@@ -71,8 +71,8 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
   };
 
   return (
-    <Card className="bg-card rounded-xl shadow-sm border border-border">
-      <CardHeader className="p-4 border-b border-border">
+    <Card className="bg-card border-border">
+      <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           {isEditing ? (
              <div className="flex items-center gap-2 w-full">
@@ -89,14 +89,14 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             </div>
           ) : (
             <>
-              <h3 className="text-base font-medium tracking-tight">{project.name}</h3>
+              <h3 className="text-lg font-semibold">{project.name}</h3>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="font-normal">
-                  <LinkIcon className="h-3 w-3 mr-1.5" />
+                <Badge variant="secondary" className="gap-1">
+                  <LinkIcon className="h-3 w-3" />
                   {project.links.length} links
                 </Badge>
-                <Badge variant="outline" className="font-normal">
-                  <span className="h-2 w-2 mr-1.5 bg-green-500 rounded-full"></span>
+                <Badge variant="outline" className="gap-1">
+                  <div className="h-2 w-2 bg-green-500 rounded-full"></div>
                   Live
                 </Badge>
                  <DropdownMenu>
@@ -106,10 +106,22 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setIsEditing(true)}><Edit className="mr-2 h-4 w-4" />Rename</DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleAddLink}><Plus className="mr-2 h-4 w-4" />Add Link</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsEmbedDialogOpen(true)}><Code className="mr-2 h-4 w-4" />Embed</DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDelete} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleAddLink}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Link
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setIsEmbedDialogOpen(true)}>
+                      <Code className="mr-2 h-4 w-4" />
+                      Embed
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -118,19 +130,17 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
         </div>
       </CardHeader>
       
-      <CardContent className="p-4 space-y-2">
+      <CardContent>
         <LinkList projectId={project.id} links={project.links} />
-        {project.links.length > 0 && (
-          <Button 
-            size="sm" 
-            variant="ghost" 
-            onClick={handleAddLink}
-            className="w-full text-muted-foreground"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Link
-          </Button>
-        )}
+        <Button 
+          size="sm" 
+          variant="ghost" 
+          onClick={handleAddLink}
+          className="w-full mt-2 text-muted-foreground"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Link
+        </Button>
       </CardContent>
       
       <EmbedDialog 

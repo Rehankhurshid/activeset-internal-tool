@@ -18,8 +18,6 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    document.documentElement.classList.remove('dark');
-    document.documentElement.style.backgroundColor = '#fafafa';
     if (!user) return;
 
     const unsubscribe = projectsService.subscribeToUserProjects(
@@ -50,19 +48,19 @@ export function Dashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-3">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="text-gray-500">Loading your projects...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Loading your projects...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-40">
+      <header className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-40">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -73,14 +71,14 @@ export function Dashboard() {
               <path d="M17 4.5L7 9.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             <span className="font-medium">Project Links</span>
-            <div className="hidden sm:flex items-center gap-2 text-sm text-gray-500">
-              <Sparkles className="h-3 w-3 text-gray-400" />
+            <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
+              <Sparkles className="h-3 w-3" />
               <span>Real-time collaboration platform</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
-              <User className="h-4 w-4 text-gray-500" />
+              <User className="h-4 w-4 text-muted-foreground" />
               <span>{user?.email}</span>
             </div>
             <Button variant="outline" size="sm" onClick={logout} className="gap-1.5">
@@ -112,14 +110,14 @@ export function Dashboard() {
 
           {isCreating && (
             <div className="max-w-md mx-auto mb-10">
-              <div className="flex items-center gap-2 border rounded-lg p-2">
+              <div className="flex items-center gap-2 border rounded-lg p-2 bg-card">
                 <Input
                   placeholder="Enter project name..."
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                    onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()}
                   autoFocus
-                  className="border-none focus-visible:ring-0"
+                  className="border-none focus-visible:ring-0 bg-transparent"
                 />
                 <Button onClick={handleCreateProject} disabled={!newProjectName.trim()}>Create</Button>
                 <Button variant="ghost" onClick={() => setIsCreating(false)}>Cancel</Button>
@@ -132,7 +130,7 @@ export function Dashboard() {
             <div className="space-y-8">
               <div>
                 <h3 className="text-lg font-medium">Your Projects</h3>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted-foreground">
                   {projects.length} {projects.length === 1 ? 'project' : 'projects'} • Real-time sync enabled
                 </p>
               </div>
