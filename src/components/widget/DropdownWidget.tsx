@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { projectsService } from '@/services/database';
+import { ChevronDown, ExternalLink } from 'lucide-react';
 
 interface DropdownWidgetProps {
   projectId?: string;
@@ -18,6 +19,7 @@ export function DropdownWidget({
 }: DropdownWidgetProps) {
   const [links, setLinks] = useState(initialLinks);
   const [isVisible, setIsVisible] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     // Check domain visibility
@@ -45,11 +47,13 @@ export function DropdownWidget({
   }
 
   const positionStyles = {
-    'bottom-right': { bottom: '0', right: '20px' },
-    'bottom-left': { bottom: '0', left: '20px' },
-    'top-right': { top: '20px', right: '20px' },
-    'top-left': { top: '20px', left: '20px' },
+    'bottom-right': { bottom: '24px', right: '24px' },
+    'bottom-left': { bottom: '24px', left: '24px' },
+    'top-right': { top: '24px', right: '24px' },
+    'top-left': { top: '24px', left: '24px' },
   };
+
+  const dropdownPosition = position.includes('bottom') ? 'bottom: calc(100% + 8px);' : 'top: calc(100% + 8px);';
 
   return (
     <>
@@ -57,83 +61,226 @@ export function DropdownWidget({
         style={{
           position: 'fixed',
           zIndex: 9999,
-          paddingTop: '10px',
           ...positionStyles[position]
         }}
-        className="dropdown-widget-container"
+        className="project-links-widget"
       >
-        <button className="dropdown-widget-button">
-          <svg width="16" height="16" viewBox="0 0 547 367" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M183.01 366.66H6.78001C5.48149 366.66 4.21044 366.286 3.11833 365.584C2.02623 364.881 1.15919 363.88 0.620591 362.698C0.0819888 361.517 -0.105462 360.205 0.080613 358.92C0.266688 357.635 0.818414 356.43 1.67003 355.45L301.06 9.69001C303.691 6.64561 306.948 4.20417 310.608 2.53199C314.268 0.859824 318.246 -0.0037835 322.27 1.24596e-05H498.49C499.787 -0.000107337 501.058 0.372636 502.149 1.07387C503.241 1.77509 504.108 2.77528 504.648 3.95533C505.187 5.13539 505.376 6.44559 505.192 7.72999C505.008 9.01439 504.459 10.2189 503.61 11.2L204.22 356.96C201.59 360.006 198.333 362.45 194.673 364.124C191.013 365.797 187.035 366.663 183.01 366.66Z" fill="white"/>
-            <path d="M452.63 366.66C427.7 366.66 403.79 356.756 386.162 339.128C368.534 321.5 358.63 297.59 358.63 272.66V178.66H452.63C477.56 178.66 501.47 188.564 519.098 206.192C536.727 223.82 546.63 247.73 546.63 272.66C546.63 297.59 536.727 321.5 519.098 339.128C501.47 356.756 477.56 366.66 452.63 366.66Z" fill="white"/>
-          </svg>
-          <span>Project Links</span>
-          <svg viewBox="0 0 20 20" fill="currentColor" style={{ width: '16px', height: '16px' }}>
-            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd"/>
-          </svg>
+        {/* Trigger Button */}
+        <button 
+          className="widget-trigger"
+          onClick={() => setIsOpen(!isOpen)}
+          onMouseEnter={() => setIsOpen(true)}
+          onMouseLeave={() => setIsOpen(false)}
+        >
+          <div className="trigger-content">
+            <div className="trigger-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="9" cy="9" r="2"/>
+                <path d="M21 15.9v.1"/>
+                <path d="M12 15.9v.1"/>
+                <path d="M3 15.9v.1"/>
+              </svg>
+            </div>
+            <span className="trigger-text">Project Links</span>
+            <ChevronDown className={`trigger-chevron ${isOpen ? 'open' : ''}`} size={14} />
+          </div>
         </button>
-        
-        <div className="dropdown-widget-content">
-          {links.map((link, index) => (
-            <a
-              key={`${link.title}-${index}`}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="dropdown-widget-link"
-            >
-              {link.title}
-            </a>
-          ))}
-        </div>
+
+        {/* Dropdown Content */}
+        {isOpen && (
+          <div 
+            className="widget-dropdown"
+            onMouseEnter={() => setIsOpen(true)}
+            onMouseLeave={() => setIsOpen(false)}
+          >
+            <div className="dropdown-header">
+              <span className="dropdown-title">Quick Links</span>
+              <div className="dropdown-badge">
+                <div className="status-dot"></div>
+                Live
+              </div>
+            </div>
+            <div className="dropdown-links">
+              {links.map((link, index) => (
+                <a
+                  key={`${link.title}-${index}`}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="dropdown-link"
+                >
+                  <span className="link-title">{link.title}</span>
+                  <ExternalLink size={12} className="link-icon" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <style jsx>{`
-        .dropdown-widget-button,
-        .dropdown-widget-link {
-          color: #fff;
+        .project-links-widget {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
           font-size: 14px;
-          transition: background-color 0.2s;
+          line-height: 1.5;
         }
-        
-        .dropdown-widget-button {
-          display: inline-flex;
+
+        .widget-trigger {
+          display: flex;
+          align-items: center;
+          background: hsl(0 0% 3.9%);
+          border: 1px solid hsl(217.2 32.6% 17.5%);
+          border-radius: 8px;
+          padding: 8px 12px;
+          color: hsl(210 40% 98%);
+          cursor: pointer;
+          transition: all 0.2s ease;
+          backdrop-filter: blur(10px);
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .widget-trigger:hover {
+          background: hsl(217.2 32.6% 17.5%);
+          border-color: hsl(215 20.2% 65.1%);
+          transform: translateY(-1px);
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .trigger-content {
+          display: flex;
           align-items: center;
           gap: 8px;
-          background-color: #1f2937;
-          padding: 10px 16px;
-          border: none;
-          cursor: pointer;
-          border-radius: 6px 6px 0 0;
+        }
+
+        .trigger-icon {
+          display: flex;
+          align-items: center;
+          color: hsl(215 20.2% 65.1%);
+        }
+
+        .trigger-text {
+          font-weight: 500;
+          font-size: 13px;
+          white-space: nowrap;
+        }
+
+        .trigger-chevron {
+          transition: transform 0.2s ease;
+          color: hsl(215 20.2% 65.1%);
+        }
+
+        .trigger-chevron.open {
+          transform: rotate(180deg);
+        }
+
+        .widget-dropdown {
+          position: absolute;
+          ${dropdownPosition}
+          right: 0;
+          background: hsl(0 0% 3.9%);
+          border: 1px solid hsl(217.2 32.6% 17.5%);
+          border-radius: 8px;
+          min-width: 220px;
+          backdrop-filter: blur(10px);
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          overflow: hidden;
+          animation: slideIn 0.2s ease;
+        }
+
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .dropdown-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 16px 8px;
+          border-bottom: 1px solid hsl(217.2 32.6% 17.5%);
+        }
+
+        .dropdown-title {
+          font-weight: 600;
+          color: hsl(210 40% 98%);
+          font-size: 13px;
+        }
+
+        .dropdown-badge {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: hsl(217.2 32.6% 17.5%);
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-size: 10px;
+          color: hsl(215 20.2% 65.1%);
           font-weight: 500;
         }
-        
-        .dropdown-widget-button:hover,
-        .dropdown-widget-link:hover {
-          background-color: #374151;
+
+        .status-dot {
+          width: 6px;
+          height: 6px;
+          background: #10b981;
+          border-radius: 50%;
+          animation: pulse 2s infinite;
         }
-        
-        .dropdown-widget-content {
-          display: none;
-          position: absolute;
-          ${position.includes('bottom') ? 'bottom: 100%;' : 'top: 100%;'}
-          right: 0;
-          background-color: #1f2937;
-          min-width: 160px;
-          box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
-          z-index: 1;
-          border-radius: 6px;
-          overflow: hidden;
+
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.5;
+          }
         }
-        
-        .dropdown-widget-link {
-          padding: 12px 16px;
+
+        .dropdown-links {
+          padding: 4px;
+        }
+
+        .dropdown-link {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 8px 12px;
+          color: hsl(210 40% 98%);
           text-decoration: none;
-          display: block;
+          border-radius: 4px;
+          transition: all 0.15s ease;
+          margin-bottom: 1px;
         }
-        
-        .dropdown-widget-container:hover .dropdown-widget-content {
-          display: block;
+
+        .dropdown-link:hover {
+          background: hsl(217.2 32.6% 17.5%);
+          color: hsl(210 40% 98%);
+          transform: translateX(2px);
+        }
+
+        .link-title {
+          font-weight: 500;
+          font-size: 13px;
+          flex: 1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .link-icon {
+          color: hsl(215 20.2% 65.1%);
+          opacity: 0;
+          transition: opacity 0.15s ease;
+        }
+
+        .dropdown-link:hover .link-icon {
+          opacity: 1;
         }
       `}</style>
     </>
