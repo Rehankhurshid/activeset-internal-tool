@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Links Widget - Examples</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #0a0a0a;
+            color: #ffffff;
+        }
+        .example {
+            margin: 2rem 0;
+            padding: 2rem;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #111;
+        }
+        .example h2 {
+            color: #fff;
+            margin-top: 0;
+        }
+        .example h3 {
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        pre {
+            background: #1a1a1a;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            border: 1px solid #333;
+        }
+        code {
+            color: #7dd3fc;
+        }
+        .widget-container {
+            margin: 1rem 0;
+            padding: 1rem;
+            border: 1px dashed #444;
+            border-radius: 4px;
+            min-height: 200px;
+        }
+        iframe {
+            border-radius: 8px;
+        }
+        .highlight {
+            background: #1a3a1a;
+            border: 2px solid #4ade80;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        .highlight h4 {
+            color: #4ade80;
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔗 Project Links Widget Examples</h1>
+    <p>This page demonstrates different ways to embed the Project Links Widget.</p>
+
+    <!-- NEW: Script-Only Method -->
+    <div class="example">
+        <div class="highlight">
+            <h4>✨ NEW: Script-Only Embedding (No DIV Required!)</h4>
+            <p>The widget automatically injects itself at the script location.</p>
+        </div>
+        
+        <h2>0. Script-Only Embedding (Simplest)</h2>
+        <h3>No HTML div required - just add the script with data attributes</h3>
+        
+        <pre><code>&lt;!-- Widget automatically injects here --&gt;
+&lt;script 
+    src="https://your-domain.com/widget.js"
+    data-auto-inject="true"
+    data-project-id="your-project-id"
+    data-theme="dark"
+    data-show-modal="true"
+&gt;&lt;/script&gt;</code></pre>
+
+        <p><strong>Live Example:</strong></p>
+        <!-- This script will automatically inject the widget below -->
+        <script 
+            src="/widget.js"
+            data-auto-inject="true"
+            data-initial-links='[{"title":"Script-Only Example","url":"https://example.com"},{"title":"No DIV Required","url":"https://github.com"}]'
+            data-theme="dark"
+            data-show-modal="true"
+        ></script>
+    </div>
+
+    <!-- Script-Only with Static Links -->
+    <div class="example">
+        <h2>0b. Script-Only with Static Links</h2>
+        <h3>Perfect for static websites with predefined links</h3>
+        
+        <pre><code>&lt;script 
+    src="https://your-domain.com/widget.js"
+    data-initial-links='[{"title":"Link 1","url":"https://example.com"}]'
+    data-theme="dark"
+&gt;&lt;/script&gt;</code></pre>
+
+        <p><strong>Live Example:</strong></p>
+        <script 
+            src="/widget.js"
+            data-initial-links='[{"title":"Documentation","url":"https://docs.example.com"},{"title":"GitHub","url":"https://github.com"},{"title":"Live Demo","url":"https://demo.example.com"}]'
+            data-theme="dark"
+        ></script>
+    </div>
+
+    <!-- Example 1: JavaScript API -->
+    <div class="example">
+        <h2>1. JavaScript API (Programmatic)</h2>
+        <h3>Most flexible method with programmatic control</h3>
+        
+        <pre><code>&lt;div id="js-widget"&gt;&lt;/div&gt;
+
+&lt;script src="https://your-domain.com/widget.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+    embedProjectLinksWidget('js-widget', {
+        projectId: 'your-project-id',
+        theme: 'dark',
+        showModal: true
+    });
+&lt;/script&gt;</code></pre>
+
+        <div class="widget-container" id="js-widget">
+            <!-- Widget will be loaded here -->
+        </div>
+    </div>
+
+    <!-- Example 2: Data Attributes -->
+    <div class="example">
+        <h2>2. Data Attributes (Declarative)</h2>
+        <h3>Declarative approach using HTML data attributes</h3>
+        
+        <pre><code>&lt;div 
+    data-project-links-widget
+    data-project-id="your-project-id"
+    data-theme="dark"
+    data-show-modal="true"
+&gt;&lt;/div&gt;
+
+&lt;script src="https://your-domain.com/widget.js"&gt;&lt;/script&gt;</code></pre>
+
+        <div 
+            class="widget-container"
+            data-project-links-widget
+            data-initial-links='[{"title":"Data Attributes Example","url":"https://example.com"},{"title":"Auto-Init","url":"https://google.com"}]'
+            data-theme="dark"
+            data-show-modal="true"
+        >
+            <!-- Widget will auto-initialize here -->
+        </div>
+    </div>
+
+    <!-- Example 3: iFrame -->
+    <div class="example">
+        <h2>3. iFrame Embedding</h2>
+        <h3>Direct iframe for simple integration</h3>
+        
+        <pre><code>&lt;iframe 
+    src="https://your-domain.com/embed?projectId=your-project-id&amp;theme=dark"
+    width="100%" 
+    height="400" 
+    frameborder="0"
+    style="border-radius: 8px;"
+&gt;&lt;/iframe&gt;</code></pre>
+
+        <iframe 
+            src="/embed?initialLinks=%5B%7B%22title%22%3A%22iFrame%20Example%22%2C%22url%22%3A%22https%3A%2F%2Fexample.com%22%7D%2C%7B%22title%22%3A%22Direct%20Embed%22%2C%22url%22%3A%22https%3A%2F%2Fgoogle.com%22%7D%5D&theme=dark"
+            width="100%" 
+            height="300" 
+            frameborder="0"
+            style="border-radius: 8px;"
+        ></iframe>
+    </div>
+
+    <!-- Configuration Options -->
+    <div class="example">
+        <h2>⚙️ Configuration Options</h2>
+        
+        <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+            <thead>
+                <tr style="border-bottom: 1px solid #444;">
+                    <th style="text-align: left; padding: 0.5rem; color: #888;">Option</th>
+                    <th style="text-align: left; padding: 0.5rem; color: #888;">Type</th>
+                    <th style="text-align: left; padding: 0.5rem; color: #888;">Default</th>
+                    <th style="text-align: left; padding: 0.5rem; color: #888;">Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="padding: 0.5rem;"><code>data-auto-inject</code></td>
+                    <td style="padding: 0.5rem;">boolean</td>
+                    <td style="padding: 0.5rem;">false</td>
+                    <td style="padding: 0.5rem;">Auto-inject widget at script location</td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.5rem;"><code>data-project-id</code></td>
+                    <td style="padding: 0.5rem;">string</td>
+                    <td style="padding: 0.5rem;">undefined</td>
+                    <td style="padding: 0.5rem;">Firebase project ID for real-time sync</td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.5rem;"><code>data-initial-links</code></td>
+                    <td style="padding: 0.5rem;">JSON string</td>
+                    <td style="padding: 0.5rem;">undefined</td>
+                    <td style="padding: 0.5rem;">Static links (alternative to projectId)</td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.5rem;"><code>data-theme</code></td>
+                    <td style="padding: 0.5rem;">'dark' | 'light'</td>
+                    <td style="padding: 0.5rem;">'dark'</td>
+                    <td style="padding: 0.5rem;">Widget theme</td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.5rem;"><code>data-show-modal</code></td>
+                    <td style="padding: 0.5rem;">boolean</td>
+                    <td style="padding: 0.5rem;">true</td>
+                    <td style="padding: 0.5rem;">Enable modal preview on desktop</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Include the widget script for the JS API example -->
+    <script src="/widget.js"></script>
+    
+    <!-- Initialize the JavaScript API example -->
+    <script>
+        // Example 1: JavaScript API
+        embedProjectLinksWidget('js-widget', {
+            initialLinks: [
+                { title: 'JavaScript API Example', url: 'https://example.com/js' },
+                { title: 'GitHub Repository', url: 'https://github.com' },
+                { title: 'Documentation', url: 'https://docs.example.com' }
+            ],
+            theme: 'dark',
+            showModal: true
+        });
+    </script>
+</body>
+</html> 

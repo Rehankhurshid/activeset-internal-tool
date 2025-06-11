@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dropdown Widget Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #f5f5f5;
+            color: #333;
+            min-height: 100vh;
+        }
+        .demo-section {
+            margin: 2rem 0;
+            padding: 2rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+        h1, h2 { color: #1f2937; }
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+        .highlight {
+            background: #fef3c7;
+            padding: 1rem;
+            border-radius: 6px;
+            border-left: 4px solid #f59e0b;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Dropdown Widget Demo</h1>
+    
+    <div class="demo-section">
+        <h2>🔄 Replace Your Static Dropdown</h2>
+        <p>This page demonstrates how our dynamic Firebase-synced widget can replace your current static dropdown.</p>
+        
+        <div class="highlight">
+            <strong>Look at the bottom-right corner!</strong> You should see a dropdown that looks exactly like your existing one, but now it's powered by real-time Firebase data.
+        </div>
+        
+        <h3>✨ Benefits of the New Dynamic Version:</h3>
+        <ul>
+            <li><strong>Real-time sync</strong> - Updates automatically when you edit in the dashboard</li>
+            <li><strong>No hardcoded links</strong> - Managed through your Firebase database</li>
+            <li><strong>Works anywhere</strong> - Not limited to Webflow domains</li>
+            <li><strong>Drag & drop ordering</strong> - Reorder links in the dashboard</li>
+            <li><strong>Multiple projects</strong> - Manage different link sets for different purposes</li>
+        </ul>
+        
+        <h3>🎨 Same Visual Design:</h3>
+        <ul>
+            <li>Identical positioning (bottom-right, fixed)</li>
+            <li>Same colors (#1f2937 background, white text)</li>
+            <li>Same hover effects (#374151)</li>
+            <li>Same SVG logo and dropdown arrow</li>
+            <li>Same typography and spacing</li>
+        </ul>
+    </div>
+    
+    <div class="demo-section">
+        <h2>📋 Embed Code</h2>
+        <p>To replace your current static dropdown, simply use this single script tag:</p>
+        
+        <pre style="background: #1f2937; color: white; padding: 1rem; border-radius: 6px; overflow-x: auto;"><code>&lt;!-- Replace your current static dropdown with this --&gt;
+&lt;script 
+    src="http://localhost:3000/widget.js"
+    data-auto-inject="true"
+    data-project-id="YOUR_PROJECT_ID"
+    data-style="dropdown"
+    data-position="bottom-right"
+    data-show-on-domains="webflow.io"&gt;
+&lt;/script&gt;</code></pre>
+        
+        <h3>📝 Configuration Options:</h3>
+        <ul>
+            <li><code>data-project-id</code>: Get this from your dashboard URL or embed dialog</li>
+            <li><code>data-position</code>: "bottom-right", "bottom-left", "top-right", "top-left"</li>
+            <li><code>data-show-on-domains</code>: Comma-separated domains (e.g., "webflow.io,staging.com")</li>
+        </ul>
+    </div>
+    
+    <div class="demo-section">
+        <h2>🔄 Migration Steps</h2>
+        <ol>
+            <li><strong>Get your project ID</strong> from the dashboard embed dialog</li>
+            <li><strong>Replace your static HTML/CSS/JS</strong> with the single script tag above</li>
+            <li><strong>Update the production URL</strong> from localhost to your deployed domain</li>
+            <li><strong>Test</strong> that it appears on your Webflow site</li>
+            <li><strong>Manage links</strong> from the dashboard instead of hardcoding</li>
+        </ol>
+    </div>
+
+    <!-- DEMO: Dynamic dropdown widget -->
+    <script 
+        src="http://localhost:3000/widget.js"
+        data-auto-inject="true"
+        data-project-id="demo-project-id"
+        data-style="dropdown"
+        data-position="bottom-right"
+        data-initial-links='[
+            {"title": "MarkUp Feedback", "url": "https://app.markup.io/invite/accept/CInPonBe"},
+            {"title": "Project Tracker", "url": "https://docs.google.com/spreadsheets/d/113nOdd2diVpL146bCmmFEkXEzHXq2ZoknfllMeKhgf0/edit#gid=1395602752"},
+            {"title": "Live Website", "url": "https://example.com"},
+            {"title": "Documentation", "url": "https://docs.example.com"}
+        ]'>
+    </script>
+
+</body>
+</html> 
