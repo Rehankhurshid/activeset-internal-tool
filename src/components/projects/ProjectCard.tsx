@@ -71,8 +71,8 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
   };
 
   return (
-    <Card className="bg-white rounded-xl shadow-sm">
-      <CardHeader className="p-4 border-b">
+    <Card className="bg-card rounded-xl shadow-sm border border-border">
+      <CardHeader className="p-4 border-b border-border">
         <div className="flex items-center justify-between">
           {isEditing ? (
              <div className="flex items-center gap-2 w-full">
@@ -120,15 +120,17 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
       
       <CardContent className="p-4 space-y-2">
         <LinkList projectId={project.id} links={project.links} />
-        <Button 
-          size="sm" 
-          variant="ghost" 
-          onClick={handleAddLink}
-          className="w-full text-gray-500"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Link
-        </Button>
+        {project.links.length > 0 && (
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            onClick={handleAddLink}
+            className="w-full text-muted-foreground"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Link
+          </Button>
+        )}
       </CardContent>
       
       <EmbedDialog 

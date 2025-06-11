@@ -64,7 +64,7 @@ function SortableLinkItem({ link, onEdit, onDelete }: SortableLinkItemProps) {
 
   if (isEditing) {
     return (
-      <div className="p-2 space-y-2 border rounded-lg bg-gray-50">
+      <div className="p-2 space-y-2 border rounded-lg bg-muted/50">
         <Input 
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -87,16 +87,16 @@ function SortableLinkItem({ link, onEdit, onDelete }: SortableLinkItemProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2 p-2 rounded-lg border bg-white ${isDragging ? 'shadow-lg' : 'shadow-sm'}`}
+      className={`flex items-center gap-2 p-2 rounded-lg border bg-card ${isDragging ? 'shadow-lg' : 'shadow-sm'}`}
     >
-      <button {...attributes} {...listeners} className="cursor-grab p-1 text-gray-400 hover:text-gray-700">
+      <button {...attributes} {...listeners} className="cursor-grab p-1 text-muted-foreground hover:text-foreground">
         <GripVertical className="h-5 w-5" />
       </button>
 
       <div className="flex-1 min-w-0">
          <a href={link.url} onClick={handleLinkClick} className="group block">
-          <div className="font-medium text-sm truncate group-hover:text-blue-600">{link.title}</div>
-          {link.url && <div className="text-xs text-gray-500 truncate">{link.url}</div>}
+          <div className="font-medium text-sm truncate group-hover:text-primary">{link.title}</div>
+          {link.url && <div className="text-xs text-muted-foreground truncate">{link.url}</div>}
         </a>
       </div>
 
@@ -126,7 +126,7 @@ function SortableLinkItem({ link, onEdit, onDelete }: SortableLinkItemProps) {
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditing(true)}>
           <Edit className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-red-600" onClick={() => onDelete(link.id)}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => onDelete(link.id)}>
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
@@ -171,8 +171,12 @@ export function LinkList({ projectId, links }: LinkListProps) {
     }
   };
 
-  if (sortedLinks.length === 0) {
-    return null; // Empty state handled in ProjectCard
+  if (links.length === 0) {
+    return (
+       <div className="text-center py-8 text-sm text-muted-foreground">
+          No links yet. Add one to get started.
+       </div>
+    )
   }
 
   return (
