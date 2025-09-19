@@ -14,9 +14,11 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Project, ProjectLink } from '@/types';
+import { Project, ProjectLink, CreateProjectLinkInput, UpdateProjectLinkInput } from '@/types';
+import { DatabaseError, logError } from '@/lib/errors';
+import { COLLECTIONS } from '@/lib/constants';
 
-const PROJECTS_COLLECTION = 'projects';
+const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
 
 const generateLinkId = (): string => `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -48,33 +50,43 @@ const getDefaultLinks = (): ProjectLink[] => [
 export const projectsService = {
   // Create a new project
   async createProject(userId: string, name: string): Promise<string> {
-    const projectRef = await addDoc(collection(db, PROJECTS_COLLECTION), {
-      name,
-      userId,
-      links: getDefaultLinks(),
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    });
-    return projectRef.id;
+    try {
+      const projectRef = await addDoc(collection(db, PROJECTS_COLLECTION), {
+        name,
+        userId,
+        links: getDefaultLinks(),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+      return projectRef.id;
+    } catch (error) {
+      logError(error, 'createProject');
+      throw new DatabaseError('Failed to create project');
+    }
   },
 
   // Get all projects for a user
   async getUserProjects(userId: string): Promise<Project[]> {
-    // Temporarily remove orderBy to avoid index requirement
-    const q = query(
-      collection(db, PROJECTS_COLLECTION),
-      where('userId', '==', userId)
-    );
-    const querySnapshot = await getDocs(q);
-    const projects = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt.toDate(),
-      updatedAt: doc.data().updatedAt.toDate(),
-    })) as Project[];
-    
-    // Sort in client-side for now
-    return projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    try {
+      // Temporarily remove orderBy to avoid index requirement
+      const q = query(
+        collection(db, PROJECTS_COLLECTION),
+        where('userId', '==', userId)
+      );
+      const querySnapshot = await getDocs(q);
+      const projects = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt.toDate(),
+        updatedAt: doc.data().updatedAt.toDate(),
+      })) as Project[];
+
+      // Sort in client-side for now
+      return projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    } catch (error) {
+      logError(error, 'getUserProjects');
+      throw new DatabaseError('Failed to fetch projects');
+    }
   },
 
   // Get a single project
@@ -118,28 +130,40 @@ export const projectsService = {
   },
 
   // Add a new link to a project
-  async addLinkToProject(projectId: string, link: Omit<ProjectLink, 'id'>): Promise<void> {
-    const project = await this.getProject(projectId);
-    if (!project) throw new Error('Project not found');
+  async addLinkToProject(projectId: string, link: CreateProjectLinkInput): Promise<void> {
+    try {
+      const project = await this.getProject(projectId);
+      if (!project) throw new DatabaseError('Project not found');
 
-    const newLink: ProjectLink = {
-      ...link,
-      id: generateLinkId(),
-    };
+      const newLink: ProjectLink = {
+        ...link,
+        id: generateLinkId(),
+      };
 
-    const updatedLinks = [...project.links, newLink];
-    await this.updateProjectLinks(projectId, updatedLinks);
+      const updatedLinks = [...project.links, newLink];
+      await this.updateProjectLinks(projectId, updatedLinks);
+    } catch (error) {
+      logError(error, 'addLinkToProject');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to add link');
+    }
   },
 
   // Update a specific link
-  async updateLink(projectId: string, linkId: string, updates: Partial<ProjectLink>): Promise<void> {
-    const project = await this.getProject(projectId);
-    if (!project) throw new Error('Project not found');
+  async updateLink(projectId: string, linkId: string, updates: UpdateProjectLinkInput): Promise<void> {
+    try {
+      const project = await this.getProject(projectId);
+      if (!project) throw new DatabaseError('Project not found');
 
-    const updatedLinks = project.links.map(link =>
-      link.id === linkId ? { ...link, ...updates } : link
-    );
-    await this.updateProjectLinks(projectId, updatedLinks);
+      const updatedLinks = project.links.map(link =>
+        link.id === linkId ? { ...link, ...updates } : link
+      );
+      await this.updateProjectLinks(projectId, updatedLinks);
+    } catch (error) {
+      logError(error, 'updateLink');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to update link');
+    }
   },
 
   // Delete a link
