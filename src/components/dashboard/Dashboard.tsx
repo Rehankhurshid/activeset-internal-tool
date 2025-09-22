@@ -3,19 +3,18 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, LogOut, User, Sparkles, Search, Filter, LayoutGrid, List, FolderOpen, Clock, Star, Archive, Settings, ChevronRight } from 'lucide-react';
+import { Plus, LogOut, User, Sparkles, Search, LayoutGrid, List, FolderOpen, Clock, Star, Archive, Settings, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Project } from '@/types';
 import { projectsService } from '@/services/database';
 import { ProjectCard } from '@/components/projects/ProjectCard';
 import { ModeToggle } from '@/components/mode-toggle';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
 export function Dashboard() {
