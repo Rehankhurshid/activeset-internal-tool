@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Funnel_Display, Funnel_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -7,6 +7,18 @@ import "./globals.css";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+});
+
+const funnelDisplay = Funnel_Display({
+  subsets: ["latin"],
+  variable: "--font-funnel-display",
+  weight: ["300", "400", "500", "600", "700", "800"],
+});
+
+const funnelSans = Funnel_Sans({
+  subsets: ["latin"],
+  variable: "--font-funnel-sans",
+  weight: ["300", "400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
@@ -22,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="dark">
       <body
-        className={`${inter.variable} font-sans antialiased bg-background text-foreground`}
+        className={`${inter.variable} ${funnelDisplay.variable} ${funnelSans.variable} font-sans antialiased bg-background text-foreground`}
       >
         <ThemeProvider
           attribute="class"

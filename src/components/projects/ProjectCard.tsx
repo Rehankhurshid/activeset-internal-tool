@@ -22,6 +22,7 @@ interface ProjectCardProps {
 
 export const ProjectCard = React.memo(function ProjectCard({ project, onDelete }: ProjectCardProps) {
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const { isLoading: isDeleting, execute: executeDelete } = useAsyncOperation();
   const { execute: executeAddLink } = useAsyncOperation();
 
@@ -54,11 +55,7 @@ export const ProjectCard = React.memo(function ProjectCard({ project, onDelete }
             onSave={handleSaveName}
             placeholder="Project name"
             className="text-lg font-semibold"
-            renderDisplay={(value, startEditing) => (
-              <h3 className="text-lg font-semibold cursor-pointer hover:text-primary" onClick={startEditing}>
-                {value}
-              </h3>
-            )}
+
           />
           <div className="flex items-center gap-2">
             <ProjectStats linkCount={project.links.length} />
@@ -84,20 +81,19 @@ export const ProjectCard = React.memo(function ProjectCard({ project, onDelete }
                   <Code className="mr-2 h-4 w-4" />
                   Embed
                 </DropdownMenuItem>
-                <ConfirmDialog title="Delete project?" confirmLabel="Delete" onConfirm={handleDelete}>
-                  {(open) => (
-                    <DropdownMenuItem onClick={open} className="text-destructive focus:text-destructive">
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  )}
-                </ConfirmDialog>
+                <DropdownMenuItem onSelect={(e) => {
+                  e.preventDefault();
+                  setIsDeleteOpen(true);
+                }} className="text-destructive focus:text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent>
         <LinkList projectId={project.id} links={project.links} />
         <AddLinkDialog
@@ -106,12 +102,22 @@ export const ProjectCard = React.memo(function ProjectCard({ project, onDelete }
           }}
         />
       </CardContent>
-      
-      <EmbedDialog 
+
+      <EmbedDialog
         isOpen={isEmbedDialogOpen}
         onOpenChange={setIsEmbedDialogOpen}
         projectId={project.id}
         projectName={project.name}
+      />
+
+      <ConfirmDialog
+        open={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+        title="Delete project?"
+        description="Are you sure you want to delete this project? This action cannot be undone."
+        confirmText="Delete"
+        onConfirm={handleDelete}
+        variant="destructive"
       />
     </Card>
   );

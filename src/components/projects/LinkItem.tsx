@@ -21,6 +21,7 @@ interface LinkItemProps {
 export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
   const isMobile = useMobile();
   const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(false);
 
   const { isLoading: isDeleting, execute: executeDelete } = useAsyncOperation();
@@ -178,26 +179,29 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
         </Button>
 
         {/* Delete Button */}
-        <ConfirmDialog
-          title="Delete link?"
-          confirmLabel="Delete"
-          onConfirm={handleDelete}
+        {/* Delete Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsDeleteOpen(true);
+          }}
+          disabled={isUpdating || isDeleting}
         >
-          {(open) => (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                open();
-              }}
-              disabled={isUpdating || isDeleting}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-        </ConfirmDialog>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+
+        <ConfirmDialog
+          open={isDeleteOpen}
+          onOpenChange={setIsDeleteOpen}
+          title="Delete link?"
+          description="Are you sure you want to delete this link? This action cannot be undone."
+          confirmText="Delete"
+          onConfirm={handleDelete}
+          variant="destructive"
+        />
       </div>
     </div>
   );
