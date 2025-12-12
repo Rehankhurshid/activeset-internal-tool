@@ -144,9 +144,9 @@ export default function Dashboard({
                     </DropdownMenu>
                 </div>
 
-                {/* Proposals List */}
+                {/* Proposals Grid */}
                 {proposals.length > 0 ? (
-                    <div className="space-y-1 bg-muted/30 rounded-xl p-2">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {proposals.map((proposal) => (
                             <ProposalCard
                                 key={proposal.id}

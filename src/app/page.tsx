@@ -1,16 +1,18 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { FolderOpen, FileText, Sparkles, LogOut } from 'lucide-react';
+import { FolderOpen, FileText, Sparkles, LogOut, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/mode-toggle';
 
 export default function Home() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, isAdmin } = useAuth();
+  const { hasAccess: hasProposalAccess, loading: proposalAccessLoading } = useModuleAccess('proposal');
 
   if (loading) {
     return (
@@ -39,7 +41,7 @@ export default function Home() {
       </header>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
-        {/* Project Links Module */}
+        {/* Project Links Module - Always visible */}
         <Link href="/modules/project-links" className="block group">
           <Card className="h-full transition-all hover:border-primary hover:shadow-lg">
             <CardHeader>
@@ -52,25 +54,48 @@ export default function Home() {
           </Card>
         </Link>
 
-        {/* Proposal Generator Module */}
-        <Link href="/modules/proposal" className="block group">
-          <Card className="h-full transition-all hover:border-primary hover:shadow-lg">
+        {/* Proposal Generator Module - Only visible if user has access */}
+        {(proposalAccessLoading || hasProposalAccess || isAdmin) && (
+          proposalAccessLoading ? (
+            <Card className="h-full">
+              <CardHeader>
+                <Skeleton className="mb-4 w-12 h-12 rounded-lg" />
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-48 mt-2" />
+              </CardHeader>
+            </Card>
+          ) : (
+            <Link href="/modules/proposal" className="block group">
+              <Card className="h-full transition-all hover:border-primary hover:shadow-lg">
+                <CardHeader>
+                  <div className="mb-4 w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                    <FileText className="h-6 w-6 text-purple-500" />
+                  </div>
+                  <CardTitle>Proposal Generator</CardTitle>
+                  <CardDescription>Create professional website proposals using Gemini AI.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center text-xs text-purple-500 font-medium">
+                    <Sparkles className="mr-1 h-3 w-3" /> AI Powered
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          )
+        )}
+
+        {/* Placeholder for when user has no access - shows locked state */}
+        {!proposalAccessLoading && !hasProposalAccess && !isAdmin && (
+          <Card className="h-full opacity-50 cursor-not-allowed">
             <CardHeader>
-              <div className="mb-4 w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                <FileText className="h-6 w-6 text-purple-500" />
+              <div className="mb-4 w-12 h-12 rounded-lg bg-gray-500/10 flex items-center justify-center">
+                <Lock className="h-6 w-6 text-gray-500" />
               </div>
-              <CardTitle>Proposal Generator</CardTitle>
-              <CardDescription>Create professional website proposals using Gemini AI.</CardDescription>
+              <CardTitle className="text-muted-foreground">Proposal Generator</CardTitle>
+              <CardDescription>You don&apos;t have access to this module. Contact admin.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center text-xs text-purple-500 font-medium">
-                <Sparkles className="mr-1 h-3 w-3" /> AI Powered
-              </div>
-            </CardContent>
           </Card>
-        </Link>
-
-
+        )}
       </div>
     </div>
   );
