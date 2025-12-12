@@ -247,10 +247,12 @@ ${proposal.agencyName}`;
   
   <p>I hope this email finds you well. Please find our proposal for <strong>${proposal.title}</strong>.</p>
   
+  <br/>
+  
   <p><strong>View the full proposal online:</strong><br/>
   <a href="${shareUrl}" style="color: #2563eb;">${shareUrl}</a></p>
   
-  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;"/>
+  <hr style="border: none; border-top: 1px solid #ccc; margin: 16px 0;"/>
   
   <p><strong>💰 Pricing Summary</strong></p>
   <ul style="margin: 0; padding-left: 20px;">
@@ -258,16 +260,14 @@ ${proposal.agencyName}`;
   </ul>
   <p style="margin-top: 8px;"><strong>Total: ${proposal.data.pricing.total}</strong></p>
   
+  <hr style="border: none; border-top: 1px solid #ccc; margin: 16px 0;"/>
+  
   <p><strong>📅 Timeline</strong></p>
   <p>${proposal.data.timeline.phases.length} phase(s): ${timelinePhases}</p>
   
-  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;"/>
+  <hr style="border: none; border-top: 1px solid #ccc; margin: 16px 0;"/>
   
   <p>Looking forward to discussing this with you.</p>
-  
-  <p>Best regards,<br/>
-  <strong>${proposal.data.signatures.agency.name}</strong><br/>
-  ${proposal.agencyName}</p>
 </div>`;
   };
 
