@@ -184,7 +184,7 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
   };
 
   const shareProposal = () => {
-    const shareUrl = `${window.location.origin}/modules/proposal?share=${proposal.id}`;
+    const shareUrl = `${window.location.origin}/view/${proposal.id}`;
     navigator.clipboard.writeText(shareUrl);
     alert('Share link copied to clipboard!');
   };
@@ -192,7 +192,7 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
   // Email Template Functions
   const getShareUrl = () => {
     return typeof window !== 'undefined'
-      ? `${window.location.origin}/modules/proposal?share=${proposal.id}`
+      ? `${window.location.origin}/view/${proposal.id}`
       : '';
   };
 
