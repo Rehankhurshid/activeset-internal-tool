@@ -10,29 +10,17 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [accessChecked, setAccessChecked] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser && firebaseUser.email) {
-        // Check if email is allowed
-        const allowed = await accessControlService.isEmailAllowed(firebaseUser.email);
-
-        if (allowed) {
-          setUser(firebaseUser);
-          setIsAdmin(accessControlService.isAdmin(firebaseUser.email));
-        } else {
-          // Not allowed - sign out
-          await signOut(auth);
-          setUser(null);
-          setIsAdmin(false);
-          setError('Your email is not authorized. Contact admin for access.');
-        }
+        // Allow any authenticated user - module access is checked separately
+        setUser(firebaseUser);
+        setIsAdmin(accessControlService.isAdmin(firebaseUser.email));
       } else {
         setUser(null);
         setIsAdmin(false);
       }
-      setAccessChecked(true);
       setLoading(false);
     });
 
@@ -52,12 +40,10 @@ export const useAuth = () => {
         return;
       }
 
-      // Check if email is allowed
-      const allowed = await accessControlService.isEmailAllowed(result.user.email);
-
-      if (!allowed) {
+      // Check if email domain is @activeset.co (basic domain restriction)
+      if (!result.user.email.endsWith('@activeset.co')) {
         await signOut(auth);
-        setError('Your email is not authorized to access this application. Please contact the admin.');
+        setError('Only @activeset.co email addresses are allowed.');
         setLoading(false);
         return;
       }
@@ -94,7 +80,6 @@ export const useAuth = () => {
     loading,
     error,
     isAdmin,
-    accessChecked,
     signInWithGoogle,
     logout,
     clearError,

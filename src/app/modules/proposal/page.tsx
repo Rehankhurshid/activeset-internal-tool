@@ -10,11 +10,16 @@ import { proposalService } from './services/ProposalService';
 import { templateService } from './services/TemplateService';
 import { Proposal, ProposalTemplate, ViewType } from './types/Proposal';
 import { copyToClipboard } from './utils/proposalUtils';
+import { useModuleAccess } from '@/hooks/useModuleAccess';
+import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ShieldX } from 'lucide-react';
 
 export default function ProposalPage() {
+    const { hasAccess, loading: accessLoading } = useModuleAccess('proposal');
+    const { user, isAuthenticated, signInWithGoogle, loading: authLoading } = useAuth();
+
     const [currentView, setCurrentView] = useState<ViewType>('dashboard');
     const [proposals, setProposals] = useState<Proposal[]>([]);
     const [templates, setTemplates] = useState<ProposalTemplate[]>([]);
@@ -23,11 +28,15 @@ export default function ProposalPage() {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+    // All useEffect hooks must be called before any early returns
     useEffect(() => {
-        loadProposals();
-        loadTemplates();
-        checkForSharedProposal();
-    }, []);
+        if (isAuthenticated && hasAccess) {
+            loadProposals();
+            loadTemplates();
+            checkForSharedProposal();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated, hasAccess]);
 
     const loadTemplates = () => {
         const data = templateService.getTemplates();
@@ -64,6 +73,45 @@ export default function ProposalPage() {
             setLoading(false);
         }
     };
+
+    // Show access denied if not authenticated or no module access
+    if (authLoading || accessLoading) {
+        return <LoadingScreen message="Checking access..." />;
+    }
+
+    if (!isAuthenticated) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
+                <div className="text-center max-w-md p-8 bg-gray-800/50 rounded-2xl border border-gray-700">
+                    <h1 className="text-2xl font-bold text-white mb-4">Proposal Module</h1>
+                    <p className="text-gray-400 mb-6">Sign in with your @activeset.co email to access proposals.</p>
+                    <Button onClick={signInWithGoogle} className="w-full">
+                        Sign in with Google
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    if (!hasAccess) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
+                <div className="text-center max-w-md p-8 bg-gray-800/50 rounded-2xl border border-gray-700">
+                    <ShieldX className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                    <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
+                    <p className="text-gray-400 mb-4">
+                        You don&apos;t have permission to access the Proposals module.
+                    </p>
+                    <p className="text-sm text-gray-500 mb-6">
+                        Signed in as: {user?.email}
+                    </p>
+                    <Link href="/">
+                        <Button variant="outline">Back to Home</Button>
+                    </Link>
+                </div>
+            </div>
+        );
+    }
 
     const handleCreateProposal = () => {
         setSelectedProposal(null);

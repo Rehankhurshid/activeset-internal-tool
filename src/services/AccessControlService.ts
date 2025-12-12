@@ -3,78 +3,108 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const ADMIN_EMAIL = 'rehan@activeset.co';
 
-export interface AccessControl {
+export interface ModuleAccess {
     admin: string;
-    allowedEmails: string[];
+    modules: Record<string, string[]>; // module name -> array of emails ("*" means public)
 }
 
+// Available modules that can be restricted
+export const RESTRICTED_MODULES = ['proposal'] as const;
+export type RestrictedModule = typeof RESTRICTED_MODULES[number];
+
 class AccessControlService {
-    private cachedAllowedEmails: string[] | null = null;
+    private cachedAccess: ModuleAccess | null = null;
     private cacheTimestamp: number = 0;
     private CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-    async getAccessControl(): Promise<AccessControl> {
+    async getModuleAccess(): Promise<ModuleAccess> {
         try {
-            const docRef = doc(db, 'access_control', 'allowed_users');
+            const docRef = doc(db, 'access_control', 'module_access');
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
-                return docSnap.data() as AccessControl;
+                return docSnap.data() as ModuleAccess;
             }
 
-            // Initialize with admin if doesn't exist
-            const defaultAccess: AccessControl = {
+            // Initialize with admin having access to all restricted modules
+            const defaultAccess: ModuleAccess = {
                 admin: ADMIN_EMAIL,
-                allowedEmails: [ADMIN_EMAIL]
+                modules: {
+                    proposal: [ADMIN_EMAIL]
+                }
             };
-            await this.saveAccessControl(defaultAccess);
+            await this.saveModuleAccess(defaultAccess);
             return defaultAccess;
         } catch (error) {
-            console.error('Error fetching access control:', error);
-            // Fallback to allow admin if Firestore fails
+            console.error('Error fetching module access:', error);
+            // Fallback to allow admin
             return {
                 admin: ADMIN_EMAIL,
-                allowedEmails: [ADMIN_EMAIL]
+                modules: {
+                    proposal: [ADMIN_EMAIL]
+                }
             };
         }
     }
 
-    async saveAccessControl(accessControl: AccessControl): Promise<void> {
-        const docRef = doc(db, 'access_control', 'allowed_users');
-        await setDoc(docRef, accessControl);
+    async saveModuleAccess(access: ModuleAccess): Promise<void> {
+        const docRef = doc(db, 'access_control', 'module_access');
+        await setDoc(docRef, access);
         // Clear cache
-        this.cachedAllowedEmails = null;
+        this.cachedAccess = null;
     }
 
-    async isEmailAllowed(email: string): Promise<boolean> {
+    async hasModuleAccess(email: string, module: RestrictedModule): Promise<boolean> {
+        // Admin always has access
+        if (this.isAdmin(email)) return true;
+
         // Use cache if valid
-        if (this.cachedAllowedEmails && Date.now() - this.cacheTimestamp < this.CACHE_TTL) {
-            return this.cachedAllowedEmails.includes(email.toLowerCase());
+        if (this.cachedAccess && Date.now() - this.cacheTimestamp < this.CACHE_TTL) {
+            return this.checkAccess(this.cachedAccess, email, module);
         }
 
-        const accessControl = await this.getAccessControl();
-        this.cachedAllowedEmails = accessControl.allowedEmails.map(e => e.toLowerCase());
+        const access = await this.getModuleAccess();
+        this.cachedAccess = access;
         this.cacheTimestamp = Date.now();
 
-        return this.cachedAllowedEmails.includes(email.toLowerCase());
+        return this.checkAccess(access, email, module);
+    }
+
+    private checkAccess(access: ModuleAccess, email: string, module: RestrictedModule): boolean {
+        const moduleUsers = access.modules[module] || [];
+
+        // "*" means public access
+        if (moduleUsers.includes('*')) return true;
+
+        // Check if email is in list
+        return moduleUsers.some(e => e.toLowerCase() === email.toLowerCase());
     }
 
     isAdmin(email: string): boolean {
         return email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
     }
 
-    async addAllowedEmail(email: string): Promise<void> {
-        const accessControl = await this.getAccessControl();
+    async getModuleUsers(module: RestrictedModule): Promise<string[]> {
+        const access = await this.getModuleAccess();
+        return access.modules[module] || [];
+    }
+
+    async addModuleAccess(email: string, module: RestrictedModule): Promise<void> {
+        const access = await this.getModuleAccess();
         const normalizedEmail = email.toLowerCase().trim();
 
-        if (!accessControl.allowedEmails.includes(normalizedEmail)) {
-            accessControl.allowedEmails.push(normalizedEmail);
-            await this.saveAccessControl(accessControl);
+        if (!access.modules[module]) {
+            access.modules[module] = [];
+        }
+
+        if (!access.modules[module].includes(normalizedEmail)) {
+            access.modules[module].push(normalizedEmail);
+            await this.saveModuleAccess(access);
         }
     }
 
-    async removeAllowedEmail(email: string): Promise<void> {
-        const accessControl = await this.getAccessControl();
+    async removeModuleAccess(email: string, module: RestrictedModule): Promise<void> {
+        const access = await this.getModuleAccess();
         const normalizedEmail = email.toLowerCase().trim();
 
         // Can't remove admin
@@ -82,10 +112,12 @@ class AccessControlService {
             throw new Error('Cannot remove admin from access list');
         }
 
-        accessControl.allowedEmails = accessControl.allowedEmails.filter(
-            e => e.toLowerCase() !== normalizedEmail
-        );
-        await this.saveAccessControl(accessControl);
+        if (access.modules[module]) {
+            access.modules[module] = access.modules[module].filter(
+                e => e.toLowerCase() !== normalizedEmail
+            );
+            await this.saveModuleAccess(access);
+        }
     }
 }
 

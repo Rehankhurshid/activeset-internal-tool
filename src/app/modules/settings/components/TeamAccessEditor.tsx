@@ -5,29 +5,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus, Shield, Loader2 } from "lucide-react";
-import { accessControlService, AccessControl } from "@/services/AccessControlService";
+import { accessControlService, ModuleAccess, RESTRICTED_MODULES, RestrictedModule } from "@/services/AccessControlService";
 
 interface TeamAccessEditorProps {
     isAdmin: boolean;
 }
 
+const MODULE_LABELS: Record<RestrictedModule, string> = {
+    proposal: "Proposals"
+};
+
 export function TeamAccessEditor({ isAdmin }: TeamAccessEditorProps) {
-    const [accessControl, setAccessControl] = useState<AccessControl | null>(null);
+    const [accessData, setAccessData] = useState<ModuleAccess | null>(null);
     const [loading, setLoading] = useState(true);
+    const [selectedModule, setSelectedModule] = useState<RestrictedModule>("proposal");
     const [newEmail, setNewEmail] = useState("");
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        loadAccessControl();
+        loadAccessData();
     }, []);
 
-    const loadAccessControl = async () => {
+    const loadAccessData = async () => {
         try {
             setLoading(true);
-            const data = await accessControlService.getAccessControl();
-            setAccessControl(data);
+            const data = await accessControlService.getModuleAccess();
+            setAccessData(data);
         } catch (err) {
             console.error("Error loading access control:", err);
             setError("Failed to load access settings");
@@ -49,8 +55,8 @@ export function TeamAccessEditor({ isAdmin }: TeamAccessEditorProps) {
         try {
             setSaving(true);
             setError(null);
-            await accessControlService.addAllowedEmail(newEmail.trim());
-            await loadAccessControl();
+            await accessControlService.addModuleAccess(newEmail.trim(), selectedModule);
+            await loadAccessData();
             setNewEmail("");
         } catch (err) {
             console.error("Error adding email:", err);
@@ -66,8 +72,8 @@ export function TeamAccessEditor({ isAdmin }: TeamAccessEditorProps) {
         try {
             setSaving(true);
             setError(null);
-            await accessControlService.removeAllowedEmail(email);
-            await loadAccessControl();
+            await accessControlService.removeModuleAccess(email, selectedModule);
+            await loadAccessData();
         } catch (err: unknown) {
             console.error("Error removing email:", err);
             setError(err instanceof Error ? err.message : "Failed to remove email");
@@ -75,6 +81,8 @@ export function TeamAccessEditor({ isAdmin }: TeamAccessEditorProps) {
             setSaving(false);
         }
     };
+
+    const currentModuleUsers = accessData?.modules[selectedModule] || [];
 
     if (loading) {
         return (
@@ -104,13 +112,29 @@ export function TeamAccessEditor({ isAdmin }: TeamAccessEditorProps) {
             <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2">
                     <Shield className="w-5 h-5" />
-                    Team Access Control
+                    Module Access Control
                 </CardTitle>
                 <CardDescription>
-                    Manage which email addresses can access the proposal directory.
+                    Manage which team members can access specific modules.
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col gap-4">
+                {/* Module selector */}
+                <div className="flex gap-2">
+                    <Select value={selectedModule} onValueChange={(v) => setSelectedModule(v as RestrictedModule)}>
+                        <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Select module" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {RESTRICTED_MODULES.map(module => (
+                                <SelectItem key={module} value={module}>
+                                    {MODULE_LABELS[module]}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
                 {/* Add new email */}
                 <div className="flex gap-2">
                     <Input
@@ -136,41 +160,47 @@ export function TeamAccessEditor({ isAdmin }: TeamAccessEditorProps) {
                     </div>
                 )}
 
-                {/* Email list */}
+                {/* Email list for selected module */}
                 <div className="flex-1 overflow-y-auto space-y-2">
-                    {accessControl?.allowedEmails.map((email) => {
-                        const isAdminEmail = accessControlService.isAdmin(email);
-                        return (
-                            <div
-                                key={email}
-                                className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-md group"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm">{email}</span>
-                                    {isAdminEmail && (
-                                        <Badge variant="secondary" className="text-xs">
-                                            Admin
-                                        </Badge>
+                    {currentModuleUsers.length === 0 ? (
+                        <div className="text-sm text-muted-foreground text-center py-4">
+                            No users have access to {MODULE_LABELS[selectedModule]} yet.
+                        </div>
+                    ) : (
+                        currentModuleUsers.map((email) => {
+                            const isAdminEmail = accessControlService.isAdmin(email);
+                            return (
+                                <div
+                                    key={email}
+                                    className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-md group"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm">{email}</span>
+                                        {isAdminEmail && (
+                                            <Badge variant="secondary" className="text-xs">
+                                                Admin
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    {!isAdminEmail && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                            onClick={() => handleRemoveEmail(email)}
+                                            disabled={saving}
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
                                     )}
                                 </div>
-                                {!isAdminEmail && (
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                        onClick={() => handleRemoveEmail(email)}
-                                        disabled={saving}
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                )}
-                            </div>
-                        );
-                    })}
+                            );
+                        })
+                    )}
                 </div>
 
                 <div className="text-xs text-muted-foreground pt-2 border-t">
-                    {accessControl?.allowedEmails.length || 0} team member(s) with access
+                    {currentModuleUsers.length} user(s) with access to {MODULE_LABELS[selectedModule]}
                 </div>
             </CardContent>
         </Card>
