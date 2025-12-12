@@ -107,9 +107,10 @@ COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
 
 USER nextjs
 
+# Railway sets PORT dynamically, so we don't hardcode it
+# EXPOSE is just documentation, Railway handles actual port binding
 EXPOSE 3000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]
