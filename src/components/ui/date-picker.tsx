@@ -33,9 +33,6 @@ export function DatePicker({ value, onChange, placeholder = "Pick a date", class
     // Convert ISO string to Date object for the calendar
     const selectedDate = value ? new Date(value + 'T00:00:00') : undefined
 
-    // Format for display - show ISO format in input for easy editing
-    const displayValue = value || ''
-
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value
         setInputValue(newValue)
