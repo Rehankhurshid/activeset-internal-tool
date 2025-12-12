@@ -1,7 +1,7 @@
 'use client';
 
-import { Card, CardContent } from "@/components/ui/card";
-import { FileText, Calendar, Share2, Edit3 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { FileText, CheckCircle2, Send, Edit3 } from "lucide-react";
 import { Proposal } from "../types/Proposal";
 
 interface StatisticsCardsProps {
@@ -11,46 +11,45 @@ interface StatisticsCardsProps {
 export default function StatisticsCards({ proposals }: StatisticsCardsProps) {
     const stats = [
         {
-            title: 'Total Proposals',
+            title: 'Total',
             value: proposals.length,
             icon: FileText,
-            color: 'bg-primary/10 text-primary'
+            gradient: 'from-blue-500/20 to-blue-600/10',
+            iconColor: 'text-blue-500'
         },
         {
             title: 'Approved',
             value: proposals.filter(p => p.status === 'approved').length,
-            icon: Calendar,
-            color: 'bg-green-500/10 text-green-600 dark:text-green-400'
+            icon: CheckCircle2,
+            gradient: 'from-green-500/20 to-green-600/10',
+            iconColor: 'text-green-500'
         },
         {
             title: 'Sent',
             value: proposals.filter(p => p.status === 'sent').length,
-            icon: Share2,
-            color: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
+            icon: Send,
+            gradient: 'from-amber-500/20 to-amber-600/10',
+            iconColor: 'text-amber-500'
         },
         {
             title: 'Drafts',
             value: proposals.filter(p => p.status === 'draft').length,
             icon: Edit3,
-            color: 'bg-muted text-muted-foreground'
+            gradient: 'from-gray-500/20 to-gray-600/10',
+            iconColor: 'text-gray-500'
         }
     ];
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="flex flex-wrap gap-2 mb-6">
             {stats.map((stat, index) => (
-                <Card key={index} className="bg-card border-border text-card-foreground">
-                    <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${stat.color}`}>
-                                <stat.icon className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-semibold">{stat.value}</p>
-                                <p className="text-sm text-muted-foreground">{stat.title}</p>
-                            </div>
-                        </div>
-                    </CardContent>
+                <Card
+                    key={index}
+                    className={`flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r ${stat.gradient} border-0 backdrop-blur-sm`}
+                >
+                    <stat.icon className={`w-4 h-4 ${stat.iconColor}`} />
+                    <span className="text-lg font-semibold">{stat.value}</span>
+                    <span className="text-sm text-muted-foreground">{stat.title}</span>
                 </Card>
             ))}
         </div>
