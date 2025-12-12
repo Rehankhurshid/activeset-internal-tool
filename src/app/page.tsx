@@ -13,6 +13,7 @@ import { ModeToggle } from '@/components/mode-toggle';
 export default function Home() {
   const { user, loading, logout, isAdmin } = useAuth();
   const { hasAccess: hasProposalAccess, loading: proposalAccessLoading } = useModuleAccess('proposal');
+  const { hasAccess: hasProjectLinksAccess, loading: projectLinksAccessLoading } = useModuleAccess('project-links');
 
   if (loading) {
     return (
@@ -23,6 +24,58 @@ export default function Home() {
   }
 
   if (!user) return <LoginForm />;
+
+  const renderModuleCard = (
+    href: string,
+    icon: React.ReactNode,
+    iconBg: string,
+    title: string,
+    description: string,
+    hasAccess: boolean,
+    accessLoading: boolean,
+    extra?: React.ReactNode
+  ) => {
+    if (accessLoading) {
+      return (
+        <Card className="h-full">
+          <CardHeader>
+            <Skeleton className="mb-4 w-12 h-12 rounded-lg" />
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-4 w-48 mt-2" />
+          </CardHeader>
+        </Card>
+      );
+    }
+
+    if (!hasAccess && !isAdmin) {
+      return (
+        <Card className="h-full opacity-50 cursor-not-allowed">
+          <CardHeader>
+            <div className="mb-4 w-12 h-12 rounded-lg bg-gray-500/10 flex items-center justify-center">
+              <Lock className="h-6 w-6 text-gray-500" />
+            </div>
+            <CardTitle className="text-muted-foreground">{title}</CardTitle>
+            <CardDescription>You don&apos;t have access to this module. Contact admin.</CardDescription>
+          </CardHeader>
+        </Card>
+      );
+    }
+
+    return (
+      <Link href={href} className="block group">
+        <Card className="h-full transition-all hover:border-primary hover:shadow-lg">
+          <CardHeader>
+            <div className={`mb-4 w-12 h-12 rounded-lg ${iconBg} flex items-center justify-center group-hover:opacity-80 transition-colors`}>
+              {icon}
+            </div>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
+          </CardHeader>
+          {extra && <CardContent>{extra}</CardContent>}
+        </Card>
+      </Link>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background p-8">
@@ -41,60 +94,29 @@ export default function Home() {
       </header>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
-        {/* Project Links Module - Always visible */}
-        <Link href="/modules/project-links" className="block group">
-          <Card className="h-full transition-all hover:border-primary hover:shadow-lg">
-            <CardHeader>
-              <div className="mb-4 w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-                <FolderOpen className="h-6 w-6 text-blue-500" />
-              </div>
-              <CardTitle>Project Links</CardTitle>
-              <CardDescription>Manage and organize all your project links in one place.</CardDescription>
-            </CardHeader>
-          </Card>
-        </Link>
-
-        {/* Proposal Generator Module - Only visible if user has access */}
-        {(proposalAccessLoading || hasProposalAccess || isAdmin) && (
-          proposalAccessLoading ? (
-            <Card className="h-full">
-              <CardHeader>
-                <Skeleton className="mb-4 w-12 h-12 rounded-lg" />
-                <Skeleton className="h-6 w-32" />
-                <Skeleton className="h-4 w-48 mt-2" />
-              </CardHeader>
-            </Card>
-          ) : (
-            <Link href="/modules/proposal" className="block group">
-              <Card className="h-full transition-all hover:border-primary hover:shadow-lg">
-                <CardHeader>
-                  <div className="mb-4 w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                    <FileText className="h-6 w-6 text-purple-500" />
-                  </div>
-                  <CardTitle>Proposal Generator</CardTitle>
-                  <CardDescription>Create professional website proposals using Gemini AI.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center text-xs text-purple-500 font-medium">
-                    <Sparkles className="mr-1 h-3 w-3" /> AI Powered
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          )
+        {/* Project Links Module */}
+        {renderModuleCard(
+          "/modules/project-links",
+          <FolderOpen className="h-6 w-6 text-blue-500" />,
+          "bg-blue-500/10",
+          "Project Links",
+          "Manage and organize all your project links in one place.",
+          hasProjectLinksAccess,
+          projectLinksAccessLoading
         )}
 
-        {/* Placeholder for when user has no access - shows locked state */}
-        {!proposalAccessLoading && !hasProposalAccess && !isAdmin && (
-          <Card className="h-full opacity-50 cursor-not-allowed">
-            <CardHeader>
-              <div className="mb-4 w-12 h-12 rounded-lg bg-gray-500/10 flex items-center justify-center">
-                <Lock className="h-6 w-6 text-gray-500" />
-              </div>
-              <CardTitle className="text-muted-foreground">Proposal Generator</CardTitle>
-              <CardDescription>You don&apos;t have access to this module. Contact admin.</CardDescription>
-            </CardHeader>
-          </Card>
+        {/* Proposal Generator Module */}
+        {renderModuleCard(
+          "/modules/proposal",
+          <FileText className="h-6 w-6 text-purple-500" />,
+          "bg-purple-500/10",
+          "Proposal Generator",
+          "Create professional website proposals using Gemini AI.",
+          hasProposalAccess,
+          proposalAccessLoading,
+          <div className="flex items-center text-xs text-purple-500 font-medium">
+            <Sparkles className="mr-1 h-3 w-3" /> AI Powered
+          </div>
         )}
       </div>
     </div>

@@ -9,7 +9,7 @@ export interface ModuleAccess {
 }
 
 // Available modules that can be restricted
-export const RESTRICTED_MODULES = ['proposal'] as const;
+export const RESTRICTED_MODULES = ['proposal', 'project-links'] as const;
 export type RestrictedModule = typeof RESTRICTED_MODULES[number];
 
 class AccessControlService {
@@ -30,7 +30,8 @@ class AccessControlService {
             const defaultAccess: ModuleAccess = {
                 admin: ADMIN_EMAIL,
                 modules: {
-                    proposal: [ADMIN_EMAIL]
+                    proposal: [ADMIN_EMAIL],
+                    'project-links': [ADMIN_EMAIL]
                 }
             };
             await this.saveModuleAccess(defaultAccess);
@@ -41,7 +42,8 @@ class AccessControlService {
             return {
                 admin: ADMIN_EMAIL,
                 modules: {
-                    proposal: [ADMIN_EMAIL]
+                    proposal: [ADMIN_EMAIL],
+                    'project-links': [ADMIN_EMAIL]
                 }
             };
         }
