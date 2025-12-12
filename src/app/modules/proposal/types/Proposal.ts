@@ -22,7 +22,12 @@ export interface Proposal {
         terms: string;
         signatures: {
             agency: { name: string; email: string };
-            client: { name: string; email: string };
+            client: {
+                name: string;
+                email: string;
+                signatureData?: string;  // Base64 data URL of signature image
+                signedAt?: string;       // ISO timestamp when signed
+            };
         };
     };
 }

@@ -4,6 +4,8 @@ import { useRef, useState, useLayoutEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Download, Share2, Mail, X, Copy, ExternalLink } from "lucide-react";
 import { Proposal } from "../types/Proposal";
+import SignatureSection from "./SignatureSection";
+import { proposalService } from "../services/ProposalService";
 
 const DEFAULT_HERO = '/default-hero.png';
 
@@ -26,6 +28,7 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
+  const [currentProposal, setCurrentProposal] = useState<Proposal>(proposal);
 
   // Responsive Width Logic
   useLayoutEffect(() => {
@@ -1000,20 +1003,32 @@ ${proposal.agencyName}`;
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px', paddingTop: '48px' }}>
                     <div>
                       <div style={{ borderBottom: '1px solid #d1d5db', paddingBottom: '8px', marginBottom: '8px' }}>
-                        <p style={{ fontSize: '18px', fontWeight: 500, color: '#111827' }}>{proposal.data.signatures.agency.name}</p>
+                        <p style={{ fontSize: '18px', fontWeight: 500, color: '#111827' }}>{currentProposal.data.signatures.agency.name}</p>
                       </div>
-                      <p style={{ color: '#4b5563' }}>{proposal.data.signatures.agency.email}</p>
+                      <p style={{ color: '#4b5563' }}>{currentProposal.data.signatures.agency.email}</p>
                     </div>
                     <div>
                       <div style={{ borderBottom: '1px solid #d1d5db', paddingBottom: '8px', marginBottom: '8px' }}>
-                        <p style={{ fontSize: '18px', fontWeight: 500, color: '#111827' }}>{proposal.data.signatures.client.name}</p>
+                        <p style={{ fontSize: '18px', fontWeight: 500, color: '#111827' }}>{currentProposal.data.signatures.client.name}</p>
                       </div>
-                      <p style={{ color: '#4b5563' }}>{proposal.data.signatures.client.email}</p>
+                      <p style={{ color: '#4b5563' }}>{currentProposal.data.signatures.client.email}</p>
                     </div>
                   </div>
                 </div>
               </section>
             </div>
+
+            {/* Client Signature Section */}
+            <SignatureSection
+              clientName={currentProposal.data.signatures.client.name}
+              existingSignature={currentProposal.data.signatures.client.signatureData}
+              signedAt={currentProposal.data.signatures.client.signedAt}
+              isPublic={isPublic}
+              onSign={async (signatureData) => {
+                const updated = await proposalService.signProposal(currentProposal.id, signatureData);
+                setCurrentProposal(updated);
+              }}
+            />
           </div>
         </div >
       </div >

@@ -63,6 +63,17 @@ class ProposalService {
         proposals.push(newProposal);
         this.saveProposalsToStorage(proposals);
 
+        // Auto-sync to Firestore for public access
+        try {
+            const docRef = doc(db, 'shared_proposals', newProposal.id);
+            await setDoc(docRef, {
+                ...newProposal,
+                sharedAt: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error('Error syncing proposal to Firestore:', error);
+        }
+
         return newProposal;
     }
 
@@ -83,6 +94,17 @@ class ProposalService {
 
         proposals[index] = updatedProposal;
         this.saveProposalsToStorage(proposals);
+
+        // Auto-sync to Firestore for public access
+        try {
+            const docRef = doc(db, 'shared_proposals', id);
+            await setDoc(docRef, {
+                ...updatedProposal,
+                sharedAt: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error('Error syncing proposal to Firestore:', error);
+        }
 
         return updatedProposal;
     }
@@ -148,6 +170,54 @@ class ProposalService {
             }
         } catch (error) {
             console.error('Error fetching public proposal:', error);
+            throw error;
+        }
+    }
+
+    async signProposal(id: string, signatureData: string): Promise<Proposal> {
+        try {
+            // Get the proposal from Firestore
+            const docRef = doc(db, 'shared_proposals', id);
+            const docSnap = await getDoc(docRef);
+
+            if (!docSnap.exists()) {
+                throw new Error('Proposal not found');
+            }
+
+            const proposal = docSnap.data() as Proposal;
+
+            // Update the proposal with signature data
+            const updatedProposal: Proposal = {
+                ...proposal,
+                status: 'approved',
+                updatedAt: new Date().toISOString(),
+                data: {
+                    ...proposal.data,
+                    signatures: {
+                        ...proposal.data.signatures,
+                        client: {
+                            ...proposal.data.signatures.client,
+                            signatureData: signatureData,
+                            signedAt: new Date().toISOString()
+                        }
+                    }
+                }
+            };
+
+            // Save back to Firestore
+            await setDoc(docRef, updatedProposal);
+
+            // Also update local storage if the user is the author
+            const proposals = this.getProposalsFromStorage();
+            const localIndex = proposals.findIndex(p => p.id === id);
+            if (localIndex !== -1) {
+                proposals[localIndex] = updatedProposal;
+                this.saveProposalsToStorage(proposals);
+            }
+
+            return updatedProposal;
+        } catch (error) {
+            console.error('Error signing proposal:', error);
             throw error;
         }
     }
