@@ -13,6 +13,14 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
+// Check if running on server and missing keys to avoid build crashes with clearer error
+if (!firebaseConfig.apiKey) {
+  console.warn('Firebase API keys missing. This may cause build failures if pages attempt to access Firebase.');
+  if (typeof window === 'undefined') {
+    console.log('Build Environment Variables:', JSON.stringify(Object.keys(process.env).filter(k => k.startsWith('NEXT_PUBLIC_'))));
+  }
+}
+
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase Authentication and get a reference to the service
