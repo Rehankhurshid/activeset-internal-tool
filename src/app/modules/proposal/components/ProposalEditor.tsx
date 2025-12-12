@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Proposal, ProposalTemplate } from "../types/Proposal";
 import LivePreview from "./LivePreview";
 import RichTextEditor from "./RichTextEditor";
+import { DatePicker } from "@/components/ui/date-picker";
 
 // Constants removed - using dynamic configurations from useConfigurations hook
 const DEFAULT_HERO = '/default-hero.png';
@@ -810,13 +811,13 @@ Example:
               </div>
               <div>
                 <Label htmlFor="projectDeadline">Project Deadline (Optional)</Label>
-                <Input
-                  id="projectDeadline"
-                  type="date"
-                  value={projectDeadline}
-                  onChange={(e) => setProjectDeadline(e.target.value)}
-                  className="mt-2"
-                />
+                <div className="mt-2">
+                  <DatePicker
+                    value={projectDeadline}
+                    onChange={(value) => setProjectDeadline(value)}
+                    placeholder="Select deadline"
+                  />
+                </div>
               </div>
               <div className="col-span-2">
                 <Label htmlFor="projectBudget">Final Budget (Optional)</Label>
@@ -1463,18 +1464,18 @@ Example:
                     <div className="flex flex-col sm:flex-row gap-4">
                       <div className="flex-1 flex flex-col gap-1">
                         <Label className="text-xs text-muted-foreground">Start Date</Label>
-                        <Input
-                          type="date"
+                        <DatePicker
                           value={phase.startDate || ''}
-                          onChange={(e) => updateTimelinePhase(index, 'startDate', e.target.value)}
+                          onChange={(value) => updateTimelinePhase(index, 'startDate', value)}
+                          placeholder="Select start date"
                         />
                       </div>
                       <div className="flex-1 flex flex-col gap-1">
                         <Label className="text-xs text-muted-foreground">End Date</Label>
-                        <Input
-                          type="date"
+                        <DatePicker
                           value={phase.endDate || ''}
-                          onChange={(e) => updateTimelinePhase(index, 'endDate', e.target.value)}
+                          onChange={(value) => updateTimelinePhase(index, 'endDate', value)}
+                          placeholder="Select end date"
                         />
                       </div>
                     </div>
