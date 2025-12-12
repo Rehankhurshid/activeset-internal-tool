@@ -2,7 +2,7 @@
 
 import { useRef, useState, useLayoutEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Share2 } from "lucide-react";
+import { ArrowLeft, Download, Share2, Mail, X, Copy, ExternalLink } from "lucide-react";
 import { Proposal } from "../types/Proposal";
 
 const DEFAULT_HERO = '/default-hero.png';
@@ -24,6 +24,8 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
   const [containerWidth, setContainerWidth] = useState(794); // Default to A4 width
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false);
 
   // Responsive Width Logic
   useLayoutEffect(() => {
@@ -187,6 +189,116 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
     alert('Share link copied to clipboard!');
   };
 
+  // Email Template Functions
+  const getShareUrl = () => {
+    return typeof window !== 'undefined'
+      ? `${window.location.origin}/modules/proposal?share=${proposal.id}`
+      : '';
+  };
+
+  const getEmailSubject = () => {
+    // Avoid redundancy like "Proposal: X Proposal for Y"
+    // Just use "Title for ClientName" format
+    return `${proposal.title} for ${proposal.clientName}`;
+  };
+
+  const getPlainTextBody = () => {
+    const shareUrl = getShareUrl();
+    const pricingLines = proposal.data.pricing.items
+      .map(item => `  • ${item.name}: ${item.price}`)
+      .join('\n');
+    const timelinePhases = proposal.data.timeline.phases
+      .map(p => p.title)
+      .join(' → ');
+
+    return `Hi ${proposal.data.signatures.client.name},
+
+I hope this email finds you well. Please find our proposal for ${proposal.title}.
+
+View the full proposal online:
+${shareUrl}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PRICING SUMMARY
+${pricingLines}
+  ──────────────
+  Total: ${proposal.data.pricing.total}
+
+TIMELINE
+${proposal.data.timeline.phases.length} phase(s): ${timelinePhases}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Looking forward to discussing this with you.
+
+Best regards,
+${proposal.data.signatures.agency.name}
+${proposal.agencyName}`;
+  };
+
+  const getRichTextEmailBody = () => {
+    const shareUrl = getShareUrl();
+    const pricingItems = proposal.data.pricing.items;
+    const timelinePhases = proposal.data.timeline.phases.map(p => p.title).join(' → ');
+
+    return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.6; color: #333;">
+  <p>Hi ${proposal.data.signatures.client.name},</p>
+  
+  <p>I hope this email finds you well. Please find our proposal for <strong>${proposal.title}</strong>.</p>
+  
+  <p><strong>View the full proposal online:</strong><br/>
+  <a href="${shareUrl}" style="color: #2563eb;">${shareUrl}</a></p>
+  
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;"/>
+  
+  <p><strong>💰 Pricing Summary</strong></p>
+  <ul style="margin: 0; padding-left: 20px;">
+    ${pricingItems.map(item => `<li><strong>${item.name}:</strong> ${item.price}</li>`).join('\n    ')}
+  </ul>
+  <p style="margin-top: 8px;"><strong>Total: ${proposal.data.pricing.total}</strong></p>
+  
+  <p><strong>📅 Timeline</strong></p>
+  <p>${proposal.data.timeline.phases.length} phase(s): ${timelinePhases}</p>
+  
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;"/>
+  
+  <p>Looking forward to discussing this with you.</p>
+  
+  <p>Best regards,<br/>
+  <strong>${proposal.data.signatures.agency.name}</strong><br/>
+  ${proposal.agencyName}</p>
+</div>`;
+  };
+
+  const openEmailClient = () => {
+    const subject = encodeURIComponent(getEmailSubject());
+    const body = encodeURIComponent(getPlainTextBody());
+    const clientEmail = proposal.data.signatures.client.email;
+    window.open(`mailto:${clientEmail}?subject=${subject}&body=${body}`, '_self');
+  };
+
+  const copyEmailBody = async () => {
+    const html = getRichTextEmailBody();
+    const plainText = getPlainTextBody();
+
+    try {
+      // Copy as rich text (HTML) so bold and bullets are preserved
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([plainText], { type: 'text/plain' })
+        })
+      ]);
+    } catch {
+      // Fallback to plain text
+      await navigator.clipboard.writeText(plainText);
+    }
+
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2000);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Fixed Header - Dark Theme */}
@@ -217,6 +329,15 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
                 Share
               </Button>
             )}
+            {!isPublic && (
+              <Button
+                onClick={() => setShowEmailModal(true)}
+                className="flex items-center gap-2 bg-[#333] hover:bg-[#444] text-white border-none h-9 px-4"
+              >
+                <Mail className="w-4 h-4" />
+                Email
+              </Button>
+            )}
             <Button
               onClick={generatePDF}
               className="flex items-center gap-2 bg-white hover:bg-gray-100 text-black border-none h-9 px-4"
@@ -227,6 +348,63 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
           </div>
         </div>
       </div>
+
+      {/* Email Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Send Proposal via Email</h2>
+                <p className="text-sm text-gray-500">Preview and send to {proposal.clientName}</p>
+              </div>
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Email Preview */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="mb-4">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">To</label>
+                <p className="text-sm text-gray-900">{proposal.data.signatures.client.name} &lt;{proposal.data.signatures.client.email}&gt;</p>
+              </div>
+              <div className="mb-4">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Subject</label>
+                <p className="text-sm text-gray-900">{getEmailSubject()}</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 block">Email Body Preview</label>
+                <pre className="border border-gray-200 rounded-lg bg-gray-50 p-4 text-sm text-gray-700 whitespace-pre-wrap font-sans overflow-x-auto">
+                  {getPlainTextBody()}
+                </pre>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex flex-col sm:flex-row gap-3">
+              <Button
+                onClick={openEmailClient}
+                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white h-11"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Email Client
+              </Button>
+              <Button
+                onClick={copyEmailBody}
+                className="flex-1 flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 text-white h-11"
+              >
+                <Copy className="w-4 h-4" />
+                {emailCopied ? 'Copied!' : 'Copy Email Body'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Proposal Content - PDF capture area with ALL inline styles */}
       <div className="p-6 flex justify-center bg-gray-200 min-h-[calc(100vh-80px)]">
@@ -370,7 +548,7 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
               {/* Timeline */}
               <section>
                 {/* Timeline Section */}
-                <div style={{ marginBottom: '40px', pageBreakInside: 'avoid' }}>
+                <div style={{ marginBottom: '40px' }}>
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', marginBottom: '24px', borderBottom: '2px solid #3b82f6', paddingBottom: '8px', fontFamily: FONT_TITLE }}>Project Timeline</h2>
 
                   {/* List View */}
