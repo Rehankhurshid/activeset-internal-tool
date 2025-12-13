@@ -200,9 +200,9 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
   };
 
   const getEmailSubject = () => {
-    // Avoid redundancy like "Proposal: X Proposal for Y"
-    // Just use "Title for ClientName" format
-    return `${proposal.title} for ${proposal.clientName}`;
+    // Use title directly with "by ActiveSet" to avoid redundancy
+    // e.g., "Website Design & Development Proposal by ActiveSet"
+    return `${proposal.title} by ${proposal.agencyName}`;
   };
 
   const getPlainTextBody = () => {
