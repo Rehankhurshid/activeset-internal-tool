@@ -9,7 +9,6 @@ import LoadingScreen from './components/LoadingScreen';
 import { proposalService } from './services/ProposalService';
 import { templateService } from './services/TemplateService';
 import { Proposal, ProposalTemplate, ViewType } from './types/Proposal';
-import { copyToClipboard } from './utils/proposalUtils';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
@@ -35,7 +34,6 @@ export default function ProposalPage() {
             loadTemplates();
             checkForSharedProposal();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated, hasAccess]);
 
     const loadTemplates = async () => {
