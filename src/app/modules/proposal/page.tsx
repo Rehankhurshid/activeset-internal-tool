@@ -30,19 +30,13 @@ export default function ProposalPage() {
 
     // All useEffect hooks must be called before any early returns
     useEffect(() => {
-        if (isAuthenticated && hasAccess && user) {
-            // First migrate any localStorage proposals, then load from Firestore
-            proposalService.migrateLocalProposals(user).then((migratedCount) => {
-                if (migratedCount > 0) {
-                    toast.success(`Migrated ${migratedCount} local proposals to cloud storage`);
-                }
-                loadProposals();
-            });
+        if (isAuthenticated && hasAccess) {
+            loadProposals();
             loadTemplates();
             checkForSharedProposal();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAuthenticated, hasAccess, user]);
+    }, [isAuthenticated, hasAccess]);
 
     const loadTemplates = () => {
         const data = templateService.getTemplates();

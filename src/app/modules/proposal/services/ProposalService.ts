@@ -4,87 +4,8 @@ import { doc, setDoc, getDoc, getDocs, collection, deleteDoc, query, orderBy } f
 import { User } from 'firebase/auth';
 
 class ProposalService {
-    private readonly STORAGE_KEY = 'proposals';
-    private readonly SHARE_KEY = 'shareLinks';
     private readonly COLLECTION_NAME = 'proposals';
     private readonly SHARED_COLLECTION = 'shared_proposals';
-
-    // localStorage methods - kept for migration purposes
-    private getProposalsFromStorage(): Proposal[] {
-        if (typeof window === 'undefined') return [];
-        try {
-            const data = localStorage.getItem(this.STORAGE_KEY);
-            return data ? JSON.parse(data) : [];
-        } catch (error) {
-            console.error('Error reading from localStorage:', error);
-            return [];
-        }
-    }
-
-    private saveProposalsToStorage(proposals: Proposal[]): void {
-        if (typeof window === 'undefined') return;
-        try {
-            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(proposals));
-        } catch (error) {
-            console.error('Error saving to localStorage:', error);
-        }
-    }
-
-    private clearLocalStorage(): void {
-        if (typeof window === 'undefined') return;
-        try {
-            localStorage.removeItem(this.STORAGE_KEY);
-            localStorage.removeItem(this.SHARE_KEY);
-        } catch (error) {
-            console.error('Error clearing localStorage:', error);
-        }
-    }
-
-    // Migrate localStorage proposals to Firestore
-    async migrateLocalProposals(user: User): Promise<number> {
-        const localProposals = this.getProposalsFromStorage();
-        if (localProposals.length === 0) return 0;
-
-        let migratedCount = 0;
-        for (const proposal of localProposals) {
-            try {
-                // Check if this proposal already exists in Firestore
-                const docRef = doc(db, this.COLLECTION_NAME, proposal.id);
-                const docSnap = await getDoc(docRef);
-
-                if (!docSnap.exists()) {
-                    // Add createdBy info and save to Firestore
-                    const migratedProposal: Proposal = {
-                        ...proposal,
-                        createdBy: {
-                            uid: user.uid,
-                            email: user.email || '',
-                            displayName: user.displayName || undefined
-                        }
-                    };
-                    await setDoc(docRef, migratedProposal);
-
-                    // Also sync to shared_proposals for public access
-                    const sharedDocRef = doc(db, this.SHARED_COLLECTION, proposal.id);
-                    await setDoc(sharedDocRef, {
-                        ...migratedProposal,
-                        sharedAt: new Date().toISOString()
-                    });
-
-                    migratedCount++;
-                }
-            } catch (error) {
-                console.error('Error migrating proposal:', proposal.id, error);
-            }
-        }
-
-        // Clear localStorage after successful migration
-        if (migratedCount > 0) {
-            this.clearLocalStorage();
-        }
-
-        return migratedCount;
-    }
 
     // Fetch all proposals from Firestore (team-wide access)
     async getProposals(): Promise<Proposal[]> {
@@ -101,8 +22,7 @@ class ProposalService {
             return proposals;
         } catch (error) {
             console.error('Error fetching proposals from Firestore:', error);
-            // Fallback to localStorage if Firestore fails
-            return this.getProposalsFromStorage();
+            throw new Error('Failed to load proposals');
         }
     }
 
