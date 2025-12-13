@@ -246,12 +246,13 @@ class ProposalService {
             }
 
             const proposal = docSnap.data() as Proposal;
+            const signedAt = new Date().toISOString();
 
             // Update the proposal with signature data
             const updatedProposal: Proposal = {
                 ...proposal,
                 status: 'approved',
-                updatedAt: new Date().toISOString(),
+                updatedAt: signedAt,
                 data: {
                     ...proposal.data,
                     signatures: {
@@ -259,7 +260,7 @@ class ProposalService {
                         client: {
                             ...proposal.data.signatures.client,
                             signatureData: signatureData,
-                            signedAt: new Date().toISOString()
+                            signedAt: signedAt
                         }
                     }
                 }
@@ -272,10 +273,38 @@ class ProposalService {
             const mainDocRef = doc(db, this.COLLECTION_NAME, id);
             await setDoc(mainDocRef, updatedProposal);
 
+            // Send email notification to agency (fire and forget)
+            this.sendSignatureNotification(updatedProposal, signedAt).catch(err => {
+                console.error('Failed to send signature notification:', err);
+            });
+
             return updatedProposal;
         } catch (error) {
             console.error('Error signing proposal:', error);
             throw error;
+        }
+    }
+
+    private async sendSignatureNotification(proposal: Proposal, signedAt: string): Promise<void> {
+        try {
+            const baseUrl = typeof window !== 'undefined'
+                ? window.location.origin
+                : process.env.NEXT_PUBLIC_BASE_URL || '';
+
+            await fetch(`${baseUrl}/api/send-notification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'proposal-signed',
+                    proposalId: proposal.id,
+                    proposalTitle: proposal.title,
+                    clientName: proposal.clientName,
+                    agencyEmail: proposal.data.signatures.agency.email,
+                    signedAt: signedAt
+                })
+            });
+        } catch (error) {
+            console.error('Error calling notification API:', error);
         }
     }
 }
