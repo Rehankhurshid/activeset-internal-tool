@@ -38,9 +38,13 @@ export default function ProposalPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated, hasAccess]);
 
-    const loadTemplates = () => {
-        const data = templateService.getTemplates();
-        setTemplates(data);
+    const loadTemplates = async () => {
+        try {
+            const data = await templateService.getTemplates();
+            setTemplates(data);
+        } catch (error) {
+            console.error('Error loading templates:', error);
+        }
     };
 
     const checkForSharedProposal = async () => {
@@ -134,10 +138,16 @@ export default function ProposalPage() {
         setCurrentView('editor');
     };
 
-    const handleDeleteTemplate = (templateId: string) => {
+    const handleDeleteTemplate = async (templateId: string) => {
         if (!confirm('Are you sure you want to delete this template?')) return;
-        templateService.deleteTemplate(templateId);
-        loadTemplates();
+        try {
+            await templateService.deleteTemplate(templateId);
+            await loadTemplates();
+            toast.success('Template deleted successfully');
+        } catch (error) {
+            toast.error('Failed to delete template');
+            console.error('Error deleting template:', error);
+        }
     };
 
     const handleEditTemplate = (template: ProposalTemplate) => {
@@ -157,18 +167,23 @@ export default function ProposalPage() {
         setCurrentView('editor');
     };
 
-    const handleSaveAsTemplate = (name: string, data: Proposal['data']) => {
-        if (editingTemplate) {
-            // Updating existing template
-            templateService.updateTemplate(editingTemplate.id, name, data);
-            setEditingTemplate(null);
-            toast.success('Template updated successfully');
-        } else {
-            // Creating new template
-            templateService.saveTemplate(name, data);
-            toast.success('Template saved successfully');
+    const handleSaveAsTemplate = async (name: string, data: Proposal['data']) => {
+        try {
+            if (editingTemplate) {
+                // Updating existing template
+                await templateService.updateTemplate(editingTemplate.id, name, data);
+                setEditingTemplate(null);
+                toast.success('Template updated successfully');
+            } else {
+                // Creating new template
+                await templateService.saveTemplate(name, data);
+                toast.success('Template saved successfully');
+            }
+            await loadTemplates();
+        } catch (error) {
+            toast.error('Failed to save template');
+            console.error('Error saving template:', error);
         }
-        loadTemplates();
     };
 
     const handleEditProposal = (proposal: Proposal) => {
