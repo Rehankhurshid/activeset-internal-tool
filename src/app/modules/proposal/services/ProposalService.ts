@@ -1,11 +1,15 @@
 import { Proposal } from '../types/Proposal';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getDocs, collection, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { User } from 'firebase/auth';
 
 class ProposalService {
     private readonly STORAGE_KEY = 'proposals';
     private readonly SHARE_KEY = 'shareLinks';
+    private readonly COLLECTION_NAME = 'proposals';
+    private readonly SHARED_COLLECTION = 'shared_proposals';
 
+    // localStorage methods - kept for migration purposes
     private getProposalsFromStorage(): Proposal[] {
         if (typeof window === 'undefined') return [];
         try {
@@ -26,113 +30,179 @@ class ProposalService {
         }
     }
 
-    private getShareLinksFromStorage(): Record<string, string> {
-        if (typeof window === 'undefined') return {};
-        try {
-            const data = localStorage.getItem(this.SHARE_KEY);
-            return data ? JSON.parse(data) : {};
-        } catch (error) {
-            console.error('Error reading share links from localStorage:', error);
-            return {};
-        }
-    }
-
-    private saveShareLinksToStorage(shareLinks: Record<string, string>): void {
+    private clearLocalStorage(): void {
         if (typeof window === 'undefined') return;
         try {
-            localStorage.setItem(this.SHARE_KEY, JSON.stringify(shareLinks));
+            localStorage.removeItem(this.STORAGE_KEY);
+            localStorage.removeItem(this.SHARE_KEY);
         } catch (error) {
-            console.error('Error saving share links to localStorage:', error);
+            console.error('Error clearing localStorage:', error);
         }
     }
 
-    async getProposals(): Promise<Proposal[]> {
-        return this.getProposalsFromStorage();
+    // Migrate localStorage proposals to Firestore
+    async migrateLocalProposals(user: User): Promise<number> {
+        const localProposals = this.getProposalsFromStorage();
+        if (localProposals.length === 0) return 0;
+
+        let migratedCount = 0;
+        for (const proposal of localProposals) {
+            try {
+                // Check if this proposal already exists in Firestore
+                const docRef = doc(db, this.COLLECTION_NAME, proposal.id);
+                const docSnap = await getDoc(docRef);
+
+                if (!docSnap.exists()) {
+                    // Add createdBy info and save to Firestore
+                    const migratedProposal: Proposal = {
+                        ...proposal,
+                        createdBy: {
+                            uid: user.uid,
+                            email: user.email || '',
+                            displayName: user.displayName || undefined
+                        }
+                    };
+                    await setDoc(docRef, migratedProposal);
+
+                    // Also sync to shared_proposals for public access
+                    const sharedDocRef = doc(db, this.SHARED_COLLECTION, proposal.id);
+                    await setDoc(sharedDocRef, {
+                        ...migratedProposal,
+                        sharedAt: new Date().toISOString()
+                    });
+
+                    migratedCount++;
+                }
+            } catch (error) {
+                console.error('Error migrating proposal:', proposal.id, error);
+            }
+        }
+
+        // Clear localStorage after successful migration
+        if (migratedCount > 0) {
+            this.clearLocalStorage();
+        }
+
+        return migratedCount;
     }
 
-    async createProposal(proposal: Omit<Proposal, 'id' | 'createdAt' | 'updatedAt'>): Promise<Proposal> {
-        const proposals = this.getProposalsFromStorage();
+    // Fetch all proposals from Firestore (team-wide access)
+    async getProposals(): Promise<Proposal[]> {
+        try {
+            const proposalsRef = collection(db, this.COLLECTION_NAME);
+            const q = query(proposalsRef, orderBy('createdAt', 'desc'));
+            const querySnapshot = await getDocs(q);
 
+            const proposals: Proposal[] = [];
+            querySnapshot.forEach((doc) => {
+                proposals.push(doc.data() as Proposal);
+            });
+
+            return proposals;
+        } catch (error) {
+            console.error('Error fetching proposals from Firestore:', error);
+            // Fallback to localStorage if Firestore fails
+            return this.getProposalsFromStorage();
+        }
+    }
+
+    async createProposal(proposal: Omit<Proposal, 'id' | 'createdAt' | 'updatedAt'>, user: User): Promise<Proposal> {
         const newProposal: Proposal = {
             ...proposal,
             id: crypto.randomUUID(),
+            createdBy: {
+                uid: user.uid,
+                email: user.email || '',
+                displayName: user.displayName || undefined
+            },
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };
 
-        proposals.push(newProposal);
-        this.saveProposalsToStorage(proposals);
-
-        // Auto-sync to Firestore for public access
         try {
-            const docRef = doc(db, 'shared_proposals', newProposal.id);
-            await setDoc(docRef, {
+            // Save to Firestore as primary storage
+            const docRef = doc(db, this.COLLECTION_NAME, newProposal.id);
+            await setDoc(docRef, newProposal);
+
+            // Also sync to shared_proposals for public access
+            const sharedDocRef = doc(db, this.SHARED_COLLECTION, newProposal.id);
+            await setDoc(sharedDocRef, {
                 ...newProposal,
                 sharedAt: new Date().toISOString()
             });
         } catch (error) {
-            console.error('Error syncing proposal to Firestore:', error);
+            console.error('Error saving proposal to Firestore:', error);
+            throw new Error('Failed to save proposal');
         }
 
         return newProposal;
     }
 
     async updateProposal(id: string, proposalData: Partial<Proposal>): Promise<Proposal> {
-        const proposals = this.getProposalsFromStorage();
-        const index = proposals.findIndex(p => p.id === id);
-
-        if (index === -1) {
-            throw new Error('Proposal not found');
-        }
-
-        const updatedProposal: Proposal = {
-            ...proposals[index],
-            ...proposalData,
-            id,
-            updatedAt: new Date().toISOString(),
-        };
-
-        proposals[index] = updatedProposal;
-        this.saveProposalsToStorage(proposals);
-
-        // Auto-sync to Firestore for public access
         try {
-            const docRef = doc(db, 'shared_proposals', id);
-            await setDoc(docRef, {
+            // Get current proposal from Firestore
+            const docRef = doc(db, this.COLLECTION_NAME, id);
+            const docSnap = await getDoc(docRef);
+
+            if (!docSnap.exists()) {
+                throw new Error('Proposal not found');
+            }
+
+            const currentProposal = docSnap.data() as Proposal;
+            const updatedProposal: Proposal = {
+                ...currentProposal,
+                ...proposalData,
+                id, // Ensure ID is not overwritten
+                updatedAt: new Date().toISOString(),
+            };
+
+            // Save to Firestore
+            await setDoc(docRef, updatedProposal);
+
+            // Also sync to shared_proposals for public access
+            const sharedDocRef = doc(db, this.SHARED_COLLECTION, id);
+            await setDoc(sharedDocRef, {
                 ...updatedProposal,
                 sharedAt: new Date().toISOString()
             });
-        } catch (error) {
-            console.error('Error syncing proposal to Firestore:', error);
-        }
 
-        return updatedProposal;
+            return updatedProposal;
+        } catch (error) {
+            console.error('Error updating proposal in Firestore:', error);
+            throw error;
+        }
     }
 
     async deleteProposal(id: string): Promise<void> {
-        const proposals = this.getProposalsFromStorage();
-        const filtered = proposals.filter(p => p.id !== id);
+        try {
+            // Delete from main proposals collection
+            const docRef = doc(db, this.COLLECTION_NAME, id);
+            await deleteDoc(docRef);
 
-        if (filtered.length === proposals.length) {
-            throw new Error('Proposal not found');
+            // Also delete from shared_proposals
+            const sharedDocRef = doc(db, this.SHARED_COLLECTION, id);
+            await deleteDoc(sharedDocRef);
+        } catch (error) {
+            console.error('Error deleting proposal from Firestore:', error);
+            throw new Error('Failed to delete proposal');
         }
-
-        this.saveProposalsToStorage(filtered);
     }
 
     async createShareLink(proposalId: string): Promise<string> {
-        const proposals = this.getProposalsFromStorage();
-        const proposal = proposals.find(p => p.id === proposalId);
-
-        if (!proposal) {
-            throw new Error('Proposal not found');
-        }
-
-        // Upload to Firestore for public access
         try {
-            // Use the same ID for the public doc so updates overwrite it
-            const docRef = doc(db, 'shared_proposals', proposalId);
-            await setDoc(docRef, {
+            // Get proposal from Firestore
+            const docRef = doc(db, this.COLLECTION_NAME, proposalId);
+            const docSnap = await getDoc(docRef);
+
+            if (!docSnap.exists()) {
+                throw new Error('Proposal not found');
+            }
+
+            const proposal = docSnap.data() as Proposal;
+
+            // Sync to shared_proposals collection for public access
+            const sharedDocRef = doc(db, this.SHARED_COLLECTION, proposalId);
+            await setDoc(sharedDocRef, {
                 ...proposal,
                 sharedAt: new Date().toISOString()
             });
@@ -140,32 +210,23 @@ class ProposalService {
             // Return the public URL
             return `${window.location.origin}/view/${proposalId}`;
         } catch (error) {
-            console.error('Error uploading proposal to Firestore:', error);
+            console.error('Error creating share link:', error);
             throw new Error('Failed to create public share link');
         }
     }
 
     async getSharedProposal(token: string): Promise<Proposal> {
-        // Legacy or internal share handling if needed
         return this.getPublicProposal(token);
     }
 
     async getPublicProposal(id: string): Promise<Proposal> {
         try {
-            const docRef = doc(db, 'shared_proposals', id);
+            const docRef = doc(db, this.SHARED_COLLECTION, id);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
                 return docSnap.data() as Proposal;
             } else {
-                // Fallback to local storage if running locally and checking own shared link?
-                // But for public users (incognito), local storage won't have it.
-                // So strictly Firestore is safer for "Public" usage.
-                // But let's fallback just in case the user IS the author testing it.
-                const proposals = this.getProposalsFromStorage();
-                const localProposal = proposals.find(p => p.id === id);
-                if (localProposal) return localProposal;
-
                 throw new Error('Proposal not found');
             }
         } catch (error) {
@@ -176,9 +237,9 @@ class ProposalService {
 
     async signProposal(id: string, signatureData: string): Promise<Proposal> {
         try {
-            // Get the proposal from Firestore
-            const docRef = doc(db, 'shared_proposals', id);
-            const docSnap = await getDoc(docRef);
+            // Get the proposal from shared_proposals (public access)
+            const sharedDocRef = doc(db, this.SHARED_COLLECTION, id);
+            const docSnap = await getDoc(sharedDocRef);
 
             if (!docSnap.exists()) {
                 throw new Error('Proposal not found');
@@ -204,16 +265,12 @@ class ProposalService {
                 }
             };
 
-            // Save back to Firestore
-            await setDoc(docRef, updatedProposal);
+            // Save to shared_proposals
+            await setDoc(sharedDocRef, updatedProposal);
 
-            // Also update local storage if the user is the author
-            const proposals = this.getProposalsFromStorage();
-            const localIndex = proposals.findIndex(p => p.id === id);
-            if (localIndex !== -1) {
-                proposals[localIndex] = updatedProposal;
-                this.saveProposalsToStorage(proposals);
-            }
+            // Also update the main proposals collection
+            const mainDocRef = doc(db, this.COLLECTION_NAME, id);
+            await setDoc(mainDocRef, updatedProposal);
 
             return updatedProposal;
         } catch (error) {

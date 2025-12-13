@@ -30,13 +30,19 @@ export default function ProposalPage() {
 
     // All useEffect hooks must be called before any early returns
     useEffect(() => {
-        if (isAuthenticated && hasAccess) {
-            loadProposals();
+        if (isAuthenticated && hasAccess && user) {
+            // First migrate any localStorage proposals, then load from Firestore
+            proposalService.migrateLocalProposals(user).then((migratedCount) => {
+                if (migratedCount > 0) {
+                    toast.success(`Migrated ${migratedCount} local proposals to cloud storage`);
+                }
+                loadProposals();
+            });
             loadTemplates();
             checkForSharedProposal();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAuthenticated, hasAccess]);
+    }, [isAuthenticated, hasAccess, user]);
 
     const loadTemplates = () => {
         const data = templateService.getTemplates();
@@ -190,10 +196,13 @@ export default function ProposalPage() {
                 const updatedProposal = await proposalService.updateProposal(selectedProposal.id, proposalData);
                 setProposals(prev => prev.map(p => p.id === updatedProposal.id ? updatedProposal : p));
                 toast.success('Proposal updated successfully');
-            } else {
-                const newProposal = await proposalService.createProposal(proposalData);
+            } else if (user) {
+                const newProposal = await proposalService.createProposal(proposalData, user);
                 setProposals(prev => [...prev, newProposal]);
                 toast.success('Proposal created successfully');
+            } else {
+                toast.error('You must be logged in to create a proposal');
+                return;
             }
 
             setCurrentView('dashboard');

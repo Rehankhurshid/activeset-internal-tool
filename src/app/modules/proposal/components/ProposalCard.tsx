@@ -51,9 +51,17 @@ export default function ProposalCard({
                 </h3>
 
                 {/* Client */}
-                <p className="text-sm text-muted-foreground truncate mb-4">
+                <p className="text-sm text-muted-foreground truncate">
                     {proposal.clientName}
                 </p>
+
+                {/* Created By */}
+                {proposal.createdBy && (
+                    <p className="text-xs text-muted-foreground/70 truncate mb-4">
+                        Created by {proposal.createdBy.displayName || proposal.createdBy.email}
+                    </p>
+                )}
+                {!proposal.createdBy && <div className="mb-4" />}
 
                 {/* Action Buttons - Always Visible */}
                 <div className="flex items-center gap-1 pt-3 border-t border-border/50">

@@ -1,5 +1,10 @@
 export interface Proposal {
     id: string;
+    createdBy?: {
+        uid: string;
+        email: string;
+        displayName?: string;
+    };
     title: string;
     clientName: string;
     agencyName: string;
