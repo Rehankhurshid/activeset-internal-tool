@@ -231,14 +231,51 @@ export default function ProposalPage() {
     };
 
     const shareProposal = async (proposalId: string) => {
+        setActionLoading(`share-${proposalId}`);
+
+        // Generate the URL synchronously first (before any async operations)
+        // This maintains the user gesture context for clipboard access
+        const shareUrl = `${window.location.origin}/view/${proposalId}`;
+
+        // Try to copy immediately while still in user gesture context
+        let copied = false;
         try {
-            setActionLoading(`share-${proposalId}`);
-            const shareUrl = await proposalService.createShareLink(proposalId);
-            await copyToClipboard(shareUrl);
-            toast.success('Share link copied to clipboard!');
+            await navigator.clipboard.writeText(shareUrl);
+            copied = true;
+        } catch {
+            // Fallback: try textarea method
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = shareUrl;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                copied = document.execCommand('copy');
+                document.body.removeChild(textArea);
+            } catch {
+                copied = false;
+            }
+        }
+
+        // Now sync to Firestore in background
+        try {
+            await proposalService.createShareLink(proposalId);
+            if (copied) {
+                toast.success('Share link copied to clipboard!');
+            } else {
+                toast.info(`Share link: ${shareUrl}`, { duration: 10000 });
+            }
         } catch (error) {
-            toast.error('Failed to create share link');
-            console.error('Error creating share link:', error);
+            // Even if Firestore sync fails, the proposal should already be in shared_proposals
+            // from the original save, so the link will still work
+            console.error('Error syncing share link:', error);
+            if (copied) {
+                toast.success('Share link copied to clipboard!');
+            } else {
+                toast.info(`Share link: ${shareUrl}`, { duration: 10000 });
+            }
         } finally {
             setActionLoading(null);
         }

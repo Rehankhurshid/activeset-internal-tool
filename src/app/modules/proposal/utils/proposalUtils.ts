@@ -12,17 +12,27 @@ export function getStatusColor(status: string): string {
 }
 
 export async function copyToClipboard(text: string): Promise<void> {
-    if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-    } else {
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            // Fallback for non-secure contexts
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            if (!successful) {
+                throw new Error('Fallback copy failed');
+            }
+        }
+    } catch (error) {
+        console.error('Clipboard copy failed:', error);
+        // Re-throw with a user-friendly message, or prompt user to copy manually
+        throw new Error(`Failed to copy to clipboard. Link: ${text}`);
     }
 }
