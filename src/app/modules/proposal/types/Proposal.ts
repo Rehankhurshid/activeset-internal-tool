@@ -26,12 +26,13 @@ export interface Proposal {
         };
         terms: string;
         signatures: {
-            agency: { name: string; email: string };
+            agency: { name: string; email: string; signatureData?: string };
             client: {
                 name: string;
                 email: string;
                 signatureData?: string;  // Base64 data URL of signature image
                 signedAt?: string;       // ISO timestamp when signed
+                signedDocUrl?: string;   // URL to signed PDF (DocuSeal)
             };
         };
     };

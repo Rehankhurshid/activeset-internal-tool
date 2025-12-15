@@ -2,7 +2,7 @@
 
 import { useRef, useState, useLayoutEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Share2, Mail, X, Copy, ExternalLink } from "lucide-react";
+import { ArrowLeft, Download, Share2, Mail, X, Copy, ExternalLink, PenLine } from "lucide-react";
 import { Proposal } from "../types/Proposal";
 import SignatureSection from "./SignatureSection";
 import { proposalService } from "../services/ProposalService";
@@ -29,6 +29,7 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
   const [currentProposal, setCurrentProposal] = useState<Proposal>(proposal);
+
 
   // Responsive Width Logic
   useLayoutEffect(() => {
@@ -185,6 +186,9 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
       setIsGeneratingPdf(false);
     }
   };
+
+
+
 
   const shareProposal = () => {
     const shareUrl = `${window.location.origin}/view/${proposal.id}`;
@@ -343,11 +347,20 @@ ${proposal.agencyName}`;
             )}
             <Button
               onClick={generatePDF}
-              className="flex items-center gap-2 bg-white hover:bg-gray-100 text-black border-none h-9 px-4"
+              className="flex items-center gap-2 bg-white hover:bg-gray-100 text-black border-none h-9 px-4 hidden sm:flex"
             >
               <Download className="w-4 h-4" />
               Download PDF
             </Button>
+            {isPublic && !currentProposal.data.signatures.client.signedAt && (
+              <Button
+                onClick={() => document.getElementById('signature-section')?.scrollIntoView({ behavior: 'smooth' })}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white border-none h-9 px-4 shadow-sm animate-pulse"
+              >
+                <PenLine className="w-4 h-4" />
+                Sign Contract
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -468,7 +481,7 @@ ${proposal.agencyName}`;
             {/* Content Sections */}
             <div style={{ padding: '48px', display: 'flex', flexDirection: 'column', gap: '64px' }}>
               {/* Overview */}
-              <section style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '32px' }}>
+              <section className="grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8">
                 <div>
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Overview</h2>
                 </div>
@@ -480,7 +493,7 @@ ${proposal.agencyName}`;
               </section>
 
               {/* About Us */}
-              <section style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '32px' }}>
+              <section className="grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8">
                 <div>
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>About Us</h2>
                 </div>
@@ -494,7 +507,7 @@ ${proposal.agencyName}`;
               </section>
 
               {/* Pricing */}
-              <section style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '32px' }}>
+              <section className="grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8">
                 <div>
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Pricing for {proposal.clientName}</h2>
                 </div>
@@ -700,7 +713,7 @@ ${proposal.agencyName}`;
                     };
 
                     return (
-                      <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #f3f4f6', pageBreakInside: 'avoid', width: '100%' }}>
+                      <div className="w-full overflow-x-auto" style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #f3f4f6', pageBreakInside: 'avoid' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                           <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: FONT_TITLE }}>Project Schedule</h3>
                           {!isGeneratingPdf && (
@@ -980,7 +993,7 @@ ${proposal.agencyName}`;
 
               {/* Terms */}
               {proposal.data.terms && (
-                <section style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '32px' }}>
+                <section className="grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8">
                   <div>
                     <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Terms</h2>
                   </div>
@@ -995,19 +1008,38 @@ ${proposal.agencyName}`;
               )}
 
               {/* Signatures */}
-              <section style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '32px' }}>
+              <section className="grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8">
                 <div>
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Signature</h2>
                 </div>
                 <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px', paddingTop: '48px' }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-12 pt-12">
                     <div>
+                      {/* Agency Signature if available - currently schema might not have it, but for completeness or if added later */}
+                      <div style={{ height: '80px', display: 'flex', alignItems: 'flex-end', marginBottom: '8px' }}>
+                        {currentProposal.data.signatures.agency.signatureData ? (
+                          <img
+                            src={currentProposal.data.signatures.agency.signatureData}
+                            alt="Agency Signature"
+                            style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain' }}
+                          />
+                        ) : null}
+                      </div>
                       <div style={{ borderBottom: '1px solid #d1d5db', paddingBottom: '8px', marginBottom: '8px' }}>
                         <p style={{ fontSize: '18px', fontWeight: 500, color: '#111827' }}>{currentProposal.data.signatures.agency.name}</p>
                       </div>
                       <p style={{ color: '#4b5563' }}>{currentProposal.data.signatures.agency.email}</p>
                     </div>
                     <div>
+                      <div style={{ height: '80px', display: 'flex', alignItems: 'flex-end', marginBottom: '8px' }}>
+                        {currentProposal.data.signatures.client.signatureData ? (
+                          <img
+                            src={currentProposal.data.signatures.client.signatureData}
+                            alt="Client Signature"
+                            style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain' }}
+                          />
+                        ) : null}
+                      </div>
                       <div style={{ borderBottom: '1px solid #d1d5db', paddingBottom: '8px', marginBottom: '8px' }}>
                         <p style={{ fontSize: '18px', fontWeight: 500, color: '#111827' }}>{currentProposal.data.signatures.client.name}</p>
                       </div>
@@ -1019,19 +1051,31 @@ ${proposal.agencyName}`;
             </div>
 
             {/* Client Signature Section */}
+            {/* Client Signature Section */}
+            {/* Client Signature Section */}
             <SignatureSection
               clientName={currentProposal.data.signatures.client.name}
               existingSignature={currentProposal.data.signatures.client.signatureData}
+              signedDocUrl={currentProposal.data.signatures.client.signedDocUrl}
               signedAt={currentProposal.data.signatures.client.signedAt}
               isPublic={isPublic}
               onSign={async (signatureData) => {
-                const updated = await proposalService.signProposal(currentProposal.id, signatureData);
-                setCurrentProposal(updated);
+                try {
+                  await proposalService.signProposal(currentProposal.id, signatureData);
+                  alert('Proposal signed successfully!');
+                  // Refresh proposal data
+                  const updated = await proposalService.getProposalById(currentProposal.id);
+                  if (updated) setCurrentProposal(updated);
+                } catch (error) {
+                  console.error('Error signing proposal:', error);
+                  alert('Failed to save signature. Please try again.');
+                }
               }}
             />
           </div>
-        </div >
-      </div >
-    </div >
+        </div>
+      </div>
+    </div>
+
   );
 }

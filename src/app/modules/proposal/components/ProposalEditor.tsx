@@ -43,7 +43,7 @@ interface TermsTemplate {
   text: string;
 }
 
-import { useConfigurations } from "@/hooks/useConfigurations";
+import { useConfigurations, AgencyProfile } from "@/hooks/useConfigurations";
 
 interface SortableServiceItemProps {
   id: string;
@@ -115,7 +115,7 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
 
   // Preset States - Initialize with empty, populate from configs when loaded
   const [titlePresets, setTitlePresets] = useState<string[]>([]);
-  const [agencyPresets, setAgencyPresets] = useState<string[]>([]);
+  const [agencyPresets, setAgencyPresets] = useState<AgencyProfile[]>([]);
   const [aboutPresets, setAboutPresets] = useState<AboutTemplate[]>([]);
   const [termsPresets, setTermsPresets] = useState<TermsTemplate[]>([]);
 
@@ -168,7 +168,12 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
   }, [configs.titles]);
 
   useEffect(() => {
-    if (configs.agencies.length > 0) setAgencyPresets(prev => Array.from(new Set([...prev, ...configs.agencies])));
+    if (configs.agencies.length > 0) {
+      // Ensure uniqueness by ID
+      const unique = new Map();
+      configs.agencies.forEach(item => unique.set(item.id, item));
+      setAgencyPresets(Array.from(unique.values()));
+    }
   }, [configs.agencies]);
 
   useEffect(() => {
@@ -208,7 +213,18 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
       try {
         const parsed = JSON.parse(saved);
         if (parsed.titles) setTitlePresets(prev => Array.from(new Set([...prev, ...parsed.titles])));
-        if (parsed.agencies) setAgencyPresets(prev => Array.from(new Set([...prev, ...parsed.agencies])));
+        if (parsed.agencies) {
+          // Filter/Map as needed. If string[], convert. If AgencyProfile[], keep.
+          const loaded = parsed.agencies.map((item: string | AgencyProfile) => {
+            if (typeof item === 'string') return { id: `local-${Math.random()}`, name: item, email: '', signatureData: '' };
+            return item;
+          });
+          setAgencyPresets(prev => {
+            const unique = new Map();
+            [...prev, ...loaded].forEach(i => unique.set(i.id || i.name, i));
+            return Array.from(unique.values());
+          });
+        }
         if (parsed.aboutUs) {
           // Merge based on ID to avoid duplicates
           const currentIds = new Set(configs.aboutUs.map((t: { id: string }) => t.id)); // compare against DB
@@ -248,11 +264,18 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
     if (manageType === 'title') {
       const newPresets = [...titlePresets, newItemText];
       setTitlePresets(newPresets);
-      savePresetsToStorage({ titles: newPresets }); // This still saves locally. Ideally should write to DB.
+      savePresetsToStorage({ titles: newPresets });
     } else if (manageType === 'agency') {
-      const newPresets = [...agencyPresets, newItemText];
+      // Create a default profile for quick add - though ideally user should use Settings page
+      const newProfile: AgencyProfile = {
+        id: `local-${Date.now()}`,
+        name: newItemText,
+        email: '', // Default empty
+        signatureData: '' // Default empty
+      };
+      const newPresets = [...agencyPresets, newProfile];
       setAgencyPresets(newPresets);
-      savePresetsToStorage({ agencies: newPresets });
+      // savePresetsToStorage({ agencies: newPresets }); // Removed local storage save for agencies to avoid complexity with string vs object mismatch in this legacy function. 
     } else if (manageType === 'about') {
       const newTemplate: AboutTemplate = {
         id: `custom-${Date.now()}`,
@@ -290,7 +313,7 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
     } else if (manageType === 'agency') {
       const newPresets = agencyPresets.filter((_, i) => i !== index);
       setAgencyPresets(newPresets);
-      savePresetsToStorage({ agencies: newPresets });
+      // savePresetsToStorage({ agencies: newPresets });
     } else if (manageType === 'about') {
       const newPresets = aboutPresets.filter((_, i) => i !== index);
       setAboutPresets(newPresets);
@@ -339,6 +362,28 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
       }));
     }
   }, [configs.aboutUs, proposal]);
+
+  // Set default agency if creating new and presets exist
+  useEffect(() => {
+    if (!proposal && agencyPresets.length > 0 && !formData.data.signatures.agency.name) {
+      const defaultAgency = agencyPresets[0];
+      setFormData(prev => ({
+        ...prev,
+        agencyName: defaultAgency.name,
+        data: {
+          ...prev.data,
+          signatures: {
+            ...prev.data.signatures,
+            agency: {
+              name: defaultAgency.name,
+              email: defaultAgency.email,
+              signatureData: defaultAgency.signatureData
+            }
+          }
+        }
+      }));
+    }
+  }, [agencyPresets, proposal]);
 
   // Initial title select? 
   // Maybe better to leave empty until user selects.
@@ -1069,14 +1114,33 @@ Example:
                         onChange={(e) => setFormData(prev => ({ ...prev, agencyName: e.target.value }))}
                       />
                     </div>
-                    <Select onValueChange={(value) => setFormData(prev => ({ ...prev, agencyName: value }))}>
+                    <Select onValueChange={(agencyId) => {
+                      const selected = agencyPresets.find(a => a.id === agencyId);
+                      if (selected) {
+                        setFormData(prev => ({
+                          ...prev,
+                          agencyName: selected.name, // Update top-level name
+                          data: {
+                            ...prev.data,
+                            signatures: {
+                              ...prev.data.signatures,
+                              agency: {
+                                name: selected.name,
+                                email: selected.email,
+                                signatureData: selected.signatureData
+                              }
+                            }
+                          }
+                        }));
+                      }
+                    }}>
                       <SelectTrigger className="w-[40px] px-2">
                         <span className="sr-only">Select Agency</span>
                       </SelectTrigger>
                       <SelectContent>
-                        {agencyPresets.map((agency, i) => (
-                          <SelectItem key={i} value={agency}>
-                            {agency}
+                        {agencyPresets.map((agency) => (
+                          <SelectItem key={agency.id} value={agency.id}>
+                            {agency.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1593,21 +1657,56 @@ Example:
                     <h4 className="font-medium">Agency Representative</h4>
                     <div className="space-y-2">
                       <Label htmlFor="agencySignatureName">Name</Label>
-                      <Input
-                        id="agencySignatureName"
-                        placeholder="Full name"
-                        value={formData.data.signatures.agency.name}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
-                          data: {
-                            ...prev.data,
-                            signatures: {
-                              ...prev.data.signatures,
-                              agency: { ...prev.data.signatures.agency, name: e.target.value }
-                            }
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <Input
+                            id="agencySignatureName"
+                            placeholder="Full name"
+                            value={formData.data.signatures.agency.name}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              data: {
+                                ...prev.data,
+                                signatures: {
+                                  ...prev.data.signatures,
+                                  agency: { ...prev.data.signatures.agency, name: e.target.value }
+                                }
+                              }
+                            }))}
+                          />
+                        </div>
+                        <Select onValueChange={(agencyId) => {
+                          const selected = agencyPresets.find(a => a.id === agencyId);
+                          if (selected) {
+                            setFormData(prev => ({
+                              ...prev,
+                              agencyName: selected.name, // optional: sync top level or keep separate? distinct typically better.
+                              data: {
+                                ...prev.data,
+                                signatures: {
+                                  ...prev.data.signatures,
+                                  agency: {
+                                    name: selected.name,
+                                    email: selected.email,
+                                    signatureData: selected.signatureData
+                                  }
+                                }
+                              }
+                            }));
                           }
-                        }))}
-                      />
+                        }}>
+                          <SelectTrigger className="w-[40px] px-2">
+                            <span className="sr-only">Select Agency Representative</span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {agencyPresets.map((agency) => (
+                              <SelectItem key={agency.id} value={agency.id}>
+                                {agency.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="agencySignatureEmail">Email</Label>
@@ -1767,7 +1866,7 @@ Example:
                 ))}
                 {manageType === 'agency' && agencyPresets.map((item, i) => (
                   <div key={i} className="flex justify-between items-center bg-muted p-2 rounded">
-                    <span className="text-sm truncate">{item}</span>
+                    <span className="text-sm truncate">{item.name}</span>
                     <Button variant="ghost" size="sm" onClick={() => handleDeletePreset(i)}>
                       <X className="w-3 h-3 text-destructive" />
                     </Button>

@@ -8,9 +8,16 @@ export interface ConfigurationItem {
     text: string;
 }
 
+export interface AgencyProfile {
+    id: string;
+    name: string;
+    email: string;
+    signatureData?: string;
+}
+
 export interface Configurations {
     titles: string[];
-    agencies: string[];
+    agencies: AgencyProfile[];
     serviceSnippets: { [key: string]: string };
     aboutUs: ConfigurationItem[];
     terms: ConfigurationItem[];
@@ -65,8 +72,16 @@ export const useConfigurations = () => {
         }, handleError));
 
         // 2. Agencies
-        unsubscribes.push(onSnapshot(doc(db, 'configurations', 'agencies'), (doc) => {
-            handleUpdate('agencies', doc.data()?.items || []);
+        unsubscribes.push(onSnapshot(doc(db, 'configurations', 'agencies'), (docSnap) => {
+            const rawItems = docSnap.data()?.items || [];
+            // Migration: Convert strings to objects if necessary
+            const formattedItems = rawItems.map((item: string | AgencyProfile) => {
+                if (typeof item === 'string') {
+                    return { id: Math.random().toString(36).substr(2, 9), name: item, email: '', signatureData: '' };
+                }
+                return item;
+            });
+            handleUpdate('agencies', formattedItems);
         }, handleError));
 
         // 3. Services

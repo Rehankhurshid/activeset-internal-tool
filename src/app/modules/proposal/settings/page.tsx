@@ -6,6 +6,7 @@ import { SimpleListEditor } from "@/app/modules/settings/components/SimpleListEd
 import { RichItemEditor } from "@/app/modules/settings/components/RichItemEditor";
 import { KeyValueEditor } from "@/app/modules/settings/components/KeyValueEditor";
 import { TeamAccessEditor } from "@/app/modules/settings/components/TeamAccessEditor";
+import { AgencyEditor } from "@/app/modules/settings/components/AgencyEditor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -86,7 +87,7 @@ export default function TemplateSettingsPage() {
                     </TabsContent>
 
                     <TabsContent value="agencies" className="h-full m-0">
-                        <SimpleListEditor title="Agency Names" docId="agencies" initialItems={configs.agencies} />
+                        <AgencyEditor initialItems={configs.agencies} />
                     </TabsContent>
 
                     <TabsContent value="services" className="h-full m-0">

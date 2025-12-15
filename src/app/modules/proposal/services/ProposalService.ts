@@ -26,6 +26,21 @@ class ProposalService {
         }
     }
 
+    // Helper to get a single proposal by ID
+    async getProposalById(id: string): Promise<Proposal | null> {
+        try {
+            const docRef = doc(db, this.COLLECTION_NAME, id);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                return docSnap.data() as Proposal;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error fetching proposal:', error);
+            return null;
+        }
+    }
+
     async createProposal(proposal: Omit<Proposal, 'id' | 'createdAt' | 'updatedAt'>, user: User): Promise<Proposal> {
         const newProposal: Proposal = {
             ...proposal,
@@ -204,6 +219,8 @@ class ProposalService {
             throw error;
         }
     }
+
+
 
     private async sendSignatureNotification(proposal: Proposal, signedAt: string): Promise<void> {
         try {
