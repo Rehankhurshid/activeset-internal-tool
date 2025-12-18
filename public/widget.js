@@ -1,15 +1,32 @@
 (function () {
   "use strict";
 
+  // Determine base URL from the script source if possible, otherwise fallback to production
+  let scriptBaseUrl = "https://app.activeset.co";
+  
+  try {
+    const currentScript = document.currentScript || (function() {
+      const scripts = document.getElementsByTagName('script');
+      return scripts[scripts.length - 1];
+    })();
+    
+    if (currentScript && currentScript.src) {
+      const url = new URL(currentScript.src);
+      scriptBaseUrl = url.origin;
+    }
+  } catch (e) {
+    console.warn("Could not determine script origin, using default.");
+  }
+
   // Default configuration
   const defaultConfig = {
     theme: "dark",
     allowReordering: true,
     showModal: true,
-    baseUrl: "https://active-set-internal-tool-production.up.railway.app", // Updated to production URL
+    baseUrl: scriptBaseUrl,
     style: "dropdown", // Enforced
     position: "bottom-right", // Enforced
-    showOnDomains: [], // array of domains to show on
+    showOnDomains: [], 
   };
 
   // ProjectLinksWidget class
@@ -17,10 +34,16 @@
     constructor(container, config = {}) {
       // Check for .webflow.io domain
       const hostname = window.location.hostname;
-      if (!hostname.endsWith('.webflow.io')) {
+      const isWebflow = hostname.endsWith('.webflow.io');
+      const isLocalhost = hostname.includes('localhost') || hostname.includes('127.0.0.1');
+
+      // Allow localhost for testing, strict on production
+      if (!isWebflow && !isLocalhost) {
         // console.log("Project Links Widget: Disabled on this domain (" + hostname + ")");
         return;
       }
+
+      console.log("Project Links Widget: Initializing on", hostname);
 
       this.container =
         typeof container === "string"
@@ -51,7 +74,6 @@
         } else if (this.config.initialLinks) {
           this.render({ links: this.config.initialLinks });
         } else {
-          // Silent fail or minimal log
           console.warn("Project Links: No project ID provided");
         }
       } catch (error) {
@@ -68,20 +90,20 @@
     }
 
     render(data) {
-      // Always render dropdown
       this.renderDropdown(data);
     }
 
     renderDropdown(data) {
       const links = data.links || [];
-      if (links.length === 0) return;
+      if (links.length === 0) {
+        console.log("Project Links: No links found for project");
+        return;
+      }
 
       const positionStyles = {
         "bottom-right": "bottom: 20px; right: 20px;",
-        // Other positions ignored
       };
 
-      // Ensure container is fixed and positioned correctly
       this.container.style.cssText = `
         position: fixed; 
         z-index: 9999; 
@@ -232,7 +254,6 @@
       const config = {
         projectId: element.dataset.projectId,
         theme: element.dataset.theme || defaultConfig.theme,
-        // Ignore other style configs
       };
 
       if (element.dataset.initialLinks) {
@@ -259,7 +280,6 @@
       const config = {
         projectId: script.dataset.projectId,
         theme: script.dataset.theme || defaultConfig.theme,
-        // Ignore other style configs
       };
 
       // Create container element

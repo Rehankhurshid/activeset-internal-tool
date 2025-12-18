@@ -16,7 +16,7 @@ interface EmbedDialogProps {
 export function EmbedDialog({ isOpen, onOpenChange, projectId, projectName }: EmbedDialogProps) {
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
 
-  const baseUrl = 'https://active-set-internal-tool-production.up.railway.app';
+  const baseUrl = 'https://app.activeset.co';
 
   const embedCode = `<!-- Link Injector Widget -->
 <script 
