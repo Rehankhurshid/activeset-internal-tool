@@ -128,13 +128,25 @@
             </svg>
           </button>
           
-          <div class="dropdown-widget-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #1f2937; min-width: 160px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); z-index: 1; border-radius: 6px; overflow: hidden;">
+          <div class="dropdown-widget-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #1f2937; min-width: 250px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); z-index: 1; border-radius: 6px; overflow: hidden; border: 1px solid #374151;">
+             <div class="dropdown-header">
+               <span>Quick Links</span>
+               <span class="live-badge"><span class="dot"></span>Live</span>
+            </div>
             ${links
               .map(
                 (link) => `
-              <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="dropdown-widget-link" style="padding: 12px 16px; text-decoration: none; display: block; color: #fff; font-size: 14px; transition: background-color 0.2s;">
-                ${link.title}
-              </a>
+              <div class="dropdown-widget-row">
+                <span class="dropdown-link-title" title="${link.title}">${link.title}</span>
+                <div class="dropdown-actions">
+                  <button class="action-btn copy-btn" onclick="window.copyWidgetLink(this, '${link.url}')" title="Copy Link">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </button>
+                  <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="action-btn open-btn" title="Open Link">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                  </a>
+                </div>
+              </div>
             `
               )
               .join("")}
@@ -156,20 +168,121 @@
             font-size: 14px;
             transition: background-color 0.2s;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
           }
           
-          .dropdown-widget-button:hover,
-          .dropdown-widget-link:hover {
-            background-color: #374151 !important;
+          .dropdown-widget-button:hover {
+            background-color: #374151;
           }
           
           .dropdown-widget-container:hover .dropdown-widget-content {
             display: block !important;
           }
+
+          .dropdown-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #374151;
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #111827;
+          }
+
+          .live-badge {
+            font-size: 10px;
+            background: #374151;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #9ca3af;
+          }
+
+          .dot {
+            width: 6px;
+            height: 6px;
+            background: #10b981;
+            border-radius: 50%;
+          }
+
+          .dropdown-widget-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            border-bottom: 1px solid #374151;
+            background-color: #1f2937;
+            transition: background-color 0.2s;
+          }
+
+          .dropdown-widget-row:last-child {
+            border-bottom: none;
+          }
+
+          .dropdown-widget-row:hover {
+            background-color: #374151;
+          }
+
+          .dropdown-link-title {
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 140px;
+          }
+
+          .dropdown-actions {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+          }
+
+          .action-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            color: #9ca3af;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+          }
+
+          .action-btn:hover {
+            background-color: #4b5563;
+            color: #fff;
+          }
         </style>
       `;
     }
   }
+
+  // Helper for copy
+  window.copyWidgetLink = function(btn, url) {
+    if (!navigator.clipboard) {
+       console.error("Clipboard API not available");
+       return;
+    }
+    navigator.clipboard.writeText(url).then(() => {
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      setTimeout(() => {
+        btn.innerHTML = originalHtml;
+      }, 2000);
+    }).catch(err => {
+      console.error('Failed to copy text: ', err);
+    });
+  };
 
   // Global function to embed widget
   window.embedProjectLinksWidget = function (containerId, config = {}) {
