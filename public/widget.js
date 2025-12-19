@@ -97,10 +97,10 @@
       if (links.length === 0) return;
 
       const positionStyles = {
-        "bottom-right": "bottom: 0; right: 20px;", // Old style: attached to bottom
-        "bottom-left": "bottom: 0; left: 20px;",
-        "top-right": "top: 20px; right: 20px;",
-        "top-left": "top: 20px; left: 20px;",
+        "bottom-right": "bottom: 0; right: 24px;",
+        "bottom-left": "bottom: 0; left: 24px;",
+        "top-right": "top: 24px; right: 24px;",
+        "top-left": "top: 24px; left: 24px;",
       };
 
       const dropdownPosition = this.config.position.includes("bottom")
@@ -111,41 +111,34 @@
       this.container.style.cssText = `
         position: fixed; 
         z-index: 9999; 
-        padding-top: 10px;
         ${positionStyles["bottom-right"]}
       `;
 
       this.container.innerHTML = `
         <div class="dropdown-widget-container">
           <button class="dropdown-widget-button">
-            <svg width="16" height="16" viewBox="0 0 547 367" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M183.01 366.66H6.78001C5.48149 366.66 4.21044 366.286 3.11833 365.584C2.02623 364.881 1.15919 363.88 0.620591 362.698C0.0819888 361.517 -0.105462 360.205 0.080613 358.92C0.266688 357.635 0.818414 356.43 1.67003 355.45L301.06 9.69001C303.691 6.64561 306.948 4.20417 310.608 2.53199C314.268 0.859824 318.246 -0.0037835 322.27 1.24596e-05H498.49C499.787 -0.000107337 501.058 0.372636 502.149 1.07387C503.241 1.77509 504.108 2.77528 504.648 3.95533C505.187 5.13539 505.376 6.44559 505.192 7.72999C505.008 9.01439 504.459 10.2189 503.61 11.2L204.22 356.96C201.59 360.006 198.333 362.45 194.673 364.124C191.013 365.797 187.035 366.663 183.01 366.66Z" fill="white"/>
-              <path d="M452.63 366.66C427.7 366.66 403.79 356.756 386.162 339.128C368.534 321.5 358.63 297.59 358.63 272.66V178.66H452.63C477.56 178.66 501.47 188.564 519.098 206.192C536.727 223.82 546.63 247.73 546.63 272.66C546.63 297.59 536.727 321.5 519.098 339.128C501.47 356.756 477.56 366.66 452.63 366.66Z" fill="white"/>
-            </svg>
-            <span>Project Links</span>
-            <svg viewBox="0 0 20 20" fill="currentColor" style="width: 16px; height: 16px;">
-              <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
-            </svg>
+            <div class="button-content">
+               <span>Project Links</span>
+               <div class="count-badge">${links.length}</div>
+            </div>
+            <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
           </button>
           
-          <div class="dropdown-widget-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #1f2937; min-width: 250px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); z-index: 1; border-radius: 6px; overflow: hidden; border: 1px solid #374151;">
+          <div class="dropdown-widget-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #000000; min-width: 280px; box-shadow: 0 0 0 1px #333333, 0 4px 6px -1px rgba(0, 0, 0, 0.5); z-index: 1; border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
              <div class="dropdown-header">
-               <span>Quick Links</span>
-               <span class="live-badge"><span class="dot"></span>Live</span>
+               <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888;">Available Links</span>
             </div>
             ${links
               .map(
                 (link) => `
               <div class="dropdown-widget-row">
-                <span class="dropdown-link-title" title="${link.title}">${link.title}</span>
-                <div class="dropdown-actions">
-                  <button class="action-btn copy-btn" onclick="window.copyWidgetLink(this, '${link.url}')" title="Copy Link">
+                <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="dropdown-link-title" title="${link.title}">
+                  ${link.title}
+                  <svg class="external-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
+                </a>
+                <button class="action-btn copy-btn" onclick="window.copyWidgetLink(this, '${link.url}')" title="Copy Link" aria-label="Copy Link">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                  </button>
-                  <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="action-btn open-btn" title="Open Link">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                  </a>
-                </div>
+                </button>
               </div>
             `
               )
@@ -157,66 +150,69 @@
           .dropdown-widget-button {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            background-color: #1f2937;
+            justify-content: space-between;
+            gap: 12px;
+            background-color: #000;
             padding: 10px 16px;
-            border: none;
+            border: 1px solid #333;
+            border-bottom: none;
             cursor: pointer;
-            border-radius: 6px 6px 0 0;
+            border-radius: 8px 8px 0 0;
             font-weight: 500;
             color: #fff;
             font-size: 14px;
-            transition: background-color 0.2s;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            min-width: 160px;
+            box-sizing: border-box;
           }
           
           .dropdown-widget-button:hover {
-            background-color: #374151;
+            background-color: #111;
+          }
+
+          .button-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+
+          .count-badge {
+            background: #333;
+            color: #fff;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 600;
           }
           
           .dropdown-widget-container:hover .dropdown-widget-content {
             display: block !important;
           }
 
+          .dropdown-widget-container:hover .chevron-icon {
+            transform: rotate(180deg);
+          }
+          
+          .chevron-icon {
+            transition: transform 0.2s ease;
+            color: #666;
+          }
+
           .dropdown-header {
-            padding: 12px 16px;
-            border-bottom: 1px solid #374151;
-            font-size: 13px;
-            font-weight: 600;
-            color: #fff;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #111827;
-          }
-
-          .live-badge {
-            font-size: 10px;
-            background: #374151;
-            padding: 2px 6px;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            color: #9ca3af;
-          }
-
-          .dot {
-            width: 6px;
-            height: 6px;
-            background: #10b981;
-            border-radius: 50%;
+            padding: 12px 16px 8px;
+            background: #000;
+            border-bottom: 1px solid #222;
           }
 
           .dropdown-widget-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px 16px;
-            border-bottom: 1px solid #374151;
-            background-color: #1f2937;
+            padding: 8px 12px;
+            background-color: #000;
             transition: background-color 0.2s;
+            border-bottom: 1px solid #111;
           }
 
           .dropdown-widget-row:last-child {
@@ -224,23 +220,33 @@
           }
 
           .dropdown-widget-row:hover {
-            background-color: #374151;
+            background-color: #111;
           }
 
           .dropdown-link-title {
+            flex: 1;
             color: #fff;
-            font-size: 14px;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 140px;
+            font-size: 13px;
+            font-weight: 400;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 0;
+            transition: color 0.15s;
           }
 
-          .dropdown-actions {
-            display: flex;
-            gap: 4px;
-            align-items: center;
+          .dropdown-link-title:hover {
+            color: #ccc;
+          }
+
+          .external-icon {
+            color: #444;
+            transition: color 0.15s;
+          }
+          
+          .dropdown-link-title:hover .external-icon {
+            color: #fff;
           }
 
           .action-btn {
@@ -250,17 +256,18 @@
             width: 28px;
             height: 28px;
             border-radius: 4px;
-            color: #9ca3af;
+            color: #666;
             background: transparent;
-            border: none;
+            border: 1px solid transparent;
             cursor: pointer;
-            transition: all 0.2s;
-            text-decoration: none;
+            transition: all 0.15s;
+            margin-left: 8px;
           }
 
           .action-btn:hover {
-            background-color: #4b5563;
+            background-color: #222;
             color: #fff;
+            border-color: #333;
           }
         </style>
       `;
@@ -273,11 +280,16 @@
        console.error("Clipboard API not available");
        return;
     }
+    // Prevent clicking the row
+    if (event) event.stopPropagation();
+
     navigator.clipboard.writeText(url).then(() => {
       const originalHtml = btn.innerHTML;
-      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      btn.style.color = '#fff';
       setTimeout(() => {
         btn.innerHTML = originalHtml;
+        btn.style.color = '';
       }, 2000);
     }).catch(err => {
       console.error('Failed to copy text: ', err);
