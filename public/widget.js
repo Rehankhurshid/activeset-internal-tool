@@ -29,6 +29,16 @@
     showOnDomains: [], 
   };
 
+  // Font Loader
+  function loadFonts() {
+    if (document.getElementById('plw-fonts')) return;
+    const link = document.createElement('link');
+    link.id = 'plw-fonts';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Funnel+Display:wght@400;500;600&family=Funnel+Sans:wght@300;400;500&display=swap';
+    document.head.appendChild(link);
+  }
+
   // ProjectLinksWidget class
   class ProjectLinksWidget {
     constructor(container, config = {}) {
@@ -66,6 +76,7 @@
     }
 
     async init() {
+      loadFonts(); // Ensure fonts are loaded
       try {
         if (this.config.projectId) {
           const data = await this.fetchProjectData();
@@ -126,7 +137,7 @@
           
           <div class="dropdown-widget-content" id="plw-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #000000; min-width: 280px; box-shadow: 0 0 0 1px #333333, 0 4px 6px -1px rgba(0, 0, 0, 0.5); z-index: 10000; border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
              <div class="dropdown-header">
-               <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888;">Available Links</span>
+               <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; font-family: 'Funnel Display', sans-serif;">Available Links</span>
             </div>
             ${links
               .map(
@@ -162,7 +173,7 @@
             color: #fff;
             font-size: 14px;
             transition: all 0.2s;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: 'Funnel Display', sans-serif;
             min-width: 160px;
             box-sizing: border-box;
           }
@@ -184,6 +195,7 @@
             padding: 1px 6px;
             border-radius: 4px;
             font-weight: 600;
+            font-family: 'Funnel Sans', sans-serif;
           }
           
           .chevron-icon {
@@ -226,6 +238,7 @@
             gap: 6px;
             padding: 4px 0;
             transition: color 0.15s;
+            font-family: 'Funnel Sans', sans-serif;
           }
 
           .dropdown-link-title:hover {
