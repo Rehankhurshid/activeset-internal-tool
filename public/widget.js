@@ -39,7 +39,7 @@
     document.head.appendChild(link);
   }
 
-  // Smart Auditor Engine
+  // Smart Auditor Engine (Local)
   class SmartAuditor {
     static analyze() {
       const report = {
@@ -104,11 +104,6 @@
         addIssue('warnings', `${badLinks} links have no descriptive text`, 5);
       }
 
-      // 3. Performance / Best Practices
-      if (document.querySelectorAll('*').length > 1500) {
-        addIssue('warnings', 'Large DOM size (>1500 elements)', 5);
-      }
-
       report.score = Math.max(0, report.score);
       return report;
     }
@@ -155,8 +150,10 @@
       try {
         if (this.config.projectId) {
           const data = await this.fetchProjectData();
+          this.links = data.links || []; // Store links for later use
           this.render(data);
         } else if (this.config.initialLinks) {
+          this.links = this.config.initialLinks;
           this.render({ links: this.config.initialLinks });
         } else {
           console.warn("Project Links: No project ID provided");
@@ -184,9 +181,6 @@
 
       const positionStyles = {
         "bottom-right": "bottom: 0; right: 24px;",
-        "bottom-left": "bottom: 0; left: 24px;",
-        "top-right": "top: 24px; right: 24px;",
-        "top-left": "top: 24px; left: 24px;",
       };
 
       const dropdownPosition = this.config.position.includes("bottom")
@@ -230,14 +224,18 @@
               )
               .join("")}
             <div class="audit-section">
-               <button class="audit-btn" id="plw-audit-btn">
+               <button class="audit-btn" id="plw-local-audit-btn">
                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                 Analyze Page
+                 Quick Check
+               </button>
+               <button class="audit-btn ai-btn" id="plw-ai-audit-btn" style="margin-top: 4px; border-color: #8b5cf6; color: #a78bfa;">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                 AI Deep Scan
                </button>
             </div>
           </div>
           
-          <!-- Audit Modal -->
+          <!-- Local Audit Modal -->
           <div id="plw-audit-modal" class="audit-modal-overlay" style="display: none;">
             <div class="audit-modal-content">
               <div class="audit-modal-header">
@@ -248,6 +246,21 @@
                  <!-- Results injected here -->
               </div>
             </div>
+          </div>
+
+          <!-- AI Audit Right Panel -->
+          <div id="plw-ai-panel" class="ai-panel" style="display: none;">
+             <button id="plw-close-ai" class="close-ai-btn">&times;</button>
+             <div class="ai-header">
+                <h3>AI Content Audit</h3>
+                <span class="ai-subtitle">Analyzing tone, clarity & conversion</span>
+             </div>
+             <div id="plw-ai-content" class="ai-content">
+                <div class="ai-loading">
+                  <div class="spinner"></div>
+                  <p>Analyzing page content...</p>
+                </div>
+             </div>
           </div>
         </div>
 
@@ -402,6 +415,12 @@
             color: #fff;
             border-color: #444;
           }
+
+          .ai-btn:hover {
+            background: #2e1065 !important;
+            border-color: #8b5cf6 !important;
+            color: #fff !important;
+          }
           
           /* Modal Styles */
           .audit-modal-overlay {
@@ -509,6 +528,118 @@
           .text-red { color: #ef4444; }
           .text-yellow { color: #f59e0b; }
           .text-green { color: #10b981; }
+
+          /* AI Panel Styles */
+          .ai-panel {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            width: 350px;
+            max-height: 80vh;
+            background: #09090b;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            z-index: 20001;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-family: 'Funnel Sans', sans-serif;
+          }
+
+          .close-ai-btn {
+             position: absolute;
+             top: 10px;
+             right: 15px;
+             background: none;
+             border: none;
+             color: #71717a;
+             font-size: 22px;
+             cursor: pointer;
+             z-index: 10;
+          }
+          .close-ai-btn:hover { color: #fff; }
+
+          .ai-header {
+             padding: 20px 20px 15px;
+             border-bottom: 1px solid #27272a;
+             background: #09090b;
+          }
+          
+          .ai-header h3 {
+             margin: 0;
+             font-size: 18px;
+             color: #fff;
+             font-family: 'Funnel Display', sans-serif;
+             display: flex;
+             align-items: center;
+             gap: 8px;
+          }
+          
+          .ai-subtitle {
+             display: block;
+             font-size: 12px;
+             color: #71717a;
+             margin-top: 4px;
+          }
+
+          .ai-content {
+             padding: 20px;
+             overflow-y: auto;
+             flex: 1;
+             color: #a1a1aa;
+             font-size: 14px;
+             line-height: 1.6;
+          }
+
+          .ai-loading {
+             display: flex;
+             flex-direction: column;
+             align-items: center;
+             justify-content: center;
+             padding: 40px 0;
+             gap: 15px;
+             color: #a78bfa;
+          }
+
+          .spinner {
+             width: 30px;
+             height: 30px;
+             border: 3px solid #2e1065;
+             border-top: 3px solid #a78bfa;
+             border-radius: 50%;
+             animation: spin 1s linear infinite;
+          }
+
+          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+          .ai-card {
+             background: #18181b;
+             border: 1px solid #27272a;
+             border-radius: 8px;
+             padding: 15px;
+             margin-bottom: 15px;
+          }
+          
+          .ai-card h4 {
+             margin: 0 0 10px 0;
+             font-size: 14px;
+             color: #e4e4e7;
+             font-weight: 600;
+             text-transform: uppercase;
+             letter-spacing: 0.05em;
+          }
+          
+          .ai-list {
+             margin: 0;
+             padding-left: 20px;
+          }
+          
+          .ai-list li {
+             margin-bottom: 6px;
+          }
         </style>
       `;
 
@@ -520,10 +651,17 @@
        const btn = this.container.querySelector('#plw-trigger-btn');
        const content = this.container.querySelector('#plw-content');
        const chevron = this.container.querySelector('#plw-chevron');
-       const auditBtn = this.container.querySelector('#plw-audit-btn');
-       const modal = this.container.querySelector('#plw-audit-modal');
-       const closeAudit = this.container.querySelector('#plw-close-audit');
-       const auditBody = this.container.querySelector('#plw-audit-body');
+       
+       const localAuditBtn = this.container.querySelector('#plw-local-audit-btn');
+       const aiAuditBtn = this.container.querySelector('#plw-ai-audit-btn');
+       
+       const localModal = this.container.querySelector('#plw-audit-modal');
+       const closeLocalAudit = this.container.querySelector('#plw-close-audit');
+       const localAuditBody = this.container.querySelector('#plw-audit-body');
+       
+       const aiPanel = this.container.querySelector('#plw-ai-panel');
+       const closeAi = this.container.querySelector('#plw-close-ai');
+       const aiContent = this.container.querySelector('#plw-ai-content');
 
        if (!btn || !content) return;
 
@@ -540,8 +678,9 @@
             chevron.style.transform = 'rotate(0deg)';
          }
        };
-
-       const runAudit = () => {
+       
+       // --- Local Audit Logic ---
+       const runLocalAudit = () => {
          const report = SmartAuditor.analyze();
          
          let scoreClass = 'score-low';
@@ -553,49 +692,138 @@
               <div class="score-circle ${scoreClass}">${report.score}</div>
            </div>
          `;
-         
-         if (report.errors.length > 0) {
+         if (report.errors.length > 0) { /* ... same as before */
            resultHtml += `<div class="issue-group"><div class="issue-title text-red">Critical Issues</div>`;
-           report.errors.forEach(err => {
-             resultHtml += `<div class="issue-item"><span class="issue-icon text-red">●</span>${err}</div>`;
-           });
+           report.errors.forEach(err => { resultHtml += `<div class="issue-item"><span class="issue-icon text-red">●</span>${err}</div>`; });
            resultHtml += `</div>`;
          }
-
          if (report.warnings.length > 0) {
            resultHtml += `<div class="issue-group"><div class="issue-title text-yellow">Warnings</div>`;
-           report.warnings.forEach(warn => {
-             resultHtml += `<div class="issue-item"><span class="issue-icon text-yellow">●</span>${warn}</div>`;
-           });
+           report.warnings.forEach(warn => { resultHtml += `<div class="issue-item"><span class="issue-icon text-yellow">●</span>${warn}</div>`; });
            resultHtml += `</div>`;
          }
-
          if (report.passed.length > 0) {
            resultHtml += `<div class="issue-group"><div class="issue-title text-green">Passed Checks</div>`;
-           report.passed.forEach(pass => {
-             resultHtml += `<div class="issue-item"><span class="issue-icon text-green">✓</span>${pass}</div>`;
-           });
+           report.passed.forEach(pass => { resultHtml += `<div class="issue-item"><span class="issue-icon text-green">✓</span>${pass}</div>`; });
            resultHtml += `</div>`;
          }
 
-         auditBody.innerHTML = resultHtml;
-         modal.style.display = 'flex';
+         localAuditBody.innerHTML = resultHtml;
+         localModal.style.display = 'flex';
+       };
+       
+       // --- AI Audit Logic ---
+       const runAiAudit = async () => {
+          aiPanel.style.display = 'flex';
+          aiContent.innerHTML = `
+            <div class="ai-loading">
+               <div class="spinner"></div>
+               <p>Analyzing content with Gemini AI...</p>
+            </div>
+          `;
+          
+          try {
+             // 1. Match current URL to project link
+             const currentUrl = window.location.href;
+             const currentPath = window.location.pathname;
+             
+             // Simple matching logic: exact match or contains
+             let matchedLink = this.links.find(l => currentUrl.includes(l.url) || l.url.includes(currentPath));
+             // Fallback: if homepage, try finding link with '/' or base url
+             if (!matchedLink && currentPath === '/') {
+                 matchedLink = this.links.find(l => l.url.endsWith(window.location.hostname)); 
+             }
+             
+             // 2. Scrape Content
+             const textContent = document.body.innerText;
+             
+             // 3. Call API
+             const response = await fetch(`${this.config.baseUrl}/api/audit`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                    text: textContent,
+                    url: currentUrl,
+                    projectId: this.config.projectId,
+                    linkId: matchedLink ? matchedLink.id : undefined
+                 })
+             });
+             
+             const result = await response.json();
+             
+             if (!result.success) {
+                 throw new Error(result.error || 'Audit failed');
+             }
+             
+             const data = result.data;
+             
+             // 4. Render Results
+             let html = `
+                <div class="score-container">
+                    <div class="score-circle ${data.score >= 80 ? 'score-high' : data.score >= 50 ? 'score-med' : 'score-low'}">${data.score}</div>
+                </div>
+                <div class="ai-card">
+                   <h4>Executive Summary</h4>
+                   <p>${data.summary}</p>
+                </div>
+             `;
+             
+             if (data.strengths && data.strengths.length) {
+                 html += `
+                 <div class="ai-card" style="border-left: 3px solid #10b981;">
+                    <h4 class="text-green">Strengths</h4>
+                    <ul class="ai-list">
+                       ${data.strengths.map(s => `<li>${s}</li>`).join('')}
+                    </ul>
+                 </div>`;
+             }
+             
+             if (data.improvements && data.improvements.length) {
+                 html += `
+                 <div class="ai-card" style="border-left: 3px solid #f59e0b;">
+                    <h4 class="text-yellow">Opportunities</h4>
+                    <ul class="ai-list">
+                       ${data.improvements.map(i => `<li>${i}</li>`).join('')}
+                    </ul>
+                 </div>`;
+             }
+             
+             aiContent.innerHTML = html;
+
+          } catch (err) {
+             console.error(err);
+             aiContent.innerHTML = `
+                <div style="text-align: center; color: #ef4444; padding: 20px;">
+                   <p>Analysis Failed</p>
+                   <p style="font-size: 12px; opacity: 0.8;">${err.message}</p>
+                </div>
+             `;
+          }
        };
 
        btn.addEventListener('click', toggleMenu);
        document.addEventListener('click', closeMenu);
        
-       if (auditBtn) auditBtn.addEventListener('click', (e) => {
+       if (localAuditBtn) localAuditBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          runAudit();
+          runLocalAudit();
        });
        
-       if (closeAudit) closeAudit.addEventListener('click', () => {
-          modal.style.display = 'none';
+       if (aiAuditBtn) aiAuditBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          runAiAudit(); // Close menu? No, keep context.
        });
        
-       if (modal) modal.addEventListener('click', (e) => {
-          if (e.target === modal) modal.style.display = 'none';
+       if (closeLocalAudit) closeLocalAudit.addEventListener('click', () => {
+          localModal.style.display = 'none';
+       });
+       
+       if (localModal) localModal.addEventListener('click', (e) => {
+          if (e.target === localModal) localModal.style.display = 'none';
+       });
+       
+       if (closeAi) closeAi.addEventListener('click', () => {
+           aiPanel.style.display = 'none';
        });
     }
   }

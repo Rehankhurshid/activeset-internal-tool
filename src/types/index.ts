@@ -4,10 +4,17 @@ export interface ProjectLink {
   url: string;
   order: number;
   isDefault?: boolean;
+  auditResult?: {
+    score: number;
+    summary: string;
+    strengths: string[];
+    improvements: string[];
+    lastRun: string; // ISO date string
+  };
 }
 
 export type CreateProjectLinkInput = Omit<ProjectLink, 'id'>;
-export type UpdateProjectLinkInput = Partial<Pick<ProjectLink, 'title' | 'url' | 'order'>>;
+export type UpdateProjectLinkInput = Partial<Pick<ProjectLink, 'title' | 'url' | 'order' | 'auditResult'>>;
 
 export interface Project {
   id: string;
