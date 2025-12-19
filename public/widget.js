@@ -116,15 +116,15 @@
 
       this.container.innerHTML = `
         <div class="dropdown-widget-container">
-          <button class="dropdown-widget-button">
+          <button class="dropdown-widget-button" id="plw-trigger-btn">
             <div class="button-content">
                <span>Project Links</span>
                <div class="count-badge">${links.length}</div>
             </div>
-            <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+            <svg class="chevron-icon" id="plw-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
           </button>
           
-          <div class="dropdown-widget-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #000000; min-width: 280px; box-shadow: 0 0 0 1px #333333, 0 4px 6px -1px rgba(0, 0, 0, 0.5); z-index: 1; border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
+          <div class="dropdown-widget-content" id="plw-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #000000; min-width: 280px; box-shadow: 0 0 0 1px #333333, 0 4px 6px -1px rgba(0, 0, 0, 0.5); z-index: 10000; border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
              <div class="dropdown-header">
                <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888;">Available Links</span>
             </div>
@@ -184,14 +184,6 @@
             padding: 1px 6px;
             border-radius: 4px;
             font-weight: 600;
-          }
-          
-          .dropdown-widget-container:hover .dropdown-widget-content {
-            display: block !important;
-          }
-
-          .dropdown-widget-container:hover .chevron-icon {
-            transform: rotate(180deg);
           }
           
           .chevron-icon {
@@ -271,6 +263,34 @@
           }
         </style>
       `;
+
+      // Setup click listeners
+      this.setupHandlers();
+    }
+
+    setupHandlers() {
+       const btn = this.container.querySelector('#plw-trigger-btn');
+       const content = this.container.querySelector('#plw-content');
+       const chevron = this.container.querySelector('#plw-chevron');
+
+       if (!btn || !content) return;
+
+       const toggleMenu = (e) => {
+         e.stopPropagation();
+         const isHidden = content.style.display === 'none';
+         content.style.display = isHidden ? 'block' : 'none';
+         chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+       };
+
+       const closeMenu = (e) => {
+         if (!this.container.contains(e.target)) {
+            content.style.display = 'none';
+            chevron.style.transform = 'rotate(0deg)';
+         }
+       };
+
+       btn.addEventListener('click', toggleMenu);
+       document.addEventListener('click', closeMenu);
     }
   }
 
