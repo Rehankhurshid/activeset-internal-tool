@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
         const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash-latest',
+            model: 'gemini-flash-latest',
             contents: [
                 {
                     role: 'user',
