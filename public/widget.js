@@ -39,6 +39,81 @@
     document.head.appendChild(link);
   }
 
+  // Smart Auditor Engine
+  class SmartAuditor {
+    static analyze() {
+      const report = {
+        score: 100,
+        errors: [],
+        warnings: [],
+        passed: []
+      };
+
+      const addIssue = (type, message, deduction) => {
+        report[type].push(message);
+        if (type === 'errors') report.score -= deduction;
+        if (type === 'warnings') report.score -= (deduction / 2);
+      };
+
+      // 1. SEO Checks
+      const title = document.title;
+      if (!title) {
+        addIssue('errors', 'Missing page title', 20);
+      } else if (title.length < 10 || title.length > 60) {
+        addIssue('warnings', `Title length (${title.length}) is not optimal (10-60 chars)`, 5);
+      } else {
+        report.passed.push('Page title is optimized');
+      }
+
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (!metaDesc) {
+        addIssue('errors', 'Missing meta description', 20);
+      } else if (metaDesc.content.length < 50 || metaDesc.content.length > 160) {
+        addIssue('warnings', 'Meta description length should be between 50-160 chars', 5);
+      } else {
+        report.passed.push('Meta description exists');
+      }
+
+      const h1s = document.querySelectorAll('h1');
+      if (h1s.length === 0) {
+        addIssue('errors', 'Missing H1 heading', 15);
+      } else if (h1s.length > 1) {
+        addIssue('warnings', 'Multiple H1 tags found (should be one)', 5);
+      } else {
+        report.passed.push('H1 structure is correct');
+      }
+
+      // 2. Accessibility Checks
+      const images = document.querySelectorAll('img');
+      let missingAlt = 0;
+      images.forEach(img => {
+        if (!img.alt) missingAlt++;
+      });
+      if (missingAlt > 0) {
+        addIssue('errors', `${missingAlt} images missing alt text`, 5 * missingAlt);
+      } else {
+        report.passed.push('All images have alt text');
+      }
+
+      const links = document.querySelectorAll('a');
+      let badLinks = 0;
+      links.forEach(link => {
+        if (!link.innerText.trim() && !link.getAttribute('aria-label')) badLinks++;
+      });
+      if (badLinks > 0) {
+        addIssue('warnings', `${badLinks} links have no descriptive text`, 5);
+      }
+
+      // 3. Performance / Best Practices
+      if (document.querySelectorAll('*').length > 1500) {
+        addIssue('warnings', 'Large DOM size (>1500 elements)', 5);
+      }
+
+      report.score = Math.max(0, report.score);
+      return report;
+    }
+  }
+
   // ProjectLinksWidget class
   class ProjectLinksWidget {
     constructor(container, config = {}) {
@@ -137,7 +212,7 @@
           
           <div class="dropdown-widget-content" id="plw-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #000000; min-width: 280px; box-shadow: 0 0 0 1px #333333, 0 4px 6px -1px rgba(0, 0, 0, 0.5); z-index: 10000; border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
              <div class="dropdown-header">
-               <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; font-family: 'Funnel Display', sans-serif;">Available Links</span>
+               <span class="header-title">Available Links</span>
             </div>
             ${links
               .map(
@@ -154,6 +229,25 @@
             `
               )
               .join("")}
+            <div class="audit-section">
+               <button class="audit-btn" id="plw-audit-btn">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                 Analyze Page
+               </button>
+            </div>
+          </div>
+          
+          <!-- Audit Modal -->
+          <div id="plw-audit-modal" class="audit-modal-overlay" style="display: none;">
+            <div class="audit-modal-content">
+              <div class="audit-modal-header">
+                <h3>Page Health Report</h3>
+                <button id="plw-close-audit" class="close-audit-btn">&times;</button>
+              </div>
+              <div id="plw-audit-body" class="audit-modal-body">
+                 <!-- Results injected here -->
+              </div>
+            </div>
           </div>
         </div>
 
@@ -208,6 +302,14 @@
             background: #000;
             border-bottom: 1px solid #222;
           }
+          
+          .header-title {
+            font-size: 11px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.05em; 
+            color: #888; 
+            font-family: 'Funnel Display', sans-serif;
+          }
 
           .dropdown-widget-row {
             display: flex;
@@ -217,10 +319,6 @@
             background-color: #000;
             transition: background-color 0.2s;
             border-bottom: 1px solid #111;
-          }
-
-          .dropdown-widget-row:last-child {
-            border-bottom: none;
           }
 
           .dropdown-widget-row:hover {
@@ -274,6 +372,143 @@
             color: #fff;
             border-color: #333;
           }
+          
+          /* Audit Section */
+          .audit-section {
+            padding: 8px 12px;
+            background: #000;
+            border-top: 1px solid #222;
+          }
+          
+          .audit-btn {
+             width: 100%;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             gap: 8px;
+             padding: 6px;
+             font-size: 12px;
+             background: #111;
+             border: 1px solid #333;
+             color: #888;
+             border-radius: 4px;
+             cursor: pointer;
+             transition: all 0.2s;
+             font-family: 'Funnel Sans', sans-serif;
+          }
+          
+          .audit-btn:hover {
+            background: #222;
+            color: #fff;
+            border-color: #444;
+          }
+          
+          /* Modal Styles */
+          .audit-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20000;
+            backdrop-filter: blur(2px);
+          }
+          
+          .audit-modal-content {
+            width: 500px;
+            background: #09090b;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            font-family: 'Funnel Sans', sans-serif;
+          }
+          
+          .audit-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #27272a;
+            background: #09090b;
+          }
+          
+          .audit-modal-header h3 {
+            margin: 0;
+            font-size: 16px;
+            color: #fff;
+            font-weight: 600;
+            font-family: 'Funnel Display', sans-serif;
+          }
+          
+          .close-audit-btn {
+            background: none;
+            border: none;
+            color: #71717a;
+            font-size: 24px;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0;
+          }
+          
+          .close-audit-btn:hover {
+            color: #fff;
+          }
+          
+          .audit-modal-body {
+            padding: 20px;
+            color: #a1a1aa;
+            font-size: 14px;
+            max-height: 70vh;
+            overflow-y: auto;
+          }
+          
+          .score-container {
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             margin-bottom: 24px;
+          }
+          
+          .score-circle {
+             width: 80px;
+             height: 80px;
+             border-radius: 50%;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             font-size: 28px;
+             font-weight: 700;
+             font-family: 'Funnel Display', sans-serif;
+             border: 4px solid #27272a;
+          }
+          
+          .score-high { border-color: #10b981; color: #10b981; }
+          .score-med { border-color: #f59e0b; color: #f59e0b; }
+          .score-low { border-color: #ef4444; color: #ef4444; }
+          
+          .issue-group { margin-bottom: 20px; }
+          .issue-title { font-weight: 600; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+          
+          .issue-item {
+             background: #18181b;
+             padding: 10px 12px;
+             border-radius: 6px;
+             margin-bottom: 6px;
+             border: 1px solid #27272a;
+             display: flex;
+             gap: 8px;
+             align-items: start;
+          }
+          
+          .issue-icon { flex-shrink: 0; margin-top: 2px; }
+          .text-red { color: #ef4444; }
+          .text-yellow { color: #f59e0b; }
+          .text-green { color: #10b981; }
         </style>
       `;
 
@@ -285,6 +520,10 @@
        const btn = this.container.querySelector('#plw-trigger-btn');
        const content = this.container.querySelector('#plw-content');
        const chevron = this.container.querySelector('#plw-chevron');
+       const auditBtn = this.container.querySelector('#plw-audit-btn');
+       const modal = this.container.querySelector('#plw-audit-modal');
+       const closeAudit = this.container.querySelector('#plw-close-audit');
+       const auditBody = this.container.querySelector('#plw-audit-body');
 
        if (!btn || !content) return;
 
@@ -302,8 +541,62 @@
          }
        };
 
+       const runAudit = () => {
+         const report = SmartAuditor.analyze();
+         
+         let scoreClass = 'score-low';
+         if (report.score >= 90) scoreClass = 'score-high';
+         else if (report.score >= 50) scoreClass = 'score-med';
+
+         let resultHtml = `
+           <div class="score-container">
+              <div class="score-circle ${scoreClass}">${report.score}</div>
+           </div>
+         `;
+         
+         if (report.errors.length > 0) {
+           resultHtml += `<div class="issue-group"><div class="issue-title text-red">Critical Issues</div>`;
+           report.errors.forEach(err => {
+             resultHtml += `<div class="issue-item"><span class="issue-icon text-red">●</span>${err}</div>`;
+           });
+           resultHtml += `</div>`;
+         }
+
+         if (report.warnings.length > 0) {
+           resultHtml += `<div class="issue-group"><div class="issue-title text-yellow">Warnings</div>`;
+           report.warnings.forEach(warn => {
+             resultHtml += `<div class="issue-item"><span class="issue-icon text-yellow">●</span>${warn}</div>`;
+           });
+           resultHtml += `</div>`;
+         }
+
+         if (report.passed.length > 0) {
+           resultHtml += `<div class="issue-group"><div class="issue-title text-green">Passed Checks</div>`;
+           report.passed.forEach(pass => {
+             resultHtml += `<div class="issue-item"><span class="issue-icon text-green">✓</span>${pass}</div>`;
+           });
+           resultHtml += `</div>`;
+         }
+
+         auditBody.innerHTML = resultHtml;
+         modal.style.display = 'flex';
+       };
+
        btn.addEventListener('click', toggleMenu);
        document.addEventListener('click', closeMenu);
+       
+       if (auditBtn) auditBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          runAudit();
+       });
+       
+       if (closeAudit) closeAudit.addEventListener('click', () => {
+          modal.style.display = 'none';
+       });
+       
+       if (modal) modal.addEventListener('click', (e) => {
+          if (e.target === modal) modal.style.display = 'none';
+       });
     }
   }
 
