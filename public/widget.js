@@ -230,7 +230,7 @@
                </button>
                <button class="audit-btn ai-btn" id="plw-ai-audit-btn" style="margin-top: 4px; border-color: #8b5cf6; color: #a78bfa;">
                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                 AI Deep Scan
+                 AI Tech Check
                </button>
             </div>
           </div>
@@ -252,8 +252,8 @@
           <div id="plw-ai-panel" class="ai-panel" style="display: none;">
              <button id="plw-close-ai" class="close-ai-btn">&times;</button>
              <div class="ai-header">
-                <h3>AI Content Audit</h3>
-                <span class="ai-subtitle">Analyzing tone, clarity & conversion</span>
+                <h3>Content Auditor</h3>
+                <span class="ai-subtitle">Spelling & Technical Accuracy</span>
              </div>
              <div id="plw-ai-content" class="ai-content">
                 <div class="ai-loading">
@@ -763,15 +763,15 @@
                     <div class="score-circle ${data.score >= 80 ? 'score-high' : data.score >= 50 ? 'score-med' : 'score-low'}">${data.score}</div>
                 </div>
                 <div class="ai-card">
-                   <h4>Executive Summary</h4>
+                   <h4>Audit Summary</h4>
                    <p>${data.summary}</p>
                 </div>
              `;
              
              if (data.strengths && data.strengths.length) {
                  html += `
-                 <div class="ai-card" style="border-left: 3px solid #10b981;">
-                    <h4 class="text-green">Strengths</h4>
+                 <div class="ai-card" style="border-left: 3px solid #ef4444;">
+                    <h4 class="text-red">Spelling & Grammar</h4>
                     <ul class="ai-list">
                        ${data.strengths.map(s => `<li>${s}</li>`).join('')}
                     </ul>
@@ -781,7 +781,7 @@
              if (data.improvements && data.improvements.length) {
                  html += `
                  <div class="ai-card" style="border-left: 3px solid #f59e0b;">
-                    <h4 class="text-yellow">Opportunities</h4>
+                    <h4 class="text-yellow">Technical Issues</h4>
                     <ul class="ai-list">
                        ${data.improvements.map(i => `<li>${i}</li>`).join('')}
                     </ul>

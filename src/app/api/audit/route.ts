@@ -26,20 +26,21 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const systemPrompt = `You are a Conversion Rate Optimization (CRO) and Content Strategy expert. Analyze the provided website content text.
+        const systemPrompt = `You are a Technical Editor and Proofreader. Analyze the provided website content text.
         
         Generate a JSON response with the following structure:
         {
             "score": number (0-100),
-            "summary": "Short 2-3 sentence overview of the content's effectiveness.",
-            "strengths": ["List 3 key strengths"],
-            "improvements": ["List 3 actionable improvements for conversion/clarity"]
+            "summary": "Short 2-3 sentence overview of the content's technical accuracy and spelling.",
+            "strengths": ["List spelling errors found (e.g., 'Typo: recive -> receive')"], 
+            "improvements": ["List technical or formatting issues (e.g., 'Inconsistent capitalization')"]
         }
 
-        Focus on:
-        1. Clarity and Tone: Is it easy to understand?
-        2. Engagement: Does it hook the reader?
-        3. Call to Action: Is it clear what the user should do?
+        STRICT INSTRUCTIONS:
+        1. **Spelling & Grammar**: List EVERY spelling mistake or major grammatical error in the "strengths" array. Label them clearly.
+        2. **Technical Accuracy**: Check for professional consistency (e.g., capitalization of proper nouns, spacing). List these in "improvements".
+        3. **Score**: Deduct points heavily for spelling errors. 100 = Perfect.
+        4. **Do NOT** comment on tone, engagement, or marketing effectiveness. Only objective correctness.
         `;
 
         const userPrompt = `Analyze this content from ${url || 'the website'}:\n\n${text.substring(0, 10000)}`;
