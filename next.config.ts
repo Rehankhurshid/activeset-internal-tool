@@ -3,8 +3,6 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   serverExternalPackages: ['puppeteer', '@sparticuz/chromium'],
   output: 'standalone',
-  // Disable Turbopack for production builds (fixes font loading in Docker)
-  turbopack: { enabled: false },
   async headers() {
     return [
       {
