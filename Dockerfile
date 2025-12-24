@@ -42,6 +42,9 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 # Uncomment the following line in case you want to disable telemetry during the build.
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# Disable Turbopack for production builds (fixes font loading in Docker)
+ENV TURBOPACK=0
+
 RUN npm run build
 
 # 3. Production image, copy all the files and run next
