@@ -39,73 +39,228 @@
     document.head.appendChild(link);
   }
 
-  // Smart Auditor Engine (Local)
-  class SmartAuditor {
-    static analyze() {
-      const report = {
-        score: 100,
-        errors: [],
-        warnings: [],
-        passed: []
-      };
+  // ========================================
+  // Content Quality Auditor (5-Category System)
+  // ========================================
+  class ContentQualityAuditor {
+    
+    // Common words dictionary (compact) for spell checking
+    static COMMON_WORDS = new Set([
+      'the','be','to','of','and','a','in','that','have','i','it','for','not','on','with','he','as','you',
+      'do','at','this','but','his','by','from','they','we','say','her','she','or','an','will','my','one',
+      'all','would','there','their','what','so','up','out','if','about','who','get','which','go','me',
+      'when','make','can','like','time','no','just','him','know','take','people','into','year','your',
+      'good','some','could','them','see','other','than','then','now','look','only','come','its','over',
+      'think','also','back','after','use','two','how','our','work','first','well','way','even','new',
+      'want','because','any','these','give','day','most','us','is','are','was','were','been','being',
+      'has','had','having','does','did','doing','am','here','more','very','should','such','must','may',
+      'might','shall','need','own','still','each','both','much','many','most','find','found','made',
+      'same','great','where','while','right','through','before','those','every','thing','got','down',
+      'always','another','around','never','going','last','long','little','three','left','old','own',
+      'put','end','off','does','let','set','try','ask','went','came','next','best','though','place',
+      'took','called','world','part','head','keep','hand','against','high','without','within','show',
+      'small','few','since','start','love','life','home','name','home','point','form','full','real',
+      'team','case','company','service','need','group','system','number','under','problem','however',
+      'help','run','feel','week','ever','actually','something','nothing','between','might','believe',
+      'kind','mean','money','today','away','experience','read','write','website','page','content',
+      'design','development','client','project','business','digital','marketing','brand','creative',
+      'webflow','services','solutions','contact','email','phone','address','submit','send','message'
+    ]);
 
-      const addIssue = (type, message, deduction) => {
-        report[type].push(message);
-        if (type === 'errors') report.score -= deduction;
-        if (type === 'warnings') report.score -= (deduction / 2);
-      };
+    // Placeholder patterns (CRITICAL - blocks deployment)
+    static PLACEHOLDER_PATTERNS = [
+      { regex: /lorem\s+ipsum/gi, name: 'Lorem Ipsum' },
+      { regex: /\[your\s*name\]/gi, name: '[Your Name]' },
+      { regex: /\[company\s*name\]/gi, name: '[Company Name]' },
+      { regex: /\[client\s*name\]/gi, name: '[Client Name]' },
+      { regex: /\[insert\s+.+?\s+here\]/gi, name: '[Insert X Here]' },
+      { regex: /\bTBD\b/g, name: 'TBD' },
+      { regex: /\bTODO\b/g, name: 'TODO' },
+      { regex: /\bFIXME\b/g, name: 'FIXME' },
+      { regex: /coming\s+soon/gi, name: 'Coming Soon' },
+      { regex: /placeholder\s*text/gi, name: 'Placeholder Text' },
+      { regex: /sample\s+text/gi, name: 'Sample Text' },
+      { regex: /dolor\s+sit\s+amet/gi, name: 'Lorem Ipsum (latin)' }
+    ];
 
-      // 1. SEO Checks
-      const title = document.title;
-      if (!title) {
-        addIssue('errors', 'Missing page title', 20);
-      } else if (title.length < 10 || title.length > 60) {
-        addIssue('warnings', `Title length (${title.length}) is not optimal (10-60 chars)`, 5);
-      } else {
-        report.passed.push('Page title is optimized');
+    // Count syllables in a word (for readability)
+    static countSyllables(word) {
+      word = word.toLowerCase().replace(/[^a-z]/g, '');
+      if (word.length <= 3) return 1;
+      word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
+      word = word.replace(/^y/, '');
+      const matches = word.match(/[aeiouy]{1,2}/g);
+      return matches ? matches.length : 1;
+    }
+
+    // Flesch Reading Ease Score
+    static calculateReadability(text) {
+      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      const words = text.split(/\s+/).filter(w => w.length > 0);
+      const totalSyllables = words.reduce((sum, w) => sum + this.countSyllables(w), 0);
+      
+      if (sentences.length === 0 || words.length === 0) {
+        return { score: 0, gradeLevel: 'Unknown', difficulty: 'Unknown' };
       }
 
-      const metaDesc = document.querySelector('meta[name="description"]');
-      if (!metaDesc) {
-        addIssue('errors', 'Missing meta description', 20);
-      } else if (metaDesc.content.length < 50 || metaDesc.content.length > 160) {
-        addIssue('warnings', 'Meta description length should be between 50-160 chars', 5);
-      } else {
-        report.passed.push('Meta description exists');
+      const avgSentenceLength = words.length / sentences.length;
+      const avgSyllablesPerWord = totalSyllables / words.length;
+      
+      // Flesch Reading Ease: 206.835 - 1.015(ASL) - 84.6(ASW)
+      const score = Math.round(206.835 - (1.015 * avgSentenceLength) - (84.6 * avgSyllablesPerWord));
+      const clampedScore = Math.max(0, Math.min(100, score));
+
+      let difficulty, gradeLevel;
+      if (clampedScore >= 90) { difficulty = 'Very Easy'; gradeLevel = '5th Grade'; }
+      else if (clampedScore >= 80) { difficulty = 'Easy'; gradeLevel = '6th Grade'; }
+      else if (clampedScore >= 70) { difficulty = 'Fairly Easy'; gradeLevel = '7th Grade'; }
+      else if (clampedScore >= 60) { difficulty = 'Standard'; gradeLevel = '8th-9th Grade'; }
+      else if (clampedScore >= 50) { difficulty = 'Fairly Difficult'; gradeLevel = '10th-12th Grade'; }
+      else if (clampedScore >= 30) { difficulty = 'Difficult'; gradeLevel = 'College'; }
+      else { difficulty = 'Very Difficult'; gradeLevel = 'College Graduate'; }
+
+      return { score: clampedScore, gradeLevel, difficulty };
+    }
+
+    // Main audit function
+    static audit() {
+      const text = document.body.innerText || '';
+      const result = {
+        canDeploy: true,
+        overallScore: 100,
+        summary: '',
+        categories: {
+          placeholders: { status: 'passed', issues: [], score: 100 },
+          spelling: { status: 'passed', issues: [], errorCount: 0, errorRate: '0%', score: 100 },
+          readability: { status: 'passed', score: 0, gradeLevel: '', difficulty: '', displayScore: 100 },
+          completeness: { status: 'passed', issues: [], wordCount: 0, hasH1: false, missingAlt: 0, score: 100 }
+        }
+      };
+
+      // ========== 1. PLACEHOLDER DETECTION (CRITICAL) ==========
+      this.PLACEHOLDER_PATTERNS.forEach(pattern => {
+        const matches = text.match(pattern.regex);
+        if (matches && matches.length > 0) {
+          result.categories.placeholders.issues.push({
+            type: pattern.name,
+            count: matches.length
+          });
+        }
+      });
+
+      if (result.categories.placeholders.issues.length > 0) {
+        result.categories.placeholders.status = 'failed';
+        result.categories.placeholders.score = 0;
+        result.canDeploy = false;
+        result.overallScore = 0;
       }
 
+      // ========== 2. SPELLING CHECK ==========
+      const words = text.split(/\s+/).filter(w => /^[a-zA-Z]{4,}$/.test(w));
+      const unknownWords = [];
+      const checked = new Set();
+
+      words.forEach(word => {
+        const lower = word.toLowerCase();
+        if (!checked.has(lower) && !this.COMMON_WORDS.has(lower)) {
+          // Skip proper nouns (capitalized words in middle of text)
+          if (word[0] === word[0].toUpperCase() && word.length > 2) return;
+          unknownWords.push(word);
+          checked.add(lower);
+        }
+      });
+
+      // Limit to top 10 potential typos
+      const potentialTypos = unknownWords.slice(0, 10);
+      if (potentialTypos.length > 0) {
+        result.categories.spelling.issues = potentialTypos.map(w => ({ word: w }));
+        result.categories.spelling.errorCount = potentialTypos.length;
+        result.categories.spelling.errorRate = ((potentialTypos.length / words.length) * 100).toFixed(1) + '%';
+        result.categories.spelling.status = potentialTypos.length > 5 ? 'warning' : 'info';
+        result.categories.spelling.score = Math.max(0, 100 - (potentialTypos.length * 5));
+      }
+
+      // ========== 3. READABILITY ==========
+      const readability = this.calculateReadability(text);
+      result.categories.readability.score = readability.score;
+      result.categories.readability.gradeLevel = readability.gradeLevel;
+      result.categories.readability.difficulty = readability.difficulty;
+      
+      // Ideal range is 60-70 for web content
+      if (readability.score >= 50 && readability.score <= 80) {
+        result.categories.readability.status = 'passed';
+        result.categories.readability.displayScore = 100;
+      } else if (readability.score < 30 || readability.score > 90) {
+        result.categories.readability.status = 'warning';
+        result.categories.readability.displayScore = 70;
+      } else {
+        result.categories.readability.status = 'info';
+        result.categories.readability.displayScore = 85;
+      }
+
+      // ========== 4. COMPLETENESS ==========
+      const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
+      result.categories.completeness.wordCount = wordCount;
+
+      // Check H1
       const h1s = document.querySelectorAll('h1');
+      result.categories.completeness.hasH1 = h1s.length > 0;
       if (h1s.length === 0) {
-        addIssue('errors', 'Missing H1 heading', 15);
+        result.categories.completeness.issues.push('Missing H1 heading');
       } else if (h1s.length > 1) {
-        addIssue('warnings', 'Multiple H1 tags found (should be one)', 5);
-      } else {
-        report.passed.push('H1 structure is correct');
+        result.categories.completeness.issues.push(`Multiple H1 tags (${h1s.length})`);
       }
 
-      // 2. Accessibility Checks
+      // Check alt text
       const images = document.querySelectorAll('img');
       let missingAlt = 0;
       images.forEach(img => {
-        if (!img.alt) missingAlt++;
+        if (!img.alt || img.alt.trim() === '') missingAlt++;
       });
+      result.categories.completeness.missingAlt = missingAlt;
       if (missingAlt > 0) {
-        addIssue('errors', `${missingAlt} images missing alt text`, 5 * missingAlt);
+        result.categories.completeness.issues.push(`${missingAlt} images missing alt text`);
+      }
+
+      // Word count check
+      if (wordCount < 50) {
+        result.categories.completeness.issues.push('Very thin content (< 50 words)');
+      } else if (wordCount < 100) {
+        result.categories.completeness.issues.push('Light content (< 100 words)');
+      }
+
+      if (result.categories.completeness.issues.length > 0) {
+        result.categories.completeness.status = result.categories.completeness.issues.some(i => i.includes('Missing H1')) ? 'warning' : 'info';
+        result.categories.completeness.score = Math.max(0, 100 - (result.categories.completeness.issues.length * 10));
+      }
+
+      // ========== CALCULATE OVERALL SCORE ==========
+      if (result.canDeploy) {
+        // Weighted average: Placeholders (blocked), Spelling 30%, Readability 20%, Completeness 50%
+        result.overallScore = Math.round(
+          (result.categories.spelling.score * 0.3) +
+          (result.categories.readability.displayScore * 0.2) +
+          (result.categories.completeness.score * 0.5)
+        );
+      }
+
+      // Generate summary
+      const issueCount = 
+        result.categories.placeholders.issues.length +
+        result.categories.spelling.issues.length +
+        result.categories.completeness.issues.length;
+
+      if (!result.canDeploy) {
+        result.summary = '⛔ BLOCKED: Placeholder content detected. Replace before deploying.';
+      } else if (result.overallScore >= 90) {
+        result.summary = '✅ Excellent! Content is ready for deployment.';
+      } else if (result.overallScore >= 70) {
+        result.summary = `⚠️ Good with ${issueCount} minor issue(s). Review recommended.`;
       } else {
-        report.passed.push('All images have alt text');
+        result.summary = `❌ ${issueCount} issues found. Fix before deploying.`;
       }
 
-      const links = document.querySelectorAll('a');
-      let badLinks = 0;
-      links.forEach(link => {
-        if (!link.innerText.trim() && !link.getAttribute('aria-label')) badLinks++;
-      });
-      if (badLinks > 0) {
-        addIssue('warnings', `${badLinks} links have no descriptive text`, 5);
-      }
-
-      report.score = Math.max(0, report.score);
-      return report;
+      return result;
     }
   }
 
@@ -228,9 +383,9 @@
                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                  Quick Check
                </button>
-               <button class="audit-btn ai-btn" id="plw-ai-audit-btn" style="margin-top: 4px; border-color: #8b5cf6; color: #a78bfa;">
-                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                 AI Tech Check
+               <button class="audit-btn ai-btn" id="plw-ai-audit-btn" style="margin-top: 4px; border-color: #10b981; color: #34d399;">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                 Audit Page
                </button>
             </div>
           </div>
@@ -248,17 +403,17 @@
             </div>
           </div>
 
-          <!-- AI Audit Right Panel -->
+          <!-- Content Quality Audit Right Panel -->
           <div id="plw-ai-panel" class="ai-panel" style="display: none;">
              <button id="plw-close-ai" class="close-ai-btn">&times;</button>
              <div class="ai-header">
-                <h3>Content Auditor</h3>
-                <span class="ai-subtitle">Spelling & Technical Accuracy</span>
+                <h3>📋 Content Audit</h3>
+                <span class="ai-subtitle">Placeholder · Spelling · Readability</span>
              </div>
              <div id="plw-ai-content" class="ai-content">
                 <div class="ai-loading">
                   <div class="spinner"></div>
-                  <p>Analyzing page content...</p>
+                  <p>Scanning content...</p>
                 </div>
              </div>
           </div>
@@ -640,6 +795,76 @@
           .ai-list li {
              margin-bottom: 6px;
           }
+
+          /* Category Rows */
+          .category-list {
+             border: 1px solid #27272a;
+             border-radius: 8px;
+             overflow: hidden;
+          }
+
+          .category-row {
+             display: flex;
+             align-items: center;
+             padding: 12px 14px;
+             background: #18181b;
+             border-bottom: 1px solid #27272a;
+             gap: 10px;
+          }
+
+          .category-row:last-of-type {
+             border-bottom: none;
+          }
+
+          .category-row.passed { background: #18181b; }
+          .category-row.warning { background: #1c1917; }
+          .category-row.failed { background: #1c0d0d; }
+          .category-row.info { background: #18181b; }
+
+          .cat-icon {
+             font-size: 16px;
+             flex-shrink: 0;
+          }
+
+          .cat-name {
+             flex: 1;
+             font-size: 13px;
+             font-weight: 500;
+             color: #e4e4e7;
+          }
+
+          .cat-status {
+             font-size: 12px;
+             color: #71717a;
+          }
+
+          .category-row.passed .cat-status { color: #10b981; }
+          .category-row.warning .cat-status { color: #f59e0b; }
+          .category-row.failed .cat-status { color: #ef4444; }
+
+          .cat-details {
+             background: #0c0c0c;
+             padding: 8px 14px 8px 40px;
+             border-bottom: 1px solid #27272a;
+          }
+
+          .detail-item {
+             font-size: 12px;
+             color: #a1a1aa;
+             padding: 3px 0;
+          }
+
+          /* Score blocked state */
+          .score-blocked {
+             border-color: #ef4444 !important;
+             color: #ef4444 !important;
+             animation: pulse-red 2s infinite;
+          }
+
+          @keyframes pulse-red {
+             0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+             50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+          }
         </style>
       `;
 
@@ -712,93 +937,116 @@
          localModal.style.display = 'flex';
        };
        
-       // --- AI Audit Logic ---
-       const runAiAudit = async () => {
+       // --- Content Quality Audit (Local) ---
+       const runContentAudit = () => {
           aiPanel.style.display = 'flex';
-          aiContent.innerHTML = `
-            <div class="ai-loading">
-               <div class="spinner"></div>
-               <p>Analyzing content with Gemini AI...</p>
-            </div>
-          `;
           
-          try {
-             // 1. Match current URL to project link
-             const currentUrl = window.location.href;
-             const currentPath = window.location.pathname;
-             
-             // Simple matching logic: exact match or contains
-             let matchedLink = this.links.find(l => currentUrl.includes(l.url) || l.url.includes(currentPath));
-             // Fallback: if homepage, try finding link with '/' or base url
-             if (!matchedLink && currentPath === '/') {
-                 matchedLink = this.links.find(l => l.url.endsWith(window.location.hostname)); 
-             }
-             
-             // 2. Scrape Content
-             const textContent = document.body.innerText;
-             
-             // 3. Call API
-             const response = await fetch(`${this.config.baseUrl}/api/audit`, {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({
-                    text: textContent,
-                    url: currentUrl,
-                    projectId: this.config.projectId,
-                    linkId: matchedLink ? matchedLink.id : undefined
-                 })
-             });
-             
-             const result = await response.json();
-             
-             if (!result.success) {
-                 throw new Error(result.error || 'Audit failed');
-             }
-             
-             const data = result.data;
-             
-             // 4. Render Results
-             let html = `
+          // Small delay for visual feedback
+          setTimeout(() => {
+            try {
+              const result = ContentQualityAuditor.audit();
+              
+              // Score styling
+              let scoreClass = 'score-low';
+              if (result.overallScore >= 90) scoreClass = 'score-high';
+              else if (result.overallScore >= 70) scoreClass = 'score-med';
+              if (!result.canDeploy) scoreClass = 'score-blocked';
+              
+              // Build HTML
+              let html = `
                 <div class="score-container">
-                    <div class="score-circle ${data.score >= 80 ? 'score-high' : data.score >= 50 ? 'score-med' : 'score-low'}">${data.score}</div>
+                  <div class="score-circle ${scoreClass}">${result.overallScore}</div>
                 </div>
-                <div class="ai-card">
-                   <h4>Audit Summary</h4>
-                   <p>${data.summary}</p>
+                <div class="audit-summary" style="text-align: center; margin-bottom: 20px; font-size: 13px; color: #a1a1aa;">
+                  ${result.summary}
                 </div>
-             `;
-             
-             if (data.strengths && data.strengths.length) {
-                 html += `
-                 <div class="ai-card" style="border-left: 3px solid #ef4444;">
-                    <h4 class="text-red">Spelling & Grammar</h4>
-                    <ul class="ai-list">
-                       ${data.strengths.map(s => `<li>${s}</li>`).join('')}
-                    </ul>
-                 </div>`;
-             }
-             
-             if (data.improvements && data.improvements.length) {
-                 html += `
-                 <div class="ai-card" style="border-left: 3px solid #f59e0b;">
-                    <h4 class="text-yellow">Technical Issues</h4>
-                    <ul class="ai-list">
-                       ${data.improvements.map(i => `<li>${i}</li>`).join('')}
-                    </ul>
-                 </div>`;
-             }
-             
-             aiContent.innerHTML = html;
-
-          } catch (err) {
-             console.error(err);
-             aiContent.innerHTML = `
+                
+                <div class="category-list">
+              `;
+              
+              // Category: Placeholders
+              const ph = result.categories.placeholders;
+              html += `
+                <div class="category-row ${ph.status}">
+                  <span class="cat-icon">🔴</span>
+                  <span class="cat-name">Placeholders</span>
+                  <span class="cat-status">${ph.status === 'passed' ? '✓ Clear' : `⛔ ${ph.issues.length} found`}</span>
+                </div>
+              `;
+              if (ph.issues.length > 0) {
+                html += `<div class="cat-details">`;
+                ph.issues.forEach(i => {
+                  html += `<div class="detail-item">• ${i.type} (${i.count}x)</div>`;
+                });
+                html += `</div>`;
+              }
+              
+              // Category: Spelling
+              const sp = result.categories.spelling;
+              html += `
+                <div class="category-row ${sp.status}">
+                  <span class="cat-icon">🔤</span>
+                  <span class="cat-name">Spelling</span>
+                  <span class="cat-status">${sp.errorCount === 0 ? '✓ Clean' : `${sp.errorCount} flagged`}</span>
+                </div>
+              `;
+              if (sp.issues.length > 0) {
+                html += `<div class="cat-details">`;
+                sp.issues.slice(0, 5).forEach(i => {
+                  html += `<div class="detail-item">• "${i.word}"</div>`;
+                });
+                if (sp.issues.length > 5) html += `<div class="detail-item" style="opacity:0.6;">+ ${sp.issues.length - 5} more</div>`;
+                html += `</div>`;
+              }
+              
+              // Category: Readability
+              const rd = result.categories.readability;
+              html += `
+                <div class="category-row ${rd.status}">
+                  <span class="cat-icon">📖</span>
+                  <span class="cat-name">Readability</span>
+                  <span class="cat-status">${rd.score} · ${rd.difficulty}</span>
+                </div>
+              `;
+              
+              // Category: Completeness
+              const cm = result.categories.completeness;
+              html += `
+                <div class="category-row ${cm.status}">
+                  <span class="cat-icon">✅</span>
+                  <span class="cat-name">Completeness</span>
+                  <span class="cat-status">${cm.issues.length === 0 ? '✓ Good' : `${cm.issues.length} issue(s)`}</span>
+                </div>
+              `;
+              if (cm.issues.length > 0) {
+                html += `<div class="cat-details">`;
+                cm.issues.forEach(i => {
+                  html += `<div class="detail-item">• ${i}</div>`;
+                });
+                html += `</div>`;
+              }
+              
+              html += `</div>`; // close category-list
+              
+              // Word count badge
+              html += `
+                <div style="text-align: center; margin-top: 16px; font-size: 11px; color: #71717a;">
+                  ${cm.wordCount} words · ${rd.gradeLevel}
+                </div>
+              `;
+              
+              aiContent.innerHTML = html;
+              
+            } catch (err) {
+              console.error(err);
+              aiContent.innerHTML = `
                 <div style="text-align: center; color: #ef4444; padding: 20px;">
-                   <p>Analysis Failed</p>
-                   <p style="font-size: 12px; opacity: 0.8;">${err.message}</p>
+                  <p>Audit Failed</p>
+                  <p style="font-size: 12px; opacity: 0.8;">${err.message}</p>
                 </div>
-             `;
-          }
+              `;
+            }
+          }, 100);
        };
 
        btn.addEventListener('click', toggleMenu);
@@ -811,7 +1059,7 @@
        
        if (aiAuditBtn) aiAuditBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          runAiAudit(); // Close menu? No, keep context.
+          runContentAudit();
        });
        
        if (closeLocalAudit) closeLocalAudit.addEventListener('click', () => {
