@@ -44,50 +44,23 @@
   // ========================================
   class ContentQualityAuditor {
     
-    static COMMON_WORDS = new Set([
-      // Top 500 Common English Words
-      'the','be','to','of','and','a','in','that','have','i','it','for','not','on','with','he','as','you',
-      'do','at','this','but','his','by','from','they','we','say','her','she','or','an','will','my','one',
-      'all','would','there','their','what','so','up','out','if','about','who','get','which','go','me',
-      'when','make','can','like','time','no','just','him','know','take','people','into','year','your',
-      'good','some','could','them','see','other','than','then','now','look','only','come','its','over',
-      'think','also','back','after','use','two','how','our','work','first','well','way','even','new',
-      'want','because','any','these','give','day','most','us','is','are','was','were','been','being',
-      'has','had','having','does','did','doing','am','here','more','very','should','such','must','may',
-      'might','shall','need','own','still','each','both','much','many','most','find','found','made',
-      'same','great','where','while','right','through','before','those','every','thing','got','down',
-      'always','another','around','never','going','last','long','little','three','left','old','own',
-      'put','end','off','does','let','set','try','ask','went','came','next','best','though','place',
-      'took','called','world','part','head','keep','hand','against','high','without','within','show',
-      'small','few','since','start','love','life','home','name','home','point','form','full','real',
-      'team','case','company','service','need','group','system','number','under','problem','however',
-      'help','run','feel','week','ever','actually','something','nothing','between','might','believe',
-      'kind','mean','money','today','away','experience','read','write','website','page','content',
-      'design','development','client','project','business','digital','marketing','brand','creative',
-      // Business Professional & Tech
-      'software','application','app','platform','solution','user','interface','experience','function',
-      'feature','benefit','value','quality','performance','security','speed','reliable','robust',
-      'scalable','flexible','dynamic','modern','innovative','seamless','integrated','custom',
-      'tailored','efficient','productive','powerful','simple','easy','fast','secure','cloud',
-      'server','data','analytics','internet','search','result','engine','technology','tech',
-      'trust','deliver','strengthen','expertise','provide','ensure','build','create','establish',
-      'maintain','improve','enhance','optimize','maximize','minimize','reduce','increase','decrease',
-      'partner','vendor','supplier','stakeholder','investor','employee','staff','member','growth',
-      'success','vision','mission','strategy','goal','objective','target','market','industry',
-      'global','local','community','social','media','network','connect','engage','interact',
-      'reach','audience','customer','client','consumer','sale','buy','purchase','order','payment',
-      'shipping','delivery','return','refund','support','help','contact','email','phone','address',
-      'location','map','direction','hour','open','close','available','now','free','trial','demo',
-      'subscribe','newsletter','join','sign','login','register','account','profile','setting',
-      'preference','notification','message','chat','feedback','review','rating','star','blog',
-      'news','article','post','story','guide','tutorial','manual','documentation','faq','answer',
-      'question','comment','share','link','click','button','form','input','submit','cancel',
-      'save','delete','edit','update','view','download','upload','image','video','audio','file',
-      'copyright','rights','reserved','terms','condition','privacy','policy','legal','disclaimer',
-      'webflow','services','solutions','career','careers','job','jobs','hiring','apply','resume',
-      'portfolio','gallery','showcase','testimonial','review','case','study','process','method',
-      'approach','philosophy','culture','value','promise','guarantee','warranty','certificate',
-      'award','recognition','history','story','founder','leader','management','executive','board'
+    static dictionarySet = null;
+    
+    // Custom technical/business jargon not in standard dictionary
+    static CUSTOM_JARGON = new Set([
+      'webflow','vercel','nextjs','react','typescript','javascript','css','html','seo','ux','ui',
+      'saas','api','sdk','json','ajax','backend','frontend','fullstack','devops','agile','scrum',
+      'kanban','roadmap','milestone','deliverable','kpi','roi','b2b','b2c','cta','cms','crm',
+      'faq','gdpr','ccpa','sso','mfa','jwt','oauth','dns','ssl','tls','https','http','ssh','ftp',
+      'widget','audit','optimization','scalability','reliability','usability','accessibility',
+      'maintainability','interoperability','functionality','configurable','customizable',
+      'integration','implementation','deployment','provisioning','orchestration','virtualization',
+      'containerization','microservices','serverless','latency','throughput','bandwidth',
+      'authentication','authorization','encryption','decryption','hashing','salting',
+      'tokenization','serialization','deserialization','compilation','transpilation',
+      'minification','obfuscation','refactoring','debugging','profiling','logging','monitoring',
+      'alerting','tracing','telemetry','analytics','metrics','dashboard','reporting','visualization',
+      'copyright','rights','reserved','terms','privacy','policy','contact','email','phone'
     ]);
 
     static PLACEHOLDER_PATTERNS = [
@@ -104,9 +77,26 @@
       { regex: /sample\s+text/gi, name: 'Sample Text' }
     ];
 
-    static audit() {
+    static async loadDictionary() {
+      if (this.dictionarySet) return; // Already loaded
+
+      try {
+        const response = await fetch('/dictionary.txt');
+        if (!response.ok) throw new Error('Failed to load dictionary');
+        const text = await response.text();
+        this.dictionarySet = new Set(text.toLowerCase().split(/\n/).map(w => w.trim()));
+      } catch (e) {
+        console.warn('Audit: Could not load dictionary.txt, falling back to minimal set.', e);
+        this.dictionarySet = new Set(); // Fallback to avoid crash, effectively disables spellcheck or uses Jargon only
+      }
+    }
+
+    static async audit() {
+      await this.loadDictionary();
+      
       const text = document.body.innerText || '';
       const doc = document;
+
       
       const result = {
         canDeploy: true,
@@ -142,7 +132,7 @@
 
       words.forEach(word => {
         const lower = word.toLowerCase();
-        if (!checked.has(lower) && !this.COMMON_WORDS.has(lower)) {
+        if (!checked.has(lower) && !this.dictionarySet.has(lower) && !this.CUSTOM_JARGON.has(lower)) {
           if (word[0] === word[0].toUpperCase()) return; // Skip proper nouns
           typos.push(word);
           checked.add(lower);
@@ -529,11 +519,11 @@
        this.runStandaloneAudit();
     }
     
-    runStandaloneAudit() {
+    async runStandaloneAudit() {
        // Small delay to ensure DOM is ready
-       setTimeout(() => {
+       setTimeout(async () => {
           try {
-             const result = ContentQualityAuditor.audit();
+             const result = await ContentQualityAuditor.audit();
              this.renderStandaloneResults(result);
           } catch (err) {
              console.error("Auto-Audit Failed:", err);
