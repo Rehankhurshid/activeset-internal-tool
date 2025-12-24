@@ -44,7 +44,6 @@
   // ========================================
   class ContentQualityAuditor {
     
-    // Common words dictionary (compact) for spell checking
     static COMMON_WORDS = new Set([
       'the','be','to','of','and','a','in','that','have','i','it','for','not','on','with','he','as','you',
       'do','at','this','but','his','by','from','they','we','say','her','she','or','an','will','my','one',
@@ -64,10 +63,10 @@
       'help','run','feel','week','ever','actually','something','nothing','between','might','believe',
       'kind','mean','money','today','away','experience','read','write','website','page','content',
       'design','development','client','project','business','digital','marketing','brand','creative',
-      'webflow','services','solutions','contact','email','phone','address','submit','send','message'
+      'webflow','services','solutions','contact','email','phone','address','submit','send','message',
+      'learn','more','about','us','terms','privacy','policy','copyright','rights','reserved'
     ]);
 
-    // Placeholder patterns (CRITICAL - blocks deployment)
     static PLACEHOLDER_PATTERNS = [
       { regex: /lorem\s+ipsum/gi, name: 'Lorem Ipsum' },
       { regex: /\[your\s*name\]/gi, name: '[Your Name]' },
@@ -79,72 +78,30 @@
       { regex: /\bFIXME\b/g, name: 'FIXME' },
       { regex: /coming\s+soon/gi, name: 'Coming Soon' },
       { regex: /placeholder\s*text/gi, name: 'Placeholder Text' },
-      { regex: /sample\s+text/gi, name: 'Sample Text' },
-      { regex: /dolor\s+sit\s+amet/gi, name: 'Lorem Ipsum (latin)' }
+      { regex: /sample\s+text/gi, name: 'Sample Text' }
     ];
 
-    // Count syllables in a word (for readability)
-    static countSyllables(word) {
-      word = word.toLowerCase().replace(/[^a-z]/g, '');
-      if (word.length <= 3) return 1;
-      word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
-      word = word.replace(/^y/, '');
-      const matches = word.match(/[aeiouy]{1,2}/g);
-      return matches ? matches.length : 1;
-    }
-
-    // Flesch Reading Ease Score
-    static calculateReadability(text) {
-      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-      const words = text.split(/\s+/).filter(w => w.length > 0);
-      const totalSyllables = words.reduce((sum, w) => sum + this.countSyllables(w), 0);
-      
-      if (sentences.length === 0 || words.length === 0) {
-        return { score: 0, gradeLevel: 'Unknown', difficulty: 'Unknown' };
-      }
-
-      const avgSentenceLength = words.length / sentences.length;
-      const avgSyllablesPerWord = totalSyllables / words.length;
-      
-      // Flesch Reading Ease: 206.835 - 1.015(ASL) - 84.6(ASW)
-      const score = Math.round(206.835 - (1.015 * avgSentenceLength) - (84.6 * avgSyllablesPerWord));
-      const clampedScore = Math.max(0, Math.min(100, score));
-
-      let difficulty, gradeLevel;
-      if (clampedScore >= 90) { difficulty = 'Very Easy'; gradeLevel = '5th Grade'; }
-      else if (clampedScore >= 80) { difficulty = 'Easy'; gradeLevel = '6th Grade'; }
-      else if (clampedScore >= 70) { difficulty = 'Fairly Easy'; gradeLevel = '7th Grade'; }
-      else if (clampedScore >= 60) { difficulty = 'Standard'; gradeLevel = '8th-9th Grade'; }
-      else if (clampedScore >= 50) { difficulty = 'Fairly Difficult'; gradeLevel = '10th-12th Grade'; }
-      else if (clampedScore >= 30) { difficulty = 'Difficult'; gradeLevel = 'College'; }
-      else { difficulty = 'Very Difficult'; gradeLevel = 'College Graduate'; }
-
-      return { score: clampedScore, gradeLevel, difficulty };
-    }
-
-    // Main audit function
     static audit() {
       const text = document.body.innerText || '';
+      const doc = document;
+      
       const result = {
         canDeploy: true,
         overallScore: 100,
         summary: '',
         categories: {
           placeholders: { status: 'passed', issues: [], score: 100 },
-          spelling: { status: 'passed', issues: [], errorCount: 0, errorRate: '0%', score: 100 },
-          readability: { status: 'passed', score: 0, gradeLevel: '', difficulty: '', displayScore: 100 },
-          completeness: { status: 'passed', issues: [], wordCount: 0, hasH1: false, missingAlt: 0, score: 100 }
+          spelling: { status: 'passed', issues: [], score: 100 },
+          seo: { status: 'passed', issues: [], score: 100 },
+          technical: { status: 'passed', issues: [], score: 100 }
         }
       };
 
-      // ========== 1. PLACEHOLDER DETECTION (CRITICAL) ==========
+      // 1. PLACEHOLDER DETECTION (CRITICAL)
       this.PLACEHOLDER_PATTERNS.forEach(pattern => {
         const matches = text.match(pattern.regex);
         if (matches && matches.length > 0) {
-          result.categories.placeholders.issues.push({
-            type: pattern.name,
-            count: matches.length
-          });
+          result.categories.placeholders.issues.push({ type: pattern.name, count: matches.length });
         }
       });
 
@@ -155,109 +112,114 @@
         result.overallScore = 0;
       }
 
-      // ========== 2. SPELLING CHECK ==========
+      // 2. SPELLING CHECK
       const words = text.split(/\s+/).filter(w => /^[a-zA-Z]{4,}$/.test(w));
-      const unknownWords = [];
       const checked = new Set();
+      const typos = [];
 
       words.forEach(word => {
         const lower = word.toLowerCase();
         if (!checked.has(lower) && !this.COMMON_WORDS.has(lower)) {
-          // Skip proper nouns (capitalized words in middle of text)
-          if (word[0] === word[0].toUpperCase() && word.length > 2) return;
-          unknownWords.push(word);
+          if (word[0] === word[0].toUpperCase()) return; // Skip proper nouns
+          typos.push(word);
           checked.add(lower);
         }
       });
-
-      // Limit to top 10 potential typos
-      const potentialTypos = unknownWords.slice(0, 10);
-      if (potentialTypos.length > 0) {
-        result.categories.spelling.issues = potentialTypos.map(w => ({ word: w }));
-        result.categories.spelling.errorCount = potentialTypos.length;
-        result.categories.spelling.errorRate = ((potentialTypos.length / words.length) * 100).toFixed(1) + '%';
-        result.categories.spelling.status = potentialTypos.length > 5 ? 'warning' : 'info';
-        result.categories.spelling.score = Math.max(0, 100 - (potentialTypos.length * 5));
-      }
-
-      // ========== 3. READABILITY ==========
-      const readability = this.calculateReadability(text);
-      result.categories.readability.score = readability.score;
-      result.categories.readability.gradeLevel = readability.gradeLevel;
-      result.categories.readability.difficulty = readability.difficulty;
       
-      // Ideal range is 60-70 for web content
-      if (readability.score >= 50 && readability.score <= 80) {
-        result.categories.readability.status = 'passed';
-        result.categories.readability.displayScore = 100;
-      } else if (readability.score < 30 || readability.score > 90) {
-        result.categories.readability.status = 'warning';
-        result.categories.readability.displayScore = 70;
-      } else {
-        result.categories.readability.status = 'info';
-        result.categories.readability.displayScore = 85;
+      const uniqueTypos = [...new Set(typos)].slice(0, 10);
+      if (uniqueTypos.length > 0) {
+        result.categories.spelling.issues = uniqueTypos.map(w => ({ word: w }));
+        result.categories.spelling.status = uniqueTypos.length > 3 ? 'warning' : 'info';
+        result.categories.spelling.score = Math.max(0, 100 - (uniqueTypos.length * 5));
       }
 
-      // ========== 4. COMPLETENESS ==========
-      const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
-      result.categories.completeness.wordCount = wordCount;
+      // 3. SEO & META
+      const seoIssues = [];
+      if (!doc.title) seoIssues.push('Missing Title tag');
+      else if (doc.title.length < 10) seoIssues.push('Title too short (< 10 chars)');
+      else if (doc.title.length > 65) seoIssues.push('Title too long (> 65 chars)');
 
-      // Check H1
-      const h1s = document.querySelectorAll('h1');
-      result.categories.completeness.hasH1 = h1s.length > 0;
-      if (h1s.length === 0) {
-        result.categories.completeness.issues.push('Missing H1 heading');
-      } else if (h1s.length > 1) {
-        result.categories.completeness.issues.push(`Multiple H1 tags (${h1s.length})`);
-      }
+      const metaDesc = doc.querySelector('meta[name="description"]');
+      if (!metaDesc) seoIssues.push('Missing Meta Description');
+      else if (metaDesc.content.length < 50) seoIssues.push('Meta Description too short');
+      else if (metaDesc.content.length > 160) seoIssues.push('Meta Description too long');
 
-      // Check alt text
-      const images = document.querySelectorAll('img');
+      const h1s = doc.querySelectorAll('h1');
+      if (h1s.length === 0) seoIssues.push('Missing H1 heading');
+      else if (h1s.length > 1) seoIssues.push(`Multiple H1 tags (${h1s.length})`);
+      
+      const images = doc.querySelectorAll('img');
       let missingAlt = 0;
-      images.forEach(img => {
-        if (!img.alt || img.alt.trim() === '') missingAlt++;
+      images.forEach(img => { if (!img.alt || img.alt.trim() === '') missingAlt++; });
+      if (missingAlt > 0) seoIssues.push(`${missingAlt} images missing alt text`);
+
+      if (seoIssues.length > 0) {
+        result.categories.seo.issues = seoIssues;
+        result.categories.seo.status = 'warning';
+        result.categories.seo.score = Math.max(0, 100 - (seoIssues.length * 15));
+      }
+
+      // 4. TECHNICAL HEALTH
+      const techIssues = [];
+      
+      // Broken/Unsafe Links
+      const links = doc.querySelectorAll('a');
+      let emptyLinks = 0;
+      let unsafeLinks = 0;
+      let httpLinks = 0;
+      links.forEach(l => {
+         const href = l.getAttribute('href');
+         if (!href || href === '#') emptyLinks++;
+         if (l.target === '_blank' && (!l.rel || !l.rel.includes('noopener'))) unsafeLinks++;
+         if (href && href.startsWith('http:') && window.location.protocol === 'https:') httpLinks++;
       });
-      result.categories.completeness.missingAlt = missingAlt;
-      if (missingAlt > 0) {
-        result.categories.completeness.issues.push(`${missingAlt} images missing alt text`);
+      if (emptyLinks > 0) techIssues.push(`${emptyLinks} empty links (href="#")`);
+      if (unsafeLinks > 0) techIssues.push(`${unsafeLinks} unsafe external links (missing noopener)`);
+      if (httpLinks > 0) techIssues.push(`${httpLinks} insecure HTTP links`);
+
+      // CLS Risks
+      let clsImages = 0;
+      images.forEach(i => {
+         if (!i.hasAttribute('width') && !i.hasAttribute('height')) clsImages++;
+      });
+      if (clsImages > 0) techIssues.push(`${clsImages} images missing width/height (CLS Risk)`);
+
+      // Buttons
+      const btns = doc.querySelectorAll('button');
+      let noTypeBtns = 0;
+      btns.forEach(b => {
+         if (!b.hasAttribute('type')) noTypeBtns++;
+      });
+      if (noTypeBtns > 0) techIssues.push(`${noTypeBtns} buttons missing type attribute`);
+
+      if (techIssues.length > 0) {
+        result.categories.technical.issues = techIssues;
+        result.categories.technical.status = 'warning';
+        result.categories.technical.score = Math.max(0, 100 - (techIssues.length * 10));
       }
 
-      // Word count check
-      if (wordCount < 50) {
-        result.categories.completeness.issues.push('Very thin content (< 50 words)');
-      } else if (wordCount < 100) {
-        result.categories.completeness.issues.push('Light content (< 100 words)');
-      }
-
-      if (result.categories.completeness.issues.length > 0) {
-        result.categories.completeness.status = result.categories.completeness.issues.some(i => i.includes('Missing H1')) ? 'warning' : 'info';
-        result.categories.completeness.score = Math.max(0, 100 - (result.categories.completeness.issues.length * 10));
-      }
-
-      // ========== CALCULATE OVERALL SCORE ==========
+      // OVERALL CALCULATION
       if (result.canDeploy) {
-        // Weighted average: Placeholders (blocked), Spelling 30%, Readability 20%, Completeness 50%
+        // Weighted: Spelling (20%), SEO (40%), Technical (40%)
         result.overallScore = Math.round(
-          (result.categories.spelling.score * 0.3) +
-          (result.categories.readability.displayScore * 0.2) +
-          (result.categories.completeness.score * 0.5)
+          (result.categories.spelling.score * 0.2) +
+          (result.categories.seo.score * 0.4) +
+          (result.categories.technical.score * 0.4)
         );
       }
 
-      // Generate summary
-      const issueCount = 
-        result.categories.placeholders.issues.length +
-        result.categories.spelling.issues.length +
-        result.categories.completeness.issues.length;
+      // Summary
+      const totalIssues = result.categories.placeholders.issues.length + 
+                          result.categories.spelling.issues.length + 
+                          result.categories.seo.issues.length + 
+                          result.categories.technical.issues.length;
 
       if (!result.canDeploy) {
-        result.summary = '⛔ BLOCKED: Placeholder content detected. Replace before deploying.';
+        result.summary = '⛔ BLOCKED: Placeholders detected.';
       } else if (result.overallScore >= 90) {
-        result.summary = '✅ Excellent! Content is ready for deployment.';
-      } else if (result.overallScore >= 70) {
-        result.summary = `⚠️ Good with ${issueCount} minor issue(s). Review recommended.`;
+        result.summary = '✅ Excellent! Site is production ready.';
       } else {
-        result.summary = `❌ ${issueCount} issues found. Fix before deploying.`;
+        result.summary = `⚠️ ${totalIssues} issues found. Review recommended.`;
       }
 
       return result;
@@ -355,7 +317,7 @@
              <button id="plw-close-standalone" class="close-standalone-btn">&times;</button>
              <div class="panel-header">
                 <h3>Content Audit</h3>
-                <span class="panel-subtitle">Placeholder · Spelling · Tech</span>
+                <span class="panel-subtitle">Placeholder · Spelling · SEO · Technical</span>
              </div>
              <div id="plw-panel-content" class="panel-content">
                 <!-- Results go here -->
@@ -606,7 +568,6 @@
        const renderRow = (icon, name, statusObj, detailsHtml = '') => {
            let statusColor = statusObj.status === 'passed' ? '#10b981' : statusObj.status === 'warning' ? '#f59e0b' : '#ef4444';
            let statusText = statusObj.status === 'passed' ? '✓ Passed' : 'Issues Found';
-           if(name === 'Readability') statusText = `${statusObj.score}`;
            
            return `
              <div class="category-row">
@@ -634,17 +595,21 @@
        }
        html += renderRow('🔤', 'Spelling', sp, spDetails);
        
-       // Readability
-       const rd = result.categories.readability;
-       html += renderRow('📖', 'Readability', {status: rd.status, score: rd.score}, `<div class="cat-details"><div class="detail-item">Grade Level: ${rd.gradeLevel}</div></div>`);
-       
-       // Completeness
-       const cm = result.categories.completeness;
-       let cmDetails = '';
-       if (cm.issues.length > 0) {
-           cmDetails = `<div class="cat-details">` + cm.issues.map(i => `<div class="detail-item">• ${i}</div>`).join('') + `</div>`;
+       // SEO & Meta
+       const seo = result.categories.seo;
+       let seoDetails = '';
+       if (seo.issues.length > 0) {
+           seoDetails = `<div class="cat-details">` + seo.issues.map(i => `<div class="detail-item">• ${i}</div>`).join('') + `</div>`;
        }
-       html += renderRow('✅', 'Completeness', cm, cmDetails);
+       html += renderRow('🔍', 'SEO & Meta', seo, seoDetails);
+       
+       // Technical Health
+       const tech = result.categories.technical;
+       let techDetails = '';
+       if (tech.issues.length > 0) {
+           techDetails = `<div class="cat-details">` + tech.issues.map(i => `<div class="detail-item">• ${i}</div>`).join('') + `</div>`;
+       }
+       html += renderRow('⚙️', 'Technical Health', tech, techDetails);
        
        html += `</div>`; // Close list
        
