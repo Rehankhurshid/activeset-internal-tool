@@ -81,13 +81,14 @@
       if (this.dictionarySet) return; // Already loaded
 
       try {
-        const response = await fetch('/dictionary.txt');
+        // Fetch standard 10k word list from GitHub Raw (CORS-friendly)
+        const response = await fetch('https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt');
         if (!response.ok) throw new Error('Failed to load dictionary');
         const text = await response.text();
         this.dictionarySet = new Set(text.toLowerCase().split(/\n/).map(w => w.trim()));
       } catch (e) {
-        console.warn('Audit: Could not load dictionary.txt, falling back to minimal set.', e);
-        this.dictionarySet = new Set(); // Fallback to avoid crash, effectively disables spellcheck or uses Jargon only
+        console.warn('Audit: Dictionary fetch failed. Spellcheck disabled.', e);
+        this.dictionarySet = null; 
       }
     }
 
@@ -126,24 +127,29 @@
       }
 
       // 2. SPELLING CHECK
-      const words = text.split(/\s+/).filter(w => /^[a-zA-Z]{4,}$/.test(w));
-      const checked = new Set();
-      const typos = [];
-
-      words.forEach(word => {
-        const lower = word.toLowerCase();
-        if (!checked.has(lower) && !this.dictionarySet.has(lower) && !this.CUSTOM_JARGON.has(lower)) {
-          if (word[0] === word[0].toUpperCase()) return; // Skip proper nouns
-          typos.push(word);
-          checked.add(lower);
-        }
-      });
-      
-      const uniqueTypos = [...new Set(typos)].slice(0, 10);
-      if (uniqueTypos.length > 0) {
-        result.categories.spelling.issues = uniqueTypos.map(w => ({ word: w }));
-        result.categories.spelling.status = uniqueTypos.length > 3 ? 'warning' : 'info';
-        result.categories.spelling.score = Math.max(0, 100 - (uniqueTypos.length * 5));
+      if (this.dictionarySet) {
+          const words = text.split(/\s+/).filter(w => /^[a-zA-Z]{4,}$/.test(w));
+          const checked = new Set();
+          const typos = [];
+    
+          words.forEach(word => {
+            const lower = word.toLowerCase();
+            if (!checked.has(lower) && !this.dictionarySet.has(lower) && !this.CUSTOM_JARGON.has(lower)) {
+              if (word[0] === word[0].toUpperCase()) return; // Skip proper nouns
+              typos.push(word);
+              checked.add(lower);
+            }
+          });
+          
+          const uniqueTypos = [...new Set(typos)].slice(0, 10);
+          if (uniqueTypos.length > 0) {
+            result.categories.spelling.issues = uniqueTypos.map(w => ({ word: w }));
+            result.categories.spelling.status = uniqueTypos.length > 3 ? 'warning' : 'info';
+            result.categories.spelling.score = Math.max(0, 100 - (uniqueTypos.length * 5));
+          }
+      } else {
+        result.categories.spelling.issues = [{ word: 'Dictionary Unavailable' }];
+        result.categories.spelling.status = 'info';
       }
 
       // 3. SEO & META
