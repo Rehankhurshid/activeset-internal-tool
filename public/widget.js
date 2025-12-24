@@ -45,6 +45,7 @@
   class ContentQualityAuditor {
     
     static COMMON_WORDS = new Set([
+      // Top 500 Common English Words
       'the','be','to','of','and','a','in','that','have','i','it','for','not','on','with','he','as','you',
       'do','at','this','but','his','by','from','they','we','say','her','she','or','an','will','my','one',
       'all','would','there','their','what','so','up','out','if','about','who','get','which','go','me',
@@ -63,8 +64,30 @@
       'help','run','feel','week','ever','actually','something','nothing','between','might','believe',
       'kind','mean','money','today','away','experience','read','write','website','page','content',
       'design','development','client','project','business','digital','marketing','brand','creative',
-      'webflow','services','solutions','contact','email','phone','address','submit','send','message',
-      'learn','more','about','us','terms','privacy','policy','copyright','rights','reserved'
+      // Business Professional & Tech
+      'software','application','app','platform','solution','user','interface','experience','function',
+      'feature','benefit','value','quality','performance','security','speed','reliable','robust',
+      'scalable','flexible','dynamic','modern','innovative','seamless','integrated','custom',
+      'tailored','efficient','productive','powerful','simple','easy','fast','secure','cloud',
+      'server','data','analytics','internet','search','result','engine','technology','tech',
+      'trust','deliver','strengthen','expertise','provide','ensure','build','create','establish',
+      'maintain','improve','enhance','optimize','maximize','minimize','reduce','increase','decrease',
+      'partner','vendor','supplier','stakeholder','investor','employee','staff','member','growth',
+      'success','vision','mission','strategy','goal','objective','target','market','industry',
+      'global','local','community','social','media','network','connect','engage','interact',
+      'reach','audience','customer','client','consumer','sale','buy','purchase','order','payment',
+      'shipping','delivery','return','refund','support','help','contact','email','phone','address',
+      'location','map','direction','hour','open','close','available','now','free','trial','demo',
+      'subscribe','newsletter','join','sign','login','register','account','profile','setting',
+      'preference','notification','message','chat','feedback','review','rating','star','blog',
+      'news','article','post','story','guide','tutorial','manual','documentation','faq','answer',
+      'question','comment','share','link','click','button','form','input','submit','cancel',
+      'save','delete','edit','update','view','download','upload','image','video','audio','file',
+      'copyright','rights','reserved','terms','condition','privacy','policy','legal','disclaimer',
+      'webflow','services','solutions','career','careers','job','jobs','hiring','apply','resume',
+      'portfolio','gallery','showcase','testimonial','review','case','study','process','method',
+      'approach','philosophy','culture','value','promise','guarantee','warranty','certificate',
+      'award','recognition','history','story','founder','leader','management','executive','board'
     ]);
 
     static PLACEHOLDER_PATTERNS = [
