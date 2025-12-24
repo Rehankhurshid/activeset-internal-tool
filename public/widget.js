@@ -301,6 +301,7 @@
     }
 
     async init() {
+      this.initContentAudit(); // Auto-run audit on load
       loadFonts(); // Ensure fonts are loaded
       try {
         if (this.config.projectId) {
@@ -328,6 +329,326 @@
 
     render(data) {
       this.renderDropdown(data);
+    }
+
+    initContentAudit() {
+       // Create Standalone Panel Container
+       const auditContainer = document.createElement('div');
+       auditContainer.id = 'plw-audit-container';
+       document.body.appendChild(auditContainer);
+       
+       // Inject Floating Badge + Panel HTML
+       auditContainer.innerHTML = `
+          <!-- Floating Score Badge -->
+          <div id="plw-audit-badge" class="audit-badge">
+             <div class="badge-ring">
+                <svg viewBox="0 0 36 36" class="circular-chart">
+                   <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                   <path id="plw-score-circle" class="circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                </svg>
+             </div>
+             <span id="plw-badge-score" class="badge-score">--</span>
+          </div>
+
+          <!-- Slide-out Panel -->
+          <div id="plw-standalone-panel" class="standalone-panel">
+             <button id="plw-close-standalone" class="close-standalone-btn">&times;</button>
+             <div class="panel-header">
+                <h3>Content Audit</h3>
+                <span class="panel-subtitle">Placeholder · Spelling · Tech</span>
+             </div>
+             <div id="plw-panel-content" class="panel-content">
+                <!-- Results go here -->
+             </div>
+          </div>
+          
+          <style>
+             #plw-audit-container {
+                font-family: 'Funnel Sans', sans-serif;
+                z-index: 10001;
+             }
+             
+             /* Badge Styles */
+             .audit-badge {
+                position: fixed;
+                top: 50%;
+                right: 20px;
+                transform: translateY(-50%);
+                width: 56px;
+                height: 56px;
+                background: #09090b;
+                border: 1px solid #27272a;
+                border-radius: 50%;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                transition: all 0.2s ease;
+                z-index: 10002;
+                overflow: hidden;
+             }
+             
+             .audit-badge:hover {
+                transform: translateY(-50%) scale(1.05);
+                box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+                border-color: #3f3f46;
+             }
+             
+             .badge-ring {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                top: 0;
+                left: 0;
+             }
+             
+             .circular-chart {
+                display: block;
+                margin: 0 auto;
+                max-width: 100%;
+                max-height: 100%;
+             }
+             
+             .circle-bg {
+                fill: none;
+                stroke: #27272a;
+                stroke-width: 2.5;
+             }
+             
+             .circle {
+                fill: none;
+                stroke-width: 2.5;
+                stroke-linecap: round;
+                animation: progress 1s ease-out forwards;
+                transition: stroke 0.3s;
+             }
+             
+             @keyframes progress {
+                0% { stroke-dasharray: 0 100; }
+             }
+             
+             .badge-score {
+                font-family: 'Funnel Display', sans-serif;
+                font-weight: 700;
+                font-size: 16px;
+                color: #fff;
+                z-index: 1;
+             }
+             
+             /* Panel Styles */
+             .standalone-panel {
+                position: fixed;
+                top: 50%;
+                right: 0; 
+                transform: translate(100%, -50%); /* Hidden by default */
+                width: 360px;
+                max-height: 85vh;
+                background: #09090b;
+                border: 1px solid #27272a;
+                border-right: none;
+                border-radius: 12px 0 0 12px;
+                box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+                display: flex;
+                flex-direction: column;
+                z-index: 10001;
+                transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+             }
+             
+             .standalone-panel.open {
+                transform: translate(0, -50%);
+             }
+             
+             .panel-header {
+                padding: 16px 20px;
+                border-bottom: 1px solid #27272a;
+                background: #09090b;
+             }
+             
+             .panel-header h3 {
+                margin: 0;
+                font-size: 16px;
+                color: #fff;
+                font-family: 'Funnel Display', sans-serif;
+             }
+             
+             .panel-subtitle {
+                font-size: 12px;
+                color: #71717a;
+             }
+             
+             .panel-content {
+                padding: 0;
+                overflow-y: auto;
+                max-height: calc(85vh - 60px);
+             }
+             
+             .close-standalone-btn {
+                position: absolute;
+                top: 12px;
+                right: 12px;
+                background: transparent;
+                border: none;
+                color: #71717a;
+                font-size: 20px;
+                cursor: pointer;
+                padding: 4px;
+                line-height: 1;
+             }
+             
+             .close-standalone-btn:hover { color: #fff; }
+             
+             /* Re-use existing category styles */
+             .category-list { border: none; border-radius: 0; }
+             .category-row { padding: 16px 20px; }
+             .cat-details { background: #0c0c0c; }
+             
+             /* Colors */
+             .stroke-green { stroke: #10b981; }
+             .stroke-yellow { stroke: #f59e0b; }
+             .stroke-red { stroke: #ef4444; }
+             
+             .score-blocked-badge {
+                 border-color: #ef4444 !important;
+                 box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+                 animation: pulse-badge 2s infinite;
+             }
+             
+             @keyframes pulse-badge {
+                0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+                70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+             }
+          </style>
+       `;
+       
+       // Wire Events
+       const badge = document.getElementById('plw-audit-badge');
+       const panel = document.getElementById('plw-standalone-panel');
+       const closeBtn = document.getElementById('plw-close-standalone');
+       
+       badge.addEventListener('click', () => {
+          panel.classList.add('open');
+          // Hide badge when panel is open (optional, or move it)
+          badge.style.opacity = '0';
+          badge.style.pointerEvents = 'none';
+       });
+       
+       closeBtn.addEventListener('click', () => {
+          panel.classList.remove('open');
+          badge.style.opacity = '1';
+          badge.style.pointerEvents = 'auto';
+       });
+       
+       // Run Initial Audit
+       this.runStandaloneAudit();
+    }
+    
+    runStandaloneAudit() {
+       // Small delay to ensure DOM is ready
+       setTimeout(() => {
+          try {
+             const result = ContentQualityAuditor.audit();
+             this.renderStandaloneResults(result);
+          } catch (err) {
+             console.error("Auto-Audit Failed:", err);
+          }
+       }, 500);
+    }
+    
+    renderStandaloneResults(result) {
+       const badgeScore = document.getElementById('plw-badge-score');
+       const scoreCircle = document.getElementById('plw-score-circle');
+       const badge = document.getElementById('plw-audit-badge');
+       const content = document.getElementById('plw-panel-content');
+       
+       if(!badgeScore || !content) return;
+       
+       // 1. Update Badge
+       badgeScore.textContent = result.overallScore;
+       
+       // Color Logic
+       let colorClass = 'stroke-red';
+       if (result.overallScore >= 90) colorClass = 'stroke-green';
+       else if (result.overallScore >= 50) colorClass = 'stroke-yellow';
+       
+       // Blocked Logic
+       if (!result.canDeploy) {
+          colorClass = 'stroke-red'; // Force red
+          badge.classList.add('score-blocked-badge');
+       } else {
+          badge.classList.remove('score-blocked-badge');
+       }
+       
+       // Set Circle Stroke
+       scoreCircle.classList.remove('stroke-green', 'stroke-yellow', 'stroke-red');
+       scoreCircle.classList.add(colorClass);
+       
+       // Set Dash Array (Progress)
+       // Circumference approx 100 for pathLength=100 logic or simply use percent
+       // The SVG path has length ~100 via logic, let's just set dasharray
+       // result.overallScore, 100
+       scoreCircle.setAttribute('stroke-dasharray', `${result.overallScore}, 100`);
+       
+       // 2. Render Panel Content
+       let html = `
+          <div style="padding: 20px; text-align: center; border-bottom: 1px solid #27272a;">
+             <div style="font-size: 32px; font-weight: 700; color: #fff; font-family: 'Funnel Display';">
+                ${result.overallScore}
+             </div>
+             <p style="margin: 4px 0 0; color: #a1a1aa; font-size: 13px;">${result.summary}</p>
+          </div>
+          
+          <div class="category-list" style="border: none;">
+       `;
+       
+       // Helper for category row
+       const renderRow = (icon, name, statusObj, detailsHtml = '') => {
+           let statusColor = statusObj.status === 'passed' ? '#10b981' : statusObj.status === 'warning' ? '#f59e0b' : '#ef4444';
+           let statusText = statusObj.status === 'passed' ? '✓ Passed' : 'Issues Found';
+           if(name === 'Readability') statusText = `${statusObj.score}`;
+           
+           return `
+             <div class="category-row">
+               <span class="cat-icon">${icon}</span>
+               <span class="cat-name">${name}</span>
+               <span class="cat-status" style="color: ${statusColor}">${statusText}</span>
+             </div>
+             ${detailsHtml}
+           `;
+       };
+       
+       // Placeholders
+       const ph = result.categories.placeholders;
+       let phDetails = '';
+       if (ph.issues.length > 0) {
+           phDetails = `<div class="cat-details">` + ph.issues.map(i => `<div class="detail-item">• ${i.type}</div>`).join('') + `</div>`;
+       }
+       html += renderRow('🔴', 'Placeholders', ph, phDetails);
+       
+       // Spelling
+       const sp = result.categories.spelling;
+       let spDetails = '';
+       if (sp.issues.length > 0) {
+           spDetails = `<div class="cat-details">` + sp.issues.slice(0, 5).map(i => `<div class="detail-item">• "${i.word}"</div>`).join('') + (sp.issues.length > 5 ? `<div class="detail-item">+ ${sp.issues.length-5} more</div>` : '') + `</div>`;
+       }
+       html += renderRow('🔤', 'Spelling', sp, spDetails);
+       
+       // Readability
+       const rd = result.categories.readability;
+       html += renderRow('📖', 'Readability', {status: rd.status, score: rd.score}, `<div class="cat-details"><div class="detail-item">Grade Level: ${rd.gradeLevel}</div></div>`);
+       
+       // Completeness
+       const cm = result.categories.completeness;
+       let cmDetails = '';
+       if (cm.issues.length > 0) {
+           cmDetails = `<div class="cat-details">` + cm.issues.map(i => `<div class="detail-item">• ${i}</div>`).join('') + `</div>`;
+       }
+       html += renderRow('✅', 'Completeness', cm, cmDetails);
+       
+       html += `</div>`; // Close list
+       
+       content.innerHTML = html;
     }
 
     renderDropdown(data) {
@@ -378,44 +699,7 @@
             `
               )
               .join("")}
-            <div class="audit-section">
-               <button class="audit-btn" id="plw-local-audit-btn">
-                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                 Quick Check
-               </button>
-               <button class="audit-btn ai-btn" id="plw-ai-audit-btn" style="margin-top: 4px; border-color: #10b981; color: #34d399;">
-                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                 Audit Page
-               </button>
             </div>
-          </div>
-          
-          <!-- Local Audit Modal -->
-          <div id="plw-audit-modal" class="audit-modal-overlay" style="display: none;">
-            <div class="audit-modal-content">
-              <div class="audit-modal-header">
-                <h3>Page Health Report</h3>
-                <button id="plw-close-audit" class="close-audit-btn">&times;</button>
-              </div>
-              <div id="plw-audit-body" class="audit-modal-body">
-                 <!-- Results injected here -->
-              </div>
-            </div>
-          </div>
-
-          <!-- Content Quality Audit Right Panel -->
-          <div id="plw-ai-panel" class="ai-panel" style="display: none;">
-             <button id="plw-close-ai" class="close-ai-btn">&times;</button>
-             <div class="ai-header">
-                <h3>📋 Content Audit</h3>
-                <span class="ai-subtitle">Placeholder · Spelling · Readability</span>
-             </div>
-             <div id="plw-ai-content" class="ai-content">
-                <div class="ai-loading">
-                  <div class="spinner"></div>
-                  <p>Scanning content...</p>
-                </div>
-             </div>
           </div>
         </div>
 
@@ -541,260 +825,6 @@
             border-color: #333;
           }
           
-          /* Audit Section */
-          .audit-section {
-            padding: 8px 12px;
-            background: #000;
-            border-top: 1px solid #222;
-          }
-          
-          .audit-btn {
-             width: 100%;
-             display: flex;
-             align-items: center;
-             justify-content: center;
-             gap: 8px;
-             padding: 6px;
-             font-size: 12px;
-             background: #111;
-             border: 1px solid #333;
-             color: #888;
-             border-radius: 4px;
-             cursor: pointer;
-             transition: all 0.2s;
-             font-family: 'Funnel Sans', sans-serif;
-          }
-          
-          .audit-btn:hover {
-            background: #222;
-            color: #fff;
-            border-color: #444;
-          }
-
-          .ai-btn:hover {
-            background: #2e1065 !important;
-            border-color: #8b5cf6 !important;
-            color: #fff !important;
-          }
-          
-          /* Modal Styles */
-          .audit-modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 20000;
-            backdrop-filter: blur(2px);
-          }
-          
-          .audit-modal-content {
-            width: 500px;
-            background: #09090b;
-            border: 1px solid #27272a;
-            border-radius: 12px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-            overflow: hidden;
-            font-family: 'Funnel Sans', sans-serif;
-          }
-          
-          .audit-modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 16px 20px;
-            border-bottom: 1px solid #27272a;
-            background: #09090b;
-          }
-          
-          .audit-modal-header h3 {
-            margin: 0;
-            font-size: 16px;
-            color: #fff;
-            font-weight: 600;
-            font-family: 'Funnel Display', sans-serif;
-          }
-          
-          .close-audit-btn {
-            background: none;
-            border: none;
-            color: #71717a;
-            font-size: 24px;
-            cursor: pointer;
-            line-height: 1;
-            padding: 0;
-          }
-          
-          .close-audit-btn:hover {
-            color: #fff;
-          }
-          
-          .audit-modal-body {
-            padding: 20px;
-            color: #a1a1aa;
-            font-size: 14px;
-            max-height: 70vh;
-            overflow-y: auto;
-          }
-          
-          .score-container {
-             display: flex;
-             align-items: center;
-             justify-content: center;
-             margin-bottom: 24px;
-          }
-          
-          .score-circle {
-             width: 80px;
-             height: 80px;
-             border-radius: 50%;
-             display: flex;
-             align-items: center;
-             justify-content: center;
-             font-size: 28px;
-             font-weight: 700;
-             font-family: 'Funnel Display', sans-serif;
-             border: 4px solid #27272a;
-          }
-          
-          .score-high { border-color: #10b981; color: #10b981; }
-          .score-med { border-color: #f59e0b; color: #f59e0b; }
-          .score-low { border-color: #ef4444; color: #ef4444; }
-          
-          .issue-group { margin-bottom: 20px; }
-          .issue-title { font-weight: 600; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-          
-          .issue-item {
-             background: #18181b;
-             padding: 10px 12px;
-             border-radius: 6px;
-             margin-bottom: 6px;
-             border: 1px solid #27272a;
-             display: flex;
-             gap: 8px;
-             align-items: start;
-          }
-          
-          .issue-icon { flex-shrink: 0; margin-top: 2px; }
-          .text-red { color: #ef4444; }
-          .text-yellow { color: #f59e0b; }
-          .text-green { color: #10b981; }
-
-          /* AI Panel Styles */
-          .ai-panel {
-            position: fixed;
-            top: 50%;
-            right: 20px;
-            transform: translateY(-50%);
-            width: 350px;
-            max-height: 80vh;
-            background: #09090b;
-            border: 1px solid #27272a;
-            border-radius: 12px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            z-index: 20001;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            font-family: 'Funnel Sans', sans-serif;
-          }
-
-          .close-ai-btn {
-             position: absolute;
-             top: 10px;
-             right: 15px;
-             background: none;
-             border: none;
-             color: #71717a;
-             font-size: 22px;
-             cursor: pointer;
-             z-index: 10;
-          }
-          .close-ai-btn:hover { color: #fff; }
-
-          .ai-header {
-             padding: 20px 20px 15px;
-             border-bottom: 1px solid #27272a;
-             background: #09090b;
-          }
-          
-          .ai-header h3 {
-             margin: 0;
-             font-size: 18px;
-             color: #fff;
-             font-family: 'Funnel Display', sans-serif;
-             display: flex;
-             align-items: center;
-             gap: 8px;
-          }
-          
-          .ai-subtitle {
-             display: block;
-             font-size: 12px;
-             color: #71717a;
-             margin-top: 4px;
-          }
-
-          .ai-content {
-             padding: 20px;
-             overflow-y: auto;
-             flex: 1;
-             color: #a1a1aa;
-             font-size: 14px;
-             line-height: 1.6;
-          }
-
-          .ai-loading {
-             display: flex;
-             flex-direction: column;
-             align-items: center;
-             justify-content: center;
-             padding: 40px 0;
-             gap: 15px;
-             color: #a78bfa;
-          }
-
-          .spinner {
-             width: 30px;
-             height: 30px;
-             border: 3px solid #2e1065;
-             border-top: 3px solid #a78bfa;
-             border-radius: 50%;
-             animation: spin 1s linear infinite;
-          }
-
-          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-          .ai-card {
-             background: #18181b;
-             border: 1px solid #27272a;
-             border-radius: 8px;
-             padding: 15px;
-             margin-bottom: 15px;
-          }
-          
-          .ai-card h4 {
-             margin: 0 0 10px 0;
-             font-size: 14px;
-             color: #e4e4e7;
-             font-weight: 600;
-             text-transform: uppercase;
-             letter-spacing: 0.05em;
-          }
-          
-          .ai-list {
-             margin: 0;
-             padding-left: 20px;
-          }
-          
-          .ai-list li {
-             margin-bottom: 6px;
-          }
 
           /* Category Rows */
           .category-list {
@@ -816,11 +846,6 @@
              border-bottom: none;
           }
 
-          .category-row.passed { background: #18181b; }
-          .category-row.warning { background: #1c1917; }
-          .category-row.failed { background: #1c0d0d; }
-          .category-row.info { background: #18181b; }
-
           .cat-icon {
              font-size: 16px;
              flex-shrink: 0;
@@ -838,10 +863,6 @@
              color: #71717a;
           }
 
-          .category-row.passed .cat-status { color: #10b981; }
-          .category-row.warning .cat-status { color: #f59e0b; }
-          .category-row.failed .cat-status { color: #ef4444; }
-
           .cat-details {
              background: #0c0c0c;
              padding: 8px 14px 8px 40px;
@@ -852,18 +873,6 @@
              font-size: 12px;
              color: #a1a1aa;
              padding: 3px 0;
-          }
-
-          /* Score blocked state */
-          .score-blocked {
-             border-color: #ef4444 !important;
-             color: #ef4444 !important;
-             animation: pulse-red 2s infinite;
-          }
-
-          @keyframes pulse-red {
-             0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-             50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
           }
         </style>
       `;
@@ -876,17 +885,6 @@
        const btn = this.container.querySelector('#plw-trigger-btn');
        const content = this.container.querySelector('#plw-content');
        const chevron = this.container.querySelector('#plw-chevron');
-       
-       const localAuditBtn = this.container.querySelector('#plw-local-audit-btn');
-       const aiAuditBtn = this.container.querySelector('#plw-ai-audit-btn');
-       
-       const localModal = this.container.querySelector('#plw-audit-modal');
-       const closeLocalAudit = this.container.querySelector('#plw-close-audit');
-       const localAuditBody = this.container.querySelector('#plw-audit-body');
-       
-       const aiPanel = this.container.querySelector('#plw-ai-panel');
-       const closeAi = this.container.querySelector('#plw-close-ai');
-       const aiContent = this.container.querySelector('#plw-ai-content');
 
        if (!btn || !content) return;
 
@@ -898,181 +896,21 @@
        };
 
        const closeMenu = (e) => {
-         if (!this.container.contains(e.target)) {
-            content.style.display = 'none';
-            chevron.style.transform = 'rotate(0deg)';
-         }
-       };
-       
-       // --- Local Audit Logic ---
-       const runLocalAudit = () => {
-         const report = SmartAuditor.analyze();
+         // Don't close if clicking inside container or if clicking the audit badge/panel
+         if (this.container.contains(e.target)) return;
          
-         let scoreClass = 'score-low';
-         if (report.score >= 90) scoreClass = 'score-high';
-         else if (report.score >= 50) scoreClass = 'score-med';
+         const auditBadge = document.getElementById('plw-audit-badge');
+         const auditPanel = document.getElementById('plw-standalone-panel');
+         
+         if (auditBadge && auditBadge.contains(e.target)) return;
+         if (auditPanel && auditPanel.contains(e.target)) return;
 
-         let resultHtml = `
-           <div class="score-container">
-              <div class="score-circle ${scoreClass}">${report.score}</div>
-           </div>
-         `;
-         if (report.errors.length > 0) { /* ... same as before */
-           resultHtml += `<div class="issue-group"><div class="issue-title text-red">Critical Issues</div>`;
-           report.errors.forEach(err => { resultHtml += `<div class="issue-item"><span class="issue-icon text-red">●</span>${err}</div>`; });
-           resultHtml += `</div>`;
-         }
-         if (report.warnings.length > 0) {
-           resultHtml += `<div class="issue-group"><div class="issue-title text-yellow">Warnings</div>`;
-           report.warnings.forEach(warn => { resultHtml += `<div class="issue-item"><span class="issue-icon text-yellow">●</span>${warn}</div>`; });
-           resultHtml += `</div>`;
-         }
-         if (report.passed.length > 0) {
-           resultHtml += `<div class="issue-group"><div class="issue-title text-green">Passed Checks</div>`;
-           report.passed.forEach(pass => { resultHtml += `<div class="issue-item"><span class="issue-icon text-green">✓</span>${pass}</div>`; });
-           resultHtml += `</div>`;
-         }
-
-         localAuditBody.innerHTML = resultHtml;
-         localModal.style.display = 'flex';
-       };
-       
-       // --- Content Quality Audit (Local) ---
-       const runContentAudit = () => {
-          aiPanel.style.display = 'flex';
-          
-          // Small delay for visual feedback
-          setTimeout(() => {
-            try {
-              const result = ContentQualityAuditor.audit();
-              
-              // Score styling
-              let scoreClass = 'score-low';
-              if (result.overallScore >= 90) scoreClass = 'score-high';
-              else if (result.overallScore >= 70) scoreClass = 'score-med';
-              if (!result.canDeploy) scoreClass = 'score-blocked';
-              
-              // Build HTML
-              let html = `
-                <div class="score-container">
-                  <div class="score-circle ${scoreClass}">${result.overallScore}</div>
-                </div>
-                <div class="audit-summary" style="text-align: center; margin-bottom: 20px; font-size: 13px; color: #a1a1aa;">
-                  ${result.summary}
-                </div>
-                
-                <div class="category-list">
-              `;
-              
-              // Category: Placeholders
-              const ph = result.categories.placeholders;
-              html += `
-                <div class="category-row ${ph.status}">
-                  <span class="cat-icon">🔴</span>
-                  <span class="cat-name">Placeholders</span>
-                  <span class="cat-status">${ph.status === 'passed' ? '✓ Clear' : `⛔ ${ph.issues.length} found`}</span>
-                </div>
-              `;
-              if (ph.issues.length > 0) {
-                html += `<div class="cat-details">`;
-                ph.issues.forEach(i => {
-                  html += `<div class="detail-item">• ${i.type} (${i.count}x)</div>`;
-                });
-                html += `</div>`;
-              }
-              
-              // Category: Spelling
-              const sp = result.categories.spelling;
-              html += `
-                <div class="category-row ${sp.status}">
-                  <span class="cat-icon">🔤</span>
-                  <span class="cat-name">Spelling</span>
-                  <span class="cat-status">${sp.errorCount === 0 ? '✓ Clean' : `${sp.errorCount} flagged`}</span>
-                </div>
-              `;
-              if (sp.issues.length > 0) {
-                html += `<div class="cat-details">`;
-                sp.issues.slice(0, 5).forEach(i => {
-                  html += `<div class="detail-item">• "${i.word}"</div>`;
-                });
-                if (sp.issues.length > 5) html += `<div class="detail-item" style="opacity:0.6;">+ ${sp.issues.length - 5} more</div>`;
-                html += `</div>`;
-              }
-              
-              // Category: Readability
-              const rd = result.categories.readability;
-              html += `
-                <div class="category-row ${rd.status}">
-                  <span class="cat-icon">📖</span>
-                  <span class="cat-name">Readability</span>
-                  <span class="cat-status">${rd.score} · ${rd.difficulty}</span>
-                </div>
-              `;
-              
-              // Category: Completeness
-              const cm = result.categories.completeness;
-              html += `
-                <div class="category-row ${cm.status}">
-                  <span class="cat-icon">✅</span>
-                  <span class="cat-name">Completeness</span>
-                  <span class="cat-status">${cm.issues.length === 0 ? '✓ Good' : `${cm.issues.length} issue(s)`}</span>
-                </div>
-              `;
-              if (cm.issues.length > 0) {
-                html += `<div class="cat-details">`;
-                cm.issues.forEach(i => {
-                  html += `<div class="detail-item">• ${i}</div>`;
-                });
-                html += `</div>`;
-              }
-              
-              html += `</div>`; // close category-list
-              
-              // Word count badge
-              html += `
-                <div style="text-align: center; margin-top: 16px; font-size: 11px; color: #71717a;">
-                  ${cm.wordCount} words · ${rd.gradeLevel}
-                </div>
-              `;
-              
-              aiContent.innerHTML = html;
-              
-            } catch (err) {
-              console.error(err);
-              aiContent.innerHTML = `
-                <div style="text-align: center; color: #ef4444; padding: 20px;">
-                  <p>Audit Failed</p>
-                  <p style="font-size: 12px; opacity: 0.8;">${err.message}</p>
-                </div>
-              `;
-            }
-          }, 100);
+         content.style.display = 'none';
+         chevron.style.transform = 'rotate(0deg)';
        };
 
        btn.addEventListener('click', toggleMenu);
        document.addEventListener('click', closeMenu);
-       
-       if (localAuditBtn) localAuditBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          runLocalAudit();
-       });
-       
-       if (aiAuditBtn) aiAuditBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          runContentAudit();
-       });
-       
-       if (closeLocalAudit) closeLocalAudit.addEventListener('click', () => {
-          localModal.style.display = 'none';
-       });
-       
-       if (localModal) localModal.addEventListener('click', (e) => {
-          if (e.target === localModal) localModal.style.display = 'none';
-       });
-       
-       if (closeAi) closeAi.addEventListener('click', () => {
-           aiPanel.style.display = 'none';
-       });
     }
   }
 
