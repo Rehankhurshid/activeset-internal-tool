@@ -60,7 +60,8 @@
       'tokenization','serialization','deserialization','compilation','transpilation',
       'minification','obfuscation','refactoring','debugging','profiling','logging','monitoring',
       'alerting','tracing','telemetry','analytics','metrics','dashboard','reporting','visualization',
-      'copyright','rights','reserved','terms','privacy','policy','contact','email','phone'
+      'copyright','rights','reserved','terms','privacy','policy','contact','email','phone',
+      'onboarding','credentials','seamless','mesoneer','mesoneers','workflow','workflows'
     ]);
 
     static PLACEHOLDER_PATTERNS = [
@@ -81,8 +82,8 @@
       if (this.dictionarySet) return; // Already loaded
 
       try {
-        // Fetch standard 10k word list from GitHub Raw (CORS-friendly)
-        const response = await fetch('https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt');
+        // Fetch extended 20k word list from GitHub Raw
+        const response = await fetch('https://raw.githubusercontent.com/first20hours/google-10000-english/master/20k.txt');
         if (!response.ok) throw new Error('Failed to load dictionary');
         const text = await response.text();
         this.dictionarySet = new Set(text.toLowerCase().split(/\n/).map(w => w.trim()));
@@ -128,7 +129,8 @@
 
       // 2. SPELLING CHECK
       if (this.dictionarySet) {
-          const words = text.split(/\s+/).filter(w => /^[a-zA-Z]{4,}$/.test(w));
+          // Tokenize by word characters (strips punctuation like 'credentials.')
+          const words = (text.match(/[a-zA-Z]{4,}/g) || []);
           const checked = new Set();
           const typos = [];
     
