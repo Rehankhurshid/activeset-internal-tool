@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { Project } from '@/types';
@@ -21,11 +21,11 @@ import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { ModeToggle } from '@/components/mode-toggle';
 
 interface PageProps {
-    params: Promise<{ id: string }>;
+    params: { id: string };
 }
 
 export default function ProjectDetailPage({ params }: PageProps) {
-    const { id } = use(params);
+    const { id } = params;
     const { user, loading: authLoading, signInWithGoogle } = useAuth();
     const { hasAccess, loading: accessLoading } = useModuleAccess('project-links');
     const [project, setProject] = useState<Project | null>(null);
