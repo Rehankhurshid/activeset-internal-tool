@@ -11,6 +11,8 @@ import { ConfirmDialog } from "@/components/ui/alert-dialog-confirm";
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { useMobile } from '@/hooks/useMobile';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 interface LinkItemProps {
   link: ProjectLink;
@@ -121,6 +123,44 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
           )}
         </a>
       </div>
+
+      {/* Audit Score Badge */}
+      {link.auditResult && (
+        <div className="flex items-center mr-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border cursor-help transition-colors",
+                  link.auditResult.score >= 90 ? "bg-green-500/10 text-green-600 border-green-500/20 hover:bg-green-500/20" :
+                    link.auditResult.score >= 70 ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20 hover:bg-yellow-500/20" :
+                      "bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/20"
+                )}>
+                  <span className="relative flex h-2 w-2">
+                    <span className={cn(
+                      "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                      link.auditResult.score >= 90 ? "bg-green-400" :
+                        link.auditResult.score >= 70 ? "bg-yellow-400" : "bg-red-400"
+                    )}></span>
+                    <span className={cn(
+                      "relative inline-flex rounded-full h-2 w-2",
+                      link.auditResult.score >= 90 ? "bg-green-500" :
+                        link.auditResult.score >= 70 ? "bg-yellow-500" : "bg-red-500"
+                    )}></span>
+                  </span>
+                  <span className="tabular-nums">{link.auditResult.score}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="space-y-1 p-1">
+                  <p className="font-semibold text-xs">Last Scan: {new Date(link.auditResult.lastRun).toLocaleTimeString()}</p>
+                  <p className="text-xs text-muted-foreground max-w-[200px]">{link.auditResult.summary || 'Click to see details'}</p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="flex gap-1">
