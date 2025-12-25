@@ -62,7 +62,7 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
     if (isMobile) {
       handleOpenLink();
     } else {
-      setIsModalOpen(true);
+      setIsReportOpen(true);
     }
   };
 

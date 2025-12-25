@@ -14,9 +14,9 @@ interface AuditDetailDialogProps {
 }
 
 export function AuditDetailDialog({ isOpen, onOpenChange, auditResult, linkTitle, linkUrl }: AuditDetailDialogProps) {
-    if (!auditResult) return null;
-
-    const { score, categories, lastRun } = auditResult;
+    const score = auditResult?.score || 0;
+    const categories = auditResult?.categories || { spelling: {}, seo: {}, technical: {} };
+    const lastRun = auditResult?.lastRun;
 
     const getStatusIcon = (status: string) => {
         switch (status) {
@@ -26,6 +26,31 @@ export function AuditDetailDialog({ isOpen, onOpenChange, auditResult, linkTitle
             default: return <Info className="h-4 w-4 text-blue-500" />;
         }
     };
+
+    if (!auditResult) {
+        return (
+            <Dialog open={isOpen} onOpenChange={onOpenChange}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{linkTitle}</DialogTitle>
+                        <DialogDescription>{linkUrl}</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-8 text-center space-y-3">
+                        <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center">
+                            <Info className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <h3 className="font-semibold text-lg">No Audit Data Yet</h3>
+                        <p className="text-sm text-muted-foreground">
+                            The widget hasn't run on this page yet. Visit the page to capture audit data suitable for sync.
+                        </p>
+                        <p className="text-xs text-muted-foreground/70 pt-2">
+                            (Ensure widget.js is deployed and you reload the target page)
+                        </p>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        );
+    }
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
