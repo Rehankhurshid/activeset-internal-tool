@@ -61,7 +61,8 @@
       'minification','obfuscation','refactoring','debugging','profiling','logging','monitoring',
       'alerting','tracing','telemetry','analytics','metrics','dashboard','reporting','visualization',
       'copyright','rights','reserved','terms','privacy','policy','contact','email','phone',
-      'onboarding','credentials','seamless','mesoneer','mesoneers','workflow','workflows'
+      'onboarding','credentials','seamless','mesoneer','mesoneers','workflow','workflows',
+      'signeer','fiduciary','leanrun','digitizes','paperless'
     ]);
 
     static PLACEHOLDER_PATTERNS = [
@@ -245,6 +246,48 @@
 
       return result;
     }
+
+    static highlightTypos(typos) {
+      if (!window.CSS || !CSS.highlights) return;
+      CSS.highlights.clear();
+      
+      if (!typos || typos.length === 0) return;
+      
+      const ranges = [];
+      const typoSet = new Set(typos.map(t => t.word.toLowerCase()));
+      const treeWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let currentNode = treeWalker.nextNode();
+
+      while (currentNode) {
+         // Skip widget itself and scripts
+         if (currentNode.parentElement && (
+             currentNode.parentElement.closest('#plw-audit-container') || 
+             currentNode.parentElement.tagName === 'SCRIPT' || 
+             currentNode.parentElement.tagName === 'STYLE'
+         )) {
+             currentNode = treeWalker.nextNode();
+             continue;
+         }
+
+         const text = currentNode.nodeValue;
+         const regex = /[a-zA-Z]{4,}/g;
+         let match;
+         while ((match = regex.exec(text)) !== null) {
+             if (typoSet.has(match[0].toLowerCase())) {
+                 const range = new Range();
+                 range.setStart(currentNode, match.index);
+                 range.setEnd(currentNode, match.index + match[0].length);
+                 ranges.push(range);
+             }
+         }
+         currentNode = treeWalker.nextNode();
+      }
+
+      if (ranges.length > 0) {
+         const highlight = new Highlight(...ranges);
+         CSS.highlights.set("plw-typo", highlight);
+      }
+    }
   }
 
   // ProjectLinksWidget class
@@ -349,6 +392,13 @@
              #plw-audit-container {
                 font-family: 'Funnel Sans', sans-serif;
                 z-index: 10001;
+             }
+             
+             ::highlight(plw-typo) {
+                text-decoration: underline wavy #ef4444;
+                text-decoration-thickness: 2px;
+                background-color: rgba(239, 68, 68, 0.15);
+                color: unset;
              }
              
              /* Badge Styles */
@@ -532,6 +582,7 @@
        setTimeout(async () => {
           try {
              const result = await ContentQualityAuditor.audit();
+             ContentQualityAuditor.highlightTypos(result.categories.spelling.issues);
              this.renderStandaloneResults(result);
           } catch (err) {
              console.error("Auto-Audit Failed:", err);
