@@ -64,6 +64,8 @@
       'onboarding','credentials','seamless','mesoneer','mesoneers','workflow','workflows',
       'signeer','fiduciary','leanrun','digitizes','paperless'
     ]);
+    
+    static dictionarySet = null; // Deprecated but kept for compatibility logic removal if needed
 
     static PLACEHOLDER_PATTERNS = [
       { regex: /lorem\s+ipsum/gi, name: 'Lorem Ipsum' },
@@ -79,24 +81,9 @@
       { regex: /sample\s+text/gi, name: 'Sample Text' }
     ];
 
-    static async loadDictionary() {
-      if (this.dictionarySet) return; // Already loaded
 
-      try {
-        // Fetch extended 20k word list from GitHub Raw
-        const response = await fetch('https://raw.githubusercontent.com/first20hours/google-10000-english/master/20k.txt');
-        if (!response.ok) throw new Error('Failed to load dictionary');
-        const text = await response.text();
-        this.dictionarySet = new Set(text.toLowerCase().split(/\n/).map(w => w.trim()));
-      } catch (e) {
-        console.warn('Audit: Dictionary fetch failed. Spellcheck disabled.', e);
-        this.dictionarySet = null; 
-      }
-    }
 
     static async audit() {
-      await this.loadDictionary();
-      
       const text = document.body.innerText || '';
       const doc = document;
 
@@ -128,31 +115,65 @@
         result.overallScore = 0;
       }
 
-      // 2. SPELLING CHECK
-      if (this.dictionarySet) {
-          // Tokenize by word characters (strips punctuation like 'credentials.')
-          const words = (text.match(/[a-zA-Z]{4,}/g) || []);
-          const checked = new Set();
-          const typos = [];
-    
-          words.forEach(word => {
-            const lower = word.toLowerCase();
-            if (!checked.has(lower) && !this.dictionarySet.has(lower) && !this.CUSTOM_JARGON.has(lower)) {
-              if (word[0] === word[0].toUpperCase()) return; // Skip proper nouns
-              typos.push(word);
-              checked.add(lower);
-            }
+      // 2. SPELLING & GRAMMAR CHECK (LanguageTool API)
+      const typos = [];
+      try {
+          // Dynamic API URL discovery
+          let scriptUrl = document.currentScript ? document.currentScript.src : null;
+          if (!scriptUrl) {
+             const scripts = document.querySelectorAll('script');
+             for (let s of scripts) {
+                if (s.src && s.src.includes('widget.js')) { scriptUrl = s.src; break; }
+             }
+          }
+          // Default to current origin if script url not found, or construct absolute
+          const baseUrl = scriptUrl ? new URL(scriptUrl).origin : window.location.origin;
+          const apiUrl = `${baseUrl}/api/check-text`;
+          
+          // Truncate text to avoid huge payload if necessary
+          const textPayload = text.substring(0, 15000); 
+
+          const ltResponse = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: textPayload })
           });
           
-          const uniqueTypos = [...new Set(typos)].slice(0, 10);
-          if (uniqueTypos.length > 0) {
-            result.categories.spelling.issues = uniqueTypos.map(w => ({ word: w }));
-            result.categories.spelling.status = uniqueTypos.length > 3 ? 'warning' : 'info';
-            result.categories.spelling.score = Math.max(0, 100 - (uniqueTypos.length * 5));
+          if (ltResponse.ok) {
+              const ltData = await ltResponse.json();
+              if (ltData.matches) {
+                  const seen = new Set();
+                  ltData.matches.forEach(match => {
+                      // Extract word from context (using offset/length is safer than match.context.text)
+                      // match.offset is global index, match.length is word length
+                      // We need the substring from original text
+                      const word = textPayload.substring(match.offset, match.offset + match.length);
+                      
+                      const lower = word.toLowerCase();
+                      if (this.CUSTOM_JARGON.has(lower)) return;
+                      // Only show misspellings (ignore grammar for now to match user expectation) or keep all?
+                      // User asked for "Spellcheck". "signeer" is misspelling.
+                      // Let's filter for spelling to avoid "grammar" noise which might be subjective
+                      if (match.rule.issueType === 'misspelling' && !seen.has(lower)) {
+                           typos.push(word);
+                           seen.add(lower);
+                      }
+                  });
+              }
           }
-      } else {
-        result.categories.spelling.issues = [{ word: 'Dictionary Unavailable' }];
-        result.categories.spelling.status = 'info';
+      } catch (e) {
+          console.warn('Audit: Spellcheck API failed', e);
+          typos.push('Check Unavailable');
+      }
+
+      const uniqueTypos = [...new Set(typos)].slice(0, 10);
+      if (uniqueTypos.length > 0 && uniqueTypos[0] !== 'Check Unavailable') {
+        result.categories.spelling.issues = uniqueTypos.map(w => ({ word: w }));
+        result.categories.spelling.status = uniqueTypos.length > 3 ? 'warning' : 'info';
+        result.categories.spelling.score = Math.max(0, 100 - (uniqueTypos.length * 5));
+      } else if (uniqueTypos[0] === 'Check Unavailable') {
+         result.categories.spelling.status = 'info';
+         result.categories.spelling.issues = [{ word: 'Service Unavailable' }];
       }
 
       // 3. SEO & META
