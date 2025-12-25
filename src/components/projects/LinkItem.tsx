@@ -13,6 +13,7 @@ import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { useMobile } from '@/hooks/useMobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { AuditDetailDialog } from './AuditDetailDialog';
 
 interface LinkItemProps {
   link: ProjectLink;
@@ -25,6 +26,8 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(false);
+  const [isReportOpen, setIsReportOpen] = React.useState(false);
+
 
   const { isLoading: isDeleting, execute: executeDelete } = useAsyncOperation();
   const { isLoading: isUpdating, execute: executeUpdate } = useAsyncOperation();
@@ -131,11 +134,16 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border cursor-help transition-colors",
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border cursor-pointer transition-colors active:scale-95",
                   link.auditResult.score >= 90 ? "bg-green-500/10 text-green-600 border-green-500/20 hover:bg-green-500/20" :
                     link.auditResult.score >= 70 ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20 hover:bg-yellow-500/20" :
                       "bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/20"
-                )}>
+                )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsReportOpen(true);
+                  }}
+                >
                   <span className="relative flex h-2 w-2">
                     <span className={cn(
                       "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
@@ -164,6 +172,22 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
 
       {/* Action Buttons */}
       <div className="flex gap-1">
+        {/* External Link Button */}
+        {link.url && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenLink();
+            }}
+            title="Open in new tab"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </Button>
+        )}
+
         {/* Preview Button */}
         {link.url && (
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -241,6 +265,13 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
           confirmText="Delete"
           onConfirm={handleDelete}
           variant="destructive"
+        />
+        <AuditDetailDialog
+          isOpen={isReportOpen}
+          onOpenChange={setIsReportOpen}
+          auditResult={link.auditResult}
+          linkTitle={link.title}
+          linkUrl={link.url}
         />
       </div>
     </div>
