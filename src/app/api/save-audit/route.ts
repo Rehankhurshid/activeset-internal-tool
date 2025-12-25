@@ -22,7 +22,20 @@ export async function POST(request: NextRequest) {
         const project = await projectsService.getProject(projectId);
         if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404, headers: corsHeaders });
 
-        const normalize = (u: string) => u.replace(/\/$/, '').toLowerCase();
+        const normalize = (u: string) => {
+            try {
+                // If u doesn't start with http, assume it might be a relative path or just handle graceful fallback
+                const urlStr = u.startsWith('http') ? u : `https://${u}`;
+                const urlObj = new URL(urlStr);
+                // Remove query params and hash
+                // Normalize pathname: remove trailing slash
+                const pathname = urlObj.pathname.replace(/\/$/, '');
+                return `${urlObj.origin}${pathname}`.toLowerCase();
+            } catch (e) {
+                // Fallback for malformed URLs
+                return u.split('?')[0].replace(/\/$/, '').toLowerCase();
+            }
+        };
         const targetUrl = normalize(url);
 
         const link = project.links.find(l => l.url && normalize(l.url) === targetUrl);

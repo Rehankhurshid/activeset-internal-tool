@@ -319,17 +319,6 @@
   class ProjectLinksWidget {
     constructor(container, config = {}) {
       // Check for .webflow.io domain
-      const hostname = window.location.hostname;
-      const isWebflow = hostname.endsWith('.webflow.io');
-      const isLocalhost = hostname.includes('localhost') || hostname.includes('127.0.0.1');
-
-      // Allow localhost for testing, strict on production
-      if (!isWebflow && !isLocalhost) {
-        return;
-      }
-
-      console.log("Project Links Widget: Initializing on", hostname);
-
       this.container =
         typeof container === "string"
           ? document.getElementById(container)
@@ -342,6 +331,20 @@
         style: "dropdown", // Always dropdown
         position: "bottom-right" // Always bottom-right
       };
+
+      // Domain Check
+      const hostname = window.location.hostname;
+      const isWebflow = hostname.endsWith('.webflow.io');
+      const isLocalhost = hostname.includes('localhost') || hostname.includes('127.0.0.1');
+      const isAllowedDomain = this.config.showOnDomains && this.config.showOnDomains.some(d => hostname.includes(d));
+
+      // Allow localhost, webflow, or explicitly allowed domains
+      if (!isWebflow && !isLocalhost && !isAllowedDomain) {
+        console.warn("Project Links Widget: Domain not allowed", hostname);
+        return;
+      }
+
+      console.log("Project Links Widget: Initializing on", hostname);
 
       if (!this.container) {
         console.error("ProjectLinksWidget: Container not found");
