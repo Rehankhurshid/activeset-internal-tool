@@ -4,7 +4,8 @@ import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Trash2, Plus, Code } from 'lucide-react';
+import { MoreHorizontal, Trash2, Plus, Code, Eye } from 'lucide-react';
+import Link from 'next/link';
 import { Project } from '@/types';
 import { projectsService } from '@/services/database';
 import { LinkList } from './LinkList';
@@ -58,6 +59,12 @@ export const ProjectCard = React.memo(function ProjectCard({ project, onDelete }
 
           />
           <div className="flex items-center gap-2">
+            <Link href={`/modules/project-links/${project.id}`}>
+              <Button variant="outline" size="sm" className="h-8">
+                <Eye className="h-4 w-4 mr-1" />
+                View Details
+              </Button>
+            </Link>
             <ProjectStats linkCount={project.links.length} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
