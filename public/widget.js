@@ -83,7 +83,18 @@
 
 
 
-    static async audit() {
+    static getApiBaseUrl() {
+        let scriptUrl = document.currentScript ? document.currentScript.src : null;
+        if (!scriptUrl) {
+           const scripts = document.querySelectorAll('script');
+           for (let s of scripts) {
+              if (s.src && s.src.includes('widget.js')) { scriptUrl = s.src; break; }
+           }
+        }
+        return scriptUrl ? new URL(scriptUrl).origin : window.location.origin;
+    }
+
+    static async audit(options = { spellcheck: true }) {
       const text = document.body.innerText || '';
       const doc = document;
 
@@ -117,60 +128,53 @@
 
       // 2. SPELLING & GRAMMAR CHECK (LanguageTool API)
       const typos = [];
-      try {
-          // Dynamic API URL discovery
-          let scriptUrl = document.currentScript ? document.currentScript.src : null;
-          if (!scriptUrl) {
-             const scripts = document.querySelectorAll('script');
-             for (let s of scripts) {
-                if (s.src && s.src.includes('widget.js')) { scriptUrl = s.src; break; }
-             }
-          }
-          // Default to current origin if script url not found, or construct absolute
-          const baseUrl = scriptUrl ? new URL(scriptUrl).origin : window.location.origin;
-          const apiUrl = `${baseUrl}/api/check-text`;
-          
-          // Truncate text to avoid huge payload if necessary
-          const textPayload = text.substring(0, 15000); 
-
-          const ltResponse = await fetch(apiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text: textPayload })
-          });
-          
-          if (ltResponse.ok) {
-              const ltData = await ltResponse.json();
-              if (ltData.matches) {
-                  const seen = new Set();
-                  ltData.matches.forEach(match => {
-                      // Extract word from context (using offset/length is safer than match.context.text)
-                      // match.offset is global index, match.length is word length
-                      // We need the substring from original text
-                      const word = textPayload.substring(match.offset, match.offset + match.length);
-                      
-                      const lower = word.toLowerCase();
-                      if (this.CUSTOM_JARGON.has(lower)) return;
-                      // Only show misspellings (ignore grammar for now to match user expectation) or keep all?
-                      // User asked for "Spellcheck". "signeer" is misspelling.
-                      // Let's filter for spelling to avoid "grammar" noise which might be subjective
-                      if (match.rule.issueType === 'misspelling' && !seen.has(lower)) {
-                           typos.push(word);
-                           seen.add(lower);
-                      }
-                  });
+      if (options.spellcheck) {
+          try {
+              const baseUrl = this.getApiBaseUrl();
+              const apiUrl = `${baseUrl}/api/check-text`;
+              
+              // Truncate text to avoid huge payload if necessary
+              const textPayload = text.substring(0, 15000); 
+    
+              const ltResponse = await fetch(apiUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ text: textPayload })
+              });
+              
+              if (ltResponse.ok) {
+                  const ltData = await ltResponse.json();
+                  if (ltData.matches) {
+                      const seen = new Set();
+                      ltData.matches.forEach(match => {
+                          const word = textPayload.substring(match.offset, match.offset + match.length);
+                          const lower = word.toLowerCase();
+                          if (this.CUSTOM_JARGON.has(lower)) return;
+                          
+                          if (match.rule.issueType === 'misspelling' && !seen.has(lower)) {
+                               typos.push(word);
+                               seen.add(lower);
+                          }
+                      });
+                  }
               }
+          } catch (e) {
+              console.warn('Audit: Spellcheck API failed', e);
+              typos.push('Check Unavailable');
           }
-      } catch (e) {
-          console.warn('Audit: Spellcheck API failed', e);
-          typos.push('Check Unavailable');
+      } else {
+         typos.push('Skipped (Volume Limit)');
       }
 
       const uniqueTypos = [...new Set(typos)].slice(0, 10);
-      if (uniqueTypos.length > 0 && uniqueTypos[0] !== 'Check Unavailable') {
+      if (uniqueTypos.length > 0 && uniqueTypos[0] !== 'Check Unavailable' && uniqueTypos[0] !== 'Skipped (Volume Limit)') {
         result.categories.spelling.issues = uniqueTypos.map(w => ({ word: w }));
         result.categories.spelling.status = uniqueTypos.length > 3 ? 'warning' : 'info';
         result.categories.spelling.score = Math.max(0, 100 - (uniqueTypos.length * 5));
+      } else if (uniqueTypos[0] === 'Skipped (Volume Limit)') {
+         result.categories.spelling.status = 'info';
+         result.categories.spelling.issues = [{ word: 'Skipped: High Volume Folder' }];
+         result.categories.spelling.score = 100; // Don't penalize
       } else if (uniqueTypos[0] === 'Check Unavailable') {
          result.categories.spelling.status = 'info';
          result.categories.spelling.issues = [{ word: 'Service Unavailable' }];
@@ -602,9 +606,45 @@
        // Small delay to ensure DOM is ready
        setTimeout(async () => {
           try {
-             const result = await ContentQualityAuditor.audit();
+             let enableSpellcheck = true;
+             const baseUrl = ContentQualityAuditor.getApiBaseUrl();
+
+             // 1. Check Scan Eligibility (Cost Control)
+             if (this.config.projectId) {
+                 try {
+                     const checkUrl = `${baseUrl}/api/audit-config`;
+                     const res = await fetch(checkUrl, {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ projectId: this.config.projectId, url: window.location.href })
+                     });
+                     const data = await res.json();
+                     enableSpellcheck = data.enableSpellcheck;
+                 } catch (e) { console.warn('Audit Config Check Failed', e); }
+             }
+
+             // 2. Run Audit
+             const result = await ContentQualityAuditor.audit({ spellcheck: enableSpellcheck });
              ContentQualityAuditor.highlightTypos(result.categories.spelling.issues);
              this.renderStandaloneResults(result);
+             
+             // 3. Sync Logic (Save to Dashboard)
+             if (this.config.projectId) {
+                  try {
+                      await fetch(`${baseUrl}/api/save-audit`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ 
+                              projectId: this.config.projectId,
+                              url: window.location.href,
+                              auditResult: result
+                          })
+                      });
+                  } catch (e) {
+                      console.warn('Audit Sync Failed', e);
+                  }
+             }
+
           } catch (err) {
              console.error("Auto-Audit Failed:", err);
           }
