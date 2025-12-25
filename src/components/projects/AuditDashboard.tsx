@@ -164,7 +164,7 @@ export function AuditDashboard({ links }: AuditDashboardProps) {
                                         <div className="col-span-3 flex gap-2">
                                             {/* We can infer categories from score for now or just show a general status */}
                                             {/* In a real scenario, we'd drill down into categories if passed in props */}
-                                            {link.auditResult?.score >= 90 ? (
+                                            {(link.auditResult?.score || 0) >= 90 ? (
                                                 <div className="flex items-center text-xs text-green-600">
                                                     <CheckCircle className="h-3 w-3 mr-1" /> Ready
                                                 </div>
