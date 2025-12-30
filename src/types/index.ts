@@ -30,6 +30,7 @@ export interface AuditResult {
   lastRun: string; // ISO date string
   contentSnapshot?: ContentSnapshot;
   changedFields?: string[]; // e.g., ['title', 'h1', 'wordCount']
+  diffSummary?: string; // Human readable summary of changes (e.g. "Title updated, Word count +20")
   categories: {
     placeholders: {
       status: 'passed' | 'failed' | 'warning' | 'info';
