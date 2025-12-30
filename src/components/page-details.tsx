@@ -479,155 +479,63 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                     <div className="text-xs text-muted-foreground">Sentence count</div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* SEO (Promoted from Tabs) */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle>SEO</CardTitle>
+                <CardDescription>MetaData and ranking signals</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {seoIssues.length > 0 ? (
+                  <ul className="space-y-2">
+                    {seoIssues.map((issue, idx) => (
+                      <li key={idx} className="flex gap-2 text-sm text-muted-foreground p-2 rounded bg-muted/50">
+                        <Info className="h-4 w-4 text-blue-500 mt-0.5" />
+                        {issue.title}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
+                    <CheckCircle2 className="h-8 w-8 text-green-500/50 mb-2" />
+                    <p>No SEO issues detected</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Completeness */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Completeness</CardTitle>
+              <CardDescription>Content quality checklist</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {completenessChecks.map((check, idx) => (
+                  <div key={idx} className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="flex items-center gap-3">
+                      {check.passed ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <XCircle className="h-5 w-5 text-red-500" />
+                      )}
+                      <span className="text-sm font-medium">{check.check}</span>
+                    </div>
+                    {!check.passed && check.count !== undefined && check.count > 0 && (
+                      <Badge variant="destructive">{check.count}</Badge>
+                    )}
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
-
-          {/* SEO (Promoted from Tabs) */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>SEO</CardTitle>
-              <CardDescription>MetaData and ranking signals</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {seoIssues.length > 0 ? (
-                <ul className="space-y-2">
-                  {seoIssues.map((issue, idx) => (
-                    <li key={idx} className="flex gap-2 text-sm text-muted-foreground p-2 rounded bg-muted/50">
-                      <Info className="h-4 w-4 text-blue-500 mt-0.5" />
-                      {issue.title}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
-                  <CheckCircle2 className="h-8 w-8 text-green-500/50 mb-2" />
-                  <p>No SEO issues detected</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
-
-        {/* Completeness */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Completeness</CardTitle>
-            <CardDescription>Content quality checklist</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {completenessChecks.map((check, idx) => (
-                <div key={idx} className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="flex items-center gap-3">
-                    {check.passed ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
-                    )}
-                    <span className="text-sm font-medium">{check.check}</span>
-                  </div>
-                  {!check.passed && check.count !== undefined && check.count > 0 && (
-                    <Badge variant="destructive">{check.count}</Badge>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       </div>
-
-
-      <ul className="list-inside list-disc space-y-1 text-muted-foreground">
-        {issue.fix.map((step, stepIdx) => (
-          <li key={stepIdx}>{step}</li>
-        ))}
-      </ul>
     </div>
-                      </AccordionContent >
-                    </AccordionItem >
-                  ))
-}
-                </Accordion >
-              </TabsContent >
-            </Tabs >
-          </CardContent >
-        </Card >
-
-  {/* Section F: Scan Run History */ }
-  < Card >
-          <CardHeader>
-            <CardTitle>Scan run history</CardTitle>
-            <CardDescription>Historical audit runs for this page</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date/Time</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Full hash</TableHead>
-                    <TableHead>Content hash</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Blockers</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {scanRunHistory.map((run, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-medium max-w-[200px] truncate">{run.timestamp}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{run.duration}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <div className={`h-2 w-2 rounded-full ${run.fullHashChanged ? 'bg-orange-500' : 'bg-green-500'}`} />
-                          <span className="text-xs">{run.fullHashChanged ? 'Changed' : 'Same'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <div className={`h-2 w-2 rounded-full ${run.contentHashChanged ? 'bg-orange-500' : 'bg-green-500'}`} />
-                          <span className="text-xs">{run.contentHashChanged ? 'Changed' : 'Same'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-semibold">{run.contentScore}</span>
-                      </TableCell>
-                      <TableCell>
-                        {run.blockers > 0 ? (
-                          <Badge variant="destructive">{run.blockers}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={getStatusColor(run.status)}>
-                          {run.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="sm">
-                            View run
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            Set baseline
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            Compare
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card >
-      </div >
-    </div >
   )
 }

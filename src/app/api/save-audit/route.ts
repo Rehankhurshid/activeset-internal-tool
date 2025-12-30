@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
 import type { ChangeStatus, AuditResult, ContentSnapshot } from '@/types';
-import { auditService } from '@/services/auditService';
+import { auditService } from '@/services/AuditService';
 import { createTwoFilesPatch } from 'diff';
 
 const corsHeaders = {
