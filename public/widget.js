@@ -323,6 +323,7 @@
         summary: '',
         fullHash,
         contentHash,
+        htmlSource: fullPageHtml, // Capture full source for diffing
         // Capture content snapshot for change detection
         contentSnapshot: {
           title: doc.title || '',

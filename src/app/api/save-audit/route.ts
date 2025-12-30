@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
 import type { ChangeStatus, AuditResult, ContentSnapshot } from '@/types';
+import { auditService } from '@/services/auditService';
+import { createTwoFilesPatch } from 'diff';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -121,6 +123,35 @@ export async function POST(request: NextRequest) {
         // Get previous audit result if link exists
         const prevAudit = link?.auditResult as AuditResult | undefined;
 
+        // --- Source Diffing Logic ---
+        let diffPatch: string | undefined;
+        let diffSummary = '';
+        let changedFields: string[] = [];
+
+        // Try to fetch previous source for true diff
+        const linkId = link?.id || 'temp_link_id';
+        const prevLog = await auditService.getLatestAuditLog(linkId);
+
+        if (prevLog && auditResult.htmlSource && prevLog.htmlSource) {
+            // Compute unified diff if source changed
+            if (auditResult.fullHash !== prevLog.fullHash) {
+                // Generate a patch
+                try {
+                    diffPatch = createTwoFilesPatch(
+                        'Previous Version',
+                        'Current Version',
+                        prevLog.htmlSource,
+                        auditResult.htmlSource,
+                        'Old Source',
+                        'New Source',
+                        { context: 3 }
+                    );
+                } catch (e) {
+                    console.error('Diff generation failed:', e);
+                }
+            }
+        }
+
         // Compute change status
         const changeStatus = computeChangeStatus(
             auditResult.fullHash,
@@ -130,9 +161,6 @@ export async function POST(request: NextRequest) {
         );
 
         // Compute detailed changes if content changed
-        let changedFields: string[] = [];
-        let diffSummary = '';
-
         if (changeStatus === 'CONTENT_CHANGED' && prevAudit?.contentSnapshot && auditResult.contentSnapshot) {
             const details = computeDetailedChanges(auditResult.contentSnapshot, prevAudit.contentSnapshot);
             changedFields = details.changedFields;
@@ -143,11 +171,29 @@ export async function POST(request: NextRequest) {
                 changedFields.push('body');
                 diffSummary = 'Main content text modified';
             }
+        } else if (changeStatus === 'TECH_CHANGE_ONLY') {
+            diffSummary = 'Structure/Code changed (no text impact)';
         }
+
+        // Save full source to Audit Logs (separate collection)
+        if (auditResult.htmlSource && link) {
+            await auditService.saveAuditLog({
+                projectId,
+                linkId: link.id,
+                url,
+                fullHash: auditResult.fullHash,
+                contentHash: auditResult.contentHash,
+                htmlSource: auditResult.htmlSource,
+                diffPatch // Store the patch too for easy retrieval
+            });
+        }
+
+        // Remove massive fields before saving to Project document
+        const { htmlSource, ...cleanAuditResult } = auditResult;
 
         // Build final audit result with changeStatus
         const finalAuditResult: AuditResult = {
-            ...auditResult,
+            ...cleanAuditResult,
             score: auditResult.overallScore || auditResult.score || 0,
             changeStatus,
             changedFields,
@@ -163,7 +209,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({
                 success: true,
                 linkId: link.id,
-                changeStatus
+                changeStatus,
+                diffSummary
             }, { headers: corsHeaders });
         } else {
             // Auto-create new link for discovered page
