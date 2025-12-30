@@ -109,6 +109,13 @@
           
           // Remove any nav/footer descendants from clone
           clone.querySelectorAll('nav, footer').forEach(child => child.remove());
+
+          // Inject separate line/space after block elements (and distinct inline blocks like links/buttons)
+          // to prevent text fusion e.g. <div>Hello</div><div>World</div> -> "HelloWorld"
+          const blockSelectors = 'div, p, h1, h2, h3, h4, h5, h6, li, article, section, header, footer, aside, br, hr, a, button, label, option, select, table, thead, tbody, tfoot, tr, td, th';
+          clone.querySelectorAll(blockSelectors).forEach(block => {
+             block.after(doc.createTextNode(' '));
+          });
           
           const text = clone.innerText || clone.textContent || '';
           if (text.trim()) {
@@ -121,6 +128,13 @@
       if (textParts.length === 0) {
         const bodyClone = doc.body.cloneNode(true);
         bodyClone.querySelectorAll('nav, footer, script, style, #plw-audit-container').forEach(el => el.remove());
+        
+        // Inject separate line/space after block elements
+        const blockSelectors = 'div, p, h1, h2, h3, h4, h5, h6, li, article, section, header, footer, aside, br, hr, a, button, label, option, select, table, thead, tbody, tfoot, tr, td, th';
+        bodyClone.querySelectorAll(blockSelectors).forEach(block => {
+           block.after(doc.createTextNode(' '));
+        });
+
         const fallbackText = bodyClone.innerText || bodyClone.textContent || '';
         textParts.push(fallbackText.trim());
       }
@@ -280,6 +294,17 @@
         summary: '',
         fullHash,
         contentHash,
+        // Capture content snapshot for change detection
+        contentSnapshot: {
+          title: doc.title || '',
+          h1: doc.querySelector('h1')?.textContent?.trim() || '',
+          metaDescription: doc.querySelector('meta[name="description"]')?.content || '',
+          wordCount: readabilityData.wordCount,
+          headings: Array.from(doc.querySelectorAll('h1, h2, h3'))
+            .filter(h => !h.closest('nav') && !h.closest('footer'))
+            .map(h => h.textContent?.trim() || '')
+            .slice(0, 10) // Limit to first 10 headings
+        },
         categories: {
           placeholders: { status: 'passed', issues: [], score: 100 },
           spelling: { status: 'passed', issues: [], score: 100 },

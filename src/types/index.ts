@@ -12,6 +12,14 @@ export interface ProjectLink {
 export type ChangeStatus = 'NO_CHANGE' | 'TECH_CHANGE_ONLY' | 'CONTENT_CHANGED' | 'SCAN_FAILED';
 
 // Audit result from widget scanning
+export interface ContentSnapshot {
+  title: string;
+  h1: string;
+  metaDescription: string;
+  wordCount: number;
+  headings: string[]; // All H1-H3 headings
+}
+
 export interface AuditResult {
   score: number;
   summary: string;
@@ -20,6 +28,8 @@ export interface AuditResult {
   contentHash?: string;
   changeStatus?: ChangeStatus;
   lastRun: string; // ISO date string
+  contentSnapshot?: ContentSnapshot;
+  changedFields?: string[]; // e.g., ['title', 'h1', 'wordCount']
   categories: {
     placeholders: {
       status: 'passed' | 'failed' | 'warning' | 'info';
