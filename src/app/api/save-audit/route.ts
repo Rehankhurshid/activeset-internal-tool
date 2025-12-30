@@ -206,8 +206,7 @@ export async function POST(request: NextRequest) {
             finalAuditResult.diffPatch = diffPatch;
         }
 
-        // Explicitly delete htmlSource if it somehow crept in (though cleanAuditResult excludes it)
-        delete finalAuditResult.htmlSource;
+
 
         if (link) {
             await projectsService.updateLink(projectId, link.id, {
