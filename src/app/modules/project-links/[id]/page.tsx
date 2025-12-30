@@ -34,8 +34,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
     const { execute: executeAddLink } = useAsyncOperation();
 
-    // Default to 'audit' tab if there's data, else 'links'
-    const [activeTab, setActiveTab] = useState('links');
+    // Default to 'audit' tab
+    const [activeTab, setActiveTab] = useState('audit');
 
     useEffect(() => {
         if (!user || !id) return;
