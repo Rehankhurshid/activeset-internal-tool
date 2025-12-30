@@ -62,7 +62,7 @@
       'alerting','tracing','telemetry','analytics','metrics','dashboard','reporting','visualization',
       'copyright','rights','reserved','terms','privacy','policy','contact','email','phone',
       'onboarding','credentials','seamless','mesoneer','mesoneers','workflow','workflows',
-      'signeer','fiduciary','leanrun','digitizes','paperless'
+      'signeer','fiduciary','leanrun','digitizes','paperless','deliver','delivers','delivered','delivery'
     ]);
     
     static dictionarySet = null; // Deprecated but kept for compatibility logic removal if needed
