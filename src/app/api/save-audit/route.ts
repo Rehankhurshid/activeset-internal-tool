@@ -191,17 +191,23 @@ export async function POST(request: NextRequest) {
         // Remove massive fields before saving to Project document
         const { htmlSource, ...cleanAuditResult } = auditResult;
 
-        // Build final audit result with changeStatus
+        // Build final audit result with changeStatus (ensure no undefined values for Firestore)
         const finalAuditResult: AuditResult = {
             ...cleanAuditResult,
             score: auditResult.overallScore || auditResult.score || 0,
             changeStatus,
             changedFields,
             diffSummary,
-            diffPatch: diffPatch || undefined, // Send patch to UI if available
-            htmlSource: undefined, // Do NOT save full HTML in ProjectLink (too big)
             lastRun: new Date().toISOString()
         };
+
+        // Conditionally add diffPatch if it exists (Firestore throws on undefined)
+        if (diffPatch) {
+            finalAuditResult.diffPatch = diffPatch;
+        }
+
+        // Explicitly delete htmlSource if it somehow crept in (though cleanAuditResult excludes it)
+        delete finalAuditResult.htmlSource;
 
         if (link) {
             await projectsService.updateLink(projectId, link.id, {
