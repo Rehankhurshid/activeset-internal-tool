@@ -127,7 +127,42 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
     // No history backend yet
   ];
 
-  const differences: DiffItem[] = []; // No diff backend yet
+  // Map changed fields to diff items
+  const differences: DiffItem[] = [];
+
+  if (audit?.changeStatus === 'CONTENT_CHANGED') {
+    if (audit.diffSummary) {
+      // Add a summary item
+      differences.push({
+        type: 'info',
+        severity: 'info',
+        title: audit.diffSummary,
+        content: 'Detected changes in latest scan',
+        detectedBy: 'System'
+      });
+    }
+
+    if (audit.changedFields && audit.changedFields.length > 0) {
+      audit.changedFields.forEach(field => {
+        differences.push({
+          type: 'modified',
+          severity: 'warning',
+          title: `${field.charAt(0).toUpperCase() + field.slice(1)} Changed`,
+          content: `${field} was modified since the last scan.`,
+          detectedBy: 'Content Hash'
+        });
+      });
+    } else {
+      // Fallback if no specific fields listed but content changed
+      differences.push({
+        type: 'modified',
+        severity: 'warning',
+        title: 'Content Modified',
+        content: 'Main content text has changed.',
+        detectedBy: 'Content Hash'
+      });
+    }
+  }
 
   const placeholders = audit?.categories?.placeholders?.issues || []
   const spellingErrors = audit?.categories?.spelling?.issues.map(i => ({
