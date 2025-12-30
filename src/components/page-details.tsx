@@ -335,219 +335,61 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
           </Card>
         </div>
 
-        {/* Section B: Change Detection */}
-        <div className="mb-8 grid gap-6 lg:grid-cols-2">
-          {/* Left: Hash Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Hash className="h-5 w-5" />
-                Hash status
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-medium">Full page source hash</span>
-                  <Button variant="ghost" size="sm" onClick={() => copyToClipboard(hashData.fullHash)}>
-                    <Copy className="h-3 w-3" />
-                  </Button>
+        {/* Section B: Change Detection (Condensed) */}
+        {audit?.changeStatus === 'CONTENT_CHANGED' && (
+          <Card className="mb-8 border-orange-500/20 bg-orange-500/5">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-orange-600" />
+                  <CardTitle className="text-orange-700">Content Updates Detected</CardTitle>
                 </div>
-                <div className="rounded-md bg-muted p-3">
-                  <code className="text-xs">{hashData.fullHash}</code>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">Detects any HTML/source change</p>
+                <Badge variant="outline" className="bg-background text-orange-700 border-orange-200">
+                  {pageData.lastContentChange}
+                </Badge>
               </div>
-
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-medium">Content hash</span>
-                  <Button variant="ghost" size="sm" onClick={() => copyToClipboard(hashData.contentHash)}>
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-                <div className="rounded-md bg-muted p-3">
-                  <code className="text-xs">{hashData.contentHash}</code>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">Excludes nav & footer; tracks meaningful content</p>
-              </div>
-
-              <div className="rounded-lg border bg-card p-4">
-                <div className="mb-3 text-sm font-medium">Last comparison result</div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">FullHash:</span>
-                    <Badge variant={hashData.fullHashChanged ? "destructive" : "secondary"}>
-                      {hashData.fullHashChanged ? "CHANGED" : "SAME"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">ContentHash:</span>
-                    <Badge variant={hashData.contentHashChanged ? "destructive" : "secondary"}>
-                      {hashData.contentHashChanged ? "CHANGED" : "SAME"}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  Nav/Footer excluded from content hash to focus on meaningful page changes
-                </AlertDescription>
-              </Alert>
-            </CardContent>
-          </Card>
-
-          {/* Right: Change History */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Change history
-              </CardTitle>
-              <CardDescription>Last 30 days</CardDescription>
+              <CardDescription className="text-orange-600/80">
+                {audit.diffSummary || "Changes detected in page content"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {changeHistory.map((day, idx) => (
-                  <div key={idx} className="flex items-center gap-3 rounded-lg border p-3">
-                    <div className="flex-1 text-sm font-medium">{day.date}</div>
-                    <div className="flex gap-2">
-                      {day.contentChanged && (
-                        <Badge className="bg-orange-500/10 text-orange-700 dark:text-orange-400">Content changed</Badge>
-                      )}
-                      {day.techOnly && (
-                        <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-400">Tech-only</Badge>
-                      )}
-                      {!day.contentChanged && !day.techOnly && (
-                        <Badge className="bg-green-500/10 text-green-700 dark:text-green-400">No change</Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 flex items-center justify-center gap-6 text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-green-500" />
-                  <span className="text-muted-foreground">No change</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-orange-500" />
-                  <span className="text-muted-foreground">Content</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-blue-500" />
-                  <span className="text-muted-foreground">Tech-only</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-red-500" />
-                  <span className="text-muted-foreground">Blocked</span>
-                </div>
-              </div>
+              <Accordion type="single" collapsible className="w-full bg-background/50 rounded-lg border px-4">
+                {differences.length === 0 ? (
+                  <div className="py-4 text-center text-muted-foreground text-sm">Review content changes below.</div>
+                ) : (
+                  differences.map((diff, idx) => (
+                    <AccordionItem key={idx} value={`item-${idx}`} className="border-b-0">
+                      <AccordionTrigger className="hover:no-underline py-3">
+                        <div className="flex items-center gap-3">
+                          {getSeverityIcon(diff.severity)}
+                          <span className="font-medium text-sm">{diff.title}</span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="space-y-2 pb-3 pl-7">
+                          {diff.type === "text" ? (
+                            <div className="grid grid-cols-2 gap-4 text-xs">
+                              <div className="p-2 bg-red-500/5 rounded border border-red-500/10">
+                                <span className="font-semibold text-red-600 block mb-1">Old:</span>
+                                {diff.before}
+                              </div>
+                              <div className="p-2 bg-green-500/5 rounded border border-green-500/10">
+                                <span className="font-semibold text-green-600 block mb-1">New:</span>
+                                {diff.after}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-sm text-muted-foreground">{diff.content}</div>
+                          )}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))
+                )}
+              </Accordion>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Section C: Differences */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>What changed?</CardTitle>
-            <CardDescription>Compare scans to see differences</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-6 flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Compare:</span>
-                <Select value={compareA} onValueChange={setCompareA}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="scan-1">Latest</SelectItem>
-                    <SelectItem value="scan-2">Previous</SelectItem>
-                  </SelectContent>
-                </Select>
-                <span className="text-muted-foreground">vs</span>
-                <Select value={compareB} onValueChange={setCompareB}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="scan-1">Latest</SelectItem>
-                    <SelectItem value="scan-2">Previous</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant={showContentOnly ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setShowContentOnly(true)}
-                >
-                  Show content changes only
-                </Button>
-                <Button
-                  variant={!showContentOnly ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setShowContentOnly(false)}
-                >
-                  Include tech-only changes
-                </Button>
-              </div>
-            </div>
-
-            <Accordion type="single" collapsible className="w-full">
-              {differences.length === 0 ? (
-                <div className="py-4 text-center text-muted-foreground text-sm">No differences recorded yet.</div>
-              ) : (
-                differences.map((diff, idx) => (
-                  <AccordionItem key={idx} value={`item-${idx}`}>
-                    <AccordionTrigger>
-                      <div className="flex items-center gap-3">
-                        {getSeverityIcon(diff.severity)}
-                        <span className="font-medium">{diff.title}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {diff.detectedBy}
-                        </Badge>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-3 pl-7">
-                        {diff.type === "text" && (
-                          <>
-                            <div className="rounded-md bg-red-500/10 p-3">
-                              <div className="mb-1 text-xs font-medium text-red-700 dark:text-red-400">Before:</div>
-                              <div className="text-sm">{diff.before}</div>
-                            </div>
-                            <div className="rounded-md bg-green-500/10 p-3">
-                              <div className="mb-1 text-xs font-medium text-green-700 dark:text-green-400">After:</div>
-                              <div className="text-sm">{diff.after}</div>
-                            </div>
-                          </>
-                        )}
-                        {diff.type === "added" && (
-                          <div className="rounded-md bg-green-500/10 p-3">
-                            <div className="mb-1 text-xs font-medium text-green-700 dark:text-green-400">Added:</div>
-                            <div className="text-sm">{diff.content}</div>
-                          </div>
-                        )}
-                        {diff.type === "removed" && (
-                          <div className="rounded-md bg-red-500/10 p-3">
-                            <div className="mb-1 text-xs font-medium text-red-700 dark:text-red-400">Removed:</div>
-                            <div className="text-sm">{diff.content}</div>
-                          </div>
-                        )}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))
-              )}
-            </Accordion>
-          </CardContent>
-        </Card>
+        )}
 
         {/* Section D: Content Quality */}
         <div className="mb-8 space-y-6">
@@ -637,219 +479,83 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                     <div className="text-xs text-muted-foreground">Sentence count</div>
                   </div>
                 </div>
-                <div className="mt-4 flex justify-center">
-                  <Badge variant="outline" className="text-sm">
-                    {readabilityData.difficulty}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Completeness */}
+          {/* SEO (Promoted from Tabs) */}
           <Card>
-            <CardHeader>
-              <CardTitle>Completeness</CardTitle>
-              <CardDescription>Content quality checklist</CardDescription>
+            <CardHeader className="pb-3">
+              <CardTitle>SEO</CardTitle>
+              <CardDescription>MetaData and ranking signals</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {completenessChecks.map((check, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="flex items-center gap-3">
-                      {check.passed ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-red-500" />
-                      )}
-                      <span className="text-sm font-medium">{check.check}</span>
-                    </div>
-                    {!check.passed && check.count !== undefined && check.count > 0 && (
-                      <Badge variant="destructive">{check.count}</Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
+              {seoIssues.length > 0 ? (
+                <ul className="space-y-2">
+                  {seoIssues.map((issue, idx) => (
+                    <li key={idx} className="flex gap-2 text-sm text-muted-foreground p-2 rounded bg-muted/50">
+                      <Info className="h-4 w-4 text-blue-500 mt-0.5" />
+                      {issue.title}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
+                  <CheckCircle2 className="h-8 w-8 text-green-500/50 mb-2" />
+                  <p>No SEO issues detected</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Section E: Other Audit Categories (Tabs) */}
-        <Card className="mb-8">
+        {/* Completeness */}
+        <Card>
           <CardHeader>
-            <CardTitle>Audit categories</CardTitle>
-            <CardDescription>Detailed analysis across multiple dimensions</CardDescription>
+            <CardTitle>Completeness</CardTitle>
+            <CardDescription>Content quality checklist</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="performance" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="performance">
-                  <Zap className="mr-2 h-4 w-4" />
-                  Performance
-                </TabsTrigger>
-                <TabsTrigger value="accessibility">
-                  <Eye className="mr-2 h-4 w-4" />
-                  Accessibility
-                </TabsTrigger>
-                <TabsTrigger value="seo">
-                  <Search className="mr-2 h-4 w-4" />
-                  SEO
-                </TabsTrigger>
-                <TabsTrigger value="security">
-                  <Shield className="mr-2 h-4 w-4" />
-                  Security
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="performance" className="mt-6">
-                <div className="mb-6 rounded-lg border bg-card p-4">
-                  <div className="text-sm font-medium text-muted-foreground">Performance score</div>
-                  <div className="mt-2 flex items-center gap-4">
-                    <div className="text-4xl font-bold">68</div>
-                    <Progress value={68} className="h-3 flex-1" />
+            <div className="space-y-3">
+              {completenessChecks.map((check, idx) => (
+                <div key={idx} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="flex items-center gap-3">
+                    {check.passed ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-500" />
+                    )}
+                    <span className="text-sm font-medium">{check.check}</span>
                   </div>
+                  {!check.passed && check.count !== undefined && check.count > 0 && (
+                    <Badge variant="destructive">{check.count}</Badge>
+                  )}
                 </div>
-
-                <Accordion type="single" collapsible className="w-full">
-                  {performanceIssues.map((issue, idx) => (
-                    <AccordionItem key={idx} value={`perf-${idx}`}>
-                      <AccordionTrigger>
-                        <div className="flex items-center gap-3">
-                          {getSeverityIcon(issue.severity)}
-                          <div className="text-left">
-                            <div className="font-medium">{issue.title}</div>
-                            <div className="text-sm text-muted-foreground">{issue.description}</div>
-                          </div>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="pl-7">
-                          <div className="mb-2 text-sm font-medium">How to fix:</div>
-                          <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
-                            {issue.fix.map((step, stepIdx) => (
-                              <li key={stepIdx}>{step}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </TabsContent>
-
-              <TabsContent value="accessibility" className="mt-6">
-                <div className="mb-6 rounded-lg border bg-card p-4">
-                  <div className="text-sm font-medium text-muted-foreground">Accessibility score</div>
-                  <div className="mt-2 flex items-center gap-4">
-                    <div className="text-4xl font-bold">72</div>
-                    <Progress value={72} className="h-3 flex-1" />
-                  </div>
-                </div>
-
-                <Accordion type="single" collapsible className="w-full">
-                  {accessibilityIssues.map((issue, idx) => (
-                    <AccordionItem key={idx} value={`a11y-${idx}`}>
-                      <AccordionTrigger>
-                        <div className="flex items-center gap-3">
-                          {getSeverityIcon(issue.severity)}
-                          <div className="text-left">
-                            <div className="font-medium">{issue.title}</div>
-                            <div className="text-sm text-muted-foreground">{issue.description}</div>
-                          </div>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="pl-7">
-                          <div className="mb-2 text-sm font-medium">How to fix:</div>
-                          <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
-                            {issue.fix.map((step, stepIdx) => (
-                              <li key={stepIdx}>{step}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </TabsContent>
-
-              <TabsContent value="seo" className="mt-6">
-                <div className="mb-6 rounded-lg border bg-card p-4">
-                  <div className="text-sm font-medium text-muted-foreground">SEO score</div>
-                  <div className="mt-2 flex items-center gap-4">
-                    <div className="text-4xl font-bold">85</div>
-                    <Progress value={85} className="h-3 flex-1" />
-                  </div>
-                </div>
-
-                <Accordion type="single" collapsible className="w-full">
-                  {seoIssues.map((issue, idx) => (
-                    <AccordionItem key={idx} value={`seo-${idx}`}>
-                      <AccordionTrigger>
-                        <div className="flex items-center gap-3">
-                          {getSeverityIcon(issue.severity)}
-                          <div className="text-left">
-                            <div className="font-medium">{issue.title}</div>
-                            <div className="text-sm text-muted-foreground">{issue.description}</div>
-                          </div>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="pl-7">
-                          <div className="mb-2 text-sm font-medium">How to fix:</div>
-                          <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
-                            {issue.fix.map((step, stepIdx) => (
-                              <li key={stepIdx}>{step}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </TabsContent>
-
-              <TabsContent value="security" className="mt-6">
-                <div className="mb-6 rounded-lg border bg-card p-4">
-                  <div className="text-sm font-medium text-muted-foreground">Security score</div>
-                  <div className="mt-2 flex items-center gap-4">
-                    <div className="text-4xl font-bold">55</div>
-                    <Progress value={55} className="h-3 flex-1" />
-                  </div>
-                </div>
-
-                <Accordion type="single" collapsible className="w-full">
-                  {securityIssues.map((issue, idx) => (
-                    <AccordionItem key={idx} value={`sec-${idx}`}>
-                      <AccordionTrigger>
-                        <div className="flex items-center gap-3">
-                          {getSeverityIcon(issue.severity)}
-                          <div className="text-left">
-                            <div className="font-medium">{issue.title}</div>
-                            <div className="text-sm text-muted-foreground">{issue.description}</div>
-                          </div>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="pl-7">
-                          <div className="mb-2 text-sm font-medium">How to fix:</div>
-                          <ul className="list-inside list-disc space-y-1 text-muted-foreground">
-                            {issue.fix.map((step, stepIdx) => (
-                              <li key={stepIdx}>{step}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </TabsContent>
-            </Tabs>
+              ))}
+            </div>
           </CardContent>
         </Card>
+      </div>
 
-        {/* Section F: Scan Run History */}
-        <Card>
+
+      <ul className="list-inside list-disc space-y-1 text-muted-foreground">
+        {issue.fix.map((step, stepIdx) => (
+          <li key={stepIdx}>{step}</li>
+        ))}
+      </ul>
+    </div>
+                      </AccordionContent >
+                    </AccordionItem >
+                  ))
+}
+                </Accordion >
+              </TabsContent >
+            </Tabs >
+          </CardContent >
+        </Card >
+
+  {/* Section F: Scan Run History */ }
+  < Card >
           <CardHeader>
             <CardTitle>Scan run history</CardTitle>
             <CardDescription>Historical audit runs for this page</CardDescription>
@@ -920,8 +626,8 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
               </Table>
             </div>
           </CardContent>
-        </Card>
-      </div>
-    </div>
+        </Card >
+      </div >
+    </div >
   )
 }
