@@ -22,7 +22,7 @@ export interface AuditLogEntry {
     fullHash: string;
     contentHash: string;
     htmlSource: string; // The full page source
-    diffPatch?: string; // Unified diff against previous version
+    diffPatch?: string | null; // Unified diff against previous version
 }
 
 export const auditService = {
