@@ -1,4 +1,4 @@
-'use client';
+// Firebase Client SDK - works in both client and server contexts
 
 import {
   collection,
@@ -190,7 +190,7 @@ export const projectsService = {
         createdAt: doc.data().createdAt.toDate(),
         updatedAt: doc.data().updatedAt.toDate(),
       })) as Project[];
-      
+
       // Sort in client-side for now
       const sortedProjects = projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
       callback(sortedProjects);
@@ -200,7 +200,7 @@ export const projectsService = {
   // Real-time subscription to a single project
   subscribeToProject(projectId: string, callback: (project: Project | null) => void): () => void {
     const docRef = doc(db, PROJECTS_COLLECTION, projectId);
-    
+
     return onSnapshot(docRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();

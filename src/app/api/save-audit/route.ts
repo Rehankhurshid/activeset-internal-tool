@@ -120,6 +120,8 @@ export async function POST(request: NextRequest) {
 
     } catch (error) {
         console.error('Save Audit Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: corsHeaders });
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error('Error details:', errMsg);
+        return NextResponse.json({ error: 'Internal Server Error', details: errMsg }, { status: 500, headers: corsHeaders });
     }
 }
