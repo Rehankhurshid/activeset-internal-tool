@@ -21,8 +21,9 @@ const CUSTOM_JARGON = new Set([
   'minification','obfuscation','refactoring','debugging','profiling','logging','monitoring',
   'alerting','tracing','telemetry','analytics','metrics','dashboard','reporting','visualization',
   'copyright','rights','reserved','terms','privacy','policy','contact','email','phone',
-  'onboarding','credentials','seamless','mesoneer','mesoneers','workflow','workflows',
-  'signeer','fiduciary','leanrun','digitizes','paperless','deliver','delivers','delivered','delivery'
+  'signeer','fiduciary','leanrun','digitizes','paperless','deliver','delivers','delivered','delivery',
+  'usecase','lifecycle','onboarding','roadmap','workflow','workflows','journey','touchpoint',
+  'checklist','timeline','build','learn','optimization','li'
 ]);
 
 // Initialize nspell when worker starts

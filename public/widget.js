@@ -61,8 +61,9 @@
       'minification','obfuscation','refactoring','debugging','profiling','logging','monitoring',
       'alerting','tracing','telemetry','analytics','metrics','dashboard','reporting','visualization',
       'copyright','rights','reserved','terms','privacy','policy','contact','email','phone',
-      'onboarding','credentials','seamless','mesoneer','mesoneers','workflow','workflows',
-      'signeer','fiduciary','leanrun','digitizes','paperless','deliver','delivers','delivered','delivery'
+      'signeer','fiduciary','leanrun','digitizes','paperless','deliver','delivers','delivered','delivery',
+      'usecase','lifecycle','onboarding','roadmap','workflow','workflows','journey','touchpoint',
+      'checklist','timeline','build','learn','optimization','li'
     ]);
     
     static dictionarySet = null; // Deprecated but kept for compatibility logic removal if needed
@@ -80,6 +81,46 @@
       { regex: /placeholder\s*text/gi, name: 'Placeholder Text' },
       { regex: /sample\s+text/gi, name: 'Sample Text' }
     ];
+
+    /**
+     * Recursive text extraction that ensures spaces around block/interactive elements.
+     * Prevents "CI-readyExecution" type fusion.
+     */
+    static getTextContentWithSpaces(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.nodeValue;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return '';
+      }
+      
+      const tagName = node.tagName.toLowerCase();
+      // Skip unwanted tags
+      if (['nav', 'footer', 'script', 'style', 'noscript', 'iframe', 'object', 'embed', 'svg', 'path', 'defs'].includes(tagName)) {
+        return '';
+      }
+      
+      // Check if element is visually hidden (basic check)
+      if (node.style && (node.style.display === 'none' || node.style.visibility === 'hidden' || node.style.opacity === '0')) {
+        return '';
+      }
+      
+      let text = '';
+      
+      // Block-level or distinct inline elements that imply separation
+      const isBlock = ['div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'article', 'section', 'header', 'footer', 'aside', 'br', 'hr', 'tr', 'td', 'th', 'blockquote', 'pre', 'code'].includes(tagName);
+      const isInteractive = ['a', 'button', 'label', 'option', 'select', 'textarea', 'input'].includes(tagName);
+      
+      if (isBlock || isInteractive || tagName === 'br') text += ' ';
+
+      for (let child of node.childNodes) {
+        text += this.getTextContentWithSpaces(child);
+      }
+
+      if (isBlock || isInteractive) text += ' ';
+      
+      return text;
+    }
 
     /**
      * Extract main content text EXCLUDING nav and footer elements.
@@ -101,42 +142,29 @@
       contentSelectors.forEach(selector => {
         const elements = doc.querySelectorAll(selector);
         elements.forEach(el => {
-          // Skip if element is inside nav or footer
+          // Skip if element is inside nav or footer (double check)
           if (el.closest('nav') || el.closest('footer')) return;
           
-          // Clone element to extract text without modifying DOM
-          const clone = el.cloneNode(true);
-          
-          // Remove any nav/footer descendants from clone
-          clone.querySelectorAll('nav, footer').forEach(child => child.remove());
-
-          // Inject separate line/space after block elements (and distinct inline blocks like links/buttons)
-          // to prevent text fusion e.g. <div>Hello</div><div>World</div> -> "HelloWorld"
-          const blockSelectors = 'div, p, h1, h2, h3, h4, h5, h6, li, article, section, header, footer, aside, br, hr, a, button, label, option, select, table, thead, tbody, tfoot, tr, td, th';
-          clone.querySelectorAll(blockSelectors).forEach(block => {
-             block.after(doc.createTextNode(' '));
-          });
-          
-          const text = clone.innerText || clone.textContent || '';
-          if (text.trim()) {
+          // Use robust recursive extraction
+          const text = this.getTextContentWithSpaces(el);
+          if (text && text.trim()) {
             textParts.push(text.trim());
           }
         });
       });
       
-      // Fallback: if no main content found, use body but exclude nav/footer
+      // Fallback: if no main content found, use body
       if (textParts.length === 0) {
-        const bodyClone = doc.body.cloneNode(true);
-        bodyClone.querySelectorAll('nav, footer, script, style, #plw-audit-container').forEach(el => el.remove());
-        
-        // Inject separate line/space after block elements
-        const blockSelectors = 'div, p, h1, h2, h3, h4, h5, h6, li, article, section, header, footer, aside, br, hr, a, button, label, option, select, table, thead, tbody, tfoot, tr, td, th';
-        bodyClone.querySelectorAll(blockSelectors).forEach(block => {
-           block.after(doc.createTextNode(' '));
-        });
-
-        const fallbackText = bodyClone.innerText || bodyClone.textContent || '';
-        textParts.push(fallbackText.trim());
+        const bodyClone = doc.body.cloneNode(true); // Scan body but skip nav/footer
+        // Pre-remove known junk from top level if possible, but our recursive function handles skipping too.
+        // For fallback, we'll just run on body and let the skipper handle it, 
+        // but we should pass the body element directly? 
+        // doc.body contains scripts etc, our scanner skips them.
+        // However, to match previous behavior of avoiding footer entirely even if not in main:
+        // Let's filter children of body?
+        // Simpler: Just run on doc.body, the recursive function skips nav/footer tags.
+        const text = this.getTextContentWithSpaces(doc.body);
+        textParts.push(text.trim());
       }
       
       // Normalize whitespace: collapse multiple spaces/newlines to single space
