@@ -78,7 +78,7 @@ function computeDetailedChanges(
     }
 
     const wcDiff = newSnapshot.wordCount - prevSnapshot.wordCount;
-    if (Math.abs(wcDiff) > 5) { // Ignore minor fluctuations
+    if (wcDiff !== 0) {
         changes.push('wordCount');
         summaryParts.push(`Word count ${wcDiff > 0 ? '+' : ''}${wcDiff}`);
     }
@@ -198,6 +198,8 @@ export async function POST(request: NextRequest) {
             changeStatus,
             changedFields,
             diffSummary,
+            diffPatch: diffPatch || undefined, // Send patch to UI if available
+            htmlSource: undefined, // Do NOT save full HTML in ProjectLink (too big)
             lastRun: new Date().toISOString()
         };
 

@@ -31,6 +31,7 @@ export interface AuditResult {
   contentSnapshot?: ContentSnapshot;
   changedFields?: string[]; // e.g., ['title', 'h1', 'wordCount']
   diffSummary?: string; // Human readable summary of changes (e.g. "Title updated, Word count +20")
+  diffPatch?: string;  // Unified diff string showing exact changes
   categories: {
     placeholders: {
       status: 'passed' | 'failed' | 'warning' | 'info';

@@ -158,10 +158,18 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
         type: 'modified',
         severity: 'warning',
         title: 'Content Modified',
-        content: 'Main content text has changed.',
+        content: 'Text or layout changes detected in the main content area.',
         detectedBy: 'Content Hash'
       });
     }
+  } else if (audit?.changeStatus === 'TECH_CHANGE_ONLY') {
+    differences.push({
+      type: 'tech',
+      severity: 'info',
+      title: 'Source Code Update',
+      content: 'Underlying HTML source changed (scripts, styles, or markup) without visible content text changes.',
+      detectedBy: 'Full Hash'
+    });
   }
 
   const placeholders = audit?.categories?.placeholders?.issues || []
@@ -336,20 +344,31 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
         </div>
 
         {/* Section B: Change Detection (Condensed) */}
-        {audit?.changeStatus === 'CONTENT_CHANGED' && (
-          <Card className="mb-8 border-orange-500/20 bg-orange-500/5">
+        {(audit?.changeStatus === 'CONTENT_CHANGED' || audit?.changeStatus === 'TECH_CHANGE_ONLY') && (
+          <Card className={`mb-8 border-opacity-20 bg-opacity-5 ${audit?.changeStatus === 'CONTENT_CHANGED'
+            ? 'border-orange-500 bg-orange-500'
+            : 'border-blue-500 bg-blue-500'
+            }`}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-orange-600" />
-                  <CardTitle className="text-orange-700">Content Updates Detected</CardTitle>
+                  <TrendingUp className={`h-5 w-5 ${audit?.changeStatus === 'CONTENT_CHANGED' ? 'text-orange-600' : 'text-blue-600'
+                    }`} />
+                  <CardTitle className={
+                    audit?.changeStatus === 'CONTENT_CHANGED' ? 'text-orange-700' : 'text-blue-700'
+                  }>
+                    {audit?.changeStatus === 'CONTENT_CHANGED' ? 'Content Updates Detected' : 'Source Code Updated'}
+                  </CardTitle>
                 </div>
-                <Badge variant="outline" className="bg-background text-orange-700 border-orange-200">
+                <Badge variant="outline" className={`bg-background ${audit?.changeStatus === 'CONTENT_CHANGED' ? 'text-orange-700 border-orange-200' : 'text-blue-700 border-blue-200'
+                  }`}>
                   {pageData.lastContentChange}
                 </Badge>
               </div>
-              <CardDescription className="text-orange-600/80">
-                {audit.diffSummary || "Changes detected in page content"}
+              <CardDescription className={
+                audit?.changeStatus === 'CONTENT_CHANGED' ? 'text-orange-600/80' : 'text-blue-600/80'
+              }>
+                {audit.diffSummary || (audit?.changeStatus === 'CONTENT_CHANGED' ? "Changes detected in page content" : "Technical or hidden changes detected")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -385,6 +404,33 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                       </AccordionContent>
                     </AccordionItem>
                   ))
+                )}
+
+                {/* Exact Source Diff Viewer */}
+                {audit.diffPatch && (
+                  <AccordionItem value="source-diff" className="border-b-0 border-t">
+                    <AccordionTrigger className="hover:no-underline py-3">
+                      <div className="flex items-center gap-3">
+                        <GitCompare className="h-4 w-4 text-purple-500" />
+                        <span className="font-medium text-sm">View Exact Source Changes</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="font-mono text-[10px] sm:text-xs overflow-x-auto p-3 bg-muted rounded border max-h-64 overflow-y-auto whitespace-pre">
+                        {audit.diffPatch.split('\n').filter(l => !l.startsWith('---') && !l.startsWith('+++')).map((line, i) => {
+                          let colorClass = "text-muted-foreground";
+                          if (line.startsWith('+')) colorClass = "text-green-600 bg-green-500/10 block w-full";
+                          if (line.startsWith('-')) colorClass = "text-red-600 bg-red-500/10 block w-full";
+                          if (line.startsWith('@@')) colorClass = "text-purple-500 block w-full mt-2 mb-1 font-bold";
+                          return (
+                            <div key={i} className={colorClass}>
+                              {line}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
                 )}
               </Accordion>
             </CardContent>
