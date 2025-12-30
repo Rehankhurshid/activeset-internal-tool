@@ -51,7 +51,12 @@ export async function POST(request: Request) {
         params.append('text', text);
         params.append('language', 'en-US');
 
-        const response = await fetch('https://api.languagetool.org/v2/check', {
+        // Use self-hosted URL if available, otherwise fallback to public API
+        const ltUrl = process.env.LANGUAGETOOL_URL
+            ? `${process.env.LANGUAGETOOL_URL}/check`
+            : 'https://api.languagetool.org/v2/check';
+
+        const response = await fetch(ltUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
             body: params

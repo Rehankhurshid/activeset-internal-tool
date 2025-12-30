@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - LANGUAGETOOL_URL=http://languagetool:8010/v2
+    depends_on:
+      - languagetool
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+  languagetool:
+    image: erikvl87/languagetool
+    ports:
+      - "8010:8010"
+    environment:
+      - EMPHATIC_MODES=false
+      # Optional: Add extra n-grams or configuration here
+    container_name: languagetool-server
