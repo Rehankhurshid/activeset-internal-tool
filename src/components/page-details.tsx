@@ -140,9 +140,8 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
         content: 'Detected changes in latest scan',
         detectedBy: 'System'
       });
-    }
-
-    if (audit.changedFields && audit.changedFields.length > 0) {
+    } else if (audit.changedFields && audit.changedFields.length > 0) {
+      // Only show individual fields if no summary is available
       audit.changedFields.forEach(field => {
         differences.push({
           type: 'modified',
@@ -158,8 +157,8 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
         type: 'modified',
         severity: 'warning',
         title: 'Content Modified',
-        content: 'Text or layout changes detected in the main content area.',
-        detectedBy: 'Content Hash'
+        content: 'The page content hash has changed, but specific fields were not identified.',
+        detectedBy: 'Hash Comparison'
       });
     }
   } else if (audit?.changeStatus === 'TECH_CHANGE_ONLY') {
