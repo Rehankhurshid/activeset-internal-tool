@@ -45,17 +45,21 @@ export const auditService = {
     // Get the most recent previous audit log for a link
     async getLatestAuditLog(linkId: string): Promise<AuditLogEntry | null> {
         try {
+            // Query without orderBy first to avoid index requirements
             const q = query(
                 collection(db, AUDIT_LOGS_COLLECTION),
-                where('linkId', '==', linkId),
-                orderBy('timestamp', 'desc'),
-                limit(1)
+                where('linkId', '==', linkId)
+                // orderBy('timestamp', 'desc') // Requires index, doing in memory for now
             );
 
             const snapshot = await getDocs(q);
             if (snapshot.empty) return null;
 
-            return snapshot.docs[0].data() as AuditLogEntry;
+            // Manual sort locally
+            const docs = snapshot.docs.map(d => d.data() as AuditLogEntry);
+            docs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+            return docs[0];
         } catch (error) {
             logError(error, 'getLatestAuditLog');
             return null;
