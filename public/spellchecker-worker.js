@@ -23,7 +23,8 @@ const CUSTOM_JARGON = new Set([
   'copyright','rights','reserved','terms','privacy','policy','contact','email','phone',
   'signeer','fiduciary','leanrun','digitizes','paperless','deliver','delivers','delivered','delivery',
   'usecase','lifecycle','onboarding','roadmap','workflow','workflows','journey','touchpoint',
-  'checklist','timeline','build','learn','optimization','li'
+  'checklist','timeline','build','learn','optimization','li',
+  'uppal','iza','día'
 ]);
 
 // Initialize nspell when worker starts
@@ -65,6 +66,12 @@ async function checkWithLanguageTool(text, apiUrl) {
         const lower = word.toLowerCase();
 
         if (CUSTOM_JARGON.has(lower)) return;
+        
+        // Ignore "li" (list item marker)
+        if (lower === 'li') return;
+        
+        // Ignore 2-3 letter uppercase words (likely acronyms e.g. IZA)
+        if (word.length >= 2 && word.length <= 3 && word === word.toUpperCase()) return;
 
         if (match.rule.issueType === 'misspelling' && !seen.has(lower)) {
           typos.push(word);
