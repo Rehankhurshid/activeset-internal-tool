@@ -64,7 +64,7 @@
       'signeer','fiduciary','leanrun','digitizes','paperless','deliver','delivers','delivered','delivery',
       'usecase','lifecycle','onboarding','roadmap','workflow','workflows','journey','touchpoint',
       'checklist','timeline','build','learn','optimization','li',
-      'uppal','iza','día'
+      'uppal','iza','día','ordaz','piso','cp','meet','get'
     ]);
     
     static dictionarySet = null; // Deprecated but kept for compatibility logic removal if needed

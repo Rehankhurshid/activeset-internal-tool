@@ -24,7 +24,7 @@ const CUSTOM_JARGON = new Set([
   'signeer','fiduciary','leanrun','digitizes','paperless','deliver','delivers','delivered','delivery',
   'usecase','lifecycle','onboarding','roadmap','workflow','workflows','journey','touchpoint',
   'checklist','timeline','build','learn','optimization','li',
-  'uppal','iza','día'
+  'uppal','iza','día','ordaz','piso','cp','meet','get'
 ]);
 
 // Initialize nspell when worker starts
