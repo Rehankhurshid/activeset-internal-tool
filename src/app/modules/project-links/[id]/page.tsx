@@ -146,20 +146,22 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
                     {/* Only show Add Link button when in links tab */}
                     {activeTab === 'links' && (
-                        <div className="flex items-center gap-2">
-                            <ScanSitemapDialog projectId={project.id} />
-                            <AddLinkDialog
-                                onAddLink={async (title, url) => {
-                                    await executeAddLink(() => handleAddLink(title, url));
-                                }}
-                                trigger={
-                                    <Button size="sm">
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        Add Link
-                                    </Button>
-                                }
-                            />
-                        </div>
+                        <AddLinkDialog
+                            onAddLink={async (title, url) => {
+                                await executeAddLink(() => handleAddLink(title, url));
+                            }}
+                            trigger={
+                                <Button size="sm">
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Add Link
+                                </Button>
+                            }
+                        />
+                    )}
+
+                    {/* Show Scan Sitemap when in audit tab */}
+                    {activeTab === 'audit' && (
+                        <ScanSitemapDialog projectId={project.id} />
                     )}
                 </div>
 
