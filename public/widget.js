@@ -64,7 +64,7 @@
       'signeer','fiduciary','leanrun','digitizes','paperless','deliver','delivers','delivered','delivery',
       'usecase','lifecycle','onboarding','roadmap','workflow','workflows','journey','touchpoint',
       'checklist','timeline','build','learn','optimization','li',
-      'uppal','iza','día','ordaz','piso','cp','meet','get'
+      'uppal','iza','día'
     ]);
     
     static dictionarySet = null; // Deprecated but kept for compatibility logic removal if needed
@@ -398,8 +398,9 @@
                           // Ignore "li" (list item marker)
                           if (lower === 'li') return;
                           
-                          // Ignore 2-3 letter uppercase words (likely acronyms e.g. IZA)
-                          if (word.length >= 2 && word.length <= 3 && word === word.toUpperCase()) return;
+                          // Ignore ANY capitalized word (Standard Technical Spellcheck behavior)
+                          // This covers: Proper Nouns (Ordaz), Addresses (Piso, Cp), UI Labels (Meet, Get), Acronyms (IZA)
+                          if (/^[A-Z]/.test(word)) return;
 
                           if (match.rule.issueType === 'misspelling' && !seen.has(lower)) {
                                typos.push(word);
