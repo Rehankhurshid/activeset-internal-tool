@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
                 fullHash: auditResult.fullHash,
                 contentHash: auditResult.contentHash,
                 htmlSource: auditResult.htmlSource,
-                diffPatch // Store the patch too for easy retrieval
+                diffPatch: diffPatch || null // Store the patch too for easy retrieval
             });
         }
 
