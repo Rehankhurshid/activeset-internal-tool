@@ -1,13 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Project, ProjectLink } from '@/types';
+import { ProjectLink, AuditResult } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { AlertCircle, CheckCircle, Clock, ExternalLink, FileText, Layout, Search, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, ExternalLink, FileText, Layout, Search, Zap, TrendingUp, Activity, XCircle } from 'lucide-react';
 import { AuditDetailDialog } from './AuditDetailDialog';
 
 interface AuditDashboardProps {
@@ -18,8 +18,7 @@ export function AuditDashboard({ links }: AuditDashboardProps) {
     const [selectedLink, setSelectedLink] = React.useState<ProjectLink | null>(null);
     const [isDetailOpen, setIsDetailOpen] = React.useState(false);
 
-    // Filter links that have actual audit data relative to the widget
-    // (Assuming any link with auditResult has data)
+    // Filter links that have actual audit data
     const auditedLinks = links.filter(link => link.auditResult);
 
     // Calculate Aggregate Metrics
@@ -27,25 +26,34 @@ export function AuditDashboard({ links }: AuditDashboardProps) {
     const scannedPages = auditedLinks.length;
 
     let totalScore = 0;
-    let totalIssues = 0;
     let deploymentReadyCount = 0;
+    let blockedCount = 0;
+    let changedPagesCount = 0;
+    let techOnlyCount = 0;
 
     auditedLinks.forEach(link => {
-        totalScore += link.auditResult?.score || 0;
+        const audit = link.auditResult as AuditResult | undefined;
+        totalScore += audit?.score || 0;
 
-        // Count issues if we can parse them, or just rely on score for now
-        // The current type doesn't have a flat issue count, but we can infer from categories if needed
-        // For now, let's use the score to determine "issues" roughly or if we had the count in the type
-        // The type has `summary` and `strengths/improvements`.
-        // Let's rely on the score for the "Health" metric.
-
-        if ((link.auditResult?.score || 0) >= 90) {
+        // Count deployment ready (score >= 90 AND canDeploy is true)
+        if ((audit?.score || 0) >= 90 && audit?.canDeploy !== false) {
             deploymentReadyCount++;
+        }
+
+        // Count blocked (canDeploy false)
+        if (audit?.canDeploy === false) {
+            blockedCount++;
+        }
+
+        // Count by changeStatus
+        if (audit?.changeStatus === 'CONTENT_CHANGED') {
+            changedPagesCount++;
+        } else if (audit?.changeStatus === 'TECH_CHANGE_ONLY') {
+            techOnlyCount++;
         }
     });
 
     const avgScore = scannedPages > 0 ? Math.round(totalScore / scannedPages) : 0;
-    const healthPercentage = scannedPages > 0 ? (deploymentReadyCount / scannedPages) * 100 : 0;
 
     const getScoreColor = (score: number) => {
         if (score >= 90) return 'text-green-500';
@@ -62,7 +70,7 @@ export function AuditDashboard({ links }: AuditDashboardProps) {
     return (
         <div className="space-y-6">
             {/* Top Level Stats */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Average Score</CardTitle>
@@ -92,27 +100,52 @@ export function AuditDashboard({ links }: AuditDashboardProps) {
 
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Deployment Ready</CardTitle>
-                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <CardTitle className="text-sm font-medium">Content Changed</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{deploymentReadyCount}</div>
+                        <div className="text-2xl font-bold">{changedPagesCount}</div>
                         <p className="text-xs text-muted-foreground">
-                            Pages with score 90+
+                            Since last scan
                         </p>
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Critical Issues</CardTitle>
-                        <AlertCircle className="h-4 w-4 text-red-500" />
+                        <CardTitle className="text-sm font-medium">Tech-Only</CardTitle>
+                        <Activity className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
-                        {/* This is a placeholder as we don't track raw issue count in the top level type yet */}
-                        <div className="text-2xl font-bold">{scannedPages - deploymentReadyCount}</div>
+                        <div className="text-2xl font-bold">{techOnlyCount}</div>
                         <p className="text-xs text-muted-foreground">
-                            Pages needing attention
+                            HTML changed, content same
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Deployment Ready</CardTitle>
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{deploymentReadyCount}</div>
+                        <p className="text-xs text-muted-foreground">
+                            Score 90+ & no blockers
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Blocked</CardTitle>
+                        <XCircle className="h-4 w-4 text-red-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-red-600">{blockedCount}</div>
+                        <p className="text-xs text-muted-foreground">
+                            Placeholders detected
                         </p>
                     </CardContent>
                 </Card>
@@ -161,19 +194,49 @@ export function AuditDashboard({ links }: AuditDashboardProps) {
                                                 {link.auditResult?.score}
                                             </Badge>
                                         </div>
-                                        <div className="col-span-3 flex gap-2">
-                                            {/* We can infer categories from score for now or just show a general status */}
-                                            {/* In a real scenario, we'd drill down into categories if passed in props */}
-                                            {(link.auditResult?.score || 0) >= 90 ? (
-                                                <div className="flex items-center text-xs text-green-600">
-                                                    <CheckCircle className="h-3 w-3 mr-1" /> Ready
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center text-xs text-amber-600">
-                                                    <Layout className="h-3 w-3 mr-1" />
-                                                    {link.auditResult?.summary || 'Issues found'}
-                                                </div>
-                                            )}
+                                        <div className="col-span-3 flex gap-2 flex-wrap">
+                                            {/* Change Status Badge */}
+                                            {(() => {
+                                                const audit = link.auditResult as AuditResult | undefined;
+                                                if (audit?.canDeploy === false) {
+                                                    return (
+                                                        <Badge variant="destructive" className="text-xs">
+                                                            <XCircle className="h-3 w-3 mr-1" />Blocked
+                                                        </Badge>
+                                                    );
+                                                }
+                                                switch (audit?.changeStatus) {
+                                                    case 'CONTENT_CHANGED':
+                                                        return (
+                                                            <Badge className="bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20 text-xs">
+                                                                <TrendingUp className="h-3 w-3 mr-1" />Changed
+                                                            </Badge>
+                                                        );
+                                                    case 'TECH_CHANGE_ONLY':
+                                                        return (
+                                                            <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 text-xs">
+                                                                <Activity className="h-3 w-3 mr-1" />Tech-only
+                                                            </Badge>
+                                                        );
+                                                    case 'NO_CHANGE':
+                                                        return (
+                                                            <Badge className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 text-xs">
+                                                                <CheckCircle className="h-3 w-3 mr-1" />No change
+                                                            </Badge>
+                                                        );
+                                                    default:
+                                                        // First scan or unknown status
+                                                        return (audit?.score || 0) >= 90 ? (
+                                                            <Badge className="bg-green-500/10 text-green-700 dark:text-green-400 text-xs">
+                                                                <CheckCircle className="h-3 w-3 mr-1" />Ready
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs">
+                                                                <AlertCircle className="h-3 w-3 mr-1" />Review
+                                                            </Badge>
+                                                        );
+                                                }
+                                            })()}
                                         </div>
                                         <div className="col-span-2 text-right text-xs text-muted-foreground">
                                             <div className="flex items-center justify-end gap-1">

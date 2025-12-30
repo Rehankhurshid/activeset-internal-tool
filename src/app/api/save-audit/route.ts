@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
+import type { ChangeStatus, AuditResult } from '@/types';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -11,9 +12,43 @@ export async function OPTIONS() {
     return NextResponse.json({}, { headers: corsHeaders });
 }
 
+/**
+ * Compute change status by comparing new hashes against previous scan.
+ */
+function computeChangeStatus(
+    newFullHash: string | undefined,
+    newContentHash: string | undefined,
+    prevFullHash: string | undefined,
+    prevContentHash: string | undefined
+): ChangeStatus {
+    // If we don't have hashes, treat as content changed (first scan or error)
+    if (!newFullHash || !newContentHash) {
+        return 'SCAN_FAILED';
+    }
+
+    // First scan - no previous hashes
+    if (!prevFullHash || !prevContentHash) {
+        return 'CONTENT_CHANGED';
+    }
+
+    // Compare hashes
+    const fullHashSame = newFullHash === prevFullHash;
+    const contentHashSame = newContentHash === prevContentHash;
+
+    if (fullHashSame && contentHashSame) {
+        return 'NO_CHANGE';
+    } else if (!contentHashSame) {
+        // Content changed (main content text changed)
+        return 'CONTENT_CHANGED';
+    } else {
+        // fullHash changed but contentHash same = tech-only change
+        return 'TECH_CHANGE_ONLY';
+    }
+}
+
 export async function POST(request: NextRequest) {
     try {
-        const { projectId, url, auditResult } = await request.json();
+        const { projectId, url, auditResult, title } = await request.json();
 
         if (!projectId || !url || !auditResult) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400, headers: corsHeaders });
@@ -24,15 +59,11 @@ export async function POST(request: NextRequest) {
 
         const normalize = (u: string) => {
             try {
-                // If u doesn't start with http, assume it might be a relative path or just handle graceful fallback
                 const urlStr = u.startsWith('http') ? u : `https://${u}`;
                 const urlObj = new URL(urlStr);
-                // Remove query params and hash
-                // Normalize pathname: remove trailing slash
                 const pathname = urlObj.pathname.replace(/\/$/, '');
                 return `${urlObj.origin}${pathname}`.toLowerCase();
             } catch (e) {
-                // Fallback for malformed URLs
                 return u.split('?')[0].replace(/\/$/, '').toLowerCase();
             }
         };
@@ -40,16 +71,51 @@ export async function POST(request: NextRequest) {
 
         const link = project.links.find(l => l.url && normalize(l.url) === targetUrl);
 
+        // Get previous audit result if link exists
+        const prevAudit = link?.auditResult as AuditResult | undefined;
+
+        // Compute change status
+        const changeStatus = computeChangeStatus(
+            auditResult.fullHash,
+            auditResult.contentHash,
+            prevAudit?.fullHash,
+            prevAudit?.contentHash
+        );
+
+        // Build final audit result with changeStatus
+        const finalAuditResult: AuditResult = {
+            ...auditResult,
+            score: auditResult.overallScore || auditResult.score || 0,
+            changeStatus,
+            lastRun: new Date().toISOString()
+        };
+
         if (link) {
             await projectsService.updateLink(projectId, link.id, {
-                auditResult: {
-                    ...auditResult,
-                    lastRun: new Date().toISOString()
-                }
+                auditResult: finalAuditResult
             });
-            return NextResponse.json({ success: true, linkId: link.id }, { headers: corsHeaders });
+
+            return NextResponse.json({
+                success: true,
+                linkId: link.id,
+                changeStatus
+            }, { headers: corsHeaders });
         } else {
-            return NextResponse.json({ warning: 'Link not tracked in project' }, { headers: corsHeaders });
+            // Auto-create new link for discovered page
+            await projectsService.addLinkToProject(projectId, {
+                title: title || new URL(url).pathname || 'Untitled Page',
+                url: url, // Use original URL
+                order: project.links.length,
+                isDefault: false,
+                source: 'auto',
+                auditResult: finalAuditResult
+            });
+
+            return NextResponse.json({
+                success: true,
+                created: true,
+                changeStatus
+            }, { headers: corsHeaders });
         }
 
     } catch (error) {

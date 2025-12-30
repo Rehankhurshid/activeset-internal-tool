@@ -4,13 +4,60 @@ export interface ProjectLink {
   url: string;
   order: number;
   isDefault?: boolean;
-  auditResult?: {
-    score: number;
-    summary: string;
-    strengths: string[];
-    improvements: string[];
-    lastRun: string; // ISO date string
+  auditResult?: AuditResult;
+  source?: 'manual' | 'auto';
+}
+
+// Change status classification based on hash comparison
+export type ChangeStatus = 'NO_CHANGE' | 'TECH_CHANGE_ONLY' | 'CONTENT_CHANGED' | 'SCAN_FAILED';
+
+// Audit result from widget scanning
+export interface AuditResult {
+  score: number;
+  summary: string;
+  canDeploy: boolean;
+  fullHash?: string;
+  contentHash?: string;
+  changeStatus?: ChangeStatus;
+  lastRun: string; // ISO date string
+  categories: {
+    placeholders: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      issues: { type: string; count: number }[];
+      score: number;
+    };
+    spelling: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      issues: { word: string; suggestion?: string }[];
+      score: number;
+    };
+    readability: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      score: number;
+      fleschScore: number;
+      wordCount: number;
+      sentenceCount: number;
+      label: string;
+    };
+    completeness: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      issues: { check: string; detail: string }[];
+      score: number;
+    };
+    seo: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      issues: string[];
+      score: number;
+    };
+    technical: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      issues: string[];
+      score: number;
+    };
   };
+  // Legacy fields for backward compatibility
+  strengths?: string[];
+  improvements?: string[];
 }
 
 export type CreateProjectLinkInput = Omit<ProjectLink, 'id'>;

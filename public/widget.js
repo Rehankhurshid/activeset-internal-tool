@@ -81,7 +81,170 @@
       { regex: /sample\s+text/gi, name: 'Sample Text' }
     ];
 
+    /**
+     * Extract main content text EXCLUDING nav and footer elements.
+     * Selects from: main, article, .hero, [role="main"], h1-h3
+     * Normalizes whitespace for consistent hashing.
+     */
+    static extractMainContent() {
+      const doc = document;
+      const contentSelectors = [
+        'main',
+        'article', 
+        '.hero',
+        '[role="main"]',
+        'h1', 'h2', 'h3'
+      ];
+      
+      const textParts = [];
+      
+      contentSelectors.forEach(selector => {
+        const elements = doc.querySelectorAll(selector);
+        elements.forEach(el => {
+          // Skip if element is inside nav or footer
+          if (el.closest('nav') || el.closest('footer')) return;
+          
+          // Clone element to extract text without modifying DOM
+          const clone = el.cloneNode(true);
+          
+          // Remove any nav/footer descendants from clone
+          clone.querySelectorAll('nav, footer').forEach(child => child.remove());
+          
+          const text = clone.innerText || clone.textContent || '';
+          if (text.trim()) {
+            textParts.push(text.trim());
+          }
+        });
+      });
+      
+      // Fallback: if no main content found, use body but exclude nav/footer
+      if (textParts.length === 0) {
+        const bodyClone = doc.body.cloneNode(true);
+        bodyClone.querySelectorAll('nav, footer, script, style, #plw-audit-container').forEach(el => el.remove());
+        const fallbackText = bodyClone.innerText || bodyClone.textContent || '';
+        textParts.push(fallbackText.trim());
+      }
+      
+      // Normalize whitespace: collapse multiple spaces/newlines to single space
+      return textParts.join(' ').replace(/\s+/g, ' ').trim();
+    }
 
+    /**
+     * Compute SHA-256 hash of given text using Web Crypto API.
+     * Returns hex string.
+     */
+    static async computeHash(text) {
+      try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      } catch (e) {
+        console.warn('Hash computation failed:', e);
+        return null;
+      }
+    }
+
+    /**
+     * Compute Flesch Reading Ease score and related metrics.
+     * Formula: 206.835 - 1.015*(words/sentences) - 84.6*(syllables/words)
+     */
+    static computeReadability(text) {
+      if (!text || text.length === 0) {
+        return { fleschScore: 0, wordCount: 0, sentenceCount: 0, syllableCount: 0, label: 'N/A' };
+      }
+      
+      // Count words
+      const words = text.match(/\b[a-zA-Z]+\b/g) || [];
+      const wordCount = words.length;
+      
+      // Count sentences (approximation)
+      const sentences = text.match(/[.!?]+/g) || [];
+      const sentenceCount = Math.max(1, sentences.length);
+      
+      // Count syllables (heuristic: count vowel groups)
+      let syllableCount = 0;
+      words.forEach(word => {
+        const vowelGroups = word.toLowerCase().match(/[aeiouy]+/g) || [];
+        let count = vowelGroups.length;
+        // Adjust for silent e at end
+        if (word.toLowerCase().endsWith('e') && count > 1) count--;
+        // Minimum 1 syllable per word
+        syllableCount += Math.max(1, count);
+      });
+      
+      // Flesch Reading Ease
+      const avgWordsPerSentence = wordCount / sentenceCount;
+      const avgSyllablesPerWord = syllableCount / Math.max(1, wordCount);
+      const fleschScore = Math.round(206.835 - (1.015 * avgWordsPerSentence) - (84.6 * avgSyllablesPerWord));
+      const clampedScore = Math.max(0, Math.min(100, fleschScore));
+      
+      // Label based on score
+      let label = 'Very Difficult';
+      if (clampedScore >= 90) label = 'Very Easy';
+      else if (clampedScore >= 80) label = 'Easy';
+      else if (clampedScore >= 60) label = 'Standard';
+      else if (clampedScore >= 30) label = 'Difficult';
+      
+      return { fleschScore: clampedScore, wordCount, sentenceCount, syllableCount, label };
+    }
+
+    /**
+     * Check content completeness thresholds.
+     * Returns issues array and score.
+     */
+    static checkCompleteness(mainContentText, doc) {
+      const issues = [];
+      let score = 100;
+      
+      const { wordCount } = this.computeReadability(mainContentText);
+      
+      // Word count threshold (warn if < 300 words)
+      if (wordCount < 300) {
+        issues.push({ check: 'Low word count', detail: `${wordCount} words (< 300 threshold)` });
+        score -= 20;
+      }
+      
+      // Heading presence (at least one H1-H3 in main content)
+      const mainEl = doc.querySelector('main, article, [role="main"]');
+      const headings = mainEl 
+        ? mainEl.querySelectorAll('h1, h2, h3')
+        : doc.querySelectorAll('h1, h2, h3');
+      
+      // Filter out headings in nav/footer
+      const validHeadings = Array.from(headings).filter(h => !h.closest('nav') && !h.closest('footer'));
+      if (validHeadings.length === 0) {
+        issues.push({ check: 'Missing headings', detail: 'No H1-H3 found in main content' });
+        score -= 15;
+      }
+      
+      // Paragraph presence (at least 2 paragraphs)
+      const paragraphs = mainEl
+        ? mainEl.querySelectorAll('p')
+        : doc.querySelectorAll('p');
+      const validParagraphs = Array.from(paragraphs).filter(p => 
+        !p.closest('nav') && !p.closest('footer') && p.innerText.trim().length > 20
+      );
+      if (validParagraphs.length < 2) {
+        issues.push({ check: 'Thin content', detail: `Only ${validParagraphs.length} paragraphs (need 2+)` });
+        score -= 15;
+      }
+      
+      // Images missing alt in main content
+      const images = mainEl
+        ? mainEl.querySelectorAll('img')
+        : doc.body.querySelectorAll('img');
+      const imagesNoAlt = Array.from(images).filter(img => 
+        !img.closest('nav') && !img.closest('footer') && (!img.alt || img.alt.trim() === '')
+      );
+      if (imagesNoAlt.length > 0) {
+        issues.push({ check: 'Images missing alt', detail: `${imagesNoAlt.length} images` });
+        score -= imagesNoAlt.length * 5;
+      }
+      
+      return { issues, score: Math.max(0, score) };
+    }
 
     static getApiBaseUrl() {
         let scriptUrl = document.currentScript ? document.currentScript.src : null;
@@ -95,25 +258,52 @@
     }
 
     static async audit(options = { spellcheck: true }) {
-      const text = document.body.innerText || '';
       const doc = document;
-
+      
+      // Extract content EXCLUDING nav/footer
+      const mainContentText = this.extractMainContent();
+      const fullPageHtml = doc.documentElement.outerHTML;
+      
+      // Compute hashes
+      const fullHash = await this.computeHash(fullPageHtml);
+      const contentHash = await this.computeHash(mainContentText);
+      
+      // Compute readability metrics
+      const readabilityData = this.computeReadability(mainContentText);
+      
+      // Check completeness
+      const completenessResult = this.checkCompleteness(mainContentText, doc);
       
       const result = {
         canDeploy: true,
         overallScore: 100,
         summary: '',
+        fullHash,
+        contentHash,
         categories: {
           placeholders: { status: 'passed', issues: [], score: 100 },
           spelling: { status: 'passed', issues: [], score: 100 },
+          readability: { 
+            status: 'passed', 
+            score: readabilityData.fleschScore,
+            fleschScore: readabilityData.fleschScore,
+            wordCount: readabilityData.wordCount,
+            sentenceCount: readabilityData.sentenceCount,
+            label: readabilityData.label
+          },
+          completeness: {
+            status: completenessResult.issues.length > 0 ? 'warning' : 'passed',
+            issues: completenessResult.issues,
+            score: completenessResult.score
+          },
           seo: { status: 'passed', issues: [], score: 100 },
           technical: { status: 'passed', issues: [], score: 100 }
         }
       };
 
-      // 1. PLACEHOLDER DETECTION (CRITICAL)
+      // 1. PLACEHOLDER DETECTION (CRITICAL) - uses mainContentText
       this.PLACEHOLDER_PATTERNS.forEach(pattern => {
-        const matches = text.match(pattern.regex);
+        const matches = mainContentText.match(pattern.regex);
         if (matches && matches.length > 0) {
           result.categories.placeholders.issues.push({ type: pattern.name, count: matches.length });
         }
@@ -126,22 +316,22 @@
         result.overallScore = 0;
       }
 
-      // 2. SPELLING & GRAMMAR CHECK (LanguageTool API)
+      // 2. SPELLING & GRAMMAR CHECK - uses mainContentText
       const typos = [];
       if (options.spellcheck) {
           try {
               const baseUrl = this.getApiBaseUrl();
               const apiUrl = `${baseUrl}/api/check-text`;
-              
-              // Truncate text to avoid huge payload if necessary
-              const textPayload = text.substring(0, 15000); 
-    
+
+              // Use main content text (nav/footer excluded), truncated
+              const textPayload = mainContentText.substring(0, 15000);
+
               const ltResponse = await fetch(apiUrl, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ text: textPayload })
               });
-              
+
               if (ltResponse.ok) {
                   const ltData = await ltResponse.json();
                   if (ltData.matches) {
@@ -150,7 +340,7 @@
                           const word = textPayload.substring(match.offset, match.offset + match.length);
                           const lower = word.toLowerCase();
                           if (this.CUSTOM_JARGON.has(lower)) return;
-                          
+
                           if (match.rule.issueType === 'misspelling' && !seen.has(lower)) {
                                typos.push(word);
                                seen.add(lower);
@@ -159,7 +349,7 @@
                   }
               }
           } catch (e) {
-              console.warn('Audit: Spellcheck API failed', e);
+              console.warn('Audit: Spellcheck API failed (automatic fallback to nspell will occur)', e);
               typos.push('Check Unavailable');
           }
       } else {
@@ -180,7 +370,7 @@
          result.categories.spelling.issues = [{ word: 'Service Unavailable' }];
       }
 
-      // 3. SEO & META
+      // 3. SEO & META (global checks, not just main content)
       const seoIssues = [];
       if (!doc.title) seoIssues.push('Missing Title tag');
       else if (doc.title.length < 10) seoIssues.push('Title too short (< 10 chars)');
@@ -195,6 +385,7 @@
       if (h1s.length === 0) seoIssues.push('Missing H1 heading');
       else if (h1s.length > 1) seoIssues.push(`Multiple H1 tags (${h1s.length})`);
       
+      // Note: Images missing alt now in completeness, but keep global count in SEO
       const images = doc.querySelectorAll('img');
       let missingAlt = 0;
       images.forEach(img => { if (!img.alt || img.alt.trim() === '') missingAlt++; });
@@ -246,18 +437,21 @@
       }
 
       // OVERALL CALCULATION
+      // Weighted: Spelling (15%), Readability (10%), Completeness (15%), SEO (30%), Technical (30%)
       if (result.canDeploy) {
-        // Weighted: Spelling (20%), SEO (40%), Technical (40%)
         result.overallScore = Math.round(
-          (result.categories.spelling.score * 0.2) +
-          (result.categories.seo.score * 0.4) +
-          (result.categories.technical.score * 0.4)
+          (result.categories.spelling.score * 0.15) +
+          (result.categories.readability.score * 0.10) +
+          (result.categories.completeness.score * 0.15) +
+          (result.categories.seo.score * 0.30) +
+          (result.categories.technical.score * 0.30)
         );
       }
 
       // Summary
       const totalIssues = result.categories.placeholders.issues.length + 
                           result.categories.spelling.issues.length + 
+                          result.categories.completeness.issues.length +
                           result.categories.seo.issues.length + 
                           result.categories.technical.issues.length;
 
@@ -640,6 +834,7 @@
                           body: JSON.stringify({ 
                               projectId: this.config.projectId,
                               url: window.location.href,
+                              title: document.title,
                               auditResult: result
                           })
                       });
