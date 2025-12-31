@@ -19,9 +19,10 @@ interface LinkItemProps {
   link: ProjectLink;
   onEdit: (linkId: string, title: string, url: string) => Promise<void>;
   onDelete: (linkId: string) => Promise<void>;
+  compact?: boolean;
 }
 
-export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
+export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
   const isMobile = useMobile();
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
@@ -33,17 +34,19 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
   const { isLoading: isUpdating, execute: executeUpdate } = useAsyncOperation();
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: link.id
+    id: link.id,
+    disabled: compact // Disable sorting logic if compact
   });
 
-  const style = {
+  const style = transform ? {
     transform: CSS.Transform.toString(transform),
     transition,
-  };
+  } : undefined;
 
   const handleSaveTitle = async (title: string) => {
     await executeUpdate(() => onEdit(link.id, title, link.url));
   };
+  // ... (handlers same)
 
   const handleSaveUrl = async (url: string) => {
     await executeUpdate(() => onEdit(link.id, link.title, url));
@@ -68,7 +71,7 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
 
   if (isEditing) {
     return (
-      <div className="p-4 space-y-3 border rounded-lg bg-muted/50">
+      <div className={cn("space-y-3 border rounded-lg bg-muted/50", compact ? "p-2 text-xs" : "p-4")}>
         <InlineEdit
           value={link.title}
           onSave={handleSaveTitle}
@@ -83,6 +86,62 @@ export function LinkItem({ link, onEdit, onDelete }: LinkItemProps) {
         <div className="flex gap-2">
           <Button size="sm" onClick={() => setIsEditing(false)}>
             Done
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Compact View Structure
+  if (compact) {
+    return (
+      <div
+        className={cn(
+          "group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors",
+          isUpdating ? "opacity-50" : ""
+        )}
+      >
+        {/* No Drag Handle in Compact Mode */}
+
+        {/* Link Content compact */}
+        <div className="flex-1 min-w-0">
+          <a
+            href={link.url}
+            onClick={handleLinkClick}
+            className="block cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-sm truncate group-hover:text-foreground transition-colors">
+                {link.title}
+              </span>
+              {/* URL only prominent on hover or if very simplified? Let's just keep title mostly. */}
+            </div>
+          </a>
+        </div>
+
+        {/* Audit Score Badge - simplified or same? Same but smaller? */}
+        {link.auditResult && (
+          <div className="flex items-center">
+            <div className={cn(
+              "flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-medium border",
+              link.auditResult.score >= 90 ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                link.auditResult.score >= 70 ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
+                  "bg-red-500/10 text-red-600 border-red-500/20"
+            )}
+              title={`Score: ${link.auditResult.score}%`}
+            >
+              {link.auditResult.score}
+            </div>
+          </div>
+        )}
+
+        {/* Actions: Reveal on Group Hover */}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}>
+            <Edit className="h-3 w-3 text-muted-foreground" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleOpenLink}>
+            <ExternalLink className="h-3 w-3 text-muted-foreground" />
           </Button>
         </div>
       </div>
