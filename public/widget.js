@@ -1109,17 +1109,21 @@
 
       const positionStyles = {
         "bottom-right": "bottom: 0; right: 24px;",
+        "bottom-left": "bottom: 0; left: 24px;",
+        "top-right": "top: 0; right: 24px;",
+        "top-left": "top: 0; left: 24px;",
+        "center-right": "top: 50%; right: 0; transform: translateY(-50%);",
+        "center-left": "top: 50%; left: 0; transform: translateY(-50%);",
       };
 
-      const dropdownPosition = this.config.position.includes("bottom")
-        ? "bottom: 100%;"
-        : "top: 100%;";
+      const posKey = this.config.position || "center-left"; 
+      const styleString = positionStyles[posKey] || positionStyles["center-left"];
 
       // Ensure container is fixed and positioned correctly matches old style
       this.container.style.cssText = `
         position: fixed; 
         z-index: 9999; 
-        ${positionStyles["bottom-right"]}
+        ${styleString}
       `;
 
       this.container.innerHTML = `
