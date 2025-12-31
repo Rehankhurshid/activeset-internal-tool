@@ -102,7 +102,7 @@ export const ProjectCard = React.memo(function ProjectCard({ project, onDelete }
       </CardHeader>
 
       <CardContent>
-        <LinkList projectId={project.id} links={project.links} />
+        <LinkList projectId={project.id} links={project.links} limit={5} />
         <AddLinkDialog
           onAddLink={async (title, url) => {
             await executeAddLink(() => handleAddLink(title, url));
