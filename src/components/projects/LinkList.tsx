@@ -11,10 +11,10 @@ import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 interface LinkListProps {
   projectId: string;
   links: ProjectLink[];
+  limit?: number;
 }
 
-
-export function LinkList({ projectId, links }: LinkListProps) {
+export function LinkList({ projectId, links, limit }: LinkListProps) {
   const [sortedLinks, setSortedLinks] = useState<ProjectLink[]>([]);
   const { execute: executeDragEnd } = useAsyncOperation();
 
@@ -59,8 +59,38 @@ export function LinkList({ projectId, links }: LinkListProps) {
 
   if (links.length === 0) {
     return (
-      <div className="text-center py-8 text-sm text-muted-foreground">
+      <div className="text-center py-6 text-sm text-muted-foreground">
         No links yet. Add one to get started.
+      </div>
+    );
+  }
+
+  // If limiting, show plain list (no drag)
+  if (limit && sortedLinks.length > 0) {
+    const displayLinks = sortedLinks.slice(0, limit);
+    const remaining = sortedLinks.length - limit;
+
+    return (
+      <div className="space-y-1">
+        {displayLinks.map((link) => (
+          <LinkItem
+            key={link.id}
+            link={link}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            compact // NEW PROP for compact view
+          />
+        ))}
+        {remaining > 0 && (
+          <div className="pt-2 text-center">
+            <a
+              href={`/modules/project-links/${projectId}`}
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
+            >
+              View {remaining} more links
+            </a>
+          </div>
+        )}
       </div>
     );
   }

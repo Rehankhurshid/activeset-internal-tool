@@ -31,7 +31,8 @@ import {
   Search,
 } from "lucide-react"
 import { projectsService } from "@/services/database"
-import { ProjectLink, AuditResult } from "@/types"
+import { ProjectLink, AuditResult, FieldChange, ImageInfo, LinkInfo } from "@/types"
+import { ChangeLogTimeline } from "@/components/change-log-timeline"
 
 interface PageDetailsProps {
   projectId?: string;
@@ -127,12 +128,53 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
     // No history backend yet
   ];
 
-  // Map changed fields to diff items
+  // Map changed fields to diff items - now with before/after values
   const differences: DiffItem[] = [];
 
   if (audit?.changeStatus === 'CONTENT_CHANGED') {
-    if (audit.diffSummary) {
-      // Add a summary item
+    // Use fieldChanges if available (new smart change detection)
+    if (audit.fieldChanges && audit.fieldChanges.length > 0) {
+      audit.fieldChanges.forEach((change: FieldChange) => {
+        const fieldNames: Record<string, string> = {
+          'title': 'Page Title',
+          'h1': 'H1 Heading',
+          'metaDescription': 'Meta Description',
+          'wordCount': 'Word Count',
+          'headings': 'Heading Structure',
+          'images': 'Images',
+          'links': 'Links',
+          'bodyText': 'Body Text'
+        };
+
+        const formatValue = (val: FieldChange['oldValue'], field: string): string => {
+          if (val === null || val === undefined) return '(empty)';
+          if (typeof val === 'number') return String(val);
+          if (typeof val === 'string') return val.length > 100 ? val.substring(0, 100) + '...' : val;
+          if (Array.isArray(val)) {
+            if (field === 'images') return `${(val as ImageInfo[]).length} image(s)`;
+            if (field === 'links') return `${(val as LinkInfo[]).length} link(s)`;
+            if (field === 'headings') return (val as string[]).slice(0, 3).join(' → ');
+            return val.join(', ').substring(0, 100);
+          }
+          return String(val);
+        };
+
+        differences.push({
+          type: change.changeType === 'added' ? 'added' : change.changeType === 'removed' ? 'removed' : 'text',
+          severity: change.changeType === 'modified' ? 'warning' : 'info',
+          title: `${fieldNames[change.field] || change.field} ${change.changeType}`,
+          before: change.oldValue !== null ? formatValue(change.oldValue, change.field) : undefined,
+          after: change.newValue !== null ? formatValue(change.newValue, change.field) : undefined,
+          content: change.changeType === 'added'
+            ? `Added: ${formatValue(change.newValue, change.field)}`
+            : change.changeType === 'removed'
+            ? `Removed: ${formatValue(change.oldValue, change.field)}`
+            : undefined,
+          detectedBy: 'Smart Change Detection'
+        });
+      });
+    } else if (audit.diffSummary) {
+      // Fallback to summary if no fieldChanges
       differences.push({
         type: 'info',
         severity: 'info',
@@ -141,7 +183,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
         detectedBy: 'System'
       });
     } else if (audit.changedFields && audit.changedFields.length > 0) {
-      // Only show individual fields if no summary is available
+      // Legacy: show individual fields without before/after
       audit.changedFields.forEach(field => {
         differences.push({
           type: 'modified',
@@ -580,6 +622,13 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
             </CardContent>
           </Card>
         </div>
+
+        {/* Content Change History Timeline */}
+        {projectId && linkId && (
+          <div className="mb-8">
+            <ChangeLogTimeline linkId={linkId} projectId={projectId} />
+          </div>
+        )}
       </div>
     </div>
   )

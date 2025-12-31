@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
-import type { ChangeStatus, AuditResult, ContentSnapshot } from '@/types';
+import type { ChangeStatus, AuditResult, ContentSnapshot, FieldChange, ExtendedContentSnapshot, ChangeLogEntry, ImageInfo, LinkInfo } from '@/types';
 import { auditService } from '@/services/AuditService';
+import { changeLogService } from '@/services/ChangeLogService';
 import { createTwoFilesPatch } from 'diff';
 
 const corsHeaders = {
@@ -49,50 +50,193 @@ function computeChangeStatus(
 }
 
 /**
- * Compare snapshots to find specific changed fields.
+ * Compare snapshots and generate detailed field changes with before/after values.
+ * This is the smart change detection that powers the change log.
  */
-function computeDetailedChanges(
-    newSnapshot: ContentSnapshot | undefined,
-    prevSnapshot: ContentSnapshot | undefined
-): { changedFields: string[], diffSummary: string } {
+function computeFieldChanges(
+    newSnapshot: ExtendedContentSnapshot | ContentSnapshot | undefined,
+    prevSnapshot: ExtendedContentSnapshot | ContentSnapshot | undefined
+): FieldChange[] {
     if (!newSnapshot || !prevSnapshot) {
-        return { changedFields: [], diffSummary: '' };
+        return [];
     }
 
-    const changes: string[] = [];
+    const changes: FieldChange[] = [];
+
+    // Title change
+    if (newSnapshot.title !== prevSnapshot.title) {
+        changes.push({
+            field: 'title',
+            oldValue: prevSnapshot.title || null,
+            newValue: newSnapshot.title || null,
+            changeType: !prevSnapshot.title ? 'added' : !newSnapshot.title ? 'removed' : 'modified'
+        });
+    }
+
+    // H1 change
+    if (newSnapshot.h1 !== prevSnapshot.h1) {
+        changes.push({
+            field: 'h1',
+            oldValue: prevSnapshot.h1 || null,
+            newValue: newSnapshot.h1 || null,
+            changeType: !prevSnapshot.h1 ? 'added' : !newSnapshot.h1 ? 'removed' : 'modified'
+        });
+    }
+
+    // Meta Description change
+    if (newSnapshot.metaDescription !== prevSnapshot.metaDescription) {
+        changes.push({
+            field: 'metaDescription',
+            oldValue: prevSnapshot.metaDescription || null,
+            newValue: newSnapshot.metaDescription || null,
+            changeType: !prevSnapshot.metaDescription ? 'added' : !newSnapshot.metaDescription ? 'removed' : 'modified'
+        });
+    }
+
+    // Word Count change (only if significant: > 5% or > 50 words)
+    const wcDiff = newSnapshot.wordCount - prevSnapshot.wordCount;
+    const wcPercent = prevSnapshot.wordCount > 0 ? Math.abs(wcDiff / prevSnapshot.wordCount) * 100 : 100;
+    if (wcPercent > 5 || Math.abs(wcDiff) > 50) {
+        changes.push({
+            field: 'wordCount',
+            oldValue: prevSnapshot.wordCount,
+            newValue: newSnapshot.wordCount,
+            changeType: 'modified'
+        });
+    }
+
+    // Headings structure change
+    if (JSON.stringify(newSnapshot.headings) !== JSON.stringify(prevSnapshot.headings)) {
+        changes.push({
+            field: 'headings',
+            oldValue: prevSnapshot.headings,
+            newValue: newSnapshot.headings,
+            changeType: 'modified'
+        });
+    }
+
+    // Extended fields (images, links) - only if available
+    const extNew = newSnapshot as ExtendedContentSnapshot;
+    const extPrev = prevSnapshot as ExtendedContentSnapshot;
+
+    // Images: detect added/removed
+    if (extNew.images && extPrev.images) {
+        const prevImageSrcs = new Set(extPrev.images.map((i: ImageInfo) => i.src));
+        const newImageSrcs = new Set(extNew.images.map((i: ImageInfo) => i.src));
+
+        const addedImages = extNew.images.filter((i: ImageInfo) => !prevImageSrcs.has(i.src));
+        const removedImages = extPrev.images.filter((i: ImageInfo) => !newImageSrcs.has(i.src));
+
+        if (addedImages.length > 0) {
+            changes.push({
+                field: 'images',
+                oldValue: null,
+                newValue: addedImages,
+                changeType: 'added'
+            });
+        }
+        if (removedImages.length > 0) {
+            changes.push({
+                field: 'images',
+                oldValue: removedImages,
+                newValue: null,
+                changeType: 'removed'
+            });
+        }
+    }
+
+    // Links: detect added/removed
+    if (extNew.links && extPrev.links) {
+        const prevLinkHrefs = new Set(extPrev.links.map((l: LinkInfo) => l.href));
+        const newLinkHrefs = new Set(extNew.links.map((l: LinkInfo) => l.href));
+
+        const addedLinks = extNew.links.filter((l: LinkInfo) => !prevLinkHrefs.has(l.href));
+        const removedLinks = extPrev.links.filter((l: LinkInfo) => !newLinkHrefs.has(l.href));
+
+        if (addedLinks.length > 0) {
+            changes.push({
+                field: 'links',
+                oldValue: null,
+                newValue: addedLinks,
+                changeType: 'added'
+            });
+        }
+        if (removedLinks.length > 0) {
+            changes.push({
+                field: 'links',
+                oldValue: removedLinks,
+                newValue: null,
+                changeType: 'removed'
+            });
+        }
+    }
+
+    // Body text hash change (catch-all for text changes not caught by specific fields)
+    if (extNew.bodyTextHash && extPrev.bodyTextHash && extNew.bodyTextHash !== extPrev.bodyTextHash) {
+        // Only add if no other specific text changes detected
+        const hasTextChanges = changes.some(c =>
+            ['title', 'h1', 'metaDescription', 'wordCount', 'headings'].includes(c.field)
+        );
+        if (!hasTextChanges) {
+            changes.push({
+                field: 'bodyText',
+                oldValue: '[content changed]',
+                newValue: '[see page for details]',
+                changeType: 'modified'
+            });
+        }
+    }
+
+    return changes;
+}
+
+/**
+ * Generate human-readable summary from field changes
+ */
+function generateChangeSummary(changes: FieldChange[]): string {
+    if (changes.length === 0) return '';
+
     const summaryParts: string[] = [];
 
-    if (newSnapshot.title !== prevSnapshot.title) {
-        changes.push('title');
-        summaryParts.push('Page Title updated');
-    }
+    changes.forEach(change => {
+        switch (change.field) {
+            case 'title':
+                summaryParts.push(`Title ${change.changeType}`);
+                break;
+            case 'h1':
+                summaryParts.push(`H1 ${change.changeType}`);
+                break;
+            case 'metaDescription':
+                summaryParts.push(`Meta description ${change.changeType}`);
+                break;
+            case 'wordCount':
+                const diff = (change.newValue as number) - (change.oldValue as number);
+                summaryParts.push(`Word count ${diff > 0 ? '+' : ''}${diff}`);
+                break;
+            case 'headings':
+                summaryParts.push('Heading structure changed');
+                break;
+            case 'images':
+                if (change.changeType === 'added') {
+                    summaryParts.push(`${(change.newValue as ImageInfo[]).length} image(s) added`);
+                } else if (change.changeType === 'removed') {
+                    summaryParts.push(`${(change.oldValue as ImageInfo[]).length} image(s) removed`);
+                }
+                break;
+            case 'links':
+                if (change.changeType === 'added') {
+                    summaryParts.push(`${(change.newValue as LinkInfo[]).length} link(s) added`);
+                } else if (change.changeType === 'removed') {
+                    summaryParts.push(`${(change.oldValue as LinkInfo[]).length} link(s) removed`);
+                }
+                break;
+            case 'bodyText':
+                summaryParts.push('Body text modified');
+                break;
+        }
+    });
 
-    if (newSnapshot.h1 !== prevSnapshot.h1) {
-        changes.push('h1');
-        summaryParts.push('H1 Heading updated');
-    }
-
-    if (newSnapshot.metaDescription !== prevSnapshot.metaDescription) {
-        changes.push('metaDescription');
-        summaryParts.push('Meta Description updated');
-    }
-
-    const wcDiff = newSnapshot.wordCount - prevSnapshot.wordCount;
-    if (wcDiff !== 0) {
-        changes.push('wordCount');
-        summaryParts.push(`Word count ${wcDiff > 0 ? '+' : ''}${wcDiff}`);
-    }
-
-    // Naive heading structure check
-    if (JSON.stringify(newSnapshot.headings) !== JSON.stringify(prevSnapshot.headings)) {
-        changes.push('headings');
-        summaryParts.push('Heading structure modified');
-    }
-
-    return {
-        changedFields: changes,
-        diffSummary: summaryParts.join(', ')
-    };
+    return summaryParts.join(', ');
 }
 
 export async function POST(request: NextRequest) {
@@ -160,15 +304,27 @@ export async function POST(request: NextRequest) {
             prevAudit?.contentHash
         );
 
-        // Compute detailed changes if content changed
-        if (changeStatus === 'CONTENT_CHANGED' && prevAudit?.contentSnapshot && auditResult.contentSnapshot) {
-            const details = computeDetailedChanges(auditResult.contentSnapshot, prevAudit.contentSnapshot);
-            changedFields = details.changedFields;
-            diffSummary = details.diffSummary;
+        // Compute detailed field changes with before/after values
+        let fieldChanges: FieldChange[] = [];
 
-            // If hash changed but no specific metadata changed, assume body text changed
-            if (changedFields.length === 0) {
-                changedFields.push('body');
+        // Get previous change log entry for comparison (has extended snapshot)
+        const prevChangeLogEntry = link ? await changeLogService.getLatestEntry(link.id) : null;
+        const prevSnapshot = prevChangeLogEntry?.contentSnapshot || prevAudit?.contentSnapshot;
+
+        if (changeStatus === 'CONTENT_CHANGED' && prevSnapshot && auditResult.contentSnapshot) {
+            fieldChanges = computeFieldChanges(auditResult.contentSnapshot, prevSnapshot);
+            diffSummary = generateChangeSummary(fieldChanges);
+            changedFields = fieldChanges.map(c => c.field);
+
+            // If hash changed but no specific fields changed, assume body text changed
+            if (fieldChanges.length === 0) {
+                fieldChanges.push({
+                    field: 'bodyText',
+                    oldValue: '[content changed]',
+                    newValue: '[see page for details]',
+                    changeType: 'modified'
+                });
+                changedFields.push('bodyText');
                 diffSummary = 'Main content text modified';
             }
         } else if (changeStatus === 'TECH_CHANGE_ONLY') {
@@ -184,8 +340,29 @@ export async function POST(request: NextRequest) {
                 fullHash: auditResult.fullHash,
                 contentHash: auditResult.contentHash,
                 htmlSource: auditResult.htmlSource,
-                diffPatch: diffPatch || null // Store the patch too for easy retrieval
+                diffPatch: diffPatch || null
             });
+        }
+
+        // Save to Change Log (content_changes collection) for history timeline
+        // Only save if there are actual changes (skip NO_CHANGE to save storage)
+        const isFirstScan = !prevAudit && !prevChangeLogEntry;
+        if (link && (changeStatus === 'CONTENT_CHANGED' || changeStatus === 'TECH_CHANGE_ONLY' || isFirstScan)) {
+            const changeLogEntry: Omit<ChangeLogEntry, 'id'> = {
+                projectId,
+                linkId: link.id,
+                url,
+                timestamp: new Date().toISOString(),
+                changeType: isFirstScan ? 'FIRST_SCAN' : changeStatus as 'CONTENT_CHANGED' | 'TECH_CHANGE_ONLY',
+                fieldChanges: fieldChanges,
+                summary: isFirstScan ? 'Initial scan' : diffSummary,
+                contentSnapshot: auditResult.contentSnapshot,
+                fullHash: auditResult.fullHash,
+                contentHash: auditResult.contentHash,
+                auditScore: auditResult.overallScore || auditResult.score || 0
+            };
+
+            await changeLogService.saveEntry(changeLogEntry);
         }
 
         // Remove massive fields before saving to Project document
@@ -197,6 +374,7 @@ export async function POST(request: NextRequest) {
             score: auditResult.overallScore || auditResult.score || 0,
             changeStatus,
             changedFields,
+            fieldChanges: fieldChanges.length > 0 ? fieldChanges : undefined, // Include before/after values
             diffSummary,
             lastRun: new Date().toISOString()
         };

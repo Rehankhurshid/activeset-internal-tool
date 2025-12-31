@@ -124,6 +124,94 @@
     }
 
     /**
+     * Extract all images from main content (excluding nav/footer)
+     * Returns array of {src, alt, inMainContent}
+     */
+    static extractImages() {
+      const images = [];
+      const mainEl = document.querySelector('main, article, [role="main"]') || document.body;
+
+      const allImages = mainEl.querySelectorAll('img');
+      allImages.forEach(img => {
+        // Skip nav/footer images
+        if (img.closest('nav') || img.closest('footer')) return;
+        // Skip tiny images (likely icons/spacers)
+        if (img.width < 50 && img.height < 50) return;
+
+        images.push({
+          src: img.src || '',
+          alt: img.alt || '',
+          inMainContent: true
+        });
+      });
+
+      return images.slice(0, 50); // Limit to 50 images
+    }
+
+    /**
+     * Extract all links from main content (excluding nav/footer)
+     * Returns array of {href, text, isExternal}
+     */
+    static extractLinks() {
+      const links = [];
+      const mainEl = document.querySelector('main, article, [role="main"]') || document.body;
+      const currentHost = window.location.hostname;
+
+      const allLinks = mainEl.querySelectorAll('a[href]');
+      allLinks.forEach(a => {
+        // Skip nav/footer links
+        if (a.closest('nav') || a.closest('footer')) return;
+
+        const href = a.href || '';
+        // Skip empty/anchor-only links
+        if (!href || href === '#' || href.startsWith('javascript:')) return;
+
+        let isExternal = false;
+        try {
+          isExternal = new URL(href).hostname !== currentHost;
+        } catch (e) {
+          isExternal = false;
+        }
+
+        links.push({
+          href: href,
+          text: (a.textContent || '').trim().substring(0, 100),
+          isExternal
+        });
+      });
+
+      return links.slice(0, 100); // Limit to 100 links
+    }
+
+    /**
+     * Extract content sections with headings
+     */
+    static extractSections() {
+      const sections = [];
+      const mainEl = document.querySelector('main, article, [role="main"]') || document.body;
+
+      // Find all section-like elements
+      const sectionElements = mainEl.querySelectorAll('section, article, .section, [data-section]');
+
+      sectionElements.forEach((section, idx) => {
+        if (section.closest('nav') || section.closest('footer')) return;
+
+        const heading = section.querySelector('h1, h2, h3');
+        const text = this.getTextContentWithSpaces(section);
+        const words = text.match(/\b[a-zA-Z]+\b/g) || [];
+
+        sections.push({
+          selector: section.tagName.toLowerCase() + (section.id ? `#${section.id}` : `.${idx}`),
+          headingText: heading ? (heading.textContent || '').trim() : `Section ${idx + 1}`,
+          wordCount: words.length,
+          textPreview: text.substring(0, 150).trim()
+        });
+      });
+
+      return sections.slice(0, 20); // Limit to 20 sections
+    }
+
+    /**
      * Extract main content text EXCLUDING nav and footer elements.
      * Selects from: main, article, .hero, [role="main"], h1-h3
      * Normalizes whitespace for consistent hashing.
@@ -324,8 +412,9 @@
         fullHash,
         contentHash,
         htmlSource: fullPageHtml, // Capture full source for diffing
-        // Capture content snapshot for change detection
+        // Capture extended content snapshot for change detection
         contentSnapshot: {
+          // Basic fields
           title: doc.title || '',
           h1: doc.querySelector('h1')?.textContent?.trim() || '',
           metaDescription: doc.querySelector('meta[name="description"]')?.content || '',
@@ -333,7 +422,12 @@
           headings: Array.from(doc.querySelectorAll('h1, h2, h3'))
             .filter(h => !h.closest('nav') && !h.closest('footer'))
             .map(h => h.textContent?.trim() || '')
-            .slice(0, 10) // Limit to first 10 headings
+            .slice(0, 10),
+          // Extended fields for smart change tracking
+          images: this.extractImages(),
+          links: this.extractLinks(),
+          sections: this.extractSections(),
+          bodyTextHash: contentHash // Hash of main content text (nav/footer excluded)
         },
         categories: {
           placeholders: { status: 'passed', issues: [], score: 100 },

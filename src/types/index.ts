@@ -30,6 +30,7 @@ export interface AuditResult {
   lastRun: string; // ISO date string
   contentSnapshot?: ContentSnapshot;
   changedFields?: string[]; // e.g., ['title', 'h1', 'wordCount']
+  fieldChanges?: FieldChange[]; // Detailed changes with before/after values
   diffSummary?: string; // Human readable summary of changes (e.g. "Title updated, Word count +20")
   diffPatch?: string;  // Unified diff string showing exact changes
   categories: {
@@ -74,6 +75,72 @@ export interface AuditResult {
 
 export type CreateProjectLinkInput = Omit<ProjectLink, 'id'>;
 export type UpdateProjectLinkInput = Partial<Pick<ProjectLink, 'title' | 'url' | 'order' | 'auditResult'>>;
+
+// --- CHANGE LOG TYPES ---
+
+// Individual field change with before/after values
+export interface FieldChange {
+  field: string;  // 'h1', 'title', 'images', 'links', 'metaDescription', 'wordCount', 'headings', 'bodyText'
+  oldValue: string | number | string[] | ImageInfo[] | LinkInfo[] | null;
+  newValue: string | number | string[] | ImageInfo[] | LinkInfo[] | null;
+  changeType: 'added' | 'removed' | 'modified';
+}
+
+// Image info for tracking
+export interface ImageInfo {
+  src: string;
+  alt: string;
+  inMainContent: boolean;
+}
+
+// Link info for tracking
+export interface LinkInfo {
+  href: string;
+  text: string;
+  isExternal: boolean;
+}
+
+// Section info for tracking
+export interface SectionInfo {
+  selector: string;
+  headingText: string;
+  wordCount: number;
+  textPreview: string;
+}
+
+// Extended content snapshot with images/links/sections
+export interface ExtendedContentSnapshot extends ContentSnapshot {
+  images: ImageInfo[];
+  links: LinkInfo[];
+  sections: SectionInfo[];
+  bodyTextHash: string;
+}
+
+// Change log entry (stored in Firestore content_changes collection)
+export interface ChangeLogEntry {
+  id: string;
+  projectId: string;
+  linkId: string;
+  url: string;
+  timestamp: string;
+  changeType: 'FIRST_SCAN' | 'CONTENT_CHANGED' | 'TECH_CHANGE_ONLY';
+  fieldChanges: FieldChange[];
+  summary: string;
+  contentSnapshot: ExtendedContentSnapshot;
+  fullHash: string;
+  contentHash: string;
+  auditScore?: number;
+}
+
+// Query options for change log
+export interface ChangeLogQueryOptions {
+  linkId?: string;
+  projectId?: string;
+  startDate?: string;
+  endDate?: string;
+  changeType?: ChangeLogEntry['changeType'];
+  limit?: number;
+}
 
 export interface Project {
   id: string;
