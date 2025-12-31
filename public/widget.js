@@ -679,17 +679,18 @@
         ...defaultConfig, 
         ...config,
         style: "dropdown", // Always dropdown
-        position: "bottom-right" // Always bottom-right
+        // position override removed
       };
 
       // Domain Check
       const hostname = window.location.hostname;
       const isWebflow = hostname.endsWith('.webflow.io');
+      const isFramer = hostname.endsWith('.framer.website');
       const isLocalhost = hostname.includes('localhost') || hostname.includes('127.0.0.1');
       const isAllowedDomain = this.config.showOnDomains && this.config.showOnDomains.some(d => hostname.includes(d));
 
-      // Allow localhost, webflow, or explicitly allowed domains
-      if (!isWebflow && !isLocalhost && !isAllowedDomain) {
+      // Allow localhost, webflow, framer, or explicitly allowed domains
+      if (!isWebflow && !isFramer && !isLocalhost && !isAllowedDomain) {
         console.warn("Project Links Widget: Domain not allowed", hostname);
         return;
       }
