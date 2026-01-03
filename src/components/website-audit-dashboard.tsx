@@ -42,6 +42,28 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
   const [sortBy, setSortBy] = useState("recent")
   const [showHistory, setShowHistory] = useState(false)
 
+  // Bulk scan state
+  const [isBulkScanning, setIsBulkScanning] = useState(false)
+  const [bulkScanProgress, setBulkScanProgress] = useState({ current: 0, total: 0 })
+  const [showCollectionDialog, setShowCollectionDialog] = useState(false)
+
+  // Helper for relative time
+  function getRelativeTime(timestamp: string): string {
+    const now = new Date();
+    const date = new Date(timestamp);
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  }
+
   // 1. Process Links into Page Data
   const pagesData = useMemo(() => {
     return links.map(link => {
@@ -70,6 +92,8 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
         status: displayStatus,
         lastContentChange: audit?.lastRun ? new Date(audit.lastRun).toLocaleDateString() : "-",
         lastScan: audit?.lastRun ? new Date(audit.lastRun).toLocaleString() : "-",
+        lastScanRelative: audit?.lastRun ? getRelativeTime(audit.lastRun) : "Never",
+        lastScanTimestamp: audit?.lastRun || "",
         score: audit?.score || 0,
         findings,
         rawAudit: audit
@@ -136,6 +160,46 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
     }
   }
 
+  // Count pages by type
+  const staticPages = links.filter(l => l.pageType !== 'collection').length
+  const collectionPages = links.filter(l => l.pageType === 'collection').length
+
+  // Bulk scan all pages
+  const handleBulkScan = async (includeCollections: boolean = false) => {
+    setIsBulkScanning(true)
+    setBulkScanProgress({ current: 0, total: staticPages + (includeCollections ? collectionPages : 0) })
+    setShowCollectionDialog(false)
+
+    try {
+      const response = await fetch('/api/scan-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          options: { scanCollections: includeCollections }
+        })
+      })
+
+      const result = await response.json()
+      console.log('[BulkScan] Completed:', result)
+
+      // Refresh the page to show updated results
+      window.location.reload()
+    } catch (error) {
+      console.error('[BulkScan] Failed:', error)
+    } finally {
+      setIsBulkScanning(false)
+    }
+  }
+
+  const handleScanAllClick = () => {
+    if (collectionPages > 0) {
+      setShowCollectionDialog(true)
+    } else {
+      handleBulkScan(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* KPIs */}
@@ -184,11 +248,56 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
         </Alert>
       )}
 
+      {/* Collection Dialog */}
+      {showCollectionDialog && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <Card className="max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>Scan All Pages?</CardTitle>
+              <CardDescription>
+                Found {staticPages} static page{staticPages !== 1 ? 's' : ''} and {collectionPages} collection page{collectionPages !== 1 ? 's' : ''}.
+                Collection pages (CMS items) can be resource-intensive.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowCollectionDialog(false)}>
+                Cancel
+              </Button>
+              <Button variant="secondary" onClick={() => handleBulkScan(false)}>
+                Static only ({staticPages})
+              </Button>
+              <Button onClick={() => handleBulkScan(true)}>
+                Scan all ({staticPages + collectionPages})
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Pages Table */}
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <CardTitle>Pages</CardTitle>
+            <div className="flex items-center gap-3">
+              <CardTitle>Pages</CardTitle>
+              <Button
+                size="sm"
+                onClick={handleScanAllClick}
+                disabled={isBulkScanning || links.length === 0}
+              >
+                {isBulkScanning ? (
+                  <>
+                    <Activity className="mr-2 h-4 w-4 animate-spin" />
+                    Scanning...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Scan All Pages
+                  </>
+                )}
+              </Button>
+            </div>
             <div className="flex flex-wrap gap-2">
               <div className="relative flex-1 md:w-64">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -267,7 +376,9 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
                           {page.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{page.lastScan}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground" title={page.lastScan}>
+                        {page.lastScanRelative}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Progress value={page.score} className="h-2 w-16" />

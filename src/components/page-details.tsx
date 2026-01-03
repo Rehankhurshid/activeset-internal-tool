@@ -70,10 +70,44 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [currentLink, setCurrentLink] = useState<ProjectLink | null>(null)
+  const [scanning, setScanning] = useState(false)
 
   const [compareA, setCompareA] = useState("scan-1")
   const [compareB, setCompareB] = useState("scan-2")
   const [showContentOnly, setShowContentOnly] = useState(true)
+
+  // Handle Re-scan button click - calls server-side page scanner
+  const handleRescan = async () => {
+    if (!projectId || !linkId || !currentLink?.url) return;
+
+    setScanning(true);
+    try {
+      const response = await fetch('/api/scan-pages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          linkId,
+          url: currentLink.url
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Scan failed:', error);
+        alert(`Scan failed: ${error.error || 'Unknown error'}`);
+      } else {
+        const result = await response.json();
+        console.log('Scan complete:', result);
+        // The real-time subscription will update the UI automatically
+      }
+    } catch (error) {
+      console.error('Scan request failed:', error);
+      alert('Scan request failed. Please try again.');
+    } finally {
+      setScanning(false);
+    }
+  };
 
   useEffect(() => {
     if (!projectId || !linkId) return;
@@ -141,6 +175,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
           'metaDescription': 'Meta Description',
           'wordCount': 'Word Count',
           'headings': 'Heading Structure',
+          'heading': 'Heading',
           'images': 'Images',
           'links': 'Links',
           'bodyText': 'Body Text'
@@ -168,8 +203,8 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
           content: change.changeType === 'added'
             ? `Added: ${formatValue(change.newValue, change.field)}`
             : change.changeType === 'removed'
-            ? `Removed: ${formatValue(change.oldValue, change.field)}`
-            : undefined,
+              ? `Removed: ${formatValue(change.oldValue, change.field)}`
+              : undefined,
           detectedBy: 'Smart Change Detection'
         });
       });
@@ -221,16 +256,11 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
     firstSeen: "Today"
   })) || []
 
-  const readabilityData = {
-    fleschScore: audit?.categories?.readability?.fleschScore || 0,
-    gradeLevel: audit?.categories?.readability?.label || "-",
-    wordCount: audit?.categories?.readability?.wordCount || 0,
-    sentenceCount: audit?.categories?.readability?.sentenceCount || 0,
-    difficulty: audit?.categories?.readability?.label || "Unknown",
-  }
+  // Word count for completeness check (readability card removed)
+  const wordCount = audit?.categories?.readability?.wordCount || 0
 
   const completenessChecks = [
-    { check: "Word count > 300", passed: (audit?.categories?.readability?.wordCount || 0) > 300, count: 0 },
+    { check: "Word count > 300", passed: wordCount > 300, count: wordCount },
     ...(audit?.categories?.completeness?.issues?.map(issue => ({ check: issue.detail, passed: false, count: 1 })) || [])
   ];
 
@@ -320,9 +350,9 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
               <Badge variant="outline" className={getStatusColor(pageData.status)}>
                 {pageData.status}
               </Badge>
-              <Button>
-                <Play className="mr-2 h-4 w-4" />
-                Re-scan now
+              <Button onClick={handleRescan} disabled={scanning}>
+                <Play className={`mr-2 h-4 w-4 ${scanning ? 'animate-spin' : ''}`} />
+                {scanning ? 'Scanning...' : 'Re-scan now'}
               </Button>
               <Button variant="secondary">
                 <GitCompare className="mr-2 h-4 w-4" />
@@ -384,6 +414,49 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
           </Card>
         </div>
 
+        {/* Section: Page Screenshot */}
+        {audit?.screenshot && (
+          <Card className="mb-8">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Eye className="h-5 w-5" />
+                    Page Snapshot
+                  </CardTitle>
+                  <CardDescription>
+                    Captured {audit.screenshotCapturedAt
+                      ? new Date(audit.screenshotCapturedAt).toLocaleString()
+                      : 'recently'} (after scroll to trigger animations)
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = `data:image/png;base64,${audit.screenshot}`;
+                    link.download = `screenshot-${new Date().toISOString()}.png`;
+                    link.click();
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-hidden rounded-lg border bg-muted/50">
+                <img
+                  src={`data:image/png;base64,${audit.screenshot}`}
+                  alt="Page screenshot"
+                  className="w-full h-auto"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Section B: Change Detection (Condensed) */}
         {(audit?.changeStatus === 'CONTENT_CHANGED' || audit?.changeStatus === 'TECH_CHANGE_ONLY') && (
           <Card className={`mb-8 border-opacity-20 bg-opacity-5 ${audit?.changeStatus === 'CONTENT_CHANGED'
@@ -430,12 +503,12 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                           {diff.type === "text" ? (
                             <div className="grid grid-cols-2 gap-4 text-xs">
                               <div className="p-2 bg-red-500/5 rounded border border-red-500/10">
-                                <span className="font-semibold text-red-600 block mb-1">Old:</span>
-                                {diff.before}
+                                <span className="font-semibold text-red-600 block mb-1">Before:</span>
+                                <span className="whitespace-pre-line">{diff.before}</span>
                               </div>
                               <div className="p-2 bg-green-500/5 rounded border border-green-500/10">
-                                <span className="font-semibold text-green-600 block mb-1">New:</span>
-                                {diff.after}
+                                <span className="font-semibold text-green-600 block mb-1">After:</span>
+                                <span className="whitespace-pre-line">{diff.after}</span>
                               </div>
                             </div>
                           ) : (
@@ -541,29 +614,21 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
               </CardContent>
             </Card>
 
-            {/* Readability */}
+            {/* Word Count Card (simplified from Readability) */}
             <Card>
-              <CardHeader>
-                <CardTitle>Readability</CardTitle>
-                <CardDescription>Content complexity analysis</CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle>Word Count</CardTitle>
+                <CardDescription>Content length indicator</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-lg border bg-card p-4">
-                    <div className="text-2xl font-bold">{readabilityData.fleschScore}</div>
-                    <div className="text-xs text-muted-foreground">Flesch score</div>
-                  </div>
-                  <div className="rounded-lg border bg-card p-4">
-                    <div className="text-lg font-semibold">{readabilityData.gradeLevel}</div>
-                    <div className="text-xs text-muted-foreground">Grade estimate</div>
-                  </div>
-                  <div className="rounded-lg border bg-card p-4">
-                    <div className="text-2xl font-bold">{readabilityData.wordCount}</div>
-                    <div className="text-xs text-muted-foreground">Word count</div>
-                  </div>
-                  <div className="rounded-lg border bg-card p-4">
-                    <div className="text-2xl font-bold">{readabilityData.sentenceCount}</div>
-                    <div className="text-xs text-muted-foreground">Sentence count</div>
+                <div className="flex items-center gap-4">
+                  <div className="text-3xl font-bold">{wordCount}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {wordCount >= 300 ? (
+                      <span className="text-green-600">✓ Good length</span>
+                    ) : (
+                      <span className="text-orange-600">Consider adding more content</span>
+                    )}
                   </div>
                 </div>
               </CardContent>

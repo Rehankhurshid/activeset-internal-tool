@@ -1,3 +1,5 @@
+import { WebflowConfig } from './webflow';
+
 export interface ProjectLink {
   id: string;
   title: string;
@@ -6,6 +8,8 @@ export interface ProjectLink {
   isDefault?: boolean;
   auditResult?: AuditResult;
   source?: 'manual' | 'auto';
+  locale?: string; // e.g., "en", "de", "fr" - detected from sitemap hreflang
+  pageType?: 'static' | 'collection' | 'unknown'; // Detected from Webflow or URL patterns
 }
 
 // Change status classification based on hash comparison
@@ -33,6 +37,8 @@ export interface AuditResult {
   fieldChanges?: FieldChange[]; // Detailed changes with before/after values
   diffSummary?: string; // Human readable summary of changes (e.g. "Title updated, Word count +20")
   diffPatch?: string;  // Unified diff string showing exact changes
+  screenshot?: string; // Base64 encoded PNG screenshot of the page
+  screenshotCapturedAt?: string; // ISO timestamp when screenshot was taken
   categories: {
     placeholders: {
       status: 'passed' | 'failed' | 'warning' | 'info';
@@ -114,6 +120,8 @@ export interface ExtendedContentSnapshot extends ContentSnapshot {
   links: LinkInfo[];
   sections: SectionInfo[];
   bodyTextHash: string;
+  bodyTextPreview?: string; // First 500 chars of body text for change comparison
+  headingsWithTags?: Array<{ tag: string, text: string }>; // Headings with H1/H2/H3 tags
 }
 
 // Change log entry (stored in Firestore content_changes collection)
@@ -149,6 +157,8 @@ export interface Project {
   createdAt: Date;
   updatedAt: Date;
   userId: string;
+  webflowConfig?: WebflowConfig;
+  sitemapUrl?: string; // For daily scheduled scans
 }
 
 export type CreateProjectInput = Pick<Project, 'name' | 'userId'>;

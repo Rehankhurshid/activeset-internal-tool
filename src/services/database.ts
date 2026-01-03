@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Project, ProjectLink, CreateProjectLinkInput, UpdateProjectLinkInput } from '@/types';
+import { WebflowConfig } from '@/types/webflow';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
 
@@ -66,6 +67,22 @@ export const projectsService = {
   },
 
   // Get all projects for a user
+  // Get all projects (admin/cron use)
+  async getAllProjects(): Promise<Project[]> {
+    try {
+      const querySnapshot = await getDocs(collection(db, PROJECTS_COLLECTION));
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt.toDate(),
+        updatedAt: doc.data().updatedAt.toDate(),
+      })) as Project[];
+    } catch (error) {
+      logError(error, 'getAllProjects');
+      throw new DatabaseError('Failed to fetch all projects');
+    }
+  },
+
   async getUserProjects(userId: string): Promise<Project[]> {
     try {
       // Temporarily remove orderBy to avoid index requirement
@@ -110,6 +127,15 @@ export const projectsService = {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       name,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // Update project sitemap URL
+  async updateProjectSitemap(projectId: string, sitemapUrl: string): Promise<void> {
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+      sitemapUrl,
       updatedAt: Timestamp.now(),
     });
   },
@@ -215,5 +241,33 @@ export const projectsService = {
         callback(null);
       }
     });
+  },
+
+  // Update Webflow configuration for a project
+  async updateWebflowConfig(projectId: string, config: WebflowConfig): Promise<void> {
+    try {
+      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+      await updateDoc(projectRef, {
+        webflowConfig: config,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'updateWebflowConfig');
+      throw new DatabaseError('Failed to update Webflow configuration');
+    }
+  },
+
+  // Remove Webflow configuration from a project
+  async removeWebflowConfig(projectId: string): Promise<void> {
+    try {
+      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+      await updateDoc(projectRef, {
+        webflowConfig: null,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'removeWebflowConfig');
+      throw new DatabaseError('Failed to remove Webflow configuration');
+    }
   },
 }; 

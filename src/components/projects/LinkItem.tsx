@@ -14,6 +14,14 @@ import { useMobile } from '@/hooks/useMobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { AuditDetailDialog } from './AuditDetailDialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, SquareArrowOutUpRight } from 'lucide-react';
 
 interface LinkItemProps {
   link: ProjectLink;
@@ -101,9 +109,6 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
           isUpdating ? "opacity-50" : ""
         )}
       >
-        {/* No Drag Handle in Compact Mode */}
-
-        {/* Link Content compact */}
         <div className="flex-1 min-w-0">
           <a
             href={link.url}
@@ -111,17 +116,22 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
             className="block cursor-pointer"
           >
             <div className="flex items-center gap-2">
+              {link.url && (
+                <img
+                  src={`https://www.google.com/s2/favicons?domain=${link.url}&sz=32`}
+                  alt=""
+                  className="w-4 h-4 rounded-sm flex-shrink-0 opacity-70"
+                />
+              )}
               <span className="font-medium text-sm truncate group-hover:text-foreground transition-colors">
                 {link.title}
               </span>
-              {/* URL only prominent on hover or if very simplified? Let's just keep title mostly. */}
             </div>
           </a>
         </div>
 
-        {/* Audit Score Badge - simplified or same? Same but smaller? */}
         {link.auditResult && (
-          <div className="flex items-center">
+          <div className="flex items-center flex-shrink-0">
             <div className={cn(
               "flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-medium border",
               link.auditResult.score >= 90 ? "bg-green-500/10 text-green-600 border-green-500/20" :
@@ -135,14 +145,14 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
           </div>
         )}
 
-        {/* Actions: Reveal on Group Hover */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}>
-            <Edit className="h-3 w-3 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleOpenLink}>
-            <ExternalLink className="h-3 w-3 text-muted-foreground" />
-          </Button>
+        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+          <LinkActionsDropdown
+            onEdit={() => setIsEditing(true)}
+            onDelete={(e) => { e.stopPropagation(); setIsDeleteOpen(true); }}
+            onPreview={(e) => { e.stopPropagation(); setIsModalOpen(true); }}
+            onOpenExternal={(e) => { e.stopPropagation(); handleOpenLink(); }}
+            hasUrl={!!link.url}
+          />
         </div>
       </div>
     );
@@ -153,8 +163,8 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
       ref={setNodeRef}
       style={style}
       className={`
-        flex items-center gap-3 p-3 rounded-lg border bg-card transition-all
-        ${isDragging ? 'shadow-lg opacity-90' : 'shadow-sm hover:shadow-md'}
+        relative flex items-center gap-3 p-3 rounded-lg border bg-card transition-all group
+        ${isDragging ? 'shadow-lg opacity-90 z-20' : 'shadow-sm hover:shadow-md'}
         ${isUpdating ? 'opacity-50' : ''}
       `}
     >
@@ -162,10 +172,10 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-foreground transition-colors"
+        className="touch-none cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
         disabled={isUpdating || isDeleting}
       >
-        <GripVertical className="h-4 w-4" />
+        <GripVertical className="h-5 w-5" />
       </button>
 
       {/* Link Content */}
@@ -173,13 +183,22 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
         <a
           href={link.url}
           onClick={handleLinkClick}
-          className="group block cursor-pointer"
+          className="block cursor-pointer"
         >
-          <div className="font-medium text-sm truncate group-hover:text-primary transition-colors">
-            {link.title}
+          <div className="flex items-center gap-2 mb-0.5">
+            {link.url && (
+              <img
+                src={`https://www.google.com/s2/favicons?domain=${link.url}&sz=32`}
+                alt=""
+                className="w-4 h-4 rounded-sm flex-shrink-0 opacity-70"
+              />
+            )}
+            <div className="font-medium text-sm truncate group-hover:text-primary transition-colors">
+              {link.title}
+            </div>
           </div>
           {link.url && (
-            <div className="text-xs text-muted-foreground truncate mt-0.5">
+            <div className="text-xs text-muted-foreground truncate pl-6">
               {link.url}
             </div>
           )}
@@ -188,7 +207,7 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
 
       {/* Audit Score Badge */}
       {link.auditResult && (
-        <div className="flex items-center mr-2">
+        <div className="flex items-center mr-2 flex-shrink-0 hidden sm:flex">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -229,110 +248,162 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
         </div>
       )}
 
-      {/* Action Buttons */}
-      <div className="flex gap-1">
-        {/* External Link Button */}
-        {link.url && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenLink();
-            }}
-            title="Open in new tab"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </Button>
-        )}
+      {/* Mobile Audit Badge (Simplified) */}
+      {link.auditResult && (
+        <div className="flex sm:hidden items-center flex-shrink-0" onClick={() => setIsReportOpen(true)}>
+          <div className={cn(
+            "w-3 h-3 rounded-full border",
+            link.auditResult.score >= 90 ? "bg-green-500 border-green-600" :
+              link.auditResult.score >= 70 ? "bg-yellow-500 border-yellow-600" :
+                "bg-red-500 border-red-600"
+          )} />
+        </div>
+      )}
 
-        {/* Preview Button */}
-        {link.url && (
-          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogTrigger asChild>
+      {/* Actions */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="hidden sm:flex items-center gap-1">
+          {/* Desktop Actions */}
+          {link.url && (
+            <>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsModalOpen(true);
+                  handleOpenLink();
                 }}
-                disabled={isUpdating || isDeleting}
+                title="Open in new tab"
               >
-                <Eye className="h-4 w-4" />
+                <ExternalLink className="h-4 w-4" />
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
-              <DialogHeader>
-                <DialogTitle className="flex items-center justify-between">
-                  <span>{link.title}</span>
+              <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                <DialogTrigger asChild>
                   <Button
-                    onClick={handleOpenLink}
-                    size="sm"
-                    variant="outline"
-                    className="gap-2"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsModalOpen(true);
+                    }}
                   >
-                    <ExternalLink className="h-4 w-4" />
-                    Open in new tab
+                    <Eye className="h-4 w-4" />
                   </Button>
-                </DialogTitle>
-              </DialogHeader>
-              <div className="flex-1 min-h-0">
-                <iframe
-                  src={link.url}
-                  className="w-full h-full border rounded-md"
-                  title={link.title}
-                />
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center justify-between">
+                      <span>{link.title}</span>
+                      <Button
+                        onClick={handleOpenLink}
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        Open in new tab
+                      </Button>
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="flex-1 min-h-0">
+                    <iframe
+                      src={link.url}
+                      className="w-full h-full border rounded-md"
+                      title={link.title}
+                    />
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setIsEditing(true)}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsDeleteOpen(true);
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
 
-        {/* Edit Button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => setIsEditing(true)}
-          disabled={isUpdating || isDeleting}
-        >
-          <Edit className="h-4 w-4" />
-        </Button>
-
-        {/* Delete Button */}
-        {/* Delete Button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsDeleteOpen(true);
-          }}
-          disabled={isUpdating || isDeleting}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-
-        <ConfirmDialog
-          open={isDeleteOpen}
-          onOpenChange={setIsDeleteOpen}
-          title="Delete link?"
-          description="Are you sure you want to delete this link? This action cannot be undone."
-          confirmText="Delete"
-          onConfirm={handleDelete}
-          variant="destructive"
-        />
-        <AuditDetailDialog
-          isOpen={isReportOpen}
-          onOpenChange={setIsReportOpen}
-          auditResult={link.auditResult}
-          linkTitle={link.title}
-          linkUrl={link.url}
-        />
+        {/* Mobile Actions (Dropdown) */}
+        <div className="sm:hidden">
+          <LinkActionsDropdown
+            onEdit={() => setIsEditing(true)}
+            onDelete={(e) => { e.stopPropagation(); setIsDeleteOpen(true); }}
+            onPreview={(e) => { e.stopPropagation(); setIsModalOpen(true); }}
+            onOpenExternal={(e) => { e.stopPropagation(); handleOpenLink(); }}
+            hasUrl={!!link.url}
+          />
+        </div>
       </div>
+
+      <ConfirmDialog
+        open={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+        title="Delete link?"
+        description="Are you sure you want to delete this link? This action cannot be undone."
+        confirmText="Delete"
+        onConfirm={handleDelete}
+        variant="destructive"
+      />
+      <AuditDetailDialog
+        isOpen={isReportOpen}
+        onOpenChange={setIsReportOpen}
+        auditResult={link.auditResult}
+        linkTitle={link.title}
+        linkUrl={link.url}
+      />
     </div>
+  );
+}
+
+function LinkActionsDropdown({ onEdit, onDelete, onPreview, onOpenExternal, hasUrl }: {
+  onEdit: () => void,
+  onDelete: (e: any) => void,
+  onPreview: (e: any) => void,
+  onOpenExternal: (e: any) => void,
+  hasUrl: boolean
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {hasUrl && (
+          <>
+            <DropdownMenuItem onClick={onOpenExternal}>
+              <SquareArrowOutUpRight className="mr-2 h-4 w-4" /> Open Link
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onPreview}>
+              <Eye className="mr-2 h-4 w-4" /> Preview
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem onClick={onEdit}>
+          <Edit className="mr-2 h-4 w-4" /> Edit
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onDelete} className="text-destructive">
+          <Trash2 className="mr-2 h-4 w-4" /> Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

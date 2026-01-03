@@ -43,11 +43,12 @@ export const auditService = {
     },
 
     // Get the most recent previous audit log for a link
-    async getLatestAuditLog(linkId: string): Promise<AuditLogEntry | null> {
+    async getLatestAuditLog(projectId: string, linkId: string): Promise<AuditLogEntry | null> {
         try {
             // Query without orderBy first to avoid index requirements
             const q = query(
                 collection(db, AUDIT_LOGS_COLLECTION),
+                where('projectId', '==', projectId),
                 where('linkId', '==', linkId)
                 // orderBy('timestamp', 'desc') // Requires index, doing in memory for now
             );
@@ -66,3 +67,14 @@ export const auditService = {
         }
     }
 };
+
+// Static class wrapper for use in API routes
+export class AuditService {
+    static async saveAuditLog(entry: AuditLogEntry): Promise<string> {
+        return auditService.saveAuditLog(entry);
+    }
+
+    static async getLatestAuditLog(projectId: string, linkId: string): Promise<AuditLogEntry | null> {
+        return auditService.getLatestAuditLog(projectId, linkId);
+    }
+}

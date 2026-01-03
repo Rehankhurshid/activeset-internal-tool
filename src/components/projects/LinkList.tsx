@@ -16,6 +16,7 @@ interface LinkListProps {
 
 export function LinkList({ projectId, links, limit }: LinkListProps) {
   const [sortedLinks, setSortedLinks] = useState<ProjectLink[]>([]);
+  const [filter, setFilter] = useState('');
   const { execute: executeDragEnd } = useAsyncOperation();
 
   useEffect(() => {
@@ -24,6 +25,11 @@ export function LinkList({ projectId, links, limit }: LinkListProps) {
       .sort((a, b) => a.order - b.order);
     setSortedLinks(validLinks);
   }, [links]);
+
+  const filteredLinks = sortedLinks.filter(link =>
+    link.title.toLowerCase().includes(filter.toLowerCase()) ||
+    link.url.toLowerCase().includes(filter.toLowerCase())
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -102,18 +108,36 @@ export function LinkList({ projectId, links, limit }: LinkListProps) {
       onDragEnd={handleDragEnd}
     >
       <SortableContext
-        items={sortedLinks.map(link => link.id)}
+        items={filteredLinks.map(link => link.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="space-y-2">
-          {sortedLinks.map((link) => (
-            <LinkItem
-              key={link.id}
-              link={link}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
-          ))}
+        <div className="space-y-4">
+          {links.length > 5 && (
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Filter links..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-input placeholder:text-muted-foreground"
+              />
+            </div>
+          )}
+          <div className="space-y-2">
+            {filteredLinks.map((link) => (
+              <LinkItem
+                key={link.id}
+                link={link}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            ))}
+            {filteredLinks.length === 0 && filter && (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No links match "{filter}"
+              </div>
+            )}
+          </div>
         </div>
       </SortableContext>
     </DndContext>

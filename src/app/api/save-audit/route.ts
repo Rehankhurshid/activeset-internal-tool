@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
 
         // Try to fetch previous source for true diff
         const linkId = link?.id || 'temp_link_id';
-        const prevLog = await auditService.getLatestAuditLog(linkId);
+        const prevLog = await auditService.getLatestAuditLog(projectId, linkId);
 
         if (prevLog && auditResult.htmlSource && prevLog.htmlSource) {
             // Compute unified diff if source changed
