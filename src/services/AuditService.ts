@@ -29,8 +29,16 @@ export const auditService = {
     // Save a new audit log with source
     async saveAuditLog(entry: Omit<AuditLogEntry, 'timestamp'>): Promise<string> {
         try {
+            // Truncate htmlSource if it exceeds ~900KB to leave room for other fields
+            // Firestore limit is 1MB (1,048,576 bytes)
+            let safeEntry = { ...entry };
+            if (entry.htmlSource && entry.htmlSource.length > 900000) {
+                console.warn(`[AuditService] Truncating large htmlSource (${entry.htmlSource.length} bytes) for link ${entry.linkId}`);
+                safeEntry.htmlSource = entry.htmlSource.substring(0, 900000) + '... (truncated)';
+            }
+
             const docRef = await addDoc(collection(db, AUDIT_LOGS_COLLECTION), {
-                ...entry,
+                ...safeEntry,
                 timestamp: new Date().toISOString()
             });
             return docRef.id;

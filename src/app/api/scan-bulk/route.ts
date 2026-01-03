@@ -89,21 +89,35 @@ export async function POST(request: NextRequest) {
             try {
                 console.log(`[scan-bulk] Scanning: ${link.url}`);
 
-                // Call the single page scan logic
-                const scanResult = await scanSinglePage(projectId, link, project.links);
+                const { score, changeStatus, updatedLink } = await scanSinglePage(projectId, link, project.links);
 
                 results.push({
                     linkId: link.id,
                     url: link.url,
                     success: true,
-                    score: scanResult.score,
-                    changeStatus: scanResult.changeStatus
+                    score,
+                    changeStatus
                 });
 
+                // Update the link in our local filtered list AND the main project list reference
+                // We need to keep 'project.links' up to date for the final save
+                const idx = project.links.findIndex(l => l.id === link.id);
+                if (idx !== -1 && updatedLink) {
+                    project.links[idx] = updatedLink;
+                }
+
+                // Batch Save: every 10 items or so (or just save all at end if list is < 100)
+                // Saving every 5 items to show progress in UI if user refreshes, but respecting rate limit
+                // 5 items * 500ms delay = 2.5 seconds per save => < 1 write/s
+                if (results.length % 5 === 0) {
+                    console.log('[scan-bulk] Batch saving progress...');
+                    await projectsService.updateProjectLinks(projectId, project.links);
+                }
+
                 // Update summary
-                if (scanResult.changeStatus === 'NO_CHANGE') summary.noChange++;
-                else if (scanResult.changeStatus === 'TECH_CHANGE_ONLY') summary.techChange++;
-                else if (scanResult.changeStatus === 'CONTENT_CHANGED') summary.contentChanged++;
+                if (changeStatus === 'NO_CHANGE') summary.noChange++;
+                else if (changeStatus === 'TECH_CHANGE_ONLY') summary.techChange++;
+                else if (changeStatus === 'CONTENT_CHANGED') summary.contentChanged++;
 
             } catch (error) {
                 console.error(`[scan-bulk] Failed to scan ${link.url}:`, error);
@@ -119,6 +133,10 @@ export async function POST(request: NextRequest) {
             // Small delay between scans to be nice to servers
             await new Promise(resolve => setTimeout(resolve, 500));
         }
+
+        // Final Save: Ensure all changes are persisted
+        console.log('[scan-bulk] Saving final results...');
+        await projectsService.updateProjectLinks(projectId, project.links);
 
         const response: BulkScanResponse = {
             projectId,
@@ -139,6 +157,14 @@ export async function POST(request: NextRequest) {
             { error: 'Internal Server Error' },
             { status: 500, headers: corsHeaders }
         );
+    } finally {
+        // FINAL SAVE: Ensure we save everything at the end, even if loop finished or error halfway
+        // (If error was catchable inside loop, we continue. If outside, we should try to save what we have)
+        // Re-fetching project might be safer but we have local state.
+        // If 'project' variable is available and modified.
+        // We can't access 'project' here easily due to scope if we don't wrap broad try/catch correctly, 
+        // but 'project' is defined inside try.
+        // We'll rely on the in-loop saves and one final save inside the try block.
     }
 }
 
@@ -149,7 +175,7 @@ async function scanSinglePage(
     projectId: string,
     link: ProjectLink,
     allLinks: ProjectLink[]
-): Promise<{ score: number; changeStatus: ChangeStatus }> {
+): Promise<{ score: number; changeStatus: ChangeStatus; updatedLink: ProjectLink }> {
     const scanResult = await pageScanner.scan(link.url);
 
     // Get previous audit result for comparison
@@ -218,18 +244,24 @@ async function scanSinglePage(
         categories: scanResult.categories
     };
 
-    // Update the link in the project - save to database
+    // Return the updated link object instead of saving it immediately
+    // This allows bulk operations to batch the save
+    const updatedLink: ProjectLink = {
+        ...link,
+        title: scanResult.contentSnapshot.title || link.title,
+        auditResult
+    };
+
+    /* REMOVED: Individual project update to avoid Rate Limit (1 write/s per doc) in bulk loop
     const linkIndex = allLinks.findIndex(l => l.id === link.id);
     if (linkIndex >= 0) {
-        const updatedLinks = [...allLinks]; // Copy
-        updatedLinks[linkIndex] = {
-            ...link,
-            title: scanResult.contentSnapshot.title || link.title,
-            auditResult
-        };
-
+        // ...
         await projectsService.updateProjectLinks(projectId, updatedLinks);
     }
+    */
+
+    // Save to audit_logs for history (these are new docs, high write rate allowed)
+    // ...
 
     // Save to audit_logs for history
     const auditLogData: Record<string, unknown> = {
@@ -273,5 +305,5 @@ async function scanSinglePage(
         });
     }
 
-    return { score: scanResult.score, changeStatus };
+    return { score: scanResult.score, changeStatus, updatedLink };
 }
