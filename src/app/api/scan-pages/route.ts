@@ -66,6 +66,11 @@ export async function POST(request: NextRequest) {
             prevResult?.contentHash
         );
 
+        console.log(`[scan-pages] URL: ${url}`);
+        console.log(`[scan-pages] New Hash: ${scanResult.fullHash.substring(0, 10)} (Content: ${scanResult.contentHash.substring(0, 10)})`);
+        console.log(`[scan-pages] Prev Hash: ${prevResult?.fullHash?.substring(0, 10)} (Content: ${prevResult?.contentHash?.substring(0, 10)})`);
+        console.log(`[scan-pages] Result: ${changeStatus}`);
+
         console.log(`[scan-pages] Change status: ${changeStatus}`);
 
         // Get previous HTML source for diff
