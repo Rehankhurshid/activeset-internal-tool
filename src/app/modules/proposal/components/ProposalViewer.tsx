@@ -447,31 +447,30 @@ ${proposal.agencyName}`;
             }}>
 
               {/* Header Content */}
-              <div style={{
-                position: 'relative',
-                padding: '48px',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between'
-              }}>
+              <div className="p-6 sm:p-8 md:p-12 h-full flex flex-col justify-between">
                 <div style={{ color: '#ffffff' }}>
-                  <h1 style={{ fontSize: '36px', fontWeight: 700, marginBottom: '16px', color: '#ffffff', fontFamily: FONT_TITLE }}>{proposal.title}</h1>
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 text-white break-words" style={{ fontFamily: FONT_TITLE }}>{proposal.title}</h1>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', color: '#ffffff' }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 text-white">
                   <div>
                     <p style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', color: '#bfdbfe' }}>Agency</p>
-                    <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '4px', color: '#ffffff', fontFamily: FONT_TITLE }}>{proposal.agencyName}</h3>
-                    <p style={{ color: '#dbeafe', opacity: 0.7 }}>
-                      {proposal.data.signatures.agency.name} &lt;{proposal.data.signatures.agency.email}&gt;
+                    <h3 className="text-lg sm:text-xl font-semibold mb-1 text-white break-words" style={{ fontFamily: FONT_TITLE }}>{proposal.agencyName}</h3>
+                    <p className="text-sm text-blue-100 opacity-90 break-all">
+                      {proposal.data.signatures.agency.name}
+                    </p>
+                    <p className="text-sm text-blue-100 opacity-90 break-all">
+                      {proposal.data.signatures.agency.email}
                     </p>
                   </div>
                   <div>
                     <p style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', color: '#bfdbfe' }}>Client</p>
-                    <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '4px', color: '#ffffff', fontFamily: FONT_TITLE }}>{proposal.clientName}</h3>
-                    <p style={{ color: '#dbeafe', opacity: 0.7 }}>
-                      {proposal.data.signatures.client.name} &lt;{proposal.data.signatures.client.email}&gt;
+                    <h3 className="text-lg sm:text-xl font-semibold mb-1 text-white break-words" style={{ fontFamily: FONT_TITLE }}>{proposal.clientName}</h3>
+                    <p className="text-sm text-blue-100 opacity-90 break-all">
+                      {proposal.data.signatures.client.name}
+                    </p>
+                    <p className="text-sm text-blue-100 opacity-90 break-all">
+                      {proposal.data.signatures.client.email}
                     </p>
                   </div>
                 </div>
@@ -479,7 +478,7 @@ ${proposal.agencyName}`;
             </div>
 
             {/* Content Sections */}
-            <div style={{ padding: '48px', display: 'flex', flexDirection: 'column', gap: '64px' }}>
+            <div className="p-6 sm:p-8 md:p-12 flex flex-col gap-12 sm:gap-16">
               {/* Overview */}
               <section className="grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8">
                 <div>
@@ -713,22 +712,28 @@ ${proposal.agencyName}`;
                     };
 
                     return (
-                      <div className="w-full overflow-x-auto" style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #f3f4f6', pageBreakInside: 'avoid' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                          <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: FONT_TITLE }}>Project Schedule</h3>
+                      <div className="w-full overflow-x-auto scrollbar-thin scrollbar-thumb-blue-200 scrollbar-track-gray-100 hover:scrollbar-thumb-blue-300 transition-all duration-300" style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #f3f4f6', pageBreakInside: 'avoid' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                          <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2" style={{ fontFamily: FONT_TITLE }}>
+                            <span className="text-lg">📅</span> Project Schedule
+                          </h3>
                           {!isGeneratingPdf && (
-                            <span style={{ fontSize: '11px', color: '#9ca3af' }}>Hover to view dates</span>
+                            <span className="text-xs text-gray-400 hidden sm:inline">
+                              <span className="hidden md:inline">Hover to view dates • </span>
+                              Scroll horizontally on mobile →
+                            </span>
                           )}
                         </div>
 
-                        <div style={{
+                        <div className="group hover:shadow-lg transition-all duration-300" style={{
                           display: 'flex',
                           width: `${TOTAL_WIDTH}px`,
+                          minWidth: '800px',
                           backgroundColor: '#ffffff',
-                          borderRadius: '8px',
+                          borderRadius: '12px',
                           border: '1px solid #e5e7eb',
                           overflow: 'hidden',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
                         }}>
                           {/* SIDEBAR */}
                           <div style={{
@@ -1051,8 +1056,6 @@ ${proposal.agencyName}`;
             </div>
 
             {/* Client Signature Section */}
-            {/* Client Signature Section */}
-            {/* Client Signature Section */}
             <SignatureSection
               clientName={currentProposal.data.signatures.client.name}
               existingSignature={currentProposal.data.signatures.client.signatureData}
@@ -1075,6 +1078,19 @@ ${proposal.agencyName}`;
           </div>
         </div>
       </div>
+
+      {/* Floating Mobile CTA for signing - only on mobile and when not signed */}
+      {isPublic && !currentProposal.data.signatures.client.signedAt && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent md:hidden z-40 animate-slideUp">
+          <Button
+            onClick={() => document.getElementById('signature-section')?.scrollIntoView({ behavior: 'smooth' })}
+            className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold shadow-2xl flex items-center justify-center gap-3 rounded-xl animate-pulse-subtle"
+          >
+            <PenLine className="w-5 h-5" />
+            Sign Proposal Now
+          </Button>
+        </div>
+      )}
     </div>
 
   );
