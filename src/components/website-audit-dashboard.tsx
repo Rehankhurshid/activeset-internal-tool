@@ -75,7 +75,13 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
       else if (audit.canDeploy === false) displayStatus = "Blocked";
       else if (audit.changeStatus === 'CONTENT_CHANGED') displayStatus = "Content changed";
       else if (audit.changeStatus === 'TECH_CHANGE_ONLY') displayStatus = "Tech-only change";
-      else if (audit.changeStatus === 'SCAN_FAILED') displayStatus = "Scan failed";
+      if (audit?.changeStatus === 'SCAN_FAILED') displayStatus = "Scan failed";
+
+      // Override status during bulk scan to provide immediate feedback
+      // This solves the "Pending" confusion while the server is crushing through the list
+      if (isBulkScanning) {
+        displayStatus = "Scanning...";
+      }
 
       // Findings aggregation
       const findings = [];
@@ -155,6 +161,8 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
         return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
       case "Scan failed":
         return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20"
+      case "Scanning...":
+        return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 animate-pulse"
       default:
         return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20"
     }
@@ -342,6 +350,15 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
             </div>
           </div>
         </CardHeader>
+        {isBulkScanning && (
+          <div className="px-6 pb-2">
+            <div className="flex justify-between text-xs mb-1">
+              <span>Scanning {bulkScanProgress.total} pages...</span>
+              <span>Please wait...</span>
+            </div>
+            <Progress value={undefined} className="h-2 w-full animate-pulse" />
+          </div>
+        )}
         <CardContent>
           <div className="overflow-x-auto">
             {filteredPages.length === 0 ? (
