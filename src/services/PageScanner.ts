@@ -155,9 +155,16 @@ export class PageScanner {
         });
 
         // Compute hashes
-        // Ignore "Last Published" timestamp from Webflow to prevent false positive Tech Changes
-        const htmlForHash = htmlSource.replace(/<!--\s*Last Published:.*?-->/g, '');
-        const fullHash = createHash('sha256').update(htmlForHash).digest('hex');
+
+        // Remove known dynamic noise sections to prevent false positive Tech Changes
+        // These sections change on every load (random related posts, etc) but are not 'real' changes
+        $('.stories-listing_item, .stories-listing-wrapper').remove();
+
+        // Use the cleaned DOM structure for hashing instead of raw source
+        // This ensures removed scripts/styles/noise are actually ignored
+        const cleanedHtml = $.html().replace(/<!--\s*Last Published:.*?-->/g, '');
+
+        const fullHash = createHash('sha256').update(cleanedHtml).digest('hex');
         const contentHash = bodyTextHash;
 
         // Build content snapshot
