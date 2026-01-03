@@ -74,6 +74,10 @@ export class PageScanner {
         // Remove scripts, styles, and structural elements for content extraction
         $('script, style, noscript, iframe, svg').remove();
 
+        // Remove known dynamic noise sections to prevent false positive Tech Changes
+        // These sections change on every load (random related posts, etc) but are not 'real' changes
+        $('.stories-listing_item, .stories-listing-wrapper').remove();
+
         // Extract metadata
         const title = $('title').text().trim() || '';
         const h1 = $('h1').first().text().trim() || '';
@@ -155,17 +159,21 @@ export class PageScanner {
         });
 
         // Compute hashes
-
-        // Remove known dynamic noise sections to prevent false positive Tech Changes
-        // These sections change on every load (random related posts, etc) but are not 'real' changes
-        $('.stories-listing_item, .stories-listing-wrapper').remove();
-
-        // Use the cleaned DOM structure for hashing instead of raw source
-        // This ensures removed scripts/styles/noise are actually ignored
-        const cleanedHtml = $.html().replace(/<!--\s*Last Published:.*?-->/g, '');
-
-        const fullHash = createHash('sha256').update(cleanedHtml).digest('hex');
         const contentHash = bodyTextHash;
+
+        // Build data object for canonical Full Hash (Data-Driven Hash)
+        // This relies ONLY on extracted content, ignoring HTML structure/classes/attributes/comments
+        const dataForHash = {
+            title,
+            h1,
+            metaDescription,
+            wordCount,
+            headingsWithTags,
+            images,
+            links,
+            bodyText // Include full body text in hash
+        };
+        const fullHash = createHash('sha256').update(JSON.stringify(dataForHash)).digest('hex');
 
         // Build content snapshot
         const contentSnapshot: ExtendedContentSnapshot = {

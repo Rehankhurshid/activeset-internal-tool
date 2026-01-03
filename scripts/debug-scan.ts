@@ -63,9 +63,9 @@ async function fetchAndClean(url: string) {
 
     // NEW: Remove dynamic noise
     // The specific class from debug log was "stories-listing_item"
-    // $('.stories-listing_item').remove(); 
-    // $('.stories-listing-wrapper').remove(); 
-    // $('.w-dyn-list').remove();
+    $('.stories-listing_item').remove();
+    $('.stories-listing-wrapper').remove();
+    $('.w-dyn-list').remove();
 
     let cleanedHtml = $.html();
     cleanedHtml = cleanedHtml.replace(/<!--\s*Last Published:.*?-->/g, '');
