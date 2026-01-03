@@ -155,7 +155,9 @@ export class PageScanner {
         });
 
         // Compute hashes
-        const fullHash = createHash('sha256').update(htmlSource).digest('hex');
+        // Ignore "Last Published" timestamp from Webflow to prevent false positive Tech Changes
+        const htmlForHash = htmlSource.replace(/<!--\s*Last Published:.*?-->/g, '');
+        const fullHash = createHash('sha256').update(htmlForHash).digest('hex');
         const contentHash = bodyTextHash;
 
         // Build content snapshot
