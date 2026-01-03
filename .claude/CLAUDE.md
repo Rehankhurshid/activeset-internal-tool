@@ -68,7 +68,11 @@ Feature documentation is located in `/docs/features/`:
 
 | Feature | Documentation |
 |---------|--------------|
+| Project Links | [docs/features/project-links.md](../docs/features/project-links.md) |
+| Audit Dashboard | [docs/features/audit-dashboard.md](../docs/features/audit-dashboard.md) |
 | Webflow Pages | [docs/features/webflow-pages.md](../docs/features/webflow-pages.md) |
+| Proposals | [docs/features/proposal.md](../docs/features/proposal.md) |
+| Settings Module | [docs/features/settings.md](../docs/features/settings.md) |
 
 API documentation is in `/docs/misc/`:
 
