@@ -11,9 +11,10 @@ import { templateService } from './services/TemplateService';
 import { Proposal, ProposalTemplate, ViewType } from './types/Proposal';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { useAuth } from '@/hooks/useAuth';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ShieldX } from 'lucide-react';
+import { ShieldX } from 'lucide-react';
+import { AppNavigation } from '@/components/navigation/AppNavigation';
+import Link from 'next/link';
 
 export default function ProposalPage() {
     const { hasAccess, loading: accessLoading } = useModuleAccess('proposal');
@@ -336,14 +337,11 @@ export default function ProposalPage() {
 
     return (
         <>
-            <div className="fixed top-4 left-4 z-50">
-                <Link href="/">
-                    <Button variant="outline" className="flex items-center gap-2">
-                        <ArrowLeft className="w-4 h-4" />
-                        Back to Dashboard
-                    </Button>
-                </Link>
-            </div>
+            <AppNavigation 
+                title="Proposals"
+                showBackButton
+                backHref="/"
+            />
             <Dashboard
                 proposals={proposals}
                 templates={templates}

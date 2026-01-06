@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Existing rules (keep your current rules and add these)
+    
+    // Proposal Comments - allow authenticated agency users and public access for shared proposals
+    match /proposal_comments/{commentId} {
+      // Allow authenticated users to read/write comments
+      allow read, write: if request.auth != null;
+      
+      // Allow unauthenticated users to add comments on shared proposals (for clients)
+      allow create: if request.resource.data.authorType == 'client';
+      allow read: if true;
+    }
+    
+    // Proposal History - read-only for authenticated users, write via service
+    match /proposal_history/{historyId} {
+      // Allow authenticated users to read history
+      allow read: if request.auth != null;
+      
+      // Allow writes from authenticated users (for edit tracking)
+      allow write: if request.auth != null;
+      
+      // Allow unauthenticated writes for signature events (clients signing)
+      allow create: if request.resource.data.changeType == 'signed';
+    }
+  }
+}

@@ -3,20 +3,20 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, LogOut, User, Sparkles, Search, LayoutGrid, List, FolderOpen, Link as LinkIcon } from 'lucide-react';
+import { Plus, Sparkles, Search, LayoutGrid, List, FolderOpen, Link as LinkIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Project } from '@/types';
 import { projectsService } from '@/services/database';
 import { ProjectCard } from '@/components/projects/ProjectCard';
-import { ModeToggle } from '@/components/mode-toggle';
 import { Card, CardContent } from "@/components/ui/card";
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { AppNavigation } from '@/components/navigation/AppNavigation';
 
 export function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -80,81 +80,70 @@ export function Dashboard() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-background text-foreground flex flex-col">
-        {/* Header */}
-        <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex h-16 items-center px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-4 flex-1">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M2 7L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M12 22V12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M22 7L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M17 4.5L7 9.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span className="font-semibold text-lg">Project Links</span>
-              <Badge variant="secondary" className="hidden sm:inline-flex">
-                <Sparkles className="h-3 w-3 mr-1" />
-                Live Sync
-              </Badge>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden md:flex items-center gap-2 text-sm">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">{user?.email}</span>
-              </div>
-              <ModeToggle />
-              <Button variant="outline" size="sm" onClick={logout}>
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline-flex ml-2">Sign Out</span>
-              </Button>
-            </div>
-          </div>
-        </header>
+        <AppNavigation 
+          title="Project Links"
+          showBackButton
+          backHref="/"
+        >
+          <Badge variant="secondary" className="hidden sm:inline-flex">
+            <Sparkles className="h-3 w-3 mr-1" />
+            Live Sync
+          </Badge>
+        </AppNavigation>
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="container mx-auto p-4 md:p-6 lg:p-8">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
             {/* Page Header */}
-            <div className="mb-6 md:mb-8">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Your Projects</h1>
-                  <p className="text-muted-foreground mt-1 text-sm md:text-base">
+            <div className="mb-4 sm:mb-6 lg:mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">Your Projects</h1>
+                  <p className="text-muted-foreground mt-1 text-xs sm:text-sm lg:text-base">
                     Manage your project links
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <Button
                     variant={viewMode === 'grid' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setViewMode('grid')}
+                    aria-label="Grid view"
                   >
                     <LayoutGrid className="h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:ml-2">Grid</span>
                   </Button>
                   <Button
                     variant={viewMode === 'list' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setViewMode('list')}
+                    aria-label="List view"
                   >
                     <List className="h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:ml-2">List</span>
                   </Button>
                 </div>
               </div>
 
               {/* Search and Create Row */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                   <Input
                     placeholder="Search projects..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
+                    className="pl-9 w-full"
+                    aria-label="Search projects"
                   />
                 </div>
-                <Button onClick={() => setIsCreating(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Project
+                <Button 
+                  onClick={() => setIsCreating(true)}
+                  className="w-full sm:w-auto shrink-0"
+                >
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">New Project</span>
+                  <span className="sm:hidden">New</span>
                 </Button>
               </div>
 

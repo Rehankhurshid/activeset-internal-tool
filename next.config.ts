@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   serverExternalPackages: ['puppeteer', '@sparticuz/chromium'],
   output: 'standalone',
+  images: {
+    domains: ['www.google.com'],
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 60,
+  },
   async headers() {
     return [
       {
@@ -15,7 +20,10 @@ const nextConfig: NextConfig = {
         ]
       }
     ]
-  }
+  },
+  experimental: {
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
+  },
 };
 
 export default nextConfig;

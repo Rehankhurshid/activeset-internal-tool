@@ -59,13 +59,13 @@ async function fetchAndClean(url: string) {
     const $ = cheerio.load(html);
 
     // Simulate PageScanner cleaning + FIX
-    $('script, style, noscript, iframe, svg').remove();
+    // $('script, style, noscript, iframe, svg').remove();
 
     // NEW: Remove dynamic noise
-    // The specific class from debug log was "stories-listing_item"
-    $('.stories-listing_item').remove();
-    $('.stories-listing-wrapper').remove();
-    $('.w-dyn-list').remove();
+    // THE USER WANTS TO SEE CHANGES. So we DISABLE cleaning to show them the noise.
+    // $('.stories-listing_item').remove(); 
+    // $('.stories-listing-wrapper').remove(); 
+    // $('.w-dyn-list').remove();
 
     let cleanedHtml = $.html();
     cleanedHtml = cleanedHtml.replace(/<!--\s*Last Published:.*?-->/g, '');

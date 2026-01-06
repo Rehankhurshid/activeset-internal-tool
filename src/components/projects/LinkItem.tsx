@@ -121,6 +121,8 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
                   src={`https://www.google.com/s2/favicons?domain=${link.url}&sz=32`}
                   alt=""
                   className="w-4 h-4 rounded-sm flex-shrink-0 opacity-70"
+                  loading="lazy"
+                  decoding="async"
                 />
               )}
               <span className="font-medium text-sm truncate group-hover:text-foreground transition-colors">
@@ -191,6 +193,8 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
                 src={`https://www.google.com/s2/favicons?domain=${link.url}&sz=32`}
                 alt=""
                 className="w-4 h-4 rounded-sm flex-shrink-0 opacity-70"
+                loading="lazy"
+                decoding="async"
               />
             )}
             <div className="font-medium text-sm truncate group-hover:text-primary transition-colors">

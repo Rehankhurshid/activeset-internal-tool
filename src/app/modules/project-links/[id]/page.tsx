@@ -19,7 +19,7 @@ import { WebsiteAuditDashboard } from '@/components/website-audit-dashboard';
 import { ScanSitemapDialog } from '@/components/scan-sitemap-dialog';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
-import { ModeToggle } from '@/components/mode-toggle';
+import { AppNavigation } from '@/components/navigation/AppNavigation';
 import { WebflowPagesDashboard } from '@/components/webflow/WebflowPagesDashboard';
 import { WebflowConfig } from '@/types/webflow';
 import { toast } from 'sonner';
@@ -126,18 +126,26 @@ export default function ProjectDetailPage({ params }: PageProps) {
     }
 
     return (
-        <div className="container mx-auto py-4 md:py-8 px-4 space-y-6 md:space-y-8">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" asChild>
-                        <Link href="/modules/project-links"><ArrowLeft size={20} /></Link>
-                    </Button>
-                    <div>
+        <div className="min-h-screen bg-background flex flex-col">
+            <AppNavigation 
+                title={project.name}
+                showBackButton
+                backHref="/modules/project-links"
+            >
+                <Button variant="outline" size="sm" onClick={() => setIsEmbedDialogOpen(true)}>
+                    <Code className="mr-2 h-4 w-4" />
+                    <span className="hidden sm:inline">Embed</span>
+                </Button>
+            </AppNavigation>
+            
+            <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6 lg:space-y-8">
+                {/* Project Info */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
                         <InlineEdit
                             value={project.name}
                             onSave={handleUpdateProjectName}
-                            className="text-2xl md:text-3xl font-bold tracking-tight"
+                            className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight"
                         />
                         <div className="flex items-center gap-2 text-muted-foreground mt-1">
                             <Badge variant="secondary" className="font-mono text-xs">
@@ -146,57 +154,52 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         </div>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <ModeToggle />
-                    <Button variant="outline" size="sm" onClick={() => setIsEmbedDialogOpen(true)}>
-                        <Code className="mr-2 h-4 w-4" />
-                        <span className="hidden sm:inline">Embed</span>
-                    </Button>
-                </div>
-            </div>
 
-            {/* Main Content */}
-            <Tabs defaultValue="audit" value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <div className="flex items-center justify-between mb-6">
-                    <TabsList>
-                        <TabsTrigger value="audit" className="gap-2">
-                            <LayoutDashboard className="h-4 w-4" />
-                            <span className="hidden sm:inline">Audit Dashboard</span>
-                            <span className="sm:hidden">Audit</span>
-                        </TabsTrigger>
-                        <TabsTrigger value="webflow" className="gap-2">
-                            <Globe className="h-4 w-4" />
-                            <span className="hidden sm:inline">Webflow Pages</span>
-                            <span className="sm:hidden">Webflow</span>
-                        </TabsTrigger>
-                    </TabsList>
+                {/* Main Content */}
+                <Tabs defaultValue="audit" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
+                        <TabsList className="w-full sm:w-auto">
+                            <TabsTrigger value="audit" className="gap-2 flex-1 sm:flex-none">
+                                <LayoutDashboard className="h-4 w-4" />
+                                <span className="hidden sm:inline">Audit Dashboard</span>
+                                <span className="sm:hidden">Audit</span>
+                            </TabsTrigger>
+                            <TabsTrigger value="webflow" className="gap-2 flex-1 sm:flex-none">
+                                <Globe className="h-4 w-4" />
+                                <span className="hidden sm:inline">Webflow Pages</span>
+                                <span className="sm:hidden">Webflow</span>
+                            </TabsTrigger>
+                        </TabsList>
 
-                    {/* Show Scan Sitemap when in audit tab */}
-                    {activeTab === 'audit' && (
-                        <ScanSitemapDialog projectId={project.id} />
-                    )}
-                </div>
+                        {/* Show Scan Sitemap when in audit tab */}
+                        {activeTab === 'audit' && (
+                            <div className="w-full sm:w-auto">
+                                <ScanSitemapDialog projectId={project.id} />
+                            </div>
+                        )}
+                    </div>
 
-                <TabsContent value="audit" className="mt-6">
-                    <WebsiteAuditDashboard links={project.links.filter(l => l.source === 'auto')} projectId={project.id} />
-                </TabsContent>
+                    <TabsContent value="audit" className="mt-4 sm:mt-6">
+                        <WebsiteAuditDashboard links={project.links.filter(l => l.source === 'auto')} projectId={project.id} />
+                    </TabsContent>
 
-                <TabsContent value="webflow" className="mt-6">
-                    <WebflowPagesDashboard
-                        projectId={project.id}
-                        webflowConfig={project.webflowConfig}
-                        onSaveConfig={handleSaveWebflowConfig}
-                        onRemoveConfig={handleRemoveWebflowConfig}
-                    />
-                </TabsContent>
-            </Tabs>
+                    <TabsContent value="webflow" className="mt-4 sm:mt-6">
+                        <WebflowPagesDashboard
+                            projectId={project.id}
+                            webflowConfig={project.webflowConfig}
+                            onSaveConfig={handleSaveWebflowConfig}
+                            onRemoveConfig={handleRemoveWebflowConfig}
+                        />
+                    </TabsContent>
+                </Tabs>
 
-            <EmbedDialog
-                isOpen={isEmbedDialogOpen}
-                onOpenChange={setIsEmbedDialogOpen}
-                projectId={project.id}
-                projectName={project.name}
-            />
+                <EmbedDialog
+                    isOpen={isEmbedDialogOpen}
+                    onOpenChange={setIsEmbedDialogOpen}
+                    projectId={project.id}
+                    projectName={project.name}
+                />
+            </main>
         </div>
     );
 }

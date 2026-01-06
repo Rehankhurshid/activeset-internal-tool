@@ -1,3 +1,48 @@
+// Section IDs for comments and history tracking
+export type ProposalSectionId =
+    | 'overview'
+    | 'aboutUs'
+    | 'pricing'
+    | 'timeline'
+    | 'terms'
+    | 'signatures'
+    | 'general';
+
+// Comment types for Google Doc-style inline commenting
+export interface ProposalComment {
+    id: string;
+    proposalId: string;
+    sectionId: ProposalSectionId;
+    authorName: string;
+    authorEmail: string;
+    authorType: 'agency' | 'client';
+    content: string;
+    createdAt: string;
+    resolved?: boolean;
+    resolvedAt?: string;
+    resolvedBy?: string;
+    parentId?: string;  // For threaded replies
+}
+
+// Version history types - stores detailed field-level changes
+export interface FieldChange {
+    field: string;           // e.g., "title", "data.pricing.total", "data.timeline.phases[0].title"
+    oldValue?: string;       // Previous value (truncated if too long)
+    newValue?: string;       // New value (truncated if too long)
+}
+
+export interface ProposalEdit {
+    id: string;
+    proposalId: string;
+    timestamp: string;
+    editorName: string;
+    editorEmail: string;
+    sectionChanged: ProposalSectionId;
+    changeType: 'create' | 'update' | 'status_change' | 'signed';
+    summary: string;         // Human-readable summary
+    changes?: FieldChange[]; // Detailed list of what changed (optional for backwards compat)
+}
+
 export interface Proposal {
     id: string;
     createdBy?: {
@@ -12,6 +57,10 @@ export interface Proposal {
     status: 'draft' | 'sent' | 'approved' | 'rejected';
     createdAt: string;
     updatedAt: string;
+    // Edit locking - prevents changes after signature
+    isLocked?: boolean;
+    lockedAt?: string;
+    lockedReason?: 'signed' | 'archived';
     data: {
         overview: string;
         overviewDetails?: {

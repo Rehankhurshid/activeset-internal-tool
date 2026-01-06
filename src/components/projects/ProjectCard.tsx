@@ -222,6 +222,8 @@ function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDe
                         src={`https://www.google.com/s2/favicons?domain=${link.url}&sz=32`}
                         alt=""
                         className="w-3.5 h-3.5 opacity-80"
+                        loading="lazy"
+                        decoding="async"
                         onError={(e) => {
                             e.currentTarget.style.display = 'none';
                             e.currentTarget.nextElementSibling?.classList.remove('hidden');
