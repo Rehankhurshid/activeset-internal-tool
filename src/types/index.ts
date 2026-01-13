@@ -12,6 +12,25 @@ export interface ProjectLink {
   pageType?: 'static' | 'collection' | 'unknown'; // Detected from Webflow or URL patterns
 }
 
+// --- PAGE TYPE RULES ---
+// Used by the audit dashboard to classify pages based on URL patterns.
+export interface PageTypeRule {
+  id: string;
+  name: string;
+  /**
+   * A simple URL-matching pattern. Interpreted as:
+   * - `matchType: 'contains'`: substring match
+   * - `matchType: 'glob'`: `*` wildcards supported
+   * - `matchType: 'regex'`: JavaScript RegExp source
+   */
+  pattern: string;
+  matchType: 'contains' | 'glob' | 'regex';
+  pageType: 'static' | 'collection' | 'unknown';
+  enabled: boolean;
+  createdAt?: string; // ISO string
+  updatedAt?: string; // ISO string
+}
+
 // Change status classification based on hash comparison
 export type ChangeStatus = 'NO_CHANGE' | 'TECH_CHANGE_ONLY' | 'CONTENT_CHANGED' | 'SCAN_FAILED';
 

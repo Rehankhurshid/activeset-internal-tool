@@ -53,6 +53,35 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
   const [showHistory, setShowHistory] = useState(false)
   const [localRules, setLocalRules] = useState<PageTypeRule[]>(pageTypeRules)
 
+  // Load persisted rules (no backend API yet)
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return
+      const raw = window.localStorage.getItem(`pageTypeRules:${projectId}`)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as PageTypeRule[]
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setLocalRules(parsed)
+      }
+    } catch {
+      // ignore
+    }
+  }, [projectId])
+
+  const persistRules = useCallback(
+    (rules: PageTypeRule[]) => {
+      setLocalRules(rules)
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(`pageTypeRules:${projectId}`, JSON.stringify(rules))
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [projectId],
+  )
+
   // Bulk scan state
   const [isBulkScanning, setIsBulkScanning] = useState(false)
   const [bulkScanProgress, setBulkScanProgress] = useState({ 
@@ -658,7 +687,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       <PageTypeRulesDialog
         projectId={projectId}
         rules={localRules}
-        onRulesChange={setLocalRules}
+        onRulesChange={persistRules}
         open={showRulesDialog}
         onOpenChange={setShowRulesDialog}
       />
@@ -671,7 +700,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
         detectedPatterns={detectedPatternsFromLinks}
         existingRules={localRules}
         onSaveRules={(rules) => {
-          setLocalRules(rules)
+          persistRules(rules)
           setShowReviewDialog(false)
           // Reload to apply new rules
           window.location.reload()
