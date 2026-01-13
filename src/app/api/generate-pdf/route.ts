@@ -145,8 +145,9 @@ export async function POST(req: NextRequest) {
         page.setDefaultNavigationTimeout(60000);
         page.setDefaultTimeout(60000);
 
-        // Set viewport to approximate A4 width (at 96 DPI, A4 is ~794px wide)
-        await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
+        // Set viewport to match web view container width (max-w-4xl = 896px)
+        // This ensures consistent spacing between web view and PDF
+        await page.setViewport({ width: 896, height: 1123, deviceScaleFactor: 2 });
 
         console.log("Setting content...");
         // Use networkidle2 (wait for <= 2 connections) which is more robust than networkidle0

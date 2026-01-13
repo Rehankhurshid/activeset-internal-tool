@@ -245,6 +245,12 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
       // Clone the element with all computed styles
       const clone = cloneWithStyles(element);
       
+      // Set fixed width matching web container (max-w-4xl = 896px)
+      // This ensures consistent spacing between web view and PDF
+      clone.style.width = '896px';
+      clone.style.maxWidth = '896px';
+      clone.style.margin = '0';
+      
       // Remove box shadow for cleaner PDF
       clone.style.boxShadow = 'none';
       
@@ -291,6 +297,12 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
                 padding: 0; 
                 font-family: 'Funnel Sans', system-ui, -apple-system, sans-serif;
                 -webkit-font-smoothing: antialiased;
+                display: flex;
+                justify-content: center;
+              }
+              .pdf-wrapper {
+                width: 896px;
+                max-width: 896px;
               }
               img {
                 max-width: 100%;
@@ -320,7 +332,9 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
             </style>
           </head>
           <body>
-            ${htmlContent}
+            <div class="pdf-wrapper">
+              ${htmlContent}
+            </div>
           </body>
         </html>
       `;
