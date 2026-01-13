@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react"
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import NextLink from "next/link"
 import { ProjectLink, AuditResult, PageTypeRule } from "@/types"
 import { PageTypeRulesDialog } from "@/components/PageTypeRulesEditor"
@@ -257,6 +257,17 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       return new Date(b.lastScan).getTime() - new Date(a.lastScan).getTime();
     });
   }, [pagesData, searchQuery, statusFilter, localeFilter, pageTypeFilter, showOnlyChanged, sortBy]);
+
+  // Group filtered pages by type (CMS first, then Static)
+  const groupedPages = useMemo(() => {
+    const cmsPages = filteredPages.filter(p => p.pageType === 'collection');
+    const staticPages = filteredPages.filter(p => p.pageType !== 'collection');
+    
+    return [
+      { type: 'collection', label: 'CMS Pages', icon: Database, pages: cmsPages },
+      { type: 'static', label: 'Static Pages', icon: File, pages: staticPages }
+    ].filter(group => group.pages.length > 0);
+  }, [filteredPages]);
 
   // 3. Compute KPI Metrics
   const metrics = useMemo(() => {
@@ -603,7 +614,6 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                   <TableRow>
                     <TableHead>Page Title / URL</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Type</TableHead>
                     <TableHead>Last Scan</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Findings</TableHead>
@@ -611,71 +621,78 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPages.map((page) => (
-                    <TableRow key={page.id}>
-                      <TableCell className="font-medium max-w-[250px] truncate">
-                        <div className="flex items-center gap-2">
-                          <div className="font-semibold block truncate flex-1" title={page.title}>{page.title || 'Untitled'}</div>
-                          {page.locale && (
-                            <Badge variant="secondary" className="text-xs shrink-0 bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20">
-                              {page.locale.toUpperCase()}
-                            </Badge>
-                          )}
-                        </div>
-                        <NextLink
-                          href={`/modules/project-links/${projectId}/audit/${page.id}`}
-                          className="hover:underline text-xs text-blue-600 dark:text-blue-400 block truncate"
-                          title={page.path}
-                        >
-                          {page.path}
-                        </NextLink>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={getStatusColor(page.status)}>
-                          {page.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {page.pageType === 'collection' ? (
-                          <Badge variant="secondary" className="text-xs bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/20 flex items-center gap-1 w-fit">
-                            <Database className="h-3 w-3" />
-                            CMS
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-xs bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-500/20 flex items-center gap-1 w-fit">
-                            <File className="h-3 w-3" />
-                            Static
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground" title={page.lastScan}>
-                        {page.lastScanRelative}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Progress value={page.score} className="h-2 w-16" />
-                          <span className="text-sm font-medium">{page.score}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {page.findings.length === 0 && <span className="text-xs text-muted-foreground">-</span>}
-                          {page.findings.map((finding, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">
-                              {finding}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" asChild>
-                            <NextLink href={`/modules/project-links/${projectId}/audit/${page.id}`}>View details</NextLink>
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {groupedPages.map((group) => {
+                    const GroupIcon = group.icon;
+                    return (
+                      <React.Fragment key={`group-${group.type}`}>
+                        {/* Group Header */}
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableCell colSpan={6} className="py-2">
+                            <div className="flex items-center gap-2 font-medium">
+                              <GroupIcon className="h-4 w-4" />
+                              <span>{group.label}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {group.pages.length}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        {/* Group Pages */}
+                        {group.pages.map((page) => (
+                          <TableRow key={page.id}>
+                            <TableCell className="font-medium max-w-[300px]">
+                              <div className="flex items-center gap-2">
+                                <div className="font-semibold block truncate flex-1" title={page.title}>{page.title || 'Untitled'}</div>
+                                {page.locale && (
+                                  <Badge variant="secondary" className="text-xs shrink-0 bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20">
+                                    {page.locale.toUpperCase()}
+                                  </Badge>
+                                )}
+                              </div>
+                              <NextLink
+                                href={`/modules/project-links/${projectId}/audit/${page.id}`}
+                                className="hover:underline text-xs text-blue-600 dark:text-blue-400 block truncate"
+                                title={page.path}
+                              >
+                                {page.path}
+                              </NextLink>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={getStatusColor(page.status)}>
+                                {page.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground" title={page.lastScan}>
+                              {page.lastScanRelative}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Progress value={page.score} className="h-2 w-16" />
+                                <span className="text-sm font-medium">{page.score}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                {page.findings.length === 0 && <span className="text-xs text-muted-foreground">-</span>}
+                                {page.findings.map((finding, idx) => (
+                                  <Badge key={idx} variant="secondary" className="text-xs">
+                                    {finding}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button variant="outline" size="sm" asChild>
+                                  <NextLink href={`/modules/project-links/${projectId}/audit/${page.id}`}>View details</NextLink>
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
