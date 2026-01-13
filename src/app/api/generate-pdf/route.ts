@@ -29,8 +29,12 @@ export async function GET(request: NextRequest) {
                 'Content-Disposition': `attachment; filename="proposal-${proposalId}.pdf"`,
             },
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error generating PDF:', error);
-        return NextResponse.json({ error: 'Failed to generate PDF' }, { status: 500 });
+        console.error('Stack trace:', error.stack);
+        return NextResponse.json({
+            error: 'Failed to generate PDF',
+            details: error.message
+        }, { status: 500 });
     }
 }
