@@ -266,36 +266,35 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     });
   }, [links]);
 
-  // Compute available locales for the filter dropdown
+  // Normalize locale - treat 'en' and undefined/default as the same (base English)
+  const normalizeLocale = useCallback((locale: string | undefined): string => {
+    if (!locale || locale === 'default' || locale === 'en') return 'default';
+    return locale.toLowerCase();
+  }, []);
+
+  // Compute available locales for the filter dropdown (normalized)
   const availableLocales = useMemo(() => {
     const locales = new Set<string>();
-    let hasDefault = false;
     links.forEach(link => {
-      if (link.locale) {
-        locales.add(link.locale);
-      } else {
-        hasDefault = true;
-      }
+      // Detect locale from URL if not set, then normalize
+      const detectedLocale = link.locale || detectLocaleFromUrl(link.url);
+      locales.add(normalizeLocale(detectedLocale));
     });
-    // Sort locales: default first, then 'en', then alphabetically
+    // Sort locales: default first, then alphabetically
     const sorted = Array.from(locales).sort((a, b) => {
-      if (a === 'en') return -1;
-      if (b === 'en') return 1;
+      if (a === 'default') return -1;
+      if (b === 'default') return 1;
       return a.localeCompare(b);
     });
-    // Add 'default' at the beginning if there are pages without locale
-    if (hasDefault) {
-      sorted.unshift('default');
-    }
     return sorted;
-  }, [links]);
+  }, [links, detectLocaleFromUrl, normalizeLocale]);
 
   // 2. Filter & Sort
   const filteredPages = useMemo(() => {
     return pagesData.filter((page) => {
       if (searchQuery && !page.path.toLowerCase().includes(searchQuery.toLowerCase()) && !page.title.toLowerCase().includes(searchQuery.toLowerCase())) return false
       if (statusFilter !== "all" && page.status !== statusFilter) return false
-      if (localeFilter !== "all" && (page.locale || 'default') !== localeFilter) return false
+      if (localeFilter !== "all" && normalizeLocale(page.locale) !== localeFilter) return false
       if (pageTypeFilter !== "all") {
         if (pageTypeFilter === "static" && page.pageType === "collection") return false;
         if (pageTypeFilter === "collection" && page.pageType !== "collection") return false;
@@ -312,7 +311,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       // Recent (default)
       return new Date(b.lastScan).getTime() - new Date(a.lastScan).getTime();
     });
-  }, [pagesData, searchQuery, statusFilter, localeFilter, pageTypeFilter, showOnlyChanged, sortBy]);
+  }, [pagesData, searchQuery, statusFilter, localeFilter, pageTypeFilter, showOnlyChanged, sortBy, normalizeLocale]);
 
   // Helper to extract folder path from URL
   const getFolderPath = useCallback((url: string): string => {
@@ -364,11 +363,11 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
 
   // Group filtered pages by locale first, then by type (CMS/Static), then by folder
   const groupedByLocale = useMemo(() => {
-    // Group pages by locale
+    // Group pages by normalized locale
     const localeMap = new Map<string, typeof filteredPages>();
     
     filteredPages.forEach(page => {
-      const locale = page.locale || 'default';
+      const locale = normalizeLocale(page.locale);
       if (!localeMap.has(locale)) {
         localeMap.set(locale, []);
       }
@@ -429,7 +428,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
         totalCount: pages.length
       };
     }).filter(group => group.totalCount > 0);
-  }, [filteredPages, groupPagesByFolder]);
+  }, [filteredPages, groupPagesByFolder, normalizeLocale]);
 
   // Track collapsed state for locales, types, and folders
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
