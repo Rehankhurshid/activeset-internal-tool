@@ -106,13 +106,6 @@ RUN apt-get update && apt-get install -y \
     fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# Download Funnel Sans and Funnel Display from official Google Fonts repo
-RUN mkdir -p /usr/share/fonts/google-fonts \
-    && curl -L "https://raw.githubusercontent.com/google/fonts/main/ofl/funnelsans/FunnelSans%5Bwght%5D.ttf" -o "/usr/share/fonts/google-fonts/FunnelSans[wght].ttf" \
-    && curl -L "https://raw.githubusercontent.com/google/fonts/main/ofl/funnelsans/FunnelSans-Italic%5Bwght%5D.ttf" -o "/usr/share/fonts/google-fonts/FunnelSans-Italic[wght].ttf" \
-    && curl -L "https://raw.githubusercontent.com/google/fonts/main/ofl/funneldisplay/FunnelDisplay%5Bwght%5D.ttf" -o "/usr/share/fonts/google-fonts/FunnelDisplay[wght].ttf" \
-    && fc-cache -fv
-
 # Set Puppeteer to use system Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium

@@ -14,6 +14,7 @@ const DEFAULT_HERO = '/default-hero.png';
 
 // Font family constants
 const FONT_TITLE = "'Funnel Display', system-ui, sans-serif";
+const FONT_BODY = "'Funnel Sans', system-ui, sans-serif";
 
 // Convert plain text bullets (•) to proper HTML lists
 const convertBulletsToHtmlLists = (html: string): string => {
@@ -448,16 +449,19 @@ ${proposal.agencyName}`;
             className="bg-white shadow-xl print:shadow-none"
           >
             {/* Header Section with Hero Image */}
-            <div style={{
-              position: 'relative',
-              height: '396px',
-              width: '100%',
-              overflow: 'hidden',
-              backgroundImage: `url(${heroImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat'
-            }}>
+            <div
+              className="proposal-container-inner"
+              style={{
+                position: 'relative',
+                height: '396px',
+                width: '100%',
+                overflow: 'hidden',
+                backgroundImage: `url(${heroImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+              }}
+            >
 
               {/* Header Content */}
               <div className="p-6 sm:p-8 md:p-12 h-full flex flex-col justify-between">
@@ -495,6 +499,12 @@ ${proposal.agencyName}`;
             {/* Content Sections */}
             <style dangerouslySetInnerHTML={{
               __html: `
+              .proposal-container-inner {
+                font-family: ${FONT_BODY};
+              }
+              .proposal-content {
+                font-family: ${FONT_BODY};
+              }
               .proposal-content ul {
                 list-style-type: disc;
                 list-style-position: outside;
@@ -509,6 +519,7 @@ ${proposal.agencyName}`;
               .proposal-content ul li p {
                 display: inline !important;
                 margin: 0 !important;
+                font-family: ${FONT_BODY};
               }
               .proposal-content ul li p span {
                 display: inline;
@@ -528,6 +539,7 @@ ${proposal.agencyName}`;
               .proposal-content ol li p {
                 display: inline !important;
                 margin: 0 !important;
+                font-family: ${FONT_BODY};
               }
               .proposal-content ol li p span {
                 display: inline;
@@ -535,11 +547,13 @@ ${proposal.agencyName}`;
               }
               .proposal-content p {
                 margin-bottom: 0.5rem;
+                font-family: ${FONT_BODY};
               }
               @media print {
                 html, body {
                   background-color: white !important;
                   color: black !important;
+                  font-family: ${FONT_BODY};
                 }
                 .no-print {
                   display: none !important;
@@ -549,7 +563,7 @@ ${proposal.agencyName}`;
                 }
               }
             `}} />
-            <div className="p-6 sm:p-8 md:p-12 flex flex-col gap-12 sm:gap-16">
+            <div className="proposal-container-inner p-6 sm:p-8 md:p-12 flex flex-col gap-12 sm:gap-16">
               {/* Overview */}
               <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('overview')}`}>
                 <div className="flex items-start justify-between">
