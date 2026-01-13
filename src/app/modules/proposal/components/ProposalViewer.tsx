@@ -194,68 +194,129 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
       // 1. Get the HTML content
       const element = proposalRef.current;
 
-      // We need to ensure all images have absolute URLs for Puppeteer
-      const processElement = (el: HTMLElement) => {
-        const clone = el.cloneNode(true) as HTMLElement;
-
-        // Remove box shadow for PDF
-        clone.style.boxShadow = 'none';
-
-        // Handle img src
-        const images = clone.querySelectorAll('img');
-        images.forEach(img => {
-          if (img.src.startsWith('/')) {
-            img.src = `${window.location.origin}${img.getAttribute('src')}`;
+      // Helper to copy computed styles inline for PDF rendering
+      const copyComputedStyles = (source: Element, target: HTMLElement) => {
+        const computed = window.getComputedStyle(source);
+        const importantStyles = [
+          'display', 'position', 'top', 'right', 'bottom', 'left',
+          'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
+          'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+          'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+          'border', 'border-width', 'border-style', 'border-color', 'border-radius',
+          'background', 'background-color', 'background-image', 'background-size', 'background-position', 'background-repeat',
+          'color', 'font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing',
+          'text-align', 'text-decoration', 'text-transform', 'white-space', 'word-wrap', 'overflow-wrap',
+          'flex', 'flex-direction', 'flex-wrap', 'justify-content', 'align-items', 'align-content', 'gap',
+          'grid', 'grid-template-columns', 'grid-template-rows', 'grid-gap',
+          'overflow', 'opacity', 'visibility', 'z-index',
+          'box-shadow', 'transform', 'transition',
+          'list-style', 'list-style-type', 'list-style-position',
+        ];
+        
+        importantStyles.forEach(prop => {
+          const value = computed.getPropertyValue(prop);
+          if (value && value !== 'none' && value !== 'normal' && value !== 'auto' && value !== '0px') {
+            target.style.setProperty(prop, value);
           }
         });
-
-        // Handle background images
-        const allElements = clone.querySelectorAll('*');
-        allElements.forEach(el => {
-          const style = window.getComputedStyle(el);
-          const bgImage = style.backgroundImage;
-          if (bgImage && bgImage !== 'none' && bgImage.includes('url(')) {
-            // Extract URL and fix if relative
-            // This is a bit complex as computed style usually returns absolute, 
-            // but if it's inline style with relative path, we might need to fix it.
-            // Our code uses inline styles for background images: `url(${heroImage})`
-            // heroImage is local '/default-hero.png' or a URL.
-          }
-        });
-
-        // Actually, since we are using inline styles in the component:
-        // backgroundImage: `url(${heroImage})`
-        // We should just ensure heroImage is absolute before rendering or fix it in the string.
-        // Let's do a simpler string replacement on the HTML for now, or just ensure the passed props are absolute.
-
-        return clone.outerHTML;
       };
 
-      // Get HTML string
-      let htmlContent = processElement(element);
+      // Deep clone with computed styles
+      const cloneWithStyles = (source: Element): HTMLElement => {
+        const clone = source.cloneNode(false) as HTMLElement;
+        
+        // Copy computed styles
+        if (clone.style) {
+          copyComputedStyles(source, clone);
+        }
+        
+        // Handle children
+        source.childNodes.forEach(child => {
+          if (child.nodeType === Node.ELEMENT_NODE) {
+            clone.appendChild(cloneWithStyles(child as Element));
+          } else if (child.nodeType === Node.TEXT_NODE) {
+            clone.appendChild(child.cloneNode(true));
+          }
+        });
+        
+        return clone;
+      };
 
-      // Simple fix for relative strings in the HTML if any slipped through (like inline styles)
-      // Note: This is a basic catch-all for the specific pattern used in this file
+      // Clone the element with all computed styles
+      const clone = cloneWithStyles(element);
+      
+      // Remove box shadow for cleaner PDF
+      clone.style.boxShadow = 'none';
+      
+      // Fix relative URLs in images
+      const images = clone.querySelectorAll('img');
+      images.forEach(img => {
+        const src = img.getAttribute('src');
+        if (src && src.startsWith('/')) {
+          img.src = `${window.location.origin}${src}`;
+        }
+      });
+
+      // Get the HTML string
+      let htmlContent = clone.outerHTML;
+
+      // Fix relative URLs in inline styles (background-image, etc.)
       htmlContent = htmlContent.replace(/url\(['"]?\/([^)'"]+)['"]?\)/g, (match, path) => {
         return `url('${window.location.origin}/${path}')`;
       });
 
-      // Also fix img src if they are relative in the string (redundant but safe)
+      // Fix relative img src
       htmlContent = htmlContent.replace(/src="\/([^"]+)"/g, (match, path) => {
         return `src="${window.location.origin}/${path}"`;
       });
 
-      // Wrap in a full HTML document structure with Google Fonts for PDF
+      // Wrap in a full HTML document with fonts and additional styles
       const fullHtml = `
         <!DOCTYPE html>
         <html>
           <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300;400;500;600;700;800&family=Funnel+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
             <style>
-              body { margin: 0; padding: 0; font-family: 'Funnel Sans', system-ui, sans-serif; }
-              * { box-sizing: border-box; }
+              * { 
+                box-sizing: border-box; 
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              body { 
+                margin: 0; 
+                padding: 0; 
+                font-family: 'Funnel Sans', system-ui, -apple-system, sans-serif;
+                -webkit-font-smoothing: antialiased;
+              }
+              img {
+                max-width: 100%;
+                height: auto;
+              }
+              /* Ensure backgrounds print */
+              @media print {
+                * {
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+              }
+              /* List styles */
+              ul, ol {
+                padding-left: 1.5rem;
+                margin: 0.5rem 0;
+              }
+              ul {
+                list-style-type: disc;
+              }
+              ol {
+                list-style-type: decimal;
+              }
+              li {
+                margin-bottom: 0.25rem;
+              }
             </style>
           </head>
           <body>
