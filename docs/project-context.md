@@ -19,7 +19,12 @@ This project is an **embeddable JavaScript widget** and dashboard for managing p
 - Real-time updates via Firestore listeners.
 
 ### 2. Proposal Generator
-- AI-powered proposal creation.
+A comprehensive system for managing the full lifecycle of client proposals.
+- **AI Engine**: Full proposal generation from meeting notes and block-level editing.
+- **Collaboration**: Real-time commenting system and version history tracking.
+- **Client Flow**: Public sharing URLs with electronic signature capture.
+- **Output**: High-fidelity, print-optimized PDF generation matching the browser view.
+- **Dashboard**: Sorting, grouping, and template library for team efficiency.
 
 ### 3. Webflow Pages Manager (New!)
 A comprehensive tool for managing Webflow site SEO.

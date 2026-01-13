@@ -144,6 +144,8 @@ Team-wide view of all proposals with filtering and actions.
 **Features**:
 - **Statistics Cards**: Total proposals, draft count, approved count, revenue metrics
 - **Status Filter**: View all, drafts, sent, approved, or rejected proposals
+- **Sorting**: Organize list by Date (default), Title, Client Name, or Total Amount (support for both ascending and descending order)
+- **Grouping**: Toggle "Group by Month" to visually segment proposals by their creation date
 - **Search**: Filter by client name or proposal title
 - **Quick Actions**: View, Edit, Share, Delete
 - **Template Library**: Create proposals from pre-saved templates
@@ -475,6 +477,10 @@ Server-side high-fidelity PDF generation that matches the browser view.
 
 **Features**:
 - **High Fidelity**: Uses Puppeteer to render the proposal exactly as seen in the browser
+- **Font Rendering**: 
+  - Uses a hybrid approach: System-level fonts (`fonts-inter`, `fonts-noto`) in Docker as fallback.
+  - Injects Google Fonts (`Funnel Sans`, `Funnel Display`) directly into the web view during PDF generation for perfect matching.
+  - Explicitly styles body text with 'Funnel Sans' to ensure consistency across environments.
 - **Modern CSS Support**: Fully supports Tailwind 4, CSS variables, and modern color functions (`oklch`)
 - **Smart Layout**:
   - **Clean Output**: Automatically removes UI-specific elements (buttons, comments, shadows) via `@media print`
@@ -487,9 +493,11 @@ Server-side high-fidelity PDF generation that matches the browser view.
 **Workflow**:
 1. User clicks "Download PDF" in the Proposal Viewer header
 2. Request sent to `/api/generate-pdf` with the proposal ID
-3. Server launches Puppeteer to render the public view URL
-4. Puppeteer emulates `print` media to apply print-specific styles
-5. PDF generated and streamed back to the client for download
+- **Environment Awareness**: The PDF API dynamically resolves the `baseUrl` from request headers (`host`, `x-forwarded-proto`), ensuring it works seamlessly across local, preview, and production (Railway) environments without manual configuration.
+- **Deployment Strategy**: 
+  - Docker container includes `chromium` and necessary dependencies.
+  - `PUPPETEER_EXECUTABLE_PATH` environment variable directs the service to use the system-installed Chromium.
+  - `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD` is set to true to minimize image size.
 
 ---
 
