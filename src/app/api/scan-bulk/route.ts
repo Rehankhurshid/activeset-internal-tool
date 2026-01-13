@@ -4,7 +4,13 @@ import { pageScanner } from '@/services/PageScanner';
 import { AuditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
 import { computeChangeStatus, computeFieldChanges, generateDiffPatch, computeBodyTextDiff } from '@/lib/scan-utils';
-import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot, ProjectLink } from '@/types';
+import { 
+    generateScanId, 
+    initScanProgress, 
+    updateScanProgress, 
+    getRunningScansForProject 
+} from '@/lib/scan-progress-store';
+import { ChangeStatus, FieldChange, ProjectLink } from '@/types';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -25,23 +31,11 @@ interface ScanResult {
     error?: string;
 }
 
-interface BulkScanResponse {
-    projectId: string;
-    totalPages: number;
-    scannedPages: number;
-    skippedPages: number;
-    results: ScanResult[];
-    summary: {
-        noChange: number;
-        techChange: number;
-        contentChanged: number;
-        failed: number;
-    };
-}
-
 /**
  * Bulk scan API - scans multiple pages in a project
  * POST body: { projectId, options: { scanCollections?: boolean, linkIds?: string[] } }
+ * 
+ * Returns immediately with a scanId. Poll /api/scan-bulk/status?scanId=xxx for progress.
  */
 export async function POST(request: NextRequest) {
     try {
@@ -52,6 +46,18 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
                 { error: 'Missing projectId' },
                 { status: 400, headers: corsHeaders }
+            );
+        }
+
+        // Check if there's already a scan running for this project
+        const runningScans = getRunningScansForProject(projectId);
+        if (runningScans.length > 0) {
+            return NextResponse.json(
+                { 
+                    error: 'A scan is already running for this project',
+                    scanId: runningScans[0].scanId 
+                },
+                { status: 409, headers: corsHeaders }
             );
         }
 
@@ -79,93 +85,141 @@ export async function POST(request: NextRequest) {
             linksToScan = linksToScan.filter(l => l.pageType !== 'collection');
         }
 
-        console.log(`[scan-bulk] Scanning ${linksToScan.length} pages (${scanCollections ? 'including' : 'excluding'} collections)`);
+        const totalPages = linksToScan.length;
 
-        const results: ScanResult[] = [];
-        const summary = { noChange: 0, techChange: 0, contentChanged: 0, failed: 0 };
-
-        // Scan pages in sequence to avoid rate limits
-        for (const link of linksToScan) {
-            try {
-                console.log(`[scan-bulk] Scanning: ${link.url}`);
-
-                const { score, changeStatus, updatedLink } = await scanSinglePage(projectId, link, project.links);
-
-                results.push({
-                    linkId: link.id,
-                    url: link.url,
-                    success: true,
-                    score,
-                    changeStatus
-                });
-
-                // Update the link in our local filtered list AND the main project list reference
-                // We need to keep 'project.links' up to date for the final save
-                const idx = project.links.findIndex(l => l.id === link.id);
-                if (idx !== -1 && updatedLink) {
-                    project.links[idx] = updatedLink;
-                }
-
-                // Batch Save: every 10 items or so (or just save all at end if list is < 100)
-                // Saving every 5 items to show progress in UI if user refreshes, but respecting rate limit
-                // 5 items * 500ms delay = 2.5 seconds per save => < 1 write/s
-                if (results.length % 5 === 0) {
-                    console.log('[scan-bulk] Batch saving progress...');
-                    await projectsService.updateProjectLinks(projectId, project.links);
-                }
-
-                // Update summary
-                if (changeStatus === 'NO_CHANGE') summary.noChange++;
-                else if (changeStatus === 'TECH_CHANGE_ONLY') summary.techChange++;
-                else if (changeStatus === 'CONTENT_CHANGED') summary.contentChanged++;
-
-            } catch (error) {
-                console.error(`[scan-bulk] Failed to scan ${link.url}:`, error);
-                results.push({
-                    linkId: link.id,
-                    url: link.url,
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                });
-                summary.failed++;
-            }
-
-            // Small delay between scans to be nice to servers
-            await new Promise(resolve => setTimeout(resolve, 500));
+        if (totalPages === 0) {
+            return NextResponse.json(
+                { 
+                    scanId: null,
+                    message: 'No pages to scan',
+                    totalPages: 0 
+                },
+                { headers: corsHeaders }
+            );
         }
 
-        // Final Save: Ensure all changes are persisted
-        console.log('[scan-bulk] Saving final results...');
-        await projectsService.updateProjectLinks(projectId, project.links);
+        // Generate scanId and initialize progress
+        const scanId = generateScanId();
+        initScanProgress(scanId, projectId, totalPages);
 
-        const response: BulkScanResponse = {
-            projectId,
-            totalPages: project.links.filter(l => l.source === 'auto').length,
-            scannedPages: results.filter(r => r.success).length,
-            skippedPages: project.links.filter(l => l.source === 'auto').length - linksToScan.length,
-            results,
-            summary
-        };
+        console.log(`[scan-bulk] Created scan ${scanId} for ${totalPages} pages`);
 
-        console.log(`[scan-bulk] Completed. Scanned: ${response.scannedPages}, Skipped: ${response.skippedPages}, Failed: ${summary.failed}`);
+        // Start the scan in the background (don't await)
+        // This allows us to return immediately with the scanId
+        runBulkScan(scanId, projectId, project.links, linksToScan, scanCollections).catch(error => {
+            console.error(`[scan-bulk] Background scan ${scanId} failed:`, error);
+            updateScanProgress(scanId, { 
+                status: 'failed', 
+                error: error instanceof Error ? error.message : 'Unknown error' 
+            });
+        });
 
-        return NextResponse.json(response, { headers: corsHeaders });
+        // Return immediately with scanId
+        return NextResponse.json(
+            { 
+                scanId,
+                totalPages,
+                message: 'Scan started. Poll /api/scan-bulk/status for progress.' 
+            },
+            { headers: corsHeaders }
+        );
 
     } catch (error) {
-        console.error('[scan-bulk] Bulk scan failed:', error);
+        console.error('[scan-bulk] Failed to start bulk scan:', error);
         return NextResponse.json(
             { error: 'Internal Server Error' },
             { status: 500, headers: corsHeaders }
         );
-    } finally {
-        // FINAL SAVE: Ensure we save everything at the end, even if loop finished or error halfway
-        // (If error was catchable inside loop, we continue. If outside, we should try to save what we have)
-        // Re-fetching project might be safer but we have local state.
-        // If 'project' variable is available and modified.
-        // We can't access 'project' here easily due to scope if we don't wrap broad try/catch correctly, 
-        // but 'project' is defined inside try.
-        // We'll rely on the in-loop saves and one final save inside the try block.
     }
+}
+
+/**
+ * Background function to run the bulk scan
+ * Updates progress store as it scans each page
+ */
+async function runBulkScan(
+    scanId: string,
+    projectId: string,
+    allLinks: ProjectLink[],
+    linksToScan: ProjectLink[],
+    scanCollections: boolean
+): Promise<void> {
+    console.log(`[scan-bulk] Scanning ${linksToScan.length} pages (${scanCollections ? 'including' : 'excluding'} collections)`);
+
+    const results: ScanResult[] = [];
+    const summary = { noChange: 0, techChange: 0, contentChanged: 0, failed: 0 };
+
+    // Keep a mutable copy of all links for updates
+    const projectLinks = [...allLinks];
+
+    // Scan pages in sequence to avoid rate limits
+    for (let i = 0; i < linksToScan.length; i++) {
+        const link = linksToScan[i];
+        
+        // Update progress with current URL being scanned
+        updateScanProgress(scanId, {
+            current: i,
+            currentUrl: link.url
+        });
+
+        try {
+            console.log(`[scan-bulk] Scanning: ${link.url}`);
+
+            const { score, changeStatus, updatedLink } = await scanSinglePage(projectId, link, projectLinks);
+
+            results.push({
+                linkId: link.id,
+                url: link.url,
+                success: true,
+                score,
+                changeStatus
+            });
+
+            // Update the link in our local list
+            const idx = projectLinks.findIndex(l => l.id === link.id);
+            if (idx !== -1 && updatedLink) {
+                projectLinks[idx] = updatedLink;
+            }
+
+            // Batch Save: every 5 items to show progress if user refreshes
+            if (results.length % 5 === 0) {
+                console.log('[scan-bulk] Batch saving progress...');
+                await projectsService.updateProjectLinks(projectId, projectLinks);
+            }
+
+            // Update summary
+            if (changeStatus === 'NO_CHANGE') summary.noChange++;
+            else if (changeStatus === 'TECH_CHANGE_ONLY') summary.techChange++;
+            else if (changeStatus === 'CONTENT_CHANGED') summary.contentChanged++;
+
+        } catch (error) {
+            console.error(`[scan-bulk] Failed to scan ${link.url}:`, error);
+            results.push({
+                linkId: link.id,
+                url: link.url,
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            summary.failed++;
+        }
+
+        // Small delay between scans to be nice to servers
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    // Final Save: Ensure all changes are persisted
+    console.log('[scan-bulk] Saving final results...');
+    await projectsService.updateProjectLinks(projectId, projectLinks);
+
+    // Mark scan as completed
+    updateScanProgress(scanId, {
+        current: linksToScan.length,
+        currentUrl: '',
+        status: 'completed',
+        summary
+    });
+
+    console.log(`[scan-bulk] Completed scan ${scanId}. Scanned: ${results.filter(r => r.success).length}, Failed: ${summary.failed}`);
 }
 
 /**
@@ -245,23 +299,11 @@ async function scanSinglePage(
     };
 
     // Return the updated link object instead of saving it immediately
-    // This allows bulk operations to batch the save
     const updatedLink: ProjectLink = {
         ...link,
         title: scanResult.contentSnapshot.title || link.title,
         auditResult
     };
-
-    /* REMOVED: Individual project update to avoid Rate Limit (1 write/s per doc) in bulk loop
-    const linkIndex = allLinks.findIndex(l => l.id === link.id);
-    if (linkIndex >= 0) {
-        // ...
-        await projectsService.updateProjectLinks(projectId, updatedLinks);
-    }
-    */
-
-    // Save to audit_logs for history (these are new docs, high write rate allowed)
-    // ...
 
     // Save to audit_logs for history
     const auditLogData: Record<string, unknown> = {
@@ -283,8 +325,6 @@ async function scanSinglePage(
     const hasHistory = !!latestLog;
 
     // If content changed (and scan succeeded), log to change log.
-    // Also log if it's the first time we're tracking this link (history bootstrap), 
-    // even if hashes match previous auditResult (legacy data).
     if ((changeStatus !== 'NO_CHANGE' && changeStatus !== 'SCAN_FAILED') || !hasHistory) {
         const entryType: 'FIRST_SCAN' | 'CONTENT_CHANGED' | 'TECH_CHANGE_ONLY' = !hasHistory
             ? 'FIRST_SCAN'

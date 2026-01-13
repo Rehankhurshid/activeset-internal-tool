@@ -1,14 +1,16 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import NextLink from "next/link"
-import { ProjectLink, AuditResult } from "@/types"
+import { ProjectLink, AuditResult, PageTypeRule } from "@/types"
+import { PageTypeRulesDialog } from "@/components/PageTypeRulesEditor"
+import { PageTypeReviewDialog, detectPatterns } from "@/components/PageTypeReviewDialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -19,6 +21,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Activity,
+  Loader2,
   Clock,
   MoreVertical,
   Search,
@@ -28,24 +31,98 @@ import {
   FileX,
   ChevronDown,
   ChevronUp,
+  Globe,
+  Database,
+  File,
+  Settings2,
 } from "lucide-react"
 
 interface WebsiteAuditDashboardProps {
   links: ProjectLink[];
   projectId: string;
+  pageTypeRules?: PageTypeRule[];
 }
 
-export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboardProps) {
+export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: WebsiteAuditDashboardProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [localeFilter, setLocaleFilter] = useState("all")
+  const [pageTypeFilter, setPageTypeFilter] = useState("all")
   const [showOnlyChanged, setShowOnlyChanged] = useState(false)
   const [sortBy, setSortBy] = useState("recent")
   const [showHistory, setShowHistory] = useState(false)
+  const [localRules, setLocalRules] = useState<PageTypeRule[]>(pageTypeRules)
 
   // Bulk scan state
   const [isBulkScanning, setIsBulkScanning] = useState(false)
-  const [bulkScanProgress, setBulkScanProgress] = useState({ current: 0, total: 0 })
+  const [bulkScanProgress, setBulkScanProgress] = useState({ 
+    current: 0, 
+    total: 0, 
+    percentage: 0,
+    currentUrl: '',
+    scanId: '' 
+  })
   const [showCollectionDialog, setShowCollectionDialog] = useState(false)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Poll for scan progress
+  const pollScanProgress = useCallback(async (scanId: string) => {
+    try {
+      const response = await fetch(`/api/scan-bulk/status?scanId=${scanId}`)
+      if (!response.ok) {
+        console.error('[BulkScan] Status check failed:', response.status)
+        return
+      }
+
+      const data = await response.json()
+      
+      setBulkScanProgress({
+        current: data.current,
+        total: data.total,
+        percentage: data.percentage,
+        currentUrl: data.currentUrl || '',
+        scanId: data.scanId
+      })
+
+      // Check if scan is completed or failed
+      if (data.status === 'completed' || data.status === 'failed') {
+        // Stop polling
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        
+        setIsBulkScanning(false)
+        
+        if (data.status === 'completed') {
+          console.log('[BulkScan] Completed:', data.summary)
+          // Refresh the page to show updated results
+          window.location.reload()
+        } else {
+          console.error('[BulkScan] Failed:', data.error)
+        }
+      }
+    } catch (error) {
+      console.error('[BulkScan] Polling error:', error)
+    }
+  }, [])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [])
+
+  // Review page types dialog state
+  const [showReviewDialog, setShowReviewDialog] = useState(false)
+  const [showRulesDialog, setShowRulesDialog] = useState(false)
+  const detectedPatternsFromLinks = useMemo(() => {
+    const urls = links.map(l => l.url)
+    return detectPatterns(urls)
+  }, [links])
 
   // Helper for relative time
   function getRelativeTime(timestamp: string): string {
@@ -95,6 +172,8 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
         id: link.id,
         path: link.url, // Display full URL for now, could parse path
         title: link.title,
+        locale: link.locale, // Include locale for filtering
+        pageType: link.pageType, // CMS or static page type
         status: displayStatus,
         lastContentChange: audit?.lastRun ? new Date(audit.lastRun).toLocaleDateString() : "-",
         lastScan: audit?.lastRun ? new Date(audit.lastRun).toLocaleString() : "-",
@@ -107,11 +186,35 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
     });
   }, [links]);
 
+  // Compute available locales for the filter dropdown
+  const availableLocales = useMemo(() => {
+    const locales = new Set<string>();
+    links.forEach(link => {
+      if (link.locale) {
+        locales.add(link.locale);
+      }
+    });
+    // Sort locales alphabetically, but put 'en' first if present
+    return Array.from(locales).sort((a, b) => {
+      if (a === 'en') return -1;
+      if (b === 'en') return 1;
+      return a.localeCompare(b);
+    });
+  }, [links]);
+
   // 2. Filter & Sort
   const filteredPages = useMemo(() => {
     return pagesData.filter((page) => {
       if (searchQuery && !page.path.toLowerCase().includes(searchQuery.toLowerCase()) && !page.title.toLowerCase().includes(searchQuery.toLowerCase())) return false
       if (statusFilter !== "all" && page.status !== statusFilter) return false
+      if (localeFilter !== "all") {
+        if (localeFilter === "none" && page.locale) return false;
+        if (localeFilter !== "none" && page.locale !== localeFilter) return false;
+      }
+      if (pageTypeFilter !== "all") {
+        if (pageTypeFilter === "static" && page.pageType === "collection") return false;
+        if (pageTypeFilter === "collection" && page.pageType !== "collection") return false;
+      }
       if (showOnlyChanged && page.status === "No change") return false
       return true
     }).sort((a, b) => {
@@ -124,7 +227,7 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
       // Recent (default)
       return new Date(b.lastScan).getTime() - new Date(a.lastScan).getTime();
     });
-  }, [pagesData, searchQuery, statusFilter, showOnlyChanged, sortBy]);
+  }, [pagesData, searchQuery, statusFilter, localeFilter, pageTypeFilter, showOnlyChanged, sortBy]);
 
   // 3. Compute KPI Metrics
   const metrics = useMemo(() => {
@@ -174,8 +277,16 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
 
   // Bulk scan all pages
   const handleBulkScan = async (includeCollections: boolean = false) => {
+    const estimatedTotal = staticPages + (includeCollections ? collectionPages : 0)
+    
     setIsBulkScanning(true)
-    setBulkScanProgress({ current: 0, total: staticPages + (includeCollections ? collectionPages : 0) })
+    setBulkScanProgress({ 
+      current: 0, 
+      total: estimatedTotal,
+      percentage: 0,
+      currentUrl: 'Starting scan...',
+      scanId: ''
+    })
     setShowCollectionDialog(false)
 
     try {
@@ -189,13 +300,46 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
       })
 
       const result = await response.json()
-      console.log('[BulkScan] Completed:', result)
+      
+      if (!response.ok) {
+        // Check if scan is already running
+        if (response.status === 409 && result.scanId) {
+          console.log('[BulkScan] Scan already running, resuming polling:', result.scanId)
+          setBulkScanProgress(prev => ({ ...prev, scanId: result.scanId }))
+          // Start polling the existing scan
+          pollingIntervalRef.current = setInterval(() => {
+            pollScanProgress(result.scanId)
+          }, 2000)
+          return
+        }
+        throw new Error(result.error || 'Failed to start scan')
+      }
 
-      // Refresh the page to show updated results
-      window.location.reload()
+      console.log('[BulkScan] Started:', result)
+      
+      const { scanId, totalPages } = result
+      
+      if (!scanId) {
+        // No pages to scan
+        console.log('[BulkScan] No pages to scan')
+        setIsBulkScanning(false)
+        return
+      }
+
+      // Update state with scanId and correct total
+      setBulkScanProgress(prev => ({ 
+        ...prev, 
+        scanId,
+        total: totalPages
+      }))
+
+      // Start polling for progress every 2 seconds
+      pollingIntervalRef.current = setInterval(() => {
+        pollScanProgress(scanId)
+      }, 2000)
+
     } catch (error) {
-      console.error('[BulkScan] Failed:', error)
-    } finally {
+      console.error('[BulkScan] Failed to start:', error)
       setIsBulkScanning(false)
     }
   }
@@ -295,7 +439,7 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
               >
                 {isBulkScanning ? (
                   <>
-                    <Activity className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Scanning...
                   </>
                 ) : (
@@ -305,6 +449,27 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
                   </>
                 )}
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Settings2 className="h-4 w-4" />
+                    Page Types
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setShowRulesDialog(true)}>
+                    <Settings2 className="mr-2 h-4 w-4" />
+                    Manage Rules
+                    {localRules.length > 0 && <span className="ml-2 text-muted-foreground">({localRules.length})</span>}
+                  </DropdownMenuItem>
+                  {links.length > 0 && (
+                    <DropdownMenuItem onClick={() => setShowReviewDialog(true)}>
+                      <Database className="mr-2 h-4 w-4" />
+                      Review Detected Patterns
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             <div className="flex flex-wrap gap-2">
               <div className="relative flex-1 md:w-64">
@@ -330,6 +495,34 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
                   <SelectItem value="Scan failed">Failed</SelectItem>
                 </SelectContent>
               </Select>
+              {availableLocales.length > 0 && (
+                <Select value={localeFilter} onValueChange={setLocaleFilter}>
+                  <SelectTrigger className="w-36">
+                    <Globe className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="Locale" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locales</SelectItem>
+                    <SelectItem value="none">No locale</SelectItem>
+                    {availableLocales.map(locale => (
+                      <SelectItem key={locale} value={locale}>
+                        {locale.toUpperCase()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Select value={pageTypeFilter} onValueChange={setPageTypeFilter}>
+                <SelectTrigger className="w-32">
+                  <Database className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  <SelectItem value="static">Static</SelectItem>
+                  <SelectItem value="collection">CMS</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-48">
                   <SelectValue />
@@ -351,12 +544,24 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
           </div>
         </CardHeader>
         {isBulkScanning && (
-          <div className="px-6 pb-2">
-            <div className="flex justify-between text-xs mb-1">
-              <span>Scanning {bulkScanProgress.total} pages...</span>
-              <span>Please wait...</span>
+          <div className="px-6 pb-4 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="font-medium">
+                Scanning {bulkScanProgress.current} of {bulkScanProgress.total} pages
+              </span>
+              <span className="text-muted-foreground">
+                {bulkScanProgress.percentage}%
+              </span>
             </div>
-            <Progress value={undefined} className="h-2 w-full animate-pulse" />
+            <Progress 
+              value={bulkScanProgress.percentage} 
+              className="h-2 w-full" 
+            />
+            {bulkScanProgress.currentUrl && (
+              <div className="text-xs text-muted-foreground truncate" title={bulkScanProgress.currentUrl}>
+                Current: {bulkScanProgress.currentUrl}
+              </div>
+            )}
           </div>
         )}
         <CardContent>
@@ -369,6 +574,7 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
                   <TableRow>
                     <TableHead>Page Title / URL</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Last Scan</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Findings</TableHead>
@@ -378,8 +584,15 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
                 <TableBody>
                   {filteredPages.map((page) => (
                     <TableRow key={page.id}>
-                      <TableCell className="font-medium max-w-[200px] truncate">
-                        <div className="font-semibold block truncate" title={page.title}>{page.title || 'Untitled'}</div>
+                      <TableCell className="font-medium max-w-[250px] truncate">
+                        <div className="flex items-center gap-2">
+                          <div className="font-semibold block truncate flex-1" title={page.title}>{page.title || 'Untitled'}</div>
+                          {page.locale && (
+                            <Badge variant="secondary" className="text-xs shrink-0 bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20">
+                              {page.locale.toUpperCase()}
+                            </Badge>
+                          )}
+                        </div>
                         <NextLink
                           href={`/modules/project-links/${projectId}/audit/${page.id}`}
                           className="hover:underline text-xs text-blue-600 dark:text-blue-400 block truncate"
@@ -392,6 +605,19 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
                         <Badge variant="outline" className={getStatusColor(page.status)}>
                           {page.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {page.pageType === 'collection' ? (
+                          <Badge variant="secondary" className="text-xs bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/20 flex items-center gap-1 w-fit">
+                            <Database className="h-3 w-3" />
+                            CMS
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-500/20 flex items-center gap-1 w-fit">
+                            <File className="h-3 w-3" />
+                            Static
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground" title={page.lastScan}>
                         {page.lastScanRelative}
@@ -427,6 +653,30 @@ export function WebsiteAuditDashboard({ links, projectId }: WebsiteAuditDashboar
           </div>
         </CardContent>
       </Card>
+
+      {/* Page Type Rules Dialog */}
+      <PageTypeRulesDialog
+        projectId={projectId}
+        rules={localRules}
+        onRulesChange={setLocalRules}
+        open={showRulesDialog}
+        onOpenChange={setShowRulesDialog}
+      />
+
+      {/* Review Page Types Dialog for existing pages */}
+      <PageTypeReviewDialog
+        isOpen={showReviewDialog}
+        onClose={() => setShowReviewDialog(false)}
+        projectId={projectId}
+        detectedPatterns={detectedPatternsFromLinks}
+        existingRules={localRules}
+        onSaveRules={(rules) => {
+          setLocalRules(rules)
+          setShowReviewDialog(false)
+          // Reload to apply new rules
+          window.location.reload()
+        }}
+      />
     </div>
   )
 }
