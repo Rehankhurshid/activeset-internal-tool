@@ -42,9 +42,6 @@ export async function POST(req: NextRequest) {
             try {
                 const chromium = await import('@sparticuz/chromium');
                 
-                // Configure chromium for serverless
-                chromium.setGraphicsMode = false;
-                
                 // Get executable path with error handling
                 let executablePath: string;
                 try {
