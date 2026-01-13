@@ -230,7 +230,6 @@ Read-only, beautifully formatted proposal view for client presentation.
 **Features**:
 - **Clean Layout**: Professional, print-ready design
 - **Signature Section**: Electronic signature capture for clients
-- **PDF Export**: Generate PDF for download via API endpoint
 - **Public Access**: Shareable URL (no login required)
 - **Status Tracking**: Shows approval status and signature timestamp
 - **Comment System**: Add comments to specific sections (visible to both agency and client)
@@ -344,7 +343,6 @@ ProposalPage (page.tsx)
     └── LivePreview
         └── ProposalViewer (read-only)
             ├── Comment Buttons (per section)
-            ├── PDF Export
             └── Share/Email Actions
 ```
 
@@ -467,6 +465,34 @@ Comprehensive version history tracking for proposals.
 
 ---
 
+---
+
+### 9. PDF Generation & Download
+
+**Location**: `src/app/modules/proposal/components/ProposalViewer.tsx` (Download Button)
+
+Server-side high-fidelity PDF generation that matches the browser view.
+
+**Features**:
+- **High Fidelity**: Uses Puppeteer to render the proposal exactly as seen in the browser
+- **Modern CSS Support**: Fully supports Tailwind 4, CSS variables, and modern color functions (`oklch`)
+- **Smart Layout**:
+  - **Clean Output**: Automatically removes UI-specific elements (buttons, comments, shadows) via `@media print`
+  - **Background Control**: Forces white background to eliminate dark theme artifacts
+  - **Page Break Optimization**: Prevents abrupt cuts in pricing tables and timeline phases
+- **Conditional Signing Block**:
+  - **Unsigned**: Hides the signature section to provide a clean review copy
+  - **Signed**: Includes the "Proposal Approved" section with the client's signature and timestamp
+
+**Workflow**:
+1. User clicks "Download PDF" in the Proposal Viewer header
+2. Request sent to `/api/generate-pdf` with the proposal ID
+3. Server launches Puppeteer to render the public view URL
+4. Puppeteer emulates `print` media to apply print-specific styles
+5. PDF generated and streamed back to the client for download
+
+---
+
 ## Technical Specifications
 
 ### Service Layer
@@ -543,6 +569,19 @@ class HistoryService {
 }
 
 export const historyService = new HistoryService();
+```
+
+**Location**: `src/services/ScreenshotService.ts`
+
+```typescript
+class ScreenshotService {
+  // Existing screenshot methods...
+  
+  // PDF Generation
+  async capturePdf(url: string, filename: string): Promise<Buffer>
+  // Uses Puppeteer to render URL with print media emulation
+}
+export const screenshotService = new ScreenshotService();
 ```
 
 ### Data Flow
@@ -1039,19 +1078,19 @@ See [Settings Module](./settings.md) for component details.
 - Supports: timeline, pricing, clientDescription, finalDeliverable
 - Context-aware with current proposal data
 
-### PDF Generation
-
-**PDF Export**: `POST /api/generate-pdf`
-- Converts proposal HTML to PDF
-- Uses Puppeteer for rendering
-- Returns PDF blob for download
-
 ### Email Notifications
 
 **Send Notification**: `POST /api/send-notification`
 - Sends email when proposal is signed
 - Uses Nodemailer with Gmail
 - Supports proposal-signed event type
+
+### PDF Generation
+
+**Generate PDF**: `GET /api/generate-pdf?proposalId={id}`
+- Generates PDF for a specific proposal
+- Uses Puppeteer with print media emulation
+- Returns `application/pdf` stream
 
 ## Environment Variables
 
@@ -1080,7 +1119,6 @@ NOTIFY_EMAIL
 1. **Team-wide Proposals**: All proposals visible to all team members (no user-specific filtering)
 2. **Single Signature**: Only client signature supported (not multi-party)
 3. **Hero Image Storage**: Images stored as data URLs (no CDN integration)
-4. **PDF Generation**: Requires external API endpoint (not built into viewer component)
 
 ---
 
@@ -1094,7 +1132,6 @@ NOTIFY_EMAIL
 | Add new proposal field | `types/Proposal.ts` → `Proposal` interface, `ProposalEditor.tsx` → Add section |
 | Add new template type | `settings/page.tsx` → Add tab, create editor component |
 | Customize proposal layout | `ProposalViewer.tsx` → Modify rendering logic |
-| Add PDF export | `ProposalViewer.tsx` → Integrate PDF library (e.g., jsPDF) |
 | Add new signature method | `SignatureSection.tsx` → Implement alternative capture method |
 | Customize email template | `/api/send-notification` → Modify email body |
 | Add new AI block type | `/api/ai-gen-block/route.ts` → Add new block type and prompt |
@@ -1123,6 +1160,13 @@ NOTIFY_EMAIL
 - **Comment System**: Google Docs-style inline comments on proposal sections
 - **Version History**: Comprehensive change tracking with field-level diffs
 - **Real-Time Updates**: Live comment sync using Firestore subscriptions
+
+### PDF Export
+- **Server-Side Generation**: Robust PDF generation using Puppeteer
+- **Print Optimization**: Dedicated `@media print` styles for clean layout
+- **Smart Page Breaks**: Content-aware breakpoints for pricing and lists
+- **Signature Handling**: Conditionally includes/excludes signature block based on status
+- **Visual Fidelity**: Pixel-perfect rendering matching the web view
 
 ### UI/UX Improvements
 - **Default Collapsed Sections**: About Us and Hero Image collapsed by default for cleaner interface

@@ -428,4 +428,4 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
 
 - **Webflow Pages**: [webflow-pages.md](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/docs/features/webflow-pages.md) - SEO editing for Webflow-hosted sites
 - **Link Management**: Manual link CRUD with drag-and-drop reordering
-- **Proposal Generator**: AI-powered proposal creation with PDF export
+- **Proposal Generator**: AI-powered proposal creation

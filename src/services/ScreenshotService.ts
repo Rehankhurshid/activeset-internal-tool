@@ -115,6 +115,66 @@ export class ScreenshotService {
     }
 
     /**
+     * Capture a PDF of a URL.
+     * @param url The page URL to capture
+     * @param options PDF options
+     */
+    async capturePdf(
+        url: string,
+        options: {
+            width?: number;
+            height?: number;
+            margin?: { top?: string; right?: string; bottom?: string; left?: string };
+            format?: 'A4' | 'Letter';
+            printBackground?: boolean;
+        } = {}
+    ): Promise<Buffer> {
+        const {
+            width = 1200,
+            height = 800,
+            margin = { top: '0px', right: '0px', bottom: '0px', left: '0px' },
+            format = 'A4',
+            printBackground = true
+        } = options;
+
+        const browser = await this.getBrowser();
+        const page = await browser.newPage();
+
+        try {
+            // Set viewport
+            await page.setViewport({ width, height });
+
+            // Navigate to the page
+            await page.goto(url, {
+                waitUntil: 'networkidle2',
+                timeout: 60000
+            });
+
+            // Wait for page to be fully loaded
+            await page.waitForFunction(() => document.readyState === 'complete', { timeout: 10000 });
+
+            // Wait for any specific selectors if needed (can be added to options)
+
+            // Add extra wait for fonts and images to settle
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Generate PDF
+            await page.emulateMediaType('print');
+            const pdfBuffer = await page.pdf({
+                format: format as any,
+                margin,
+                printBackground,
+                preferCSSPageSize: true
+            });
+
+            return Buffer.from(pdfBuffer);
+
+        } finally {
+            await page.close();
+        }
+    }
+
+    /**
      * Scroll through the page to trigger lazy loading
      */
     private async scrollPage(page: Page, delay: number): Promise<void> {

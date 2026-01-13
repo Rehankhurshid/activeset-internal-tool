@@ -153,7 +153,7 @@ export default function SignatureSection({
                 padding: '32px 48px',
                 backgroundColor: '#f0fdf4',
                 borderTop: '2px solid #22c55e'
-            }} className="md:p-12 p-6">
+            }} className="md:p-12 p-6 print:bg-[#f0fdf4]">
                 {/* Added responsive padding class as inline styles override basic classes unless !important */}
                 {/* We'll stick to style prop for main layout but add classes for responsiveness where style prop might correspond to desktop */}
 
@@ -213,7 +213,7 @@ export default function SignatureSection({
                 padding: '32px 48px',
                 backgroundColor: '#fef3c7',
                 borderTop: '2px solid #f59e0b'
-            }} className="md:p-12 p-6">
+            }} className="md:p-12 p-6 no-print">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <PenLine style={{ width: '24px', height: '24px', color: '#d97706' }} />
                     <div>
@@ -230,7 +230,7 @@ export default function SignatureSection({
     }
 
     return (
-        <div id="signature-section" className="bg-blue-50 border-t-2 border-blue-500 md:p-12 p-6 scroll-mt-24">
+        <div id="signature-section" className="bg-blue-50 border-t-2 border-blue-500 md:p-12 p-6 scroll-mt-24 no-print">
             <h3 className="text-2xl font-bold text-blue-900 mb-2">
                 Sign to Approve
             </h3>
@@ -293,8 +293,8 @@ export default function SignatureSection({
                                         key={font.name}
                                         onClick={() => setSelectedFont(font.value)}
                                         className={`p-3 border rounded-md text-center transition-all ${selectedFont === font.value
-                                                ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-200'
-                                                : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50 text-slate-700'
+                                            ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-200'
+                                            : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50 text-slate-700'
                                             }`}
                                     >
                                         <div className="text-xl overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontFamily: font.value }}>

@@ -18,7 +18,6 @@ This is an **embeddable JavaScript widget** for managing and displaying project 
 - **Authentication**: Firebase Auth (Google OAuth, restricted to @activeset.co emails)
 - **Drag & Drop**: @dnd-kit
 - **Rich Text**: Lexical + TipTap editors
-- **PDF Generation**: jspdf + html2canvas
 - **AI Integration**: Google Gemini (@google/genai)
 
 ## Project Structure
@@ -44,7 +43,7 @@ public/
 ## Key Modules
 
 1. **Link Management**: CRUD for project links with drag-and-drop reordering
-2. **Proposal Generator**: AI-powered proposal creation with PDF export
+2. **Proposal Generator**: AI-powered proposal creation
 3. **Audit Dashboard**: Content auditing with LanguageTool integration
 4. **Sitemap Scanner**: Automated sitemap discovery and analysis
 

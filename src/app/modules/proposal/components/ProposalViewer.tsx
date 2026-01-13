@@ -2,12 +2,13 @@
 
 import { useRef, useState, useLayoutEffect, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Share2, Mail, X, Copy, ExternalLink, PenLine, MessageSquare } from "lucide-react";
+import { ArrowLeft, Share2, Mail, X, Copy, ExternalLink, PenLine, MessageSquare, FileDown } from "lucide-react";
 import { Proposal, ProposalSectionId } from "../types/Proposal";
 import SignatureSection from "./SignatureSection";
 import { proposalService } from "../services/ProposalService";
 import { commentService } from "../services/CommentService";
 import CommentSidebar from "./CommentSidebar";
+import { downloadProposalPDF } from "../utils/pdfGenerator";
 
 const DEFAULT_HERO = '/default-hero.png';
 
@@ -19,18 +20,18 @@ const convertBulletsToHtmlLists = (html: string): string => {
   if (!html || !html.includes('•')) {
     return html;
   }
-  
+
   // More flexible pattern: bullet followed by any whitespace (including newlines) and then a <p> tag
   // This handles cases like:
   // "• <p>", "•\n<p>", "• \n<p>", "•\n\n<p>", etc.
   const bulletItemPattern = /•[\s\n\r]*(<p[^>]*>[\s\S]*?<\/p>)/gi;
-  
+
   const matches: Array<{ full: string; pTag: string; index: number }> = [];
   let match;
-  
+
   // Reset regex lastIndex
   bulletItemPattern.lastIndex = 0;
-  
+
   // Collect all matches
   while ((match = bulletItemPattern.exec(html)) !== null) {
     matches.push({
@@ -39,29 +40,29 @@ const convertBulletsToHtmlLists = (html: string): string => {
       index: match.index
     });
   }
-  
+
   if (matches.length === 0) {
     return html;
   }
-  
+
   // Build result by grouping consecutive bullets
   let result = '';
   let lastIndex = 0;
   let currentGroup: string[] = [];
   let groupStart = -1;
-  
+
   for (let i = 0; i < matches.length; i++) {
     const curr = matches[i];
     const prev = i > 0 ? matches[i - 1] : null;
-    
+
     // Calculate distance from previous match
-    const distance = prev 
+    const distance = prev
       ? curr.index - (prev.index + prev.full.length)
       : Infinity;
-    
+
     // Consider consecutive if within 300 chars (to handle whitespace/newlines)
     const isConsecutive = distance < 300;
-    
+
     if (!isConsecutive && currentGroup.length > 0) {
       // Close previous group
       const prevMatch = matches[i - 1];
@@ -71,24 +72,24 @@ const convertBulletsToHtmlLists = (html: string): string => {
       currentGroup = [];
       groupStart = -1;
     }
-    
+
     if (currentGroup.length === 0) {
       groupStart = curr.index;
     }
-    
+
     currentGroup.push(curr.pTag);
   }
-  
+
   // Handle the last group
   if (currentGroup.length > 0) {
     result += html.substring(lastIndex, groupStart);
     result += '<ul>' + currentGroup.map(p => `<li>${p}</li>`).join('') + '</ul>';
     lastIndex = matches[matches.length - 1].index + matches[matches.length - 1].full.length;
   }
-  
+
   // Add remaining content
   result += html.substring(lastIndex);
-  
+
   return result;
 };
 
@@ -99,10 +100,8 @@ interface ProposalViewerProps {
 }
 
 export default function ProposalViewer({ proposal, onBack, isPublic = false }: ProposalViewerProps) {
-  const proposalRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [containerWidth, setContainerWidth] = useState(794); // Default to A4 width
+  const [containerWidth, setContainerWidth] = useState(794);
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -112,6 +111,7 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
   const [showCommentSidebar, setShowCommentSidebar] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const [activeCommentSection, setActiveCommentSection] = useState<ProposalSectionId | undefined>(undefined);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Subscribe to comment count
   useEffect(() => {
@@ -151,11 +151,7 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
 
   // Responsive Width Logic
   useLayoutEffect(() => {
-    if (isGeneratingPdf || !containerRef.current) {
-      // Force A4 width during PDF gen
-      if (isGeneratingPdf) setContainerWidth(794);
-      return;
-    }
+    if (!containerRef.current) return;
 
     const updateWidth = () => {
       if (containerRef.current) {
@@ -171,214 +167,11 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
     updateWidth(); // Initial
 
     return () => resizeObserver.disconnect();
-  }, [isGeneratingPdf]);
+  }, []);
 
   // Get hero image with fallback to default
   const rawHeroImage = proposal.heroImage && proposal.heroImage.trim() ? proposal.heroImage : DEFAULT_HERO;
-
-  // Make hero image URL absolute for PDF generation
-  // This is needed because Puppeteer can't resolve relative URLs
-  const heroImage = typeof window !== 'undefined' && rawHeroImage.startsWith('/')
-    ? `${window.location.origin}${rawHeroImage}`
-    : rawHeroImage;
-
-  const generatePDF = async () => {
-    if (!proposalRef.current) return;
-
-    setIsGeneratingPdf(true);
-
-    // Allow React to re-render with fixed width
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    try {
-      // 1. Get the HTML content
-      const element = proposalRef.current;
-
-      // Helper to copy computed styles inline for PDF rendering
-      const copyComputedStyles = (source: Element, target: HTMLElement) => {
-        const computed = window.getComputedStyle(source);
-        const importantStyles = [
-          'display', 'position', 'top', 'right', 'bottom', 'left',
-          'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
-          'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
-          'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-          'border', 'border-width', 'border-style', 'border-color', 'border-radius',
-          'background', 'background-color', 'background-image', 'background-size', 'background-position', 'background-repeat',
-          'color', 'font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing',
-          'text-align', 'text-decoration', 'text-transform', 'white-space', 'word-wrap', 'overflow-wrap',
-          'flex', 'flex-direction', 'flex-wrap', 'justify-content', 'align-items', 'align-content', 'gap',
-          'grid', 'grid-template-columns', 'grid-template-rows', 'grid-gap',
-          'overflow', 'opacity', 'visibility', 'z-index',
-          'box-shadow', 'transform', 'transition',
-          'list-style', 'list-style-type', 'list-style-position',
-        ];
-        
-        importantStyles.forEach(prop => {
-          const value = computed.getPropertyValue(prop);
-          if (value && value !== 'none' && value !== 'normal' && value !== 'auto' && value !== '0px') {
-            target.style.setProperty(prop, value);
-          }
-        });
-      };
-
-      // Deep clone with computed styles
-      const cloneWithStyles = (source: Element): HTMLElement => {
-        const clone = source.cloneNode(false) as HTMLElement;
-        
-        // Copy computed styles
-        if (clone.style) {
-          copyComputedStyles(source, clone);
-        }
-        
-        // Handle children
-        source.childNodes.forEach(child => {
-          if (child.nodeType === Node.ELEMENT_NODE) {
-            clone.appendChild(cloneWithStyles(child as Element));
-          } else if (child.nodeType === Node.TEXT_NODE) {
-            clone.appendChild(child.cloneNode(true));
-          }
-        });
-        
-        return clone;
-      };
-
-      // Clone the element with all computed styles
-      const clone = cloneWithStyles(element);
-      
-      // Set fixed width matching web container (max-w-4xl = 896px)
-      // This ensures consistent spacing between web view and PDF
-      clone.style.width = '896px';
-      clone.style.maxWidth = '896px';
-      clone.style.margin = '0';
-      
-      // Remove box shadow for cleaner PDF
-      clone.style.boxShadow = 'none';
-      
-      // Fix relative URLs in images
-      const images = clone.querySelectorAll('img');
-      images.forEach(img => {
-        const src = img.getAttribute('src');
-        if (src && src.startsWith('/')) {
-          img.src = `${window.location.origin}${src}`;
-        }
-      });
-
-      // Get the HTML string
-      let htmlContent = clone.outerHTML;
-
-      // Fix relative URLs in inline styles (background-image, etc.)
-      htmlContent = htmlContent.replace(/url\(['"]?\/([^)'"]+)['"]?\)/g, (match, path) => {
-        return `url('${window.location.origin}/${path}')`;
-      });
-
-      // Fix relative img src
-      htmlContent = htmlContent.replace(/src="\/([^"]+)"/g, (match, path) => {
-        return `src="${window.location.origin}/${path}"`;
-      });
-
-      // Wrap in a full HTML document with fonts and additional styles
-      const fullHtml = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="preconnect" href="https://fonts.googleapis.com">
-            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-            <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300;400;500;600;700;800&family=Funnel+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-            <style>
-              * { 
-                box-sizing: border-box; 
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              body { 
-                margin: 0; 
-                padding: 0; 
-                font-family: 'Funnel Sans', system-ui, -apple-system, sans-serif;
-                -webkit-font-smoothing: antialiased;
-                display: flex;
-                justify-content: center;
-              }
-              .pdf-wrapper {
-                width: 896px;
-                max-width: 896px;
-              }
-              img {
-                max-width: 100%;
-                height: auto;
-              }
-              /* Ensure backgrounds print */
-              @media print {
-                * {
-                  -webkit-print-color-adjust: exact !important;
-                  print-color-adjust: exact !important;
-                }
-              }
-              /* List styles */
-              ul, ol {
-                padding-left: 1.5rem;
-                margin: 0.5rem 0;
-              }
-              ul {
-                list-style-type: disc;
-              }
-              ol {
-                list-style-type: decimal;
-              }
-              li {
-                margin-bottom: 0.25rem;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="pdf-wrapper">
-              ${htmlContent}
-            </div>
-          </body>
-        </html>
-      `;
-
-      const response = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ html: fullHtml }),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        let errorMsg = 'Failed to generate PDF';
-        try {
-          const json = JSON.parse(text);
-          errorMsg = json.error || JSON.stringify(json);
-          console.error("PDF Gen Server Error (JSON):", json);
-        } catch {
-          console.error("PDF Gen Server Error (Text):", text);
-          errorMsg = text.slice(0, 200) || `Server Error ${response.status}`; // truncated
-        }
-        throw new Error(errorMsg);
-      }
-
-      // Handle the blob response
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${proposal.title.replace(/\s+/g, '_')}_Proposal.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-    } catch (error: unknown) {
-      console.error('Error generating PDF:', error);
-      alert(`Error generating PDF: ${(error as Error).message}`);
-    } finally {
-      setIsGeneratingPdf(false);
-    }
-  };
+  const heroImage = rawHeroImage;
 
 
 
@@ -499,10 +292,23 @@ ${proposal.agencyName}`;
     setTimeout(() => setEmailCopied(false), 2000);
   };
 
+  const handleDownloadPDF = async () => {
+    setIsDownloading(true);
+    try {
+      const filename = `proposal-${proposal.clientName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`;
+      await downloadProposalPDF(currentProposal.id, filename);
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Failed to download PDF. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background print:bg-white">
       {/* Fixed Header - Dark Theme */}
-      <div className="sticky top-0 z-50 bg-[#1A1A1A] border-b border-[#333] px-6 py-4 text-white shadow-md">
+      <div className="sticky top-0 z-50 bg-[#1A1A1A] border-b border-[#333] px-6 py-4 text-white shadow-md no-print">
         <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             {!isPublic && (
@@ -539,15 +345,17 @@ ${proposal.agencyName}`;
               </Button>
             )}
             <Button
-              onClick={generatePDF}
-              className="flex items-center gap-2 bg-white hover:bg-gray-100 text-black border-none h-9 px-4 hidden sm:flex"
+              onClick={handleDownloadPDF}
+              disabled={isDownloading}
+              className="flex items-center gap-2 bg-[#333] hover:bg-[#444] text-white border-none h-9 px-4"
             >
-              <Download className="w-4 h-4" />
-              Download PDF
+              <FileDown className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`} />
+              {isDownloading ? 'Generating...' : 'Download'}
             </Button>
             {/* Comments Button */}
             <Button
               onClick={() => setShowCommentSidebar(true)}
+              data-html2canvas-ignore
               className="flex items-center gap-2 bg-[#333] hover:bg-[#444] text-white border-none h-9 px-4 relative"
             >
               <MessageSquare className="w-4 h-4" />
@@ -561,6 +369,7 @@ ${proposal.agencyName}`;
             {isPublic && !currentProposal.data.signatures.client.signedAt && (
               <Button
                 onClick={() => document.getElementById('signature-section')?.scrollIntoView({ behavior: 'smooth' })}
+                data-html2canvas-ignore
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white border-none h-9 px-4 shadow-sm animate-pulse"
               >
                 <PenLine className="w-4 h-4" />
@@ -628,17 +437,15 @@ ${proposal.agencyName}`;
         </div>
       )}
 
-      {/* Proposal Content - PDF capture area with ALL inline styles */}
-      <div className="p-6 flex justify-center bg-gray-200 min-h-[calc(100vh-80px)]">
+      {/* Proposal Content */}
+      <div className="p-6 flex justify-center bg-gray-200 min-h-[calc(100vh-80px)] print:p-0 print:bg-white print:min-h-0">
         <div
           ref={containerRef}
-          className="w-full max-w-4xl"
+          className="w-full max-w-4xl print:max-w-none print:w-full"
         >
           <div
-            ref={proposalRef}
-            className="bg-white"
-            style={{
-            }}
+            id="proposal-container"
+            className="bg-white shadow-xl print:shadow-none"
           >
             {/* Header Section with Hero Image */}
             <div style={{
@@ -683,8 +490,11 @@ ${proposal.agencyName}`;
               </div>
             </div>
 
+            {/* Print Header - Only visible in PDF if we needed it, but jspdf will capture the hero */}
+
             {/* Content Sections */}
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+              __html: `
               .proposal-content ul {
                 list-style-type: disc;
                 list-style-position: outside;
@@ -726,21 +536,32 @@ ${proposal.agencyName}`;
               .proposal-content p {
                 margin-bottom: 0.5rem;
               }
+              @media print {
+                html, body {
+                  background-color: white !important;
+                  color: black !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
+                .proposal-content section {
+                  page-break-inside: avoid;
+                }
+              }
             `}} />
             <div className="p-6 sm:p-8 md:p-12 flex flex-col gap-12 sm:gap-16">
               {/* Overview */}
               <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('overview')}`}>
                 <div className="flex items-start justify-between">
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Overview</h2>
-                  {!isGeneratingPdf && (
-                    <button
-                      onClick={() => openCommentsForSection('overview')}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                      title="Add comment to Overview"
-                    >
-                      <MessageSquare className="w-5 h-5" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => openCommentsForSection('overview')}
+                    data-html2canvas-ignore
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                    title="Add comment to Overview"
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                  </button>
                 </div>
                 <div>
                   <div
@@ -755,15 +576,14 @@ ${proposal.agencyName}`;
               <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('aboutUs')}`}>
                 <div className="flex items-start justify-between">
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>About Us</h2>
-                  {!isGeneratingPdf && (
-                    <button
-                      onClick={() => openCommentsForSection('aboutUs')}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                      title="Add comment to About Us"
-                    >
-                      <MessageSquare className="w-5 h-5" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => openCommentsForSection('aboutUs')}
+                    data-html2canvas-ignore
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                    title="Add comment to About Us"
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                  </button>
                 </div>
                 <div>
                   <div
@@ -778,15 +598,14 @@ ${proposal.agencyName}`;
               <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('pricing')}`}>
                 <div className="flex items-start justify-between">
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Pricing for {proposal.clientName}</h2>
-                  {!isGeneratingPdf && (
-                    <button
-                      onClick={() => openCommentsForSection('pricing')}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                      title="Add comment to Pricing"
-                    >
-                      <MessageSquare className="w-5 h-5" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => openCommentsForSection('pricing')}
+                    data-html2canvas-ignore
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                    title="Add comment to Pricing"
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                  </button>
                 </div>
                 <div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -802,7 +621,7 @@ ${proposal.agencyName}`;
 
                       <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         {proposal.data.pricing.items.map((item, index) => (
-                          <div key={index}>
+                          <div key={index} className="break-inside-avoid">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                               <div style={{ flex: 1 }}>
                                 <h4 style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>{item.name}</h4>
@@ -844,21 +663,20 @@ ${proposal.agencyName}`;
                 <div style={{ marginBottom: '40px' }}>
                   <div className="flex items-center justify-between" style={{ marginBottom: '24px', borderBottom: '2px solid #3b82f6', paddingBottom: '8px' }}>
                     <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Project Timeline</h2>
-                    {!isGeneratingPdf && (
-                      <button
-                        onClick={() => openCommentsForSection('timeline')}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                        title="Add comment to Timeline"
-                      >
-                        <MessageSquare className="w-5 h-5" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => openCommentsForSection('timeline')}
+                      data-html2canvas-ignore
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                      title="Add comment to Timeline"
+                    >
+                      <MessageSquare className="w-5 h-5" />
+                    </button>
                   </div>
 
                   {/* List View */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                     {proposal.data.timeline.phases.map((phase, index) => (
-                      <div key={index} style={{ display: 'flex', gap: '16px' }}>
+                      <div key={index} style={{ display: 'flex', gap: '16px' }} className="break-inside-avoid">
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <div style={{
                             width: '32px',
@@ -906,7 +724,7 @@ ${proposal.agencyName}`;
                     ))}
                   </div>
 
-                  {/* Notion-style Gantt Chart (Inline Styles for PDF) */}
+                  {/* Notion-style Gantt Chart */}
                   {proposal.data.timeline.phases.some(p => p.startDate && p.endDate) && (() => {
                     const phases = proposal.data.timeline.phases.filter(p => p.startDate && p.endDate);
                     if (phases.length === 0) return null;
@@ -926,10 +744,9 @@ ${proposal.agencyName}`;
 
                     // Layout Constants (Pixels)
                     // Dynamic TOTAL_WIDTH based on container (subtracting 48px * 2 padding)
-                    // If generating PDF, we strictly use 698 (794 - 96).
                     const PADDING_X = 96;
                     const DYNAMIC_WIDTH = containerWidth - PADDING_X;
-                    const TOTAL_WIDTH = isGeneratingPdf ? 698 : Math.max(698, DYNAMIC_WIDTH);
+                    const TOTAL_WIDTH = Math.max(698, DYNAMIC_WIDTH);
 
                     const SIDEBAR_WIDTH = 260;
                     const TIMELINE_WIDTH = TOTAL_WIDTH - SIDEBAR_WIDTH;
@@ -977,7 +794,6 @@ ${proposal.agencyName}`;
 
                     // Interaction Handlers
                     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-                      if (isGeneratingPdf) return;
                       const rect = e.currentTarget.getBoundingClientRect();
                       const x = e.clientX - rect.left;
 
@@ -1001,17 +817,15 @@ ${proposal.agencyName}`;
                     };
 
                     return (
-                      <div className="w-full overflow-x-auto scrollbar-thin scrollbar-thumb-blue-200 scrollbar-track-gray-100 hover:scrollbar-thumb-blue-300 transition-all duration-300" style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #f3f4f6', pageBreakInside: 'avoid' }}>
+                      <div className="w-full overflow-x-auto scrollbar-thin scrollbar-thumb-blue-200 scrollbar-track-gray-100 hover:scrollbar-thumb-blue-300 transition-all duration-300 break-inside-avoid" style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #f3f4f6', pageBreakInside: 'avoid' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
                           <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2" style={{ fontFamily: FONT_TITLE }}>
                             <span className="text-lg">📅</span> Project Schedule
                           </h3>
-                          {!isGeneratingPdf && (
-                            <span className="text-xs text-gray-400 hidden sm:inline">
-                              <span className="hidden md:inline">Hover to view dates • </span>
-                              Scroll horizontally on mobile →
-                            </span>
-                          )}
+                          <span className="text-xs text-gray-400 hidden sm:inline">
+                            <span className="hidden md:inline">Hover to view dates • </span>
+                            Scroll horizontally on mobile →
+                          </span>
                         </div>
 
                         <div className="group hover:shadow-lg transition-all duration-300" style={{
@@ -1089,7 +903,7 @@ ${proposal.agencyName}`;
                             style={{
                               width: `${TIMELINE_WIDTH}px`,
                               position: 'relative',
-                              cursor: isGeneratingPdf ? 'default' : 'crosshair'
+                              cursor: 'crosshair'
                             }}
                             onMouseMove={handleMouseMove}
                             onMouseLeave={handleMouseLeave}
@@ -1165,7 +979,7 @@ ${proposal.agencyName}`;
                             )}
 
                             {/* Hover Cursor Line */}
-                            {hoverX !== null && !isGeneratingPdf && (
+                            {hoverX !== null && (
                               <div style={{
                                 position: 'absolute',
                                 top: 0,
@@ -1290,15 +1104,14 @@ ${proposal.agencyName}`;
                 <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('terms')}`}>
                   <div className="flex items-start justify-between">
                     <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Terms</h2>
-                    {!isGeneratingPdf && (
-                      <button
-                        onClick={() => openCommentsForSection('terms')}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                        title="Add comment to Terms"
-                      >
-                        <MessageSquare className="w-5 h-5" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => openCommentsForSection('terms')}
+                      data-html2canvas-ignore
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                      title="Add comment to Terms"
+                    >
+                      <MessageSquare className="w-5 h-5" />
+                    </button>
                   </div>
                   <div>
                     <div
@@ -1354,32 +1167,34 @@ ${proposal.agencyName}`;
             </div>
 
             {/* Client Signature Section */}
-            <SignatureSection
-              clientName={currentProposal.data.signatures.client.name}
-              existingSignature={currentProposal.data.signatures.client.signatureData}
-              signedDocUrl={currentProposal.data.signatures.client.signedDocUrl}
-              signedAt={currentProposal.data.signatures.client.signedAt}
-              isPublic={isPublic}
-              onSign={async (signatureData) => {
-                try {
-                  await proposalService.signProposal(currentProposal.id, signatureData);
-                  alert('Proposal signed successfully!');
-                  // Refresh proposal data
-                  const updated = await proposalService.getProposalById(currentProposal.id);
-                  if (updated) setCurrentProposal(updated);
-                } catch (error) {
-                  console.error('Error signing proposal:', error);
-                  alert('Failed to save signature. Please try again.');
-                }
-              }}
-            />
+            <div className={!currentProposal.data.signatures.client.signedAt ? 'no-print' : ''}>
+              <SignatureSection
+                clientName={currentProposal.data.signatures.client.name}
+                existingSignature={currentProposal.data.signatures.client.signatureData}
+                signedDocUrl={currentProposal.data.signatures.client.signedDocUrl}
+                signedAt={currentProposal.data.signatures.client.signedAt}
+                isPublic={isPublic}
+                onSign={async (signatureData) => {
+                  try {
+                    await proposalService.signProposal(currentProposal.id, signatureData);
+                    alert('Proposal signed successfully!');
+                    // Refresh proposal data
+                    const updated = await proposalService.getProposalById(currentProposal.id);
+                    if (updated) setCurrentProposal(updated);
+                  } catch (error) {
+                    console.error('Error signing proposal:', error);
+                    alert('Failed to save signature. Please try again.');
+                  }
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>
 
       {/* Floating Mobile CTA for signing - only on mobile and when not signed */}
       {isPublic && !currentProposal.data.signatures.client.signedAt && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent md:hidden z-40 animate-slideUp">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent md:hidden z-40 animate-slideUp no-print">
           <Button
             onClick={() => document.getElementById('signature-section')?.scrollIntoView({ behavior: 'smooth' })}
             className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold shadow-2xl flex items-center justify-center gap-3 rounded-xl animate-pulse-subtle"

@@ -20,7 +20,6 @@ This project is an **embeddable JavaScript widget** and dashboard for managing p
 
 ### 2. Proposal Generator
 - AI-powered proposal creation.
-- PDF generation (`jspdf` + `html2canvas`).
 
 ### 3. Webflow Pages Manager (New!)
 A comprehensive tool for managing Webflow site SEO.
