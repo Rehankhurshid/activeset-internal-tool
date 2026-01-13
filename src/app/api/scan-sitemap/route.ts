@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
 import { ProjectLink } from '@/types';
+import { auditService } from '@/services/AuditService';
+import { changeLogService } from '@/services/ChangeLogService';
 
 interface SitemapEntry {
     url: string;
@@ -11,6 +13,13 @@ interface SitemapEntry {
 /**
  * Parse sitemap XML and extract URLs with locale information.
  * Supports both standard sitemaps and multi-lingual sitemaps with xhtml:link hreflang.
+ * 
+ * For multilingual sitemaps, each <url> block contains:
+ * - A primary <loc> URL
+ * - Multiple <xhtml:link> elements pointing to all language variants
+ * 
+ * We detect the locale of the primary URL by finding the hreflang entry 
+ * whose href matches the <loc> URL.
  */
 function parseSitemap(xmlText: string): SitemapEntry[] {
     const entries: SitemapEntry[] = [];
@@ -28,34 +37,40 @@ function parseSitemap(xmlText: string): SitemapEntry[] {
         if (!locMatch) continue;
 
         const primaryUrl = locMatch[1].trim();
+        const normalizedPrimaryUrl = primaryUrl.replace(/\/$/, '').toLowerCase();
+
+        // Skip if we've already seen this URL
+        if (seenUrls.has(normalizedPrimaryUrl)) continue;
 
         // Check for xhtml:link with hreflang (multi-lingual sitemap)
         // Format: <xhtml:link rel="alternate" hreflang="de" href="https://..."/>
         const hreflangRegex = /<xhtml:link[^>]*hreflang="([^"]+)"[^>]*href="([^"]+)"/g;
         const hreflangMatches = [...urlBlock.matchAll(hreflangRegex)];
 
-        if (hreflangMatches.length > 0) {
-            // Multi-lingual: add each hreflang variant
-            for (const [, hreflang, href] of hreflangMatches) {
-                const url = href.trim();
-                const normalizedUrl = url.replace(/\/$/, '').toLowerCase();
+        let detectedLocale: string | undefined;
 
-                if (!seenUrls.has(normalizedUrl)) {
-                    seenUrls.add(normalizedUrl);
-                    entries.push({
-                        url,
-                        locale: hreflang === 'x-default' ? undefined : hreflang
-                    });
+        if (hreflangMatches.length > 0) {
+            // Find the hreflang entry that matches the primary URL
+            for (const [, hreflang, href] of hreflangMatches) {
+                const normalizedHref = href.trim().replace(/\/$/, '').toLowerCase();
+                if (normalizedHref === normalizedPrimaryUrl) {
+                    // Found matching hreflang for this URL
+                    detectedLocale = hreflang === 'x-default' ? 'en' : hreflang;
+                    break;
                 }
             }
-        } else {
-            // Single-language: just add the primary URL
-            const normalizedUrl = primaryUrl.replace(/\/$/, '').toLowerCase();
-            if (!seenUrls.has(normalizedUrl)) {
-                seenUrls.add(normalizedUrl);
-                entries.push({ url: primaryUrl });
+
+            // Fallback: if no exact match found, try to detect from URL path
+            if (!detectedLocale) {
+                detectedLocale = detectLocaleFromPath(primaryUrl);
             }
         }
+
+        seenUrls.add(normalizedPrimaryUrl);
+        entries.push({
+            url: primaryUrl,
+            locale: detectedLocale
+        });
     }
 
     // Fallback: if no <url> blocks found, try simple <loc> extraction
@@ -67,13 +82,112 @@ function parseSitemap(xmlText: string): SitemapEntry[] {
             const normalizedUrl = url.replace(/\/$/, '').toLowerCase();
             if (!seenUrls.has(normalizedUrl)) {
                 seenUrls.add(normalizedUrl);
-                entries.push({ url });
+                entries.push({
+                    url,
+                    locale: detectLocaleFromPath(url)
+                });
             }
         }
     }
 
     return entries;
 }
+
+/**
+ * Detect locale from URL path patterns like /es-mx/, /pt-br/, /de/, etc.
+ */
+function detectLocaleFromPath(url: string): string | undefined {
+    try {
+        const pathname = new URL(url).pathname;
+        // Common locale patterns: /es-mx/, /pt-BR/, /de/, /fr-ca/, etc.
+        const localeMatch = pathname.match(/^\/([a-z]{2}(?:-[a-z]{2,3})?)\//i);
+        if (localeMatch) {
+            return localeMatch[1].toLowerCase();
+        }
+        // Check if path starts with locale without trailing content (e.g., /es-mx)
+        const shortMatch = pathname.match(/^\/([a-z]{2}(?:-[a-z]{2,3})?)$/i);
+        if (shortMatch) {
+            return shortMatch[1].toLowerCase();
+        }
+    } catch {
+        // Invalid URL, ignore
+    }
+    return undefined;
+}
+
+/**
+ * Check if a URL path matches a pattern.
+ * Supports glob-like patterns: /blog/* matches /blog/anything
+ */
+function matchesPattern(pathname: string, pattern: string): boolean {
+    // Normalize both
+    const normalizedPath = pathname.replace(/\/$/, '').toLowerCase();
+    const normalizedPattern = pattern.replace(/\/$/, '').toLowerCase();
+
+    // Handle wildcard patterns
+    if (normalizedPattern.endsWith('/*')) {
+        const prefix = normalizedPattern.slice(0, -2);
+        return normalizedPath === prefix || normalizedPath.startsWith(prefix + '/');
+    }
+
+    // Exact match
+    return normalizedPath === normalizedPattern;
+}
+
+/**
+ * Detect page type (collection/CMS vs static) using:
+ * 1. User-defined PageTypeRules (highest priority)
+ * 2. Webflow API data
+ * 3. Path-based heuristics (fallback)
+ */
+function detectPageType(
+    url: string,
+    webflowPageTypeMap: Map<string, 'collection' | 'static'>,
+    pageTypeRules: Array<{ pattern: string; pageType: 'static' | 'collection'; priority: number }> = []
+): 'collection' | 'static' {
+    try {
+        const normalizedUrl = url.replace(/\/$/, '').toLowerCase();
+        const pathname = new URL(url).pathname.replace(/\/$/, '').toLowerCase();
+
+        // Sort rules by priority (higher first)
+        const sortedRules = [...pageTypeRules].sort((a, b) => b.priority - a.priority);
+
+        // First try: Check user-defined rules
+        for (const rule of sortedRules) {
+            if (matchesPattern(pathname, rule.pattern)) {
+                return rule.pageType;
+            }
+        }
+
+        // Second try: exact URL match from Webflow
+        if (webflowPageTypeMap.has(normalizedUrl)) {
+            return webflowPageTypeMap.get(normalizedUrl)!;
+        }
+
+        // Third try: path match from Webflow
+        if (webflowPageTypeMap.has(pathname)) {
+            return webflowPageTypeMap.get(pathname)!;
+        }
+
+        // Fallback: path-based heuristic
+        const pathSegments = pathname.split('/').filter(Boolean);
+
+        // Filter out locale segments (e.g., es-mx, pt-br, de, fr-ca)
+        // A locale segment is 2 letters optionally followed by -2-3 letters
+        const nonLocaleSegments = pathSegments.filter(seg =>
+            !seg.match(/^[a-z]{2}(-[a-z]{2,3})?$/i)
+        );
+
+        // If after removing locale we have 0 or 1 segments, it's static
+        // e.g., /es-mx/ -> 0 segments after filtering -> static
+        // e.g., /es-mx/about -> 1 segment after filtering -> static  
+        // e.g., /blog/my-post -> 2 segments -> collection
+        return nonLocaleSegments.length > 1 ? 'collection' : 'static';
+    } catch {
+        return 'static'; // Default to static on error
+    }
+}
+
 
 export async function POST(request: NextRequest) {
     try {
@@ -114,8 +228,100 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Project not found' }, { status: 404 });
         }
 
-        // Normalize existing URLs to avoid duplicates
-        const existingUrls = new Set(project.links.map(l => l.url.replace(/\/$/, '').toLowerCase()));
+        // Build Webflow page type lookup if project has Webflow config
+        const webflowPageTypeMap = new Map<string, 'collection' | 'static'>();
+        if (project.webflowConfig?.siteId && project.webflowConfig?.apiToken) {
+            try {
+                console.log(`[scan-sitemap] Fetching Webflow pages for accurate CMS detection...`);
+                const webflowPagesUrl = new URL(`https://api.webflow.com/v2/sites/${project.webflowConfig.siteId}/pages`);
+                webflowPagesUrl.searchParams.set('limit', '100');
+
+                const wfResponse = await fetch(webflowPagesUrl.toString(), {
+                    headers: {
+                        Authorization: `Bearer ${project.webflowConfig.apiToken}`,
+                        accept: 'application/json',
+                    },
+                });
+
+                if (wfResponse.ok) {
+                    const wfData = await wfResponse.json();
+                    const pages = wfData.pages || [];
+
+                    // Get custom domain or subdomain for URL matching
+                    const baseUrl = project.webflowConfig.customDomain
+                        ? `https://${project.webflowConfig.customDomain}`
+                        : null;
+
+                    pages.forEach((page: { publishedPath?: string; collectionId?: string; slug?: string }) => {
+                        const path = page.publishedPath || `/${page.slug}`;
+                        const pageType = page.collectionId ? 'collection' : 'static';
+
+                        // Store the path (normalized) -> pageType mapping
+                        const normalizedPath = path.replace(/\/$/, '').toLowerCase();
+                        webflowPageTypeMap.set(normalizedPath, pageType);
+
+                        // Also store with base URL if we know the domain
+                        if (baseUrl) {
+                            const fullUrl = `${baseUrl}${path}`.replace(/\/$/, '').toLowerCase();
+                            webflowPageTypeMap.set(fullUrl, pageType);
+                        }
+                    });
+
+                    console.log(`[scan-sitemap] Webflow page types loaded: ${webflowPageTypeMap.size} mappings (${pages.filter((p: { collectionId?: string }) => p.collectionId).length} CMS pages)`);
+                } else {
+                    console.warn(`[scan-sitemap] Failed to fetch Webflow pages: ${wfResponse.status} - using path heuristics`);
+                }
+            } catch (wfError) {
+                console.warn(`[scan-sitemap] Webflow API error, falling back to path heuristics:`, wfError);
+            }
+        }
+
+        // Create a set of normalized sitemap URLs for quick lookup
+        const sitemapUrlSet = new Set(
+            sitemapEntries.map(entry => entry.url.replace(/\/$/, '').toLowerCase())
+        );
+
+        // Separate existing links into auto and manual
+        const existingAutoLinks = project.links.filter(l => l.source === 'auto');
+        const manualLinks = project.links.filter(l => l.source !== 'auto');
+
+        // Identify stale auto links (not in sitemap) to remove
+        const staleAutoLinks = existingAutoLinks.filter(link => {
+            const normalizedUrl = link.url.replace(/\/$/, '').toLowerCase();
+            return !sitemapUrlSet.has(normalizedUrl);
+        });
+
+        // Identify auto links to keep (still in sitemap)
+        const keptAutoLinks = existingAutoLinks.filter(link => {
+            const normalizedUrl = link.url.replace(/\/$/, '').toLowerCase();
+            return sitemapUrlSet.has(normalizedUrl);
+        });
+
+        console.log(`[scan-sitemap] Stale auto links to remove: ${staleAutoLinks.length}`);
+        console.log(`[scan-sitemap] Auto links to keep: ${keptAutoLinks.length}`);
+        console.log(`[scan-sitemap] Manual links preserved: ${manualLinks.length}`);
+
+        // Delete audit history for stale links (batch delete in parallel)
+        if (staleAutoLinks.length > 0) {
+            console.log(`[scan-sitemap] Batch deleting audit history for ${staleAutoLinks.length} stale links...`);
+
+            // Run all deletions in parallel
+            await Promise.all(
+                staleAutoLinks.flatMap(staleLink => [
+                    auditService.deleteAuditLogsForLink(staleLink.id),
+                    changeLogService.deleteEntriesForLink(staleLink.id)
+                ])
+            );
+
+            console.log(`[scan-sitemap] Cleanup complete for ${staleAutoLinks.length} links`);
+        }
+
+        // Normalize existing URLs (from kept auto + manual) to avoid duplicates
+        const existingUrls = new Set([
+            ...keptAutoLinks.map(l => l.url.replace(/\/$/, '').toLowerCase()),
+            ...manualLinks.map(l => l.url.replace(/\/$/, '').toLowerCase())
+        ]);
+
         const newLinks: ProjectLink[] = [];
 
         sitemapEntries.forEach(entry => {
@@ -126,10 +332,8 @@ export async function POST(request: NextRequest) {
                 // Use "Homepage" for root path, otherwise use pathname
                 const displayTitle = pathname === '/' ? 'Homepage' : pathname;
 
-                // Detect page type: Nested paths (>1 segment) are likely collections/CMS items
-                const pathSegments = pathname.split('/').filter(Boolean);
-                const isCollection = pathSegments.length > 1; // e.g., /blog/post-1
-                const pageType: 'collection' | 'static' = isCollection ? 'collection' : 'static';
+                // Detect page type using rules, Webflow API data, or path heuristics
+                const pageType = detectPageType(entry.url, webflowPageTypeMap, project.pageTypeRules || []);
 
                 const title = entry.locale
                     ? `${displayTitle} [${entry.locale.toUpperCase()}]`
@@ -140,7 +344,7 @@ export async function POST(request: NextRequest) {
                     url: entry.url,
                     title: title,
                     source: 'auto',
-                    order: project.links.length + newLinks.length,
+                    order: keptAutoLinks.length + manualLinks.length + newLinks.length,
                     pageType
                 };
 
@@ -152,48 +356,36 @@ export async function POST(request: NextRequest) {
                 newLinks.push(newLink);
                 existingUrls.add(normalized);
             } else {
-                // URL already exists - find and mark it as 'auto' source to include in Audit Dashboard
-                const existingLink = project.links.find(l =>
+                // URL already exists - find and ensure it's marked as 'auto' source
+                const existingLink = [...keptAutoLinks, ...manualLinks].find(l =>
                     l.url.replace(/\/$/, '').toLowerCase() === normalized
                 );
-                if (existingLink) {
-                    if (existingLink.source !== 'auto') {
-                        existingLink.source = 'auto';
-                        console.log(`[scan-sitemap] Updated source to 'auto': ${entry.url}`);
-                    }
-                    // Retroactively set pageType if missing
-                    if (!existingLink.pageType) {
-                        try {
-                            const pathname = new URL(existingLink.url).pathname;
-                            const pathSegments = pathname.split('/').filter(Boolean);
-                            const isCollection = pathSegments.length > 1;
-                            existingLink.pageType = isCollection ? 'collection' : 'static';
-                        } catch (e) { /* ignore URL parse error */ }
-                    }
-                } else {
-                    console.log(`[scan-sitemap] Skipped (already exists): ${entry.url}`);
+                if (existingLink && existingLink.source !== 'auto') {
+                    existingLink.source = 'auto';
+                    console.log(`[scan-sitemap] Updated source to 'auto': ${entry.url}`);
+                }
+                // Retroactively set or update pageType using rules/Webflow data
+                if (existingLink && !existingLink.pageType) {
+                    existingLink.pageType = detectPageType(existingLink.url, webflowPageTypeMap, project.pageTypeRules || []);
                 }
             }
         });
 
         console.log(`Adding ${newLinks.length} new links from sitemap (${sitemapEntries.filter(e => e.locale).length} with locale info)`);
 
-        // Update project with new links + any existing links with updated source/pageType
-        // Ensure existing links also get pageType if missing
-        const updatedExistingLinks = project.links.map(link => {
+        // Build final links: manual links + kept auto links + new links
+        // Ensure existing links also get pageType if missing, using Webflow data
+        const processedKeptAutoLinks = keptAutoLinks.map(link => {
             if (link.pageType) return link;
-            // Retroactively detect page type
-            try {
-                const pathname = new URL(link.url).pathname;
-                const pathSegments = pathname.split('/').filter(Boolean);
-                const isCollection = pathSegments.length > 1;
-                return { ...link, pageType: (isCollection ? 'collection' : 'static') as 'collection' | 'static' };
-            } catch (e) {
-                return link;
-            }
+            return { ...link, pageType: detectPageType(link.url, webflowPageTypeMap, project.pageTypeRules || []) };
         });
 
-        const updatedLinks = [...updatedExistingLinks, ...newLinks];
+        const processedManualLinks = manualLinks.map(link => {
+            if (link.pageType) return link;
+            return { ...link, pageType: detectPageType(link.url, webflowPageTypeMap, project.pageTypeRules || []) };
+        });
+
+        const updatedLinks = [...processedManualLinks, ...processedKeptAutoLinks, ...newLinks];
         await projectsService.updateProjectLinks(projectId, updatedLinks);
 
         // Save sitemap URL for daily scans
@@ -204,6 +396,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             count: newLinks.length,
             added: newLinks,
+            removed: staleAutoLinks.length,
+            removedLinks: staleAutoLinks.map(l => ({ id: l.id, url: l.url, title: l.title })),
             totalFound: sitemapEntries.length,
             localesDetected: [...new Set(sitemapEntries.map(e => e.locale).filter(Boolean))]
         });
@@ -213,3 +407,4 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
+

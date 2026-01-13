@@ -169,6 +169,14 @@ export interface ChangeLogQueryOptions {
   limit?: number;
 }
 
+// Rule for automatic page type detection based on URL patterns
+export interface PageTypeRule {
+  id: string;
+  pattern: string; // glob-like pattern, e.g., "/blog/*", "/features/*"
+  pageType: 'static' | 'collection';
+  priority: number; // Higher priority rules are checked first
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -178,6 +186,7 @@ export interface Project {
   userId: string;
   webflowConfig?: WebflowConfig;
   sitemapUrl?: string; // For daily scheduled scans
+  pageTypeRules?: PageTypeRule[]; // User-defined rules for page type detection
 }
 
 export type CreateProjectInput = Pick<Project, 'name' | 'userId'>;

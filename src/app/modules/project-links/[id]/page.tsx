@@ -117,7 +117,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
-            <AppNavigation 
+            <AppNavigation
                 title={project.name}
                 showBackButton
                 backHref="/modules/project-links"
@@ -127,7 +127,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     <span className="hidden sm:inline">Embed</span>
                 </Button>
             </AppNavigation>
-            
+
             <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6 lg:space-y-8">
                 {/* Project Info */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -164,13 +164,20 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         {/* Show Scan Sitemap when in audit tab */}
                         {activeTab === 'audit' && (
                             <div className="w-full sm:w-auto">
-                                <ScanSitemapDialog projectId={project.id} />
+                                <ScanSitemapDialog
+                                    projectId={project.id}
+                                    existingRules={project.pageTypeRules}
+                                />
                             </div>
                         )}
                     </div>
 
                     <TabsContent value="audit" className="mt-4 sm:mt-6">
-                        <WebsiteAuditDashboard links={project.links.filter(l => l.source === 'auto')} projectId={project.id} />
+                        <WebsiteAuditDashboard
+                            links={project.links.filter(l => l.source === 'auto')}
+                            projectId={project.id}
+                            pageTypeRules={project.pageTypeRules}
+                        />
                     </TabsContent>
 
                     <TabsContent value="webflow" className="mt-4 sm:mt-6">

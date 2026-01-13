@@ -31,9 +31,11 @@ import {
   FileX,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Globe,
   Database,
   File,
+  FolderOpen,
   Settings2,
 } from "lucide-react"
 
@@ -258,16 +260,79 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     });
   }, [pagesData, searchQuery, statusFilter, localeFilter, pageTypeFilter, showOnlyChanged, sortBy]);
 
-  // Group filtered pages by type (CMS first, then Static)
+  // Helper to extract folder path from URL
+  const getFolderPath = useCallback((url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/').filter(Boolean);
+      
+      // Remove locale segments (e.g., 'en', 'es-mx')
+      const nonLocaleParts = pathParts.filter(part => 
+        !/^[a-z]{2}(-[a-z]{2})?$/i.test(part)
+      );
+      
+      if (nonLocaleParts.length <= 1) {
+        return '/'; // Root level pages
+      }
+      
+      // Return the first folder segment
+      return `/${nonLocaleParts[0]}`;
+    } catch {
+      return '/';
+    }
+  }, []);
+
+  // Group pages by folder within each type
+  const groupPagesByFolder = useCallback((pages: typeof filteredPages) => {
+    const folderMap = new Map<string, typeof pages>();
+    
+    pages.forEach(page => {
+      const folder = getFolderPath(page.path);
+      if (!folderMap.has(folder)) {
+        folderMap.set(folder, []);
+      }
+      folderMap.get(folder)!.push(page);
+    });
+    
+    // Sort folders: root first, then alphabetically
+    return Array.from(folderMap.entries())
+      .sort(([a], [b]) => {
+        if (a === '/') return -1;
+        if (b === '/') return 1;
+        return a.localeCompare(b);
+      })
+      .map(([folder, folderPages]) => ({
+        folder,
+        label: folder === '/' ? 'Root Pages' : `${folder}/*`,
+        pages: folderPages
+      }));
+  }, [getFolderPath]);
+
+  // Group filtered pages by type (CMS first, then Static), then by folder
   const groupedPages = useMemo(() => {
     const cmsPages = filteredPages.filter(p => p.pageType === 'collection');
     const staticPages = filteredPages.filter(p => p.pageType !== 'collection');
     
     return [
-      { type: 'collection', label: 'CMS Pages', icon: Database, pages: cmsPages },
-      { type: 'static', label: 'Static Pages', icon: File, pages: staticPages }
-    ].filter(group => group.pages.length > 0);
-  }, [filteredPages]);
+      { type: 'collection', label: 'CMS Pages', icon: Database, folders: groupPagesByFolder(cmsPages), totalCount: cmsPages.length },
+      { type: 'static', label: 'Static Pages', icon: File, folders: groupPagesByFolder(staticPages), totalCount: staticPages.length }
+    ].filter(group => group.totalCount > 0);
+  }, [filteredPages, groupPagesByFolder]);
+
+  // Track collapsed state for folders
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  
+  const toggleFolder = useCallback((folderId: string) => {
+    setCollapsedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return next;
+    });
+  }, []);
 
   // 3. Compute KPI Metrics
   const metrics = useMemo(() => {
@@ -625,71 +690,103 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                     const GroupIcon = group.icon;
                     return (
                       <React.Fragment key={`group-${group.type}`}>
-                        {/* Group Header */}
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        {/* Type Group Header (CMS/Static) */}
+                        <TableRow className="bg-muted/70 hover:bg-muted/70">
                           <TableCell colSpan={6} className="py-2">
-                            <div className="flex items-center gap-2 font-medium">
+                            <div className="flex items-center gap-2 font-semibold">
                               <GroupIcon className="h-4 w-4" />
                               <span>{group.label}</span>
                               <Badge variant="secondary" className="text-xs">
-                                {group.pages.length}
+                                {group.totalCount}
                               </Badge>
                             </div>
                           </TableCell>
                         </TableRow>
-                        {/* Group Pages */}
-                        {group.pages.map((page) => (
-                          <TableRow key={page.id}>
-                            <TableCell className="font-medium max-w-[300px]">
-                              <div className="flex items-center gap-2">
-                                <div className="font-semibold block truncate flex-1" title={page.title}>{page.title || 'Untitled'}</div>
-                                {page.locale && (
-                                  <Badge variant="secondary" className="text-xs shrink-0 bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20">
-                                    {page.locale.toUpperCase()}
-                                  </Badge>
-                                )}
-                              </div>
-                              <NextLink
-                                href={`/modules/project-links/${projectId}/audit/${page.id}`}
-                                className="hover:underline text-xs text-blue-600 dark:text-blue-400 block truncate"
-                                title={page.path}
+                        
+                        {/* Folder Groups within Type */}
+                        {group.folders.map((folder) => {
+                          const folderId = `${group.type}-${folder.folder}`;
+                          const isCollapsed = collapsedFolders.has(folderId);
+                          
+                          return (
+                            <React.Fragment key={folderId}>
+                              {/* Folder Header - Collapsible */}
+                              <TableRow 
+                                className="bg-muted/30 hover:bg-muted/40 cursor-pointer"
+                                onClick={() => toggleFolder(folderId)}
                               >
-                                {page.path}
-                              </NextLink>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className={getStatusColor(page.status)}>
-                                {page.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground" title={page.lastScan}>
-                              {page.lastScanRelative}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Progress value={page.score} className="h-2 w-16" />
-                                <span className="text-sm font-medium">{page.score}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-wrap gap-1">
-                                {page.findings.length === 0 && <span className="text-xs text-muted-foreground">-</span>}
-                                {page.findings.map((finding, idx) => (
-                                  <Badge key={idx} variant="secondary" className="text-xs">
-                                    {finding}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button variant="outline" size="sm" asChild>
-                                  <NextLink href={`/modules/project-links/${projectId}/audit/${page.id}`}>View details</NextLink>
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                                <TableCell colSpan={6} className="py-1.5 pl-8">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    {isCollapsed ? (
+                                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                    )}
+                                    <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                                    <span className="font-medium font-mono text-muted-foreground">{folder.label}</span>
+                                    <Badge variant="outline" className="text-xs">
+                                      {folder.pages.length}
+                                    </Badge>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                              
+                              {/* Folder Pages */}
+                              {!isCollapsed && folder.pages.map((page) => (
+                                <TableRow key={page.id}>
+                                  <TableCell className="font-medium max-w-[300px] pl-14">
+                                    <div className="flex items-center gap-2">
+                                      <div className="font-semibold block truncate flex-1" title={page.title}>{page.title || 'Untitled'}</div>
+                                      {page.locale && (
+                                        <Badge variant="secondary" className="text-xs shrink-0 bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20">
+                                          {page.locale.toUpperCase()}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <NextLink
+                                      href={`/modules/project-links/${projectId}/audit/${page.id}`}
+                                      className="hover:underline text-xs text-blue-600 dark:text-blue-400 block truncate"
+                                      title={page.path}
+                                    >
+                                      {page.path}
+                                    </NextLink>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className={getStatusColor(page.status)}>
+                                      {page.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-sm text-muted-foreground" title={page.lastScan}>
+                                    {page.lastScanRelative}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      <Progress value={page.score} className="h-2 w-16" />
+                                      <span className="text-sm font-medium">{page.score}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex flex-wrap gap-1">
+                                      {page.findings.length === 0 && <span className="text-xs text-muted-foreground">-</span>}
+                                      {page.findings.map((finding, idx) => (
+                                        <Badge key={idx} variant="secondary" className="text-xs">
+                                          {finding}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-2">
+                                      <Button variant="outline" size="sm" asChild>
+                                        <NextLink href={`/modules/project-links/${projectId}/audit/${page.id}`}>View details</NextLink>
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </React.Fragment>
+                          );
+                        })}
                       </React.Fragment>
                     );
                   })}

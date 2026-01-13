@@ -291,4 +291,18 @@ export const projectsService = {
       throw new DatabaseError('Failed to remove Webflow configuration');
     }
   },
+
+  // Update page type rules for a project
+  async updateProjectPageTypeRules(projectId: string, rules: import('@/types').PageTypeRule[]): Promise<void> {
+    try {
+      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+      await updateDoc(projectRef, {
+        pageTypeRules: rules,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'updateProjectPageTypeRules');
+      throw new DatabaseError('Failed to update page type rules');
+    }
+  },
 }; 

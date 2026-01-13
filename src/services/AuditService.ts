@@ -5,7 +5,9 @@ import {
     where,
     orderBy,
     limit,
-    getDocs
+    getDocs,
+    deleteDoc,
+    doc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { DatabaseError, logError } from '@/lib/errors';
@@ -73,6 +75,31 @@ export const auditService = {
             logError(error, 'getLatestAuditLog');
             return null;
         }
+    },
+
+    // Delete all audit logs for a given link (used during sitemap sync cleanup)
+    async deleteAuditLogsForLink(linkId: string): Promise<number> {
+        try {
+            const q = query(
+                collection(db, AUDIT_LOGS_COLLECTION),
+                where('linkId', '==', linkId)
+            );
+
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) return 0;
+
+            // Delete all matching docs
+            const deletePromises = snapshot.docs.map(docSnapshot =>
+                deleteDoc(doc(db, AUDIT_LOGS_COLLECTION, docSnapshot.id))
+            );
+            await Promise.all(deletePromises);
+
+            return snapshot.size;
+        } catch (error) {
+            logError(error, 'deleteAuditLogsForLink');
+            console.error('Failed to delete audit logs:', error);
+            return 0;
+        }
     }
 };
 
@@ -84,5 +111,9 @@ export class AuditService {
 
     static async getLatestAuditLog(projectId: string, linkId: string): Promise<AuditLogEntry | null> {
         return auditService.getLatestAuditLog(projectId, linkId);
+    }
+
+    static async deleteAuditLogsForLink(linkId: string): Promise<number> {
+        return auditService.deleteAuditLogsForLink(linkId);
     }
 }

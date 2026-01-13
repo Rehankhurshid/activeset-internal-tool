@@ -18,7 +18,7 @@ interface Proposal {
   clientName: string;
   agencyName: string;
   heroImage?: string;              // URL or data URL for hero banner
-  status: 'draft' | 'sent' | 'approved' | 'rejected';
+  status: 'draft' | 'sent' | 'approved' | 'rejected' | 'lost';
   createdAt: string;
   updatedAt: string;
   // Edit locking - prevents changes after signature
@@ -142,12 +142,13 @@ src/app/modules/proposal/
 Team-wide view of all proposals with filtering and actions.
 
 **Features**:
-- **Statistics Cards**: Total proposals, draft count, approved count, revenue metrics
-- **Status Filter**: View all, drafts, sent, approved, or rejected proposals
+- **Statistics Cards**: Total proposals, drafts, sent, approved, and lost deal metrics
+- **Content Tabs**: Split view for "Active Proposals" and "Lost Deals"
+- **Status Filter**: View all, drafts, sent, approved, rejected, or lost proposals
 - **Sorting**: Organize list by Date (default), Title, Client Name, or Total Amount (support for both ascending and descending order)
 - **Grouping**: Toggle "Group by Month" to visually segment proposals by their creation date
 - **Search**: Filter by client name or proposal title
-- **Quick Actions**: View, Edit, Share, Delete
+- **Quick Actions**: View, Edit, Share, Mark as Lost (for active), Restore (for lost), Delete
 - **Template Library**: Create proposals from pre-saved templates
 
 **Components**:
@@ -643,7 +644,7 @@ Primary collection for team proposals (requires authentication).
   "title": "Website Redesign Proposal",
   "clientName": "Acme Corp",
   "agencyName": "ActiveSet",
-  "status": "sent",
+  "status": "sent", // 'draft' | 'sent' | 'approved' | 'rejected' | 'lost'
   "createdAt": "2026-01-01T12:00:00Z",
   "updatedAt": "2026-01-02T09:30:00Z",
   "isLocked": false,

@@ -358,8 +358,54 @@ The "Scan Sitemap" feature auto-discovers pages:
 
 1. User provides sitemap URL (e.g., `https://example.com/sitemap.xml`)
 2. API parses `<loc>` tags from XML
-3. New URLs are added as `ProjectLink` with `source: 'auto'`
-4. Widget scans these pages on next visit
+3. **Multilingual Support**: For sitemaps with `<xhtml:link hreflang>` tags, the parser:
+   - Detects the locale of each URL by matching it against hreflang entries
+   - Falls back to path-based detection (e.g., `/es-mx/` → `es-mx`)
+   - Stores the locale on each `ProjectLink`
+4. **Sitemap as Source of Truth**: When re-scanning:
+   - Auto-discovered links NOT in the new sitemap are removed
+   - Associated audit history (`audit_logs`, `content_changes`) is deleted
+   - Manual links are never touched
+5. Widget scans these pages on next visit
+
+### Locale Filtering
+
+The dashboard supports filtering by locale:
+- Locale dropdown appears when pages have locales detected
+- Filter options: "All locales", "No locale", or specific locales (e.g., "EN", "ES-MX")
+- Locale badge displayed on each page row
+
+### CMS Page Type Detection
+
+The sitemap scanner includes a **post-scan review workflow** for selecting CMS vs Static page patterns:
+
+1. **Post-Scan Review Dialog**: After scanning a sitemap:
+   - A dialog appears showing all detected path patterns (e.g., `/blog/*`, `/features/*`)
+   - Each pattern shows page count and example URLs
+   - Patterns are pre-selected based on heuristics (nested paths = likely CMS)
+   - Users can **check/uncheck** patterns to classify as CMS or Static
+   - Selections are saved as **Page Type Rules**
+
+2. **Page Type Rules**: User-defined pattern → type mappings:
+   - Stored at project level (`pageTypeRules` field)
+   - Checked in priority order during scans
+   - Can be managed anytime via "Page Type Rules" button in dashboard
+   - Patterns support wildcards: `/blog/*` matches all blog posts
+
+3. **Automatic Detection** (when Webflow configured):
+   - Fetches pages from Webflow API during sitemap scan
+   - Uses `collectionId` to identify CMS template pages
+   - More accurate than path-based heuristics
+
+4. **Fallback Detection** (when no Webflow or rules):
+   - Uses path-based heuristics (nested paths > 1 non-locale segment = CMS)
+   - Filters out locale segments from path analysis (e.g., `/es-mx/` = static)
+
+5. **Type Filtering**: Dashboard includes a Type filter dropdown:
+   - "All types" - Show all pages
+   - "Static" - Only static pages
+   - "CMS" - Only collection pages
+
 
 ### Widget Embed
 

@@ -7,7 +7,8 @@ import {
     limit,
     getDocs,
     doc,
-    getDoc
+    getDoc,
+    deleteDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { logError } from '@/lib/errors';
@@ -178,6 +179,33 @@ export const changeLogService = {
             return snapshot.size;
         } catch (error) {
             logError(error, 'changeLogService.getEntryCount');
+            return 0;
+        }
+    },
+
+    /**
+     * Delete all change log entries for a given link (used during sitemap sync cleanup)
+     */
+    async deleteEntriesForLink(linkId: string): Promise<number> {
+        try {
+            const q = query(
+                collection(db, CHANGE_LOG_COLLECTION),
+                where('linkId', '==', linkId)
+            );
+
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) return 0;
+
+            // Delete all matching docs
+            const deletePromises = snapshot.docs.map(docSnapshot =>
+                deleteDoc(doc(db, CHANGE_LOG_COLLECTION, docSnapshot.id))
+            );
+            await Promise.all(deletePromises);
+
+            return snapshot.size;
+        } catch (error) {
+            logError(error, 'changeLogService.deleteEntriesForLink');
+            console.error('Failed to delete change log entries:', error);
             return 0;
         }
     }
