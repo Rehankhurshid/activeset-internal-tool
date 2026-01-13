@@ -54,7 +54,7 @@ export interface Proposal {
     clientName: string;
     agencyName: string;
     heroImage?: string; // URL or data URL for hero banner
-    status: 'draft' | 'sent' | 'approved' | 'rejected';
+    status: 'draft' | 'sent' | 'approved' | 'rejected' | 'lost';
     createdAt: string;
     updatedAt: string;
     // Edit locking - prevents changes after signature

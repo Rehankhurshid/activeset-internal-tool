@@ -37,6 +37,13 @@ export default function StatisticsCards({ proposals }: StatisticsCardsProps) {
             icon: Edit3,
             gradient: 'from-gray-500/20 to-gray-600/10',
             iconColor: 'text-gray-500'
+        },
+        {
+            title: 'Lost',
+            value: proposals.filter(p => p.status === 'lost').length,
+            icon: FileText, // Or XCircle if I import it
+            gradient: 'from-red-500/20 to-red-600/10',
+            iconColor: 'text-red-500'
         }
     ];
 

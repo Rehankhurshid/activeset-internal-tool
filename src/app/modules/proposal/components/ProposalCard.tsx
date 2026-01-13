@@ -3,7 +3,14 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, Share2, Trash2, Loader2 } from "lucide-react";
+import { Eye, Pencil, Share2, Trash2, Loader2, MoreVertical, XCircle, RotateCcw } from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Proposal } from "../types/Proposal";
 import { getStatusColor } from "../utils/proposalUtils";
 
@@ -14,6 +21,7 @@ interface ProposalCardProps {
     onEdit: (proposal: Proposal) => void;
     onShare: (proposalId: string) => void;
     onDelete: (proposalId: string) => void;
+    onStatusChange: (proposalId: string, status: Proposal['status']) => void;
 }
 
 export default function ProposalCard({
@@ -22,7 +30,8 @@ export default function ProposalCard({
     onView,
     onEdit,
     onShare,
-    onDelete
+    onDelete,
+    onStatusChange
 }: ProposalCardProps) {
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('en-US', {
@@ -97,19 +106,40 @@ export default function ProposalCard({
                         )}
                         Share
                     </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => onDelete(proposal.id)}
-                        disabled={actionLoading === proposal.id}
-                    >
-                        {actionLoading === proposal.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                            <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                                <MoreVertical className="w-4 h-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            {proposal.status !== 'lost' && (
+                                <DropdownMenuItem onClick={() => onStatusChange(proposal.id, 'lost')}>
+                                    <XCircle className="w-4 h-4 mr-2" />
+                                    Mark as Lost
+                                </DropdownMenuItem>
+                            )}
+                            {proposal.status === 'lost' && (
+                                <DropdownMenuItem onClick={() => onStatusChange(proposal.id, 'draft')}>
+                                    <RotateCcw className="w-4 h-4 mr-2" />
+                                    Restore to Draft
+                                </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => onDelete(proposal.id)}
+                                disabled={actionLoading === proposal.id}
+                                className="text-destructive focus:text-destructive"
+                            >
+                                {actionLoading === proposal.id ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                )}
+                                Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </CardContent>
         </Card>

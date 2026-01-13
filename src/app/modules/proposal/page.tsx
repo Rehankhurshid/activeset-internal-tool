@@ -238,6 +238,20 @@ export default function ProposalPage() {
         }
     };
 
+    const handleStatusChange = async (proposalId: string, status: Proposal['status']) => {
+        try {
+            setActionLoading(proposalId);
+            const updatedProposal = await proposalService.updateProposal(proposalId, { status });
+            setProposals(prev => prev.map(p => p.id === proposalId ? updatedProposal : p));
+            toast.success(`Proposal marked as ${status}`);
+        } catch (error) {
+            toast.error('Failed to update proposal status');
+            console.error('Error updating proposal status:', error);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     const shareProposal = async (proposalId: string) => {
         setActionLoading(`share-${proposalId}`);
 
@@ -337,7 +351,7 @@ export default function ProposalPage() {
 
     return (
         <>
-            <AppNavigation 
+            <AppNavigation
                 title="Proposals"
                 showBackButton
                 backHref="/"
@@ -354,6 +368,7 @@ export default function ProposalPage() {
                 onEditProposal={handleEditProposal}
                 onShareProposal={shareProposal}
                 onDeleteProposal={handleDeleteProposal}
+                onStatusChange={handleStatusChange}
             />
             <Toaster />
         </>

@@ -6,6 +6,8 @@ export function getStatusColor(status: string): string {
             return 'bg-primary/10 text-primary';
         case 'rejected':
             return 'bg-destructive/10 text-destructive';
+        case 'lost':
+            return 'bg-gray-500/10 text-gray-500 dark:text-gray-400';
         default:
             return 'bg-muted text-muted-foreground';
     }

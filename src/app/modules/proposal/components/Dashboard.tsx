@@ -2,13 +2,14 @@
 
 import { useState, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
-import { Plus, FileText, Trash2, Pencil, Settings, ChevronDown, ArrowUpDown, Calendar, Check } from "lucide-react";
+import { Plus, FileText, Trash2, Pencil, Settings, ChevronDown, ArrowUpDown, Calendar, Check, FolderOpen, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Proposal, ProposalTemplate } from "../types/Proposal";
 import StatisticsCards from "./StatisticsCards";
 import ProposalCard from "./ProposalCard";
 import EmptyState from "./EmptyState";
 import Link from 'next/link';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -30,6 +31,7 @@ interface DashboardProps {
     onEditProposal: (proposal: Proposal) => void;
     onShareProposal: (proposalId: string) => void;
     onDeleteProposal: (proposalId: string) => void;
+    onStatusChange: (proposalId: string, status: Proposal['status']) => void;
 }
 
 export default function Dashboard({
@@ -43,7 +45,8 @@ export default function Dashboard({
     onViewProposal,
     onEditProposal,
     onShareProposal,
-    onDeleteProposal
+    onDeleteProposal,
+    onStatusChange
 }: DashboardProps) {
     const [sortBy, setSortBy] = useState<'date' | 'title' | 'client' | 'amount'>('date');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -74,19 +77,74 @@ export default function Dashboard({
         });
     }, [proposals, sortBy, sortOrder]);
 
-    // Grouping Logic
-    const groupedProposals = useMemo(() => {
-        if (!groupByMonth) return { 'All Proposals': sortedProposals };
+
+
+    // Split proposals into active and lost
+    const activeProposals = useMemo(() => sortedProposals.filter(p => p.status !== 'lost'), [sortedProposals]);
+    const lostProposals = useMemo(() => sortedProposals.filter(p => p.status === 'lost'), [sortedProposals]);
+
+    // Grouping Helper
+    const getGroupedProposals = (proposalList: Proposal[]) => {
+        if (!groupByMonth) return { 'All Proposals': proposalList };
 
         const groups: Record<string, Proposal[]> = {};
-        sortedProposals.forEach(proposal => {
+        proposalList.forEach(proposal => {
             const date = new Date(proposal.createdAt);
             const key = date.toLocaleString('default', { month: 'long', year: 'numeric' });
             if (!groups[key]) groups[key] = [];
             groups[key].push(proposal);
         });
         return groups;
-    }, [sortedProposals, groupByMonth]);
+    };
+
+    const renderProposalGrid = (proposalList: Proposal[], emptyMessage: string) => {
+        if (proposalList.length === 0) {
+            return (
+                <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed rounded-lg border-muted-foreground/25 bg-muted/5">
+                    <div className="bg-muted p-3 rounded-full mb-4">
+                        <FolderOpen className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium">{emptyMessage}</h3>
+                </div>
+            );
+        }
+
+        const groups = getGroupedProposals(proposalList);
+
+        return (
+            <div className="space-y-8">
+                {Object.entries(groups).map(([groupName, groupProposals]) => (
+                    groupProposals.length > 0 && (
+                        <div key={groupName} className="space-y-4">
+                            {groupByMonth && (
+                                <h3 className="text-lg font-semibold text-muted-foreground flex items-center gap-2">
+                                    <Calendar className="w-4 h-4" />
+                                    {groupName}
+                                    <span className="text-xs font-normal bg-muted px-2 py-0.5 rounded-full">
+                                        {groupProposals.length}
+                                    </span>
+                                </h3>
+                            )}
+                            <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                                {groupProposals.map((proposal) => (
+                                    <ProposalCard
+                                        key={proposal.id}
+                                        proposal={proposal}
+                                        actionLoading={actionLoading}
+                                        onView={onViewProposal}
+                                        onEdit={onEditProposal}
+                                        onShare={onShareProposal}
+                                        onDelete={onDeleteProposal}
+                                        onStatusChange={onStatusChange}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )
+                ))}
+            </div>
+        );
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-background to-background/95">
@@ -224,41 +282,25 @@ export default function Dashboard({
                     </div>
                 </div>
 
-                {/* Proposals Grid */}
-                {Object.keys(groupedProposals).length > 0 ? (
-                    <div className="space-y-8">
-                        {Object.entries(groupedProposals).map(([groupName, groupProposals]) => (
-                            groupProposals.length > 0 && (
-                                <div key={groupName} className="space-y-4">
-                                    {groupByMonth && (
-                                        <h3 className="text-lg font-semibold text-muted-foreground flex items-center gap-2">
-                                            <Calendar className="w-4 h-4" />
-                                            {groupName}
-                                            <span className="text-xs font-normal bg-muted px-2 py-0.5 rounded-full">
-                                                {groupProposals.length}
-                                            </span>
-                                        </h3>
-                                    )}
-                                    <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                                        {groupProposals.map((proposal) => (
-                                            <ProposalCard
-                                                key={proposal.id}
-                                                proposal={proposal}
-                                                actionLoading={actionLoading}
-                                                onView={onViewProposal}
-                                                onEdit={onEditProposal}
-                                                onShare={onShareProposal}
-                                                onDelete={onDeleteProposal}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            )
-                        ))}
-                    </div>
-                ) : (
-                    <EmptyState onCreateProposal={onCreateProposal} />
-                )}
+                {/* Content Tabs */}
+                <Tabs defaultValue="active" className="w-full">
+                    <TabsList className="grid w-full max-w-[400px] grid-cols-2 mb-8">
+                        <TabsTrigger value="active">Active Proposals</TabsTrigger>
+                        <TabsTrigger value="lost">Lost Deals</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="active">
+                        {activeProposals.length > 0 ? (
+                            renderProposalGrid(activeProposals, "No active proposals found")
+                        ) : (
+                            <EmptyState onCreateProposal={onCreateProposal} />
+                        )}
+                    </TabsContent>
+
+                    <TabsContent value="lost">
+                        {renderProposalGrid(lostProposals, "No lost deals found")}
+                    </TabsContent>
+                </Tabs>
             </main>
         </div>
     );
