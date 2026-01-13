@@ -10,9 +10,10 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // Construct the public view URL
-        // In a real app, this should be the absolute URL for the public view
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        // Construct the public view URL from request headers
+        const host = request.headers.get('host') || 'localhost:3000';
+        const protocol = request.headers.get('x-forwarded-proto') || 'https';
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
         const publicUrl = `${baseUrl}/view/${proposalId}`;
 
         const screenshotService = getScreenshotService();
