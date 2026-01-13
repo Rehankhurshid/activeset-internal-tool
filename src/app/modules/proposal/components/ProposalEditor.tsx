@@ -116,6 +116,12 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
   const [projectBudget, setProjectBudget] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  
+  // Individual Block AI Edit State
+  const [blockAiDialog, setBlockAiDialog] = useState<{ type: 'timeline' | 'pricing' | 'clientDescription' | 'finalDeliverable' | null; open: boolean }>({ type: null, open: false });
+  const [blockAiNotes, setBlockAiNotes] = useState('');
+  const [blockAiLoading, setBlockAiLoading] = useState(false);
+  const [blockAiError, setBlockAiError] = useState<string | null>(null);
 
   // History Panel State
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
@@ -133,8 +139,11 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
   const [aboutPresets, setAboutPresets] = useState<AboutTemplate[]>([]);
   const [termsPresets, setTermsPresets] = useState<TermsTemplate[]>([]);
 
-  // Collapsible Sections State
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  // Collapsible Sections State - Default: collapse About Us and Hero Image
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    'section-about': true,
+    'section-hero': true,
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -174,6 +183,21 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
 
   const toggleSection = (id: string) => {
     setCollapsedSections(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Helper function to get currency symbol
+  const getCurrencySymbol = (currency?: string): string => {
+    const currencyMap: Record<string, string> = {
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'CAD': 'C$',
+      'AUD': 'A$',
+      'JPY': '¥',
+      'CHF': 'CHF',
+      'INR': '₹'
+    };
+    return currencyMap[currency || 'USD'] || currency || '$';
   };
 
   // Update presets when configs load
@@ -353,6 +377,7 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
       overview: '',
       aboutUs: '',
       pricing: {
+        currency: 'USD',
         items: [{ name: '', price: '', description: '' }],
         total: ''
       },
@@ -448,7 +473,18 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
 
   useEffect(() => {
     if (proposal) {
-      setFormData(proposal);
+      // Ensure currency is set, default to USD if missing
+      const proposalWithCurrency = {
+        ...proposal,
+        data: {
+          ...proposal.data,
+          pricing: {
+            ...proposal.data.pricing,
+            currency: proposal.data.pricing.currency || 'USD'
+          }
+        }
+      };
+      setFormData(proposalWithCurrency);
     }
   }, [proposal]);
 
@@ -559,6 +595,125 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
     }
   };
 
+  // Individual Block AI Generation Functions
+  const generateBlockAI = async (blockType: 'timeline' | 'pricing' | 'clientDescription' | 'finalDeliverable') => {
+    if (!blockAiNotes.trim()) return;
+
+    setBlockAiLoading(true);
+    setBlockAiError(null);
+
+    try {
+      const response = await fetch('/api/ai-gen-block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blockType,
+          notes: blockAiNotes,
+          clientName: formData.clientName,
+          agencyName: formData.agencyName,
+          clientWebsite,
+          projectDeadline,
+          projectBudget,
+          currentData: {
+            timeline: formData.data.timeline,
+            pricing: formData.data.pricing,
+            clientDescription: formData.data.overviewDetails?.clientDescription || '',
+            finalDeliverable: formData.data.overviewDetails?.finalDeliverable || '',
+          }
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to generate content');
+      }
+
+      const { data } = result;
+
+      // Update the specific block based on type
+      if (blockType === 'timeline' && data.timelinePhases) {
+        setFormData(prev => ({
+          ...prev,
+          data: {
+            ...prev.data,
+            timeline: {
+              ...prev.data.timeline,
+              phases: data.timelinePhases.map((phase: { title: string; description: string; duration: string; startDate?: string; endDate?: string }) => ({
+                title: phase.title,
+                description: phase.description,
+                duration: phase.duration,
+                startDate: phase.startDate || '',
+                endDate: phase.endDate || ''
+              }))
+            }
+          }
+        }));
+      } else if (blockType === 'pricing' && data.pricingItems) {
+        setFormData(prev => ({
+          ...prev,
+          data: {
+            ...prev.data,
+            pricing: {
+              ...prev.data.pricing,
+              items: data.pricingItems.map((item: { name: string; description?: string; price: string }) => ({
+                name: item.name,
+                description: item.description || '',
+                price: item.price
+              })),
+              total: data.pricingTotal || prev.data.pricing.total
+            }
+          }
+        }));
+      } else if (blockType === 'clientDescription' && data.clientDescription) {
+        setFormData(prev => {
+          const currentDetails = prev.data.overviewDetails || { clientDescription: '', services: [], finalDeliverable: '' };
+          const newDetails = { ...currentDetails, clientDescription: data.clientDescription };
+          
+          const parts = [];
+          if (newDetails.clientDescription) parts.push(newDetails.clientDescription);
+          if (newDetails.services?.length) parts.push(newDetails.services.map(s => `• ${s}`).join('\n'));
+          if (newDetails.finalDeliverable) parts.push(newDetails.finalDeliverable);
+
+          return {
+            ...prev,
+            data: {
+              ...prev.data,
+              overview: parts.join('\n\n'),
+              overviewDetails: newDetails
+            }
+          };
+        });
+      } else if (blockType === 'finalDeliverable' && data.finalDeliverable) {
+        setFormData(prev => {
+          const currentDetails = prev.data.overviewDetails || { clientDescription: '', services: [], finalDeliverable: '' };
+          const newDetails = { ...currentDetails, finalDeliverable: data.finalDeliverable };
+          
+          const parts = [];
+          if (newDetails.clientDescription) parts.push(newDetails.clientDescription);
+          if (newDetails.services?.length) parts.push(newDetails.services.map(s => `• ${s}`).join('\n'));
+          if (newDetails.finalDeliverable) parts.push(newDetails.finalDeliverable);
+
+          return {
+            ...prev,
+            data: {
+              ...prev.data,
+              overview: parts.join('\n\n'),
+              overviewDetails: newDetails
+            }
+          };
+        });
+      }
+
+      setBlockAiDialog({ type: null, open: false });
+      setBlockAiNotes('');
+    } catch (error) {
+      setBlockAiError(error instanceof Error ? error.message : 'An error occurred');
+    } finally {
+      setBlockAiLoading(false);
+    }
+  };
+
   const addPricingItem = () => {
     setFormData(prev => ({
       ...prev,
@@ -573,31 +728,93 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
   };
 
   const removePricingItem = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      data: {
-        ...prev.data,
-        pricing: {
-          ...prev.data.pricing,
-          items: prev.data.pricing.items.filter((_, i) => i !== index)
+    setFormData(prev => {
+      const updatedItems = prev.data.pricing.items.filter((_, i) => i !== index);
+      const currency = prev.data.pricing.currency || 'USD';
+      const currencySymbol = getCurrencySymbol(currency);
+      
+      // Recalculate total
+      const total = updatedItems.reduce((sum, item) => {
+        const priceValue = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
+        return sum + priceValue;
+      }, 0);
+      
+      const formattedTotal = total > 0 
+        ? `${currencySymbol} ${total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+        : '';
+      
+      return {
+        ...prev,
+        data: {
+          ...prev.data,
+          pricing: {
+            ...prev.data.pricing,
+            items: updatedItems,
+            total: formattedTotal
+          }
         }
-      }
-    }));
+      };
+    });
   };
 
   const updatePricingItem = (index: number, field: 'name' | 'price' | 'description', value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      data: {
-        ...prev.data,
-        pricing: {
-          ...prev.data.pricing,
-          items: prev.data.pricing.items.map((item, i) =>
-            i === index ? { ...item, [field]: value } : item
-          )
+    setFormData(prev => {
+      const updatedItems = prev.data.pricing.items.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item
+      );
+      
+      // Auto-calculate total from all items
+      const currency = prev.data.pricing.currency || 'USD';
+      const total = updatedItems.reduce((sum, item) => {
+        const priceValue = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
+        return sum + priceValue;
+      }, 0);
+      
+      // Format total with currency
+      const currencySymbol = getCurrencySymbol(currency);
+      const formattedTotal = total > 0 
+        ? `${currencySymbol} ${total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+        : '';
+      
+      return {
+        ...prev,
+        data: {
+          ...prev.data,
+          pricing: {
+            ...prev.data.pricing,
+            items: updatedItems,
+            total: formattedTotal
+          }
         }
-      }
-    }));
+      };
+    });
+  };
+  
+  const updatePricingCurrency = (currency: string) => {
+    setFormData(prev => {
+      // Recalculate total with new currency
+      const currencySymbol = getCurrencySymbol(currency);
+      const total = prev.data.pricing.items.reduce((sum, item) => {
+        const priceValue = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
+        return sum + priceValue;
+      }, 0);
+      
+      const formattedTotal = total > 0 
+        ? `${currencySymbol} ${total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+        : '';
+      
+      return {
+        ...prev,
+        data: {
+          ...prev.data,
+          pricing: {
+            ...prev.data.pricing,
+            currency,
+            total: formattedTotal
+          }
+        }
+      };
+    });
   };
 
   const addTimelinePhase = () => {
@@ -1081,6 +1298,112 @@ Example:
         </DialogContent>
       </Dialog>
 
+      {/* Block AI Edit Dialog */}
+      <Dialog open={blockAiDialog.open} onOpenChange={(open) => { 
+        setBlockAiDialog({ type: null, open: false }); 
+        if (!open) {
+          setBlockAiError(null);
+          setBlockAiNotes('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-400" />
+              AI Edit {blockAiDialog.type === 'timeline' ? 'Timeline' : blockAiDialog.type === 'pricing' ? 'Pricing' : blockAiDialog.type === 'clientDescription' ? 'Client Description' : 'Final Deliverable'}
+            </DialogTitle>
+            <DialogDescription>
+              {blockAiDialog.type === 'timeline' && 'Provide project details to generate an optimized timeline with phases and dates.'}
+              {blockAiDialog.type === 'pricing' && 'Provide project details to generate optimized pricing items and totals.'}
+              {blockAiDialog.type === 'clientDescription' && 'Provide information about the client to generate a professional description.'}
+              {blockAiDialog.type === 'finalDeliverable' && 'Provide project details to generate a clear final deliverable description.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4 overflow-y-auto flex-1">
+            <div>
+              <Label htmlFor="blockAiNotes">Project Information / Notes</Label>
+              <Textarea
+                id="blockAiNotes"
+                placeholder={
+                  blockAiDialog.type === 'timeline' 
+                    ? 'Enter project details, deadlines, phases needed, and any timeline constraints...'
+                    : blockAiDialog.type === 'pricing'
+                    ? 'Enter project scope, services needed, budget constraints, and pricing requirements...'
+                    : blockAiDialog.type === 'clientDescription'
+                    ? 'Enter information about the client: company name, industry, what they do, their mission...'
+                    : 'Enter project details, deliverables, platform, and key features to include...'
+                }
+                value={blockAiNotes}
+                onChange={(e) => setBlockAiNotes(e.target.value)}
+                className="mt-2 h-[200px] font-mono text-sm resize-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="blockClientWebsite">Client Website (Optional)</Label>
+                <Input
+                  id="blockClientWebsite"
+                  placeholder="https://example.com"
+                  value={clientWebsite}
+                  onChange={(e) => setClientWebsite(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
+              {(blockAiDialog.type === 'timeline' || blockAiDialog.type === 'pricing') && (
+                <>
+                  <div>
+                    <Label htmlFor="blockProjectDeadline">Project Deadline (Optional)</Label>
+                    <div className="mt-2">
+                      <DatePicker
+                        value={projectDeadline}
+                        onChange={(value) => setProjectDeadline(value)}
+                        placeholder="Select deadline"
+                      />
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="blockProjectBudget">Budget (Optional)</Label>
+                    <Input
+                      id="blockProjectBudget"
+                      placeholder="e.g. $3000, €5000"
+                      value={projectBudget}
+                      onChange={(e) => setProjectBudget(e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+            {blockAiError && (
+              <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+                {blockAiError}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setBlockAiDialog({ type: null, open: false });
+              setBlockAiNotes('');
+              setBlockAiError(null);
+            }} disabled={blockAiLoading}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => blockAiDialog.type && generateBlockAI(blockAiDialog.type)}
+              disabled={!blockAiNotes.trim() || blockAiLoading}
+              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+            >
+              {blockAiLoading ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating...</>
+              ) : (
+                <><Sparkles className="w-4 h-4 mr-2" /> Generate {blockAiDialog.type === 'timeline' ? 'Timeline' : blockAiDialog.type === 'pricing' ? 'Pricing' : blockAiDialog.type === 'clientDescription' ? 'Description' : 'Deliverable'}</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Mobile Navigation Sheet */}
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetContent side="left" className="w-[280px] sm:w-[320px]">
@@ -1366,7 +1689,18 @@ Example:
                   <div className="space-y-6">
                     {/* 1. Client Description */}
                     <div className="space-y-2">
-                      <Label htmlFor="clientDescription">Client Description</Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="clientDescription">Client Description</Label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs flex items-center gap-1.5"
+                          onClick={() => setBlockAiDialog({ type: 'clientDescription', open: true })}
+                        >
+                          <Sparkles className="w-3 h-3 text-purple-500" />
+                          AI Edit
+                        </Button>
+                      </div>
                       <RichTextEditor
                         value={formData.data.overviewDetails?.clientDescription ?? formData.data.overview}
                         onChange={(html) => {
@@ -1474,7 +1808,18 @@ Example:
 
                     {/* 3. Final Deliverable */}
                     <div className="space-y-2">
-                      <Label htmlFor="finalDeliverable">Final Deliverable Statement</Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="finalDeliverable">Final Deliverable Statement</Label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs flex items-center gap-1.5"
+                          onClick={() => setBlockAiDialog({ type: 'finalDeliverable', open: true })}
+                        >
+                          <Sparkles className="w-3 h-3 text-purple-500" />
+                          AI Edit
+                        </Button>
+                      </div>
                       <RichTextEditor
                         value={formData.data.overviewDetails?.finalDeliverable || ''}
                         onChange={(html) => {
@@ -1600,15 +1945,49 @@ Example:
                     {collapsedSections['section-pricing'] ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
                   </div>
                   {!collapsedSections['section-pricing'] && (
-                    <Button variant="outline" onClick={addPricingItem} className="flex items-center gap-2">
-                      <Plus className="w-4 h-4" />
-                      Add Item
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs flex items-center gap-1.5"
+                        onClick={() => setBlockAiDialog({ type: 'pricing', open: true })}
+                      >
+                        <Sparkles className="w-3 h-3 text-purple-500" />
+                        AI Edit
+                      </Button>
+                      <Button variant="outline" onClick={addPricingItem} className="flex items-center gap-2">
+                        <Plus className="w-4 h-4" />
+                        Add Item
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardHeader>
               {!collapsedSections['section-pricing'] && (
                 <CardContent className="space-y-4">
+                  {/* Currency Selector */}
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <Label className="text-sm">Currency:</Label>
+                    <Select 
+                      value={formData.data.pricing.currency || 'USD'} 
+                      onValueChange={updatePricingCurrency}
+                    >
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="USD">USD ($)</SelectItem>
+                        <SelectItem value="EUR">EUR (€)</SelectItem>
+                        <SelectItem value="GBP">GBP (£)</SelectItem>
+                        <SelectItem value="CAD">CAD (C$)</SelectItem>
+                        <SelectItem value="AUD">AUD (A$)</SelectItem>
+                        <SelectItem value="JPY">JPY (¥)</SelectItem>
+                        <SelectItem value="CHF">CHF (CHF)</SelectItem>
+                        <SelectItem value="INR">INR (₹)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
                   {formData.data.pricing.items.map((item, index) => (
                     <div key={index} className="space-y-2 p-3 border rounded-md">
                       <div className="flex flex-col sm:flex-row gap-2">
@@ -1618,12 +1997,23 @@ Example:
                           onChange={(e) => updatePricingItem(index, 'name', e.target.value)}
                           className="flex-1"
                         />
-                        <Input
-                          placeholder="Price"
-                          value={item.price}
-                          onChange={(e) => updatePricingItem(index, 'price', e.target.value)}
-                          className="w-full sm:w-32"
-                        />
+                        <div className="flex items-center gap-2 w-full sm:w-40">
+                          <span className="text-muted-foreground text-sm whitespace-nowrap">
+                            {getCurrencySymbol(formData.data.pricing.currency)}
+                          </span>
+                          <Input
+                            type="number"
+                            placeholder="0"
+                            value={item.price.replace(/[^\d.-]/g, '')}
+                            onChange={(e) => {
+                              const numericValue = e.target.value.replace(/[^\d.-]/g, '');
+                              updatePricingItem(index, 'price', numericValue);
+                            }}
+                            className="flex-1"
+                            min="0"
+                            step="0.01"
+                          />
+                        </div>
                         {formData.data.pricing.items.length > 1 && (
                           <Button
                             variant="outline"
@@ -1653,20 +2043,13 @@ Example:
                     </div>
                   ))}
                   <Separator />
-                  <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2 items-center">
                     <Label className="text-lg font-medium flex-1">Total</Label>
-                    <Input
-                      placeholder="Total amount (e.g., € 5,000)"
-                      value={formData.data.pricing.total}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        data: {
-                          ...prev.data,
-                          pricing: { ...prev.data.pricing, total: e.target.value }
-                        }
-                      }))}
-                      className="w-full sm:w-32"
-                    />
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-semibold text-muted-foreground">
+                        {formData.data.pricing.total || '0'}
+                      </span>
+                    </div>
                   </div>
                 </CardContent>
               )}
@@ -1681,10 +2064,21 @@ Example:
                     {collapsedSections['section-timeline'] ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
                   </div>
                   {!collapsedSections['section-timeline'] && (
-                    <Button variant="outline" onClick={addTimelinePhase} className="flex items-center gap-2">
-                      <Plus className="w-4 h-4" />
-                      Add Phase
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs flex items-center gap-1.5"
+                        onClick={() => setBlockAiDialog({ type: 'timeline', open: true })}
+                      >
+                        <Sparkles className="w-3 h-3 text-purple-500" />
+                        AI Edit
+                      </Button>
+                      <Button variant="outline" onClick={addTimelinePhase} className="flex items-center gap-2">
+                        <Plus className="w-4 h-4" />
+                        Add Phase
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardHeader>

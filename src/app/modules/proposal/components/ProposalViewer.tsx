@@ -14,6 +14,83 @@ const DEFAULT_HERO = '/default-hero.png';
 // Font family constants
 const FONT_TITLE = "'Funnel Display', system-ui, sans-serif";
 
+// Convert plain text bullets (•) to proper HTML lists
+const convertBulletsToHtmlLists = (html: string): string => {
+  if (!html || !html.includes('•')) {
+    return html;
+  }
+  
+  // More flexible pattern: bullet followed by any whitespace (including newlines) and then a <p> tag
+  // This handles cases like:
+  // "• <p>", "•\n<p>", "• \n<p>", "•\n\n<p>", etc.
+  const bulletItemPattern = /•[\s\n\r]*(<p[^>]*>[\s\S]*?<\/p>)/gi;
+  
+  const matches: Array<{ full: string; pTag: string; index: number }> = [];
+  let match;
+  
+  // Reset regex lastIndex
+  bulletItemPattern.lastIndex = 0;
+  
+  // Collect all matches
+  while ((match = bulletItemPattern.exec(html)) !== null) {
+    matches.push({
+      full: match[0],
+      pTag: match[1],
+      index: match.index
+    });
+  }
+  
+  if (matches.length === 0) {
+    return html;
+  }
+  
+  // Build result by grouping consecutive bullets
+  let result = '';
+  let lastIndex = 0;
+  let currentGroup: string[] = [];
+  let groupStart = -1;
+  
+  for (let i = 0; i < matches.length; i++) {
+    const curr = matches[i];
+    const prev = i > 0 ? matches[i - 1] : null;
+    
+    // Calculate distance from previous match
+    const distance = prev 
+      ? curr.index - (prev.index + prev.full.length)
+      : Infinity;
+    
+    // Consider consecutive if within 300 chars (to handle whitespace/newlines)
+    const isConsecutive = distance < 300;
+    
+    if (!isConsecutive && currentGroup.length > 0) {
+      // Close previous group
+      const prevMatch = matches[i - 1];
+      result += html.substring(lastIndex, groupStart);
+      result += '<ul>' + currentGroup.map(p => `<li>${p}</li>`).join('') + '</ul>';
+      lastIndex = prevMatch.index + prevMatch.full.length;
+      currentGroup = [];
+      groupStart = -1;
+    }
+    
+    if (currentGroup.length === 0) {
+      groupStart = curr.index;
+    }
+    
+    currentGroup.push(curr.pTag);
+  }
+  
+  // Handle the last group
+  if (currentGroup.length > 0) {
+    result += html.substring(lastIndex, groupStart);
+    result += '<ul>' + currentGroup.map(p => `<li>${p}</li>`).join('') + '</ul>';
+    lastIndex = matches[matches.length - 1].index + matches[matches.length - 1].full.length;
+  }
+  
+  // Add remaining content
+  result += html.substring(lastIndex);
+  
+  return result;
+};
 
 interface ProposalViewerProps {
   proposal: Proposal;
@@ -532,6 +609,49 @@ ${proposal.agencyName}`;
             </div>
 
             {/* Content Sections */}
+            <style dangerouslySetInnerHTML={{ __html: `
+              .proposal-content ul {
+                list-style-type: disc;
+                list-style-position: outside;
+                padding-left: 1.5rem;
+                margin: 0.5rem 0;
+              }
+              .proposal-content ul li {
+                display: list-item;
+                margin-bottom: 0.5rem;
+                line-height: 1.7;
+              }
+              .proposal-content ul li p {
+                display: inline !important;
+                margin: 0 !important;
+              }
+              .proposal-content ul li p span {
+                display: inline;
+                white-space: normal;
+              }
+              .proposal-content ol {
+                list-style-type: decimal;
+                list-style-position: outside;
+                padding-left: 1.5rem;
+                margin: 0.5rem 0;
+              }
+              .proposal-content ol li {
+                display: list-item;
+                margin-bottom: 0.5rem;
+                line-height: 1.7;
+              }
+              .proposal-content ol li p {
+                display: inline !important;
+                margin: 0 !important;
+              }
+              .proposal-content ol li p span {
+                display: inline;
+                white-space: normal;
+              }
+              .proposal-content p {
+                margin-bottom: 0.5rem;
+              }
+            `}} />
             <div className="p-6 sm:p-8 md:p-12 flex flex-col gap-12 sm:gap-16">
               {/* Overview */}
               <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('overview')}`}>
@@ -549,8 +669,9 @@ ${proposal.agencyName}`;
                 </div>
                 <div>
                   <div
-                    style={{ color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}
-                    dangerouslySetInnerHTML={{ __html: proposal.data.overview }}
+                    className="proposal-content"
+                    style={{ color: '#374151', lineHeight: 1.7 }}
+                    dangerouslySetInnerHTML={{ __html: convertBulletsToHtmlLists(proposal.data.overview) }}
                   />
                 </div>
               </section>
@@ -571,9 +692,9 @@ ${proposal.agencyName}`;
                 </div>
                 <div>
                   <div
+                    className="proposal-content"
                     style={{ color: '#374151', lineHeight: 1.7 }}
-                    dangerouslySetInnerHTML={{ __html: proposal.data.aboutUs }}
-                    className="prose prose-sm max-w-none text-gray-700 font-sans [&>p]:mb-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>li]:mb-1 [&>h2]:text-xl [&>h2]:font-bold [&>h2]:mb-3 [&>h2]:mt-6"
+                    dangerouslySetInnerHTML={{ __html: convertBulletsToHtmlLists(proposal.data.aboutUs) }}
                   />
                 </div>
               </section>
@@ -1106,9 +1227,9 @@ ${proposal.agencyName}`;
                   </div>
                   <div>
                     <div
+                      className="proposal-content"
                       style={{ color: '#374151', lineHeight: 1.7 }}
-                      dangerouslySetInnerHTML={{ __html: proposal.data.terms }}
-                      className="prose prose-sm max-w-none text-gray-700 font-sans [&>p]:mb-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>li]:mb-1 [&>h2]:text-xl [&>h2]:font-bold [&>h2]:mb-3 [&>h2]:mt-6 [&>h3]:text-lg [&>h3]:font-semibold [&>h3]:mb-2 [&>h3]:mt-4"
+                      dangerouslySetInnerHTML={{ __html: convertBulletsToHtmlLists(proposal.data.terms) }}
                     />
                   </div>
                 </section>

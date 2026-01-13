@@ -2,7 +2,6 @@
 
 import { useState, useEffect, use } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { Project } from '@/types';
 import { projectsService } from '@/services/database';
 import { Button } from '@/components/ui/button';
@@ -31,7 +30,6 @@ interface PageProps {
 export default function ProjectDetailPage({ params }: PageProps) {
     const { id } = use(params);
     const { user, loading: authLoading, signInWithGoogle } = useAuth();
-    const { hasAccess, loading: accessLoading } = useModuleAccess('project-links');
     const [project, setProject] = useState<Project | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
@@ -97,7 +95,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         }
     };
 
-    if (authLoading || accessLoading || isLoading) {
+    if (authLoading || isLoading) {
         return <div className="p-8"><Skeleton className="h-[200px] w-full" /></div>;
     }
 
@@ -110,16 +108,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
         );
     }
 
-    if (!hasAccess) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 text-destructive">
-                <ShieldX size={48} />
-                <h2 className="text-xl font-bold">Access Denied</h2>
-                <p>You do not have permission to view this project.</p>
-                <Button variant="outline" asChild><Link href="/">Go Home</Link></Button>
-            </div>
-        );
-    }
+    // Project Links is accessible to all authenticated users
+    // Access check removed - everyone can see and edit all project links
 
     if (!project) {
         return <div className="p-8">Project not found</div>;

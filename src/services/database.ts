@@ -223,6 +223,27 @@ export const projectsService = {
     });
   },
 
+  // Real-time subscription to all projects (for project-links module - everyone can see all)
+  subscribeToAllProjects(callback: (projects: Project[]) => void): () => void {
+    const q = query(collection(db, PROJECTS_COLLECTION));
+
+    return onSnapshot(q, (snapshot) => {
+      const projects = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt.toDate(),
+          updatedAt: data.updatedAt.toDate(),
+        } as Project;
+      });
+
+      // Sort in client-side
+      const sortedProjects = projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      callback(sortedProjects);
+    });
+  },
+
   // Real-time subscription to a single project
   subscribeToProject(projectId: string, callback: (project: Project | null) => void): () => void {
     const docRef = doc(db, PROJECTS_COLLECTION, projectId);

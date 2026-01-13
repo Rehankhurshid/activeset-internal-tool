@@ -57,6 +57,9 @@ class AccessControlService {
     }
 
     async hasModuleAccess(email: string, module: RestrictedModule): Promise<boolean> {
+        // Project Links is accessible to everyone
+        if (module === 'project-links') return true;
+
         // Admin always has access
         if (this.isAdmin(email)) return true;
 

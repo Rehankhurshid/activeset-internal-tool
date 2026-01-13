@@ -94,6 +94,7 @@ export interface PricingItem {
 }
 
 export interface PricingSection {
+    currency?: string; // Currency code (e.g., 'USD', 'EUR', 'GBP')
     items: PricingItem[];
     total: string;
 }

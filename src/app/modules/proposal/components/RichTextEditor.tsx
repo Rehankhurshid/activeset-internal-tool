@@ -224,7 +224,7 @@ const ToolbarPlugin = ({ simple }: { simple: boolean }) => {
     }, [editor, isLink]);
 
     return (
-        <div className="border-b bg-background sticky top-0 z-10 p-2 flex gap-1 items-center flex-wrap shadow-sm">
+        <div className="border-b border-input bg-muted/30 p-1.5 flex gap-0.5 items-center flex-wrap">
             {/* History */}
             <div className="flex gap-0.5 border-r pr-1 mr-1">
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)} disabled={!canUndo} title="Undo">
@@ -500,19 +500,19 @@ const RichTextEditor = ({ value, onChange, placeholder, className, simple = fals
     };
 
     return (
-        <div className={`flex flex-col h-full bg-gray-50 dark:bg-gray-900 border rounded-lg overflow-hidden ${className}`}>
+        <div className={`flex flex-col border border-input rounded-md overflow-hidden bg-transparent ${className}`}>
             <LexicalComposer initialConfig={initialConfig}>
 
                 <ToolbarPlugin simple={simple} />
 
-                <div className="flex-grow p-4 overflow-y-auto relative">
-                    <div className="max-w-[850px] mx-auto bg-white dark:bg-black p-8 min-h-[400px] shadow-sm border rounded-sm relative">
+                <div className="relative">
+                    <div className="px-3 py-2 relative">
                         <RichTextPlugin
                             contentEditable={
-                                <ContentEditable className="outline-none min-h-[300px] resize-none prose prose-sm max-w-none dark:prose-invert" />
+                                <ContentEditable className="outline-none resize-none prose prose-sm max-w-none dark:prose-invert min-h-[60px]" />
                             }
                             placeholder={
-                                <div className="absolute top-8 left-8 text-muted-foreground pointer-events-none select-none">
+                                <div className="absolute top-2 left-3 text-muted-foreground pointer-events-none select-none">
                                     {placeholder || 'Start typing...'}
                                 </div>
                             }

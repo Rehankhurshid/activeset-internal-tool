@@ -5,6 +5,46 @@ import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/aut
 import { auth, googleProvider } from '@/lib/firebase';
 import { accessControlService } from '@/services/AccessControlService';
 
+// Check if we're in local development
+const isLocalDevelopment = () => {
+  if (typeof window === 'undefined') return false;
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+};
+
+// Create a mock user for local development
+const createMockUser = (): User => {
+  const mockUser = {
+    uid: 'local-dev-user',
+    email: 'local-dev@activeset.co',
+    emailVerified: true,
+    displayName: 'Local Dev User',
+    photoURL: null,
+    phoneNumber: null,
+    isAnonymous: false,
+    providerId: 'local-dev',
+    metadata: {
+      creationTime: new Date().toISOString(),
+      lastSignInTime: new Date().toISOString(),
+    },
+    providerData: [],
+    refreshToken: '',
+    tenantId: null,
+    delete: async () => {},
+    getIdToken: async () => '',
+    getIdTokenResult: async () => ({
+      authTime: new Date().toISOString(),
+      issuedAtTime: new Date().toISOString(),
+      expirationTime: new Date(Date.now() + 3600000).toISOString(),
+      signInProvider: 'local-dev',
+      signInSecondFactor: null,
+      claims: {},
+    }),
+    reload: async () => {},
+    toJSON: () => ({}),
+  } as unknown as User;
+  return mockUser;
+};
+
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -12,6 +52,15 @@ export const useAuth = () => {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
+    // Skip auth for local development
+    if (isLocalDevelopment()) {
+      const mockUser = createMockUser();
+      setUser(mockUser);
+      setIsAdmin(true); // Make local dev user an admin
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser && firebaseUser.email) {
         // Allow any authenticated user - module access is checked separately
@@ -28,6 +77,15 @@ export const useAuth = () => {
   }, []);
 
   const signInWithGoogle = async () => {
+    // Skip auth for local development
+    if (isLocalDevelopment()) {
+      const mockUser = createMockUser();
+      setUser(mockUser);
+      setIsAdmin(true);
+      setLoading(false);
+      return;
+    }
+
     try {
       setError(null);
       setLoading(true);
@@ -60,6 +118,13 @@ export const useAuth = () => {
   };
 
   const logout = async () => {
+    // Skip auth for local development
+    if (isLocalDevelopment()) {
+      setUser(null);
+      setIsAdmin(false);
+      return;
+    }
+
     try {
       await signOut(auth);
       setUser(null);

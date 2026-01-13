@@ -28,8 +28,8 @@ export function Dashboard() {
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = projectsService.subscribeToUserProjects(
-      user.uid,
+    // Subscribe to all projects (everyone can see and edit all project links)
+    const unsubscribe = projectsService.subscribeToAllProjects(
       (updatedProjects) => {
         setProjects(updatedProjects);
         setIsLoading(false);
@@ -98,9 +98,9 @@ export function Dashboard() {
             <div className="mb-4 sm:mb-6 lg:mb-8">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
                 <div className="min-w-0 flex-1">
-                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">Your Projects</h1>
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">All Projects</h1>
                   <p className="text-muted-foreground mt-1 text-xs sm:text-sm lg:text-base">
-                    Manage your project links
+                    Manage project links (shared access)
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
