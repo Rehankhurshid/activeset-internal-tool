@@ -220,17 +220,25 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
   // Compute available locales for the filter dropdown
   const availableLocales = useMemo(() => {
     const locales = new Set<string>();
+    let hasDefault = false;
     links.forEach(link => {
       if (link.locale) {
         locales.add(link.locale);
+      } else {
+        hasDefault = true;
       }
     });
-    // Sort locales alphabetically, but put 'en' first if present
-    return Array.from(locales).sort((a, b) => {
+    // Sort locales: default first, then 'en', then alphabetically
+    const sorted = Array.from(locales).sort((a, b) => {
       if (a === 'en') return -1;
       if (b === 'en') return 1;
       return a.localeCompare(b);
     });
+    // Add 'default' at the beginning if there are pages without locale
+    if (hasDefault) {
+      sorted.unshift('default');
+    }
+    return sorted;
   }, [links]);
 
   // 2. Filter & Sort
@@ -238,10 +246,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     return pagesData.filter((page) => {
       if (searchQuery && !page.path.toLowerCase().includes(searchQuery.toLowerCase()) && !page.title.toLowerCase().includes(searchQuery.toLowerCase())) return false
       if (statusFilter !== "all" && page.status !== statusFilter) return false
-      if (localeFilter !== "all") {
-        if (localeFilter === "none" && page.locale) return false;
-        if (localeFilter !== "none" && page.locale !== localeFilter) return false;
-      }
+      if (localeFilter !== "all" && (page.locale || 'default') !== localeFilter) return false
       if (pageTypeFilter !== "all") {
         if (pageTypeFilter === "static" && page.pageType === "collection") return false;
         if (pageTypeFilter === "collection" && page.pageType !== "collection") return false;
@@ -308,27 +313,54 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       }));
   }, [getFolderPath]);
 
-  // Group filtered pages by type (CMS first, then Static), then by folder
-  const groupedPages = useMemo(() => {
-    const cmsPages = filteredPages.filter(p => p.pageType === 'collection');
-    const staticPages = filteredPages.filter(p => p.pageType !== 'collection');
+  // Group filtered pages by locale first, then by type (CMS/Static), then by folder
+  const groupedByLocale = useMemo(() => {
+    // Group pages by locale
+    const localeMap = new Map<string, typeof filteredPages>();
     
-    return [
-      { type: 'collection', label: 'CMS Pages', icon: Database, folders: groupPagesByFolder(cmsPages), totalCount: cmsPages.length },
-      { type: 'static', label: 'Static Pages', icon: File, folders: groupPagesByFolder(staticPages), totalCount: staticPages.length }
-    ].filter(group => group.totalCount > 0);
+    filteredPages.forEach(page => {
+      const locale = page.locale || 'default';
+      if (!localeMap.has(locale)) {
+        localeMap.set(locale, []);
+      }
+      localeMap.get(locale)!.push(page);
+    });
+    
+    // Sort locales: default first, then alphabetically
+    const sortedLocales = Array.from(localeMap.entries()).sort(([a], [b]) => {
+      if (a === 'default') return -1;
+      if (b === 'default') return 1;
+      return a.localeCompare(b);
+    });
+    
+    return sortedLocales.map(([locale, pages]) => {
+      const cmsPages = pages.filter(p => p.pageType === 'collection');
+      const staticPages = pages.filter(p => p.pageType !== 'collection');
+      
+      const typeGroups = [
+        { type: 'collection', label: 'CMS Pages', icon: Database, folders: groupPagesByFolder(cmsPages), totalCount: cmsPages.length },
+        { type: 'static', label: 'Static Pages', icon: File, folders: groupPagesByFolder(staticPages), totalCount: staticPages.length }
+      ].filter(group => group.totalCount > 0);
+      
+      return {
+        locale,
+        label: locale === 'default' ? 'Default (EN)' : locale.toUpperCase(),
+        typeGroups,
+        totalCount: pages.length
+      };
+    }).filter(group => group.totalCount > 0);
   }, [filteredPages, groupPagesByFolder]);
 
-  // Track collapsed state for folders
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  // Track collapsed state for locales, types, and folders
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   
-  const toggleFolder = useCallback((folderId: string) => {
-    setCollapsedFolders(prev => {
+  const toggleSection = useCallback((sectionId: string) => {
+    setCollapsedSections(prev => {
       const next = new Set(prev);
-      if (next.has(folderId)) {
-        next.delete(folderId);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
       } else {
-        next.add(folderId);
+        next.add(sectionId);
       }
       return next;
     });
@@ -600,18 +632,17 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                   <SelectItem value="Scan failed">Failed</SelectItem>
                 </SelectContent>
               </Select>
-              {availableLocales.length > 0 && (
+              {availableLocales.length > 1 && (
                 <Select value={localeFilter} onValueChange={setLocaleFilter}>
-                  <SelectTrigger className="w-36">
+                  <SelectTrigger className="w-40">
                     <Globe className="mr-2 h-4 w-4" />
                     <SelectValue placeholder="Locale" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All locales</SelectItem>
-                    <SelectItem value="none">No locale</SelectItem>
                     {availableLocales.map(locale => (
                       <SelectItem key={locale} value={locale}>
-                        {locale.toUpperCase()}
+                        {locale === 'default' ? 'Default (EN)' : locale.toUpperCase()}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -686,104 +717,146 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {groupedPages.map((group) => {
-                    const GroupIcon = group.icon;
+                  {groupedByLocale.map((localeGroup) => {
+                    const localeId = `locale-${localeGroup.locale}`;
+                    const isLocaleCollapsed = collapsedSections.has(localeId);
+                    
+                    // Only show locale header if there are multiple locales
+                    const showLocaleHeader = groupedByLocale.length > 1;
+                    
                     return (
-                      <React.Fragment key={`group-${group.type}`}>
-                        {/* Type Group Header (CMS/Static) */}
-                        <TableRow className="bg-muted/70 hover:bg-muted/70">
-                          <TableCell colSpan={6} className="py-2">
-                            <div className="flex items-center gap-2 font-semibold">
-                              <GroupIcon className="h-4 w-4" />
-                              <span>{group.label}</span>
-                              <Badge variant="secondary" className="text-xs">
-                                {group.totalCount}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                      <React.Fragment key={localeId}>
+                        {/* Locale Header - Only show if multiple locales */}
+                        {showLocaleHeader && (
+                          <TableRow 
+                            className="bg-purple-500/10 hover:bg-purple-500/15 cursor-pointer"
+                            onClick={() => toggleSection(localeId)}
+                          >
+                            <TableCell colSpan={6} className="py-2">
+                              <div className="flex items-center gap-2 font-bold">
+                                {isLocaleCollapsed ? (
+                                  <ChevronRight className="h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4" />
+                                )}
+                                <Globe className="h-4 w-4" />
+                                <span>{localeGroup.label}</span>
+                                <Badge variant="secondary" className="text-xs bg-purple-500/20">
+                                  {localeGroup.totalCount}
+                                </Badge>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
                         
-                        {/* Folder Groups within Type */}
-                        {group.folders.map((folder) => {
-                          const folderId = `${group.type}-${folder.folder}`;
-                          const isCollapsed = collapsedFolders.has(folderId);
+                        {/* Type Groups within Locale */}
+                        {!isLocaleCollapsed && localeGroup.typeGroups.map((typeGroup) => {
+                          const TypeIcon = typeGroup.icon;
+                          const typeId = `${localeId}-${typeGroup.type}`;
+                          const isTypeCollapsed = collapsedSections.has(typeId);
                           
                           return (
-                            <React.Fragment key={folderId}>
-                              {/* Folder Header - Collapsible */}
+                            <React.Fragment key={typeId}>
+                              {/* Type Header (CMS/Static) */}
                               <TableRow 
-                                className="bg-muted/30 hover:bg-muted/40 cursor-pointer"
-                                onClick={() => toggleFolder(folderId)}
+                                className="bg-muted/70 hover:bg-muted/60 cursor-pointer"
+                                onClick={() => toggleSection(typeId)}
                               >
-                                <TableCell colSpan={6} className="py-1.5 pl-8">
-                                  <div className="flex items-center gap-2 text-sm">
-                                    {isCollapsed ? (
+                                <TableCell colSpan={6} className={`py-2 ${showLocaleHeader ? 'pl-8' : ''}`}>
+                                  <div className="flex items-center gap-2 font-semibold">
+                                    {isTypeCollapsed ? (
                                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                     ) : (
                                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                     )}
-                                    <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                                    <span className="font-medium font-mono text-muted-foreground">{folder.label}</span>
-                                    <Badge variant="outline" className="text-xs">
-                                      {folder.pages.length}
+                                    <TypeIcon className="h-4 w-4" />
+                                    <span>{typeGroup.label}</span>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {typeGroup.totalCount}
                                     </Badge>
                                   </div>
                                 </TableCell>
                               </TableRow>
                               
-                              {/* Folder Pages */}
-                              {!isCollapsed && folder.pages.map((page) => (
-                                <TableRow key={page.id}>
-                                  <TableCell className="font-medium max-w-[300px] pl-14">
-                                    <div className="flex items-center gap-2">
-                                      <div className="font-semibold block truncate flex-1" title={page.title}>{page.title || 'Untitled'}</div>
-                                      {page.locale && (
-                                        <Badge variant="secondary" className="text-xs shrink-0 bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20">
-                                          {page.locale.toUpperCase()}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <NextLink
-                                      href={`/modules/project-links/${projectId}/audit/${page.id}`}
-                                      className="hover:underline text-xs text-blue-600 dark:text-blue-400 block truncate"
-                                      title={page.path}
+                              {/* Folder Groups within Type */}
+                              {!isTypeCollapsed && typeGroup.folders.map((folder) => {
+                                const folderId = `${typeId}-${folder.folder}`;
+                                const isFolderCollapsed = collapsedSections.has(folderId);
+                                
+                                return (
+                                  <React.Fragment key={folderId}>
+                                    {/* Folder Header - Collapsible */}
+                                    <TableRow 
+                                      className="bg-muted/30 hover:bg-muted/40 cursor-pointer"
+                                      onClick={() => toggleSection(folderId)}
                                     >
-                                      {page.path}
-                                    </NextLink>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline" className={getStatusColor(page.status)}>
-                                      {page.status}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-sm text-muted-foreground" title={page.lastScan}>
-                                    {page.lastScanRelative}
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center gap-2">
-                                      <Progress value={page.score} className="h-2 w-16" />
-                                      <span className="text-sm font-medium">{page.score}</span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex flex-wrap gap-1">
-                                      {page.findings.length === 0 && <span className="text-xs text-muted-foreground">-</span>}
-                                      {page.findings.map((finding, idx) => (
-                                        <Badge key={idx} variant="secondary" className="text-xs">
-                                          {finding}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    <div className="flex justify-end gap-2">
-                                      <Button variant="outline" size="sm" asChild>
-                                        <NextLink href={`/modules/project-links/${projectId}/audit/${page.id}`}>View details</NextLink>
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
+                                      <TableCell colSpan={6} className={`py-1.5 ${showLocaleHeader ? 'pl-14' : 'pl-8'}`}>
+                                        <div className="flex items-center gap-2 text-sm">
+                                          {isFolderCollapsed ? (
+                                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                          ) : (
+                                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                          )}
+                                          <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                                          <span className="font-medium font-mono text-muted-foreground">{folder.label}</span>
+                                          <Badge variant="outline" className="text-xs">
+                                            {folder.pages.length}
+                                          </Badge>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                    
+                                    {/* Folder Pages */}
+                                    {!isFolderCollapsed && folder.pages.map((page) => (
+                                      <TableRow key={page.id}>
+                                        <TableCell className={`font-medium max-w-[300px] ${showLocaleHeader ? 'pl-20' : 'pl-14'}`}>
+                                          <div className="flex items-center gap-2">
+                                            <div className="font-semibold block truncate flex-1" title={page.title}>{page.title || 'Untitled'}</div>
+                                          </div>
+                                          <NextLink
+                                            href={`/modules/project-links/${projectId}/audit/${page.id}`}
+                                            className="hover:underline text-xs text-blue-600 dark:text-blue-400 block truncate"
+                                            title={page.path}
+                                          >
+                                            {page.path}
+                                          </NextLink>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Badge variant="outline" className={getStatusColor(page.status)}>
+                                            {page.status}
+                                          </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-sm text-muted-foreground" title={page.lastScan}>
+                                          {page.lastScanRelative}
+                                        </TableCell>
+                                        <TableCell>
+                                          <div className="flex items-center gap-2">
+                                            <Progress value={page.score} className="h-2 w-16" />
+                                            <span className="text-sm font-medium">{page.score}</span>
+                                          </div>
+                                        </TableCell>
+                                        <TableCell>
+                                          <div className="flex flex-wrap gap-1">
+                                            {page.findings.length === 0 && <span className="text-xs text-muted-foreground">-</span>}
+                                            {page.findings.map((finding, idx) => (
+                                              <Badge key={idx} variant="secondary" className="text-xs">
+                                                {finding}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          <div className="flex justify-end gap-2">
+                                            <Button variant="outline" size="sm" asChild>
+                                              <NextLink href={`/modules/project-links/${projectId}/audit/${page.id}`}>View details</NextLink>
+                                            </Button>
+                                          </div>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </React.Fragment>
+                                );
+                              })}
                             </React.Fragment>
                           );
                         })}
