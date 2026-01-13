@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import chromium from '@sparticuz/chromium';
 import puppeteerCore from 'puppeteer-core';
 
 export const maxDuration = 60; // 60 seconds
 export const dynamic = 'force-dynamic';
+
+// Check if we're in Vercel production environment
+// Vercel sets VERCEL=1
+// Railway and other container platforms should use regular puppeteer
+const isVercelProduction = process.env.VERCEL === '1';
 
 export async function POST(req: NextRequest) {
     console.log("PDF Generation Request Received");
@@ -24,28 +28,118 @@ export async function POST(req: NextRequest) {
     let browser;
     try {
         console.log("Launching Puppeteer...");
+        console.log("Environment:", { 
+            NODE_ENV: process.env.NODE_ENV, 
+            VERCEL: process.env.VERCEL,
+            RAILWAY: process.env.RAILWAY_ENVIRONMENT,
+            isVercelProduction 
+        });
 
-        if (process.env.NODE_ENV === 'production') {
-            // Production (Vercel)
-            // @sparticuz/chromium specific args
-            chromium.setGraphicsMode = false;
+        // Use @sparticuz/chromium only for Vercel serverless
+        // For Railway and other container platforms, use regular puppeteer
+        if (isVercelProduction) {
+            // Production (Vercel) - try @sparticuz/chromium first
+            try {
+                const chromium = await import('@sparticuz/chromium');
+                
+                // Configure chromium for serverless
+                chromium.setGraphicsMode = false;
+                
+                // Get executable path with error handling
+                let executablePath: string;
+                try {
+                    // Try to get the executable path
+                    // If it fails with the brotli error, we'll catch it and provide a better message
+                    executablePath = await chromium.executablePath();
+                    console.log("Chromium executable path:", executablePath);
+                    
+                    // Verify the path exists (basic check)
+                    if (!executablePath || executablePath.includes('does not exist')) {
+                        throw new Error('Chromium executable path is invalid or missing');
+                    }
+                } catch (pathError) {
+                    const errorMessage = (pathError as Error).message;
+                    console.error("Error getting chromium executable path:", pathError);
+                    
+                    // Check if it's the brotli files error
+                    if (errorMessage.includes('brotli') || errorMessage.includes('does not exist')) {
+                        throw new Error(
+                            `Chromium binary not found. This usually means @sparticuz/chromium package is not properly installed or configured. ` +
+                            `Please ensure the package is correctly installed and the brotli files are available. ` +
+                            `Original error: ${errorMessage}`
+                        );
+                    }
+                    throw new Error(`Failed to get Chromium executable path: ${errorMessage}`);
+                }
 
-            browser = await puppeteerCore.launch({
-                args: chromium.args,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                defaultViewport: (chromium as any).defaultViewport,
-                executablePath: await chromium.executablePath(),
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                headless: (chromium as any).headless,
-            });
+                browser = await puppeteerCore.launch({
+                    args: [...chromium.args, '--disable-dev-shm-usage'],
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    defaultViewport: (chromium as any).defaultViewport,
+                    executablePath: executablePath,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    headless: (chromium as any).headless,
+                });
+                console.log("Successfully launched browser with @sparticuz/chromium");
+            } catch (chromiumError) {
+                const errorMessage = (chromiumError as Error).message;
+                console.error("Error with @sparticuz/chromium:", chromiumError);
+                
+                // If it's a brotli/files error, provide helpful guidance
+                if (errorMessage.includes('brotli') || errorMessage.includes('does not exist')) {
+                    console.log("Chromium package issue detected. This might be a deployment configuration problem.");
+                    console.log("Attempting fallback to regular puppeteer (may not work on Vercel)...");
+                } else {
+                    console.log("Falling back to regular puppeteer...");
+                }
+                
+                // Fallback to regular puppeteer if chromium fails
+                // Note: This might not work on Vercel, but it's worth trying
+                try {
+                    const puppeteer = await import('puppeteer').then(m => m.default);
+                    browser = await puppeteer.launch({
+                        headless: true,
+                        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+                    });
+                    console.log("Successfully launched browser with puppeteer fallback");
+                } catch (fallbackError) {
+                    console.error("Fallback to puppeteer also failed:", fallbackError);
+                    // Provide a more helpful error message
+                    const isBrotliError = errorMessage.includes('brotli') || errorMessage.includes('does not exist');
+                    const helpfulMessage = isBrotliError
+                        ? `PDF generation failed: @sparticuz/chromium package is not properly configured. The Chromium binary files (brotli) are missing. Please check your deployment configuration and ensure @sparticuz/chromium is properly installed.`
+                        : `PDF generation failed: ${errorMessage}`;
+                    throw new Error(helpfulMessage);
+                }
+            }
         } else {
-            // Local Development or Container
+            // Local Development, Railway, or other Container platforms
+            // Railway containers can use regular puppeteer with full Chrome installation
             // Dynamic import to avoid bundling 'puppeteer' in production build if user moves it to devDependencies
             const puppeteer = await import('puppeteer').then(m => m.default);
-            browser = await puppeteer.launch({
+            
+            // Check if PUPPETEER_EXECUTABLE_PATH is set (from Dockerfile)
+            const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+            
+            const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
                 headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            });
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--disable-software-rasterizer',
+                ],
+            };
+            
+            // Use the executable path from environment if available (Docker/Railway)
+            if (executablePath) {
+                launchOptions.executablePath = executablePath;
+                console.log(`Using Chromium from: ${executablePath}`);
+            }
+            
+            browser = await puppeteer.launch(launchOptions);
+            console.log("Successfully launched browser with puppeteer (Railway/Container mode)");
         }
 
         const page = await browser.newPage();
