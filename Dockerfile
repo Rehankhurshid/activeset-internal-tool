@@ -106,13 +106,13 @@ RUN apt-get update && apt-get install -y \
     fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install Funnel Sans and Funnel Display from Google Fonts
+# Download and install Funnel Sans and Funnel Display from Google Fonts GitHub
 RUN mkdir -p /usr/share/fonts/google-fonts \
-    && curl -L "https://fonts.google.com/download?family=Funnel%20Sans" -o /tmp/funnel-sans.zip \
-    && curl -L "https://fonts.google.com/download?family=Funnel%20Display" -o /tmp/funnel-display.zip \
-    && unzip -o /tmp/funnel-sans.zip -d /usr/share/fonts/google-fonts/ \
-    && unzip -o /tmp/funnel-display.zip -d /usr/share/fonts/google-fonts/ \
-    && rm /tmp/funnel-sans.zip /tmp/funnel-display.zip \
+    && curl -L "https://github.com/nickarellano/funnel/raw/main/fonts/ttf/FunnelSans-Regular.ttf" -o /usr/share/fonts/google-fonts/FunnelSans-Regular.ttf \
+    && curl -L "https://github.com/nickarellano/funnel/raw/main/fonts/ttf/FunnelSans-Medium.ttf" -o /usr/share/fonts/google-fonts/FunnelSans-Medium.ttf \
+    && curl -L "https://github.com/nickarellano/funnel/raw/main/fonts/ttf/FunnelSans-Bold.ttf" -o /usr/share/fonts/google-fonts/FunnelSans-Bold.ttf \
+    && curl -L "https://github.com/nickarellano/funnel/raw/main/fonts/ttf/FunnelDisplay-Regular.ttf" -o /usr/share/fonts/google-fonts/FunnelDisplay-Regular.ttf \
+    && curl -L "https://github.com/nickarellano/funnel/raw/main/fonts/ttf/FunnelDisplay-Bold.ttf" -o /usr/share/fonts/google-fonts/FunnelDisplay-Bold.ttf \
     && fc-cache -fv
 
 # Set Puppeteer to use system Chromium
