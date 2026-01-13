@@ -41,13 +41,15 @@ export async function POST(req: NextRequest) {
             // Production (Vercel) - try @sparticuz/chromium first
             try {
                 const chromium = await import('@sparticuz/chromium');
+                // Type assertion for chromium API (TypeScript types may be incomplete)
+                const chromiumApi = chromium as any;
                 
                 // Get executable path with error handling
                 let executablePath: string;
                 try {
                     // Try to get the executable path
                     // If it fails with the brotli error, we'll catch it and provide a better message
-                    executablePath = await chromium.executablePath();
+                    executablePath = await chromiumApi.executablePath();
                     console.log("Chromium executable path:", executablePath);
                     
                     // Verify the path exists (basic check)
@@ -70,12 +72,10 @@ export async function POST(req: NextRequest) {
                 }
 
                 browser = await puppeteerCore.launch({
-                    args: [...chromium.args, '--disable-dev-shm-usage'],
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    defaultViewport: (chromium as any).defaultViewport,
+                    args: [...(chromiumApi.args || []), '--disable-dev-shm-usage'],
+                    defaultViewport: chromiumApi.defaultViewport,
                     executablePath: executablePath,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    headless: (chromium as any).headless,
+                    headless: chromiumApi.headless !== false,
                 });
                 console.log("Successfully launched browser with @sparticuz/chromium");
             } catch (chromiumError) {
