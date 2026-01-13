@@ -95,9 +95,12 @@ WORKDIR /app
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 
-# Install Chromium for Puppeteer in production
+# Install Chromium and fonts for Puppeteer in production
 RUN apt-get update && apt-get install -y \
     chromium \
+    fonts-inter \
+    fonts-noto-core \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Puppeteer to use system Chromium
