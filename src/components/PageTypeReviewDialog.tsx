@@ -219,8 +219,15 @@ export function PageTypeReviewDialog({
                             </Badge>
                           )}
                         </div>
-                        <div className="mt-1 text-xs text-muted-foreground truncate">
-                          {p.examples.join(', ')}
+                        <div className="mt-1 text-xs text-muted-foreground truncate" title={p.examples.join(', ')}>
+                          {p.examples.slice(0, 2).map(ex => {
+                            // Show just the path, not full URL
+                            try {
+                              return new URL(ex).pathname;
+                            } catch {
+                              return ex;
+                            }
+                          }).join(', ')}{p.examples.length > 2 ? ` +${p.examples.length - 2} more` : ''}
                         </div>
                       </div>
                     </div>

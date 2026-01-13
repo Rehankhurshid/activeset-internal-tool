@@ -203,6 +203,21 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     return date.toLocaleDateString();
   }
 
+  // Helper to detect locale from URL path
+  const detectLocaleFromUrl = useCallback((url: string): string | undefined => {
+    try {
+      const pathname = new URL(url).pathname;
+      // Match patterns like /es/, /pt/, /es-mx/, /pt-br/
+      const localeMatch = pathname.match(/^\/([a-z]{2}(?:-[a-z]{2,3})?)\//i);
+      if (localeMatch) {
+        return localeMatch[1].toLowerCase();
+      }
+    } catch {
+      // ignore
+    }
+    return undefined;
+  }, []);
+
   // 1. Process Links into Page Data
   const pagesData = useMemo(() => {
     return links.map(link => {
@@ -230,11 +245,14 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       if ((audit?.categories?.technical?.issues?.length || 0) > 0) findings.push("Technical");
       if ((audit?.score || 0) < 50) findings.push("Low Score");
 
+      // Detect locale from URL if not already set
+      const detectedLocale = link.locale || detectLocaleFromUrl(link.url);
+
       return {
         id: link.id,
         path: link.url, // Display full URL for now, could parse path
         title: link.title,
-        locale: link.locale, // Include locale for filtering
+        locale: detectedLocale, // Include locale for filtering (detected from URL if not set)
         pageType: link.pageType, // CMS or static page type
         status: displayStatus,
         lastContentChange: audit?.lastRun ? new Date(audit.lastRun).toLocaleDateString() : "-",
@@ -364,6 +382,37 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       return a.localeCompare(b);
     });
     
+    // Helper to get readable locale label
+    const getLocaleLabel = (locale: string): string => {
+      if (locale === 'default') return 'English';
+      // Map common locale codes to readable names
+      const localeNames: Record<string, string> = {
+        'en': 'English',
+        'es': 'Spanish',
+        'es-mx': 'Spanish (MX)',
+        'es-ar': 'Spanish (AR)',
+        'pt': 'Portuguese',
+        'pt-br': 'Portuguese (BR)',
+        'fr': 'French',
+        'de': 'German',
+        'it': 'Italian',
+        'ja': 'Japanese',
+        'zh': 'Chinese',
+        'ko': 'Korean',
+        'da': 'Danish',
+        'nl': 'Dutch',
+        'sv': 'Swedish',
+        'no': 'Norwegian',
+        'fi': 'Finnish',
+        'pl': 'Polish',
+        'ru': 'Russian',
+        'tr': 'Turkish',
+        'ar': 'Arabic',
+        'hi': 'Hindi',
+      };
+      return localeNames[locale.toLowerCase()] || locale.toUpperCase();
+    };
+
     return sortedLocales.map(([locale, pages]) => {
       const cmsPages = pages.filter(p => p.pageType === 'collection');
       const staticPages = pages.filter(p => p.pageType !== 'collection');
@@ -375,7 +424,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       
       return {
         locale,
-        label: locale === 'default' ? 'Default (EN)' : locale.toUpperCase(),
+        label: getLocaleLabel(locale),
         typeGroups,
         totalCount: pages.length
       };
@@ -665,17 +714,29 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
               </Select>
               {availableLocales.length > 1 && (
                 <Select value={localeFilter} onValueChange={setLocaleFilter}>
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="w-44">
                     <Globe className="mr-2 h-4 w-4" />
                     <SelectValue placeholder="Locale" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All locales</SelectItem>
-                    {availableLocales.map(locale => (
-                      <SelectItem key={locale} value={locale}>
-                        {locale === 'default' ? 'Default (EN)' : locale.toUpperCase()}
-                      </SelectItem>
-                    ))}
+                    {availableLocales.map(locale => {
+                      const localeNames: Record<string, string> = {
+                        'default': 'English',
+                        'en': 'English',
+                        'es': 'Spanish',
+                        'es-mx': 'Spanish (MX)',
+                        'pt': 'Portuguese',
+                        'pt-br': 'Portuguese (BR)',
+                        'da': 'Danish',
+                      };
+                      const label = localeNames[locale.toLowerCase()] || locale.toUpperCase();
+                      return (
+                        <SelectItem key={locale} value={locale}>
+                          {label}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               )}
