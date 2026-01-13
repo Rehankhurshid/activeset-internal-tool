@@ -101,7 +101,19 @@ RUN apt-get update && apt-get install -y \
     fonts-inter \
     fonts-noto-core \
     fonts-noto-cjk \
+    curl \
+    unzip \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
+
+# Download and install Funnel Sans and Funnel Display from Google Fonts
+RUN mkdir -p /usr/share/fonts/google-fonts \
+    && curl -L "https://fonts.google.com/download?family=Funnel%20Sans" -o /tmp/funnel-sans.zip \
+    && curl -L "https://fonts.google.com/download?family=Funnel%20Display" -o /tmp/funnel-display.zip \
+    && unzip -o /tmp/funnel-sans.zip -d /usr/share/fonts/google-fonts/ \
+    && unzip -o /tmp/funnel-display.zip -d /usr/share/fonts/google-fonts/ \
+    && rm /tmp/funnel-sans.zip /tmp/funnel-display.zip \
+    && fc-cache -fv
 
 # Set Puppeteer to use system Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
