@@ -23,9 +23,18 @@ if (!firebaseConfig.apiKey) {
 
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Authentication and get a reference to the service
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+// Initialize Firebase Authentication only on the client.
+// Next.js may import modules during build/server evaluation; initializing auth there can crash builds
+// when public Firebase env vars are not present (or intentionally omitted in certain build steps).
+export const auth =
+  typeof window !== 'undefined'
+    ? getAuth(app)
+    : (null as unknown as ReturnType<typeof getAuth>);
+
+export const googleProvider =
+  typeof window !== 'undefined'
+    ? new GoogleAuthProvider()
+    : (null as unknown as GoogleAuthProvider);
 
 // Initialize Cloud Firestore and get a reference to the service
 export const db = getFirestore(app);
