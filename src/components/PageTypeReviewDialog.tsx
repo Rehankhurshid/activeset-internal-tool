@@ -4,10 +4,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Database, File, FolderOpen } from "lucide-react"
 
 export type DetectedPattern = {
   id: string
@@ -38,89 +36,57 @@ function toPathname(url: string): string {
   }
 }
 
-function buildGlobFromPaths(paths: string[]): string | null {
-  if (paths.length < 2) return null
-
-  const segments = paths.map((p) => p.split("/").filter(Boolean))
-  const maxLen = Math.max(...segments.map((s) => s.length))
-
-  // normalize lengths
-  const padded = segments.map((s) => {
-    const clone = [...s]
-    while (clone.length < maxLen) clone.push("")
-    return clone
-  })
-
-  const out: string[] = []
-  for (let i = 0; i < maxLen; i++) {
-    const values = padded.map((s) => s[i]).filter((v) => v.length > 0)
-    if (values.length === 0) continue
-    const unique = new Set(values)
-
-    // Heuristic: if many unique values at a position, it's likely an ID/slug.
-    const shouldWildcard = unique.size > 3 || values.some((v) => /^[0-9a-f]{8,}$/i.test(v)) || values.some((v) => /^\d+$/.test(v))
-
-    if (shouldWildcard) out.push("*")
-    else out.push(values[0]!)
-  }
-
-  if (out.length === 0) return null
-  // Require at least one wildcard, otherwise this is too specific to be useful
-  if (!out.includes("*")) return null
-  return `/${out.join("/")}`
-}
-
+/**
+ * Detect folder patterns from URLs.
+ * Simplified logic: Extract the first non-locale path segment as a folder pattern.
+ * Ignores root-level pages.
+ */
 export function detectPatterns(urls: string[]): DetectedPattern[] {
   const paths = urls.map(toPathname).filter(Boolean)
   if (paths.length === 0) return []
 
-  // Group by first segment to avoid generating a single overly-broad wildcard for entire site.
-  const byRoot = new Map<string, string[]>()
-  for (const p of paths) {
-    const segs = p.split("/").filter(Boolean)
-    const root = segs[0] || ""
-    byRoot.set(root, [...(byRoot.get(root) || []), p])
+  // Group by first non-locale segment
+  const folderMap = new Map<string, string[]>()
+  
+  for (const path of paths) {
+    const segments = path.split("/").filter(Boolean)
+    
+    // Filter out locale segments (e.g., es-mx, pt-br, de, fr-ca)
+    const nonLocaleSegments = segments.filter(seg =>
+      !/^[a-z]{2}(-[a-z]{2,3})?$/i.test(seg)
+    )
+    
+    // Skip root-level pages (0 or 1 non-locale segment)
+    if (nonLocaleSegments.length <= 1) continue
+    
+    // Get the first folder segment
+    const folder = nonLocaleSegments[0]
+    if (!folder) continue
+    
+    const pattern = `/${folder}/*`
+    if (!folderMap.has(pattern)) {
+      folderMap.set(pattern, [])
+    }
+    folderMap.get(pattern)!.push(path)
   }
 
+  // Convert to DetectedPattern array
   const patterns: DetectedPattern[] = []
-
-  for (const [root, group] of byRoot.entries()) {
-    const glob = buildGlobFromPaths(group)
-    if (!glob) continue
-
-    // Count matches within this group
-    const regex = new RegExp("^" + glob.split("*").map(escapeRegex).join("[^/]+") + "$")
-    const matches = group.filter((p) => regex.test(p))
-    if (matches.length < 3) continue
-
+  
+  for (const [pattern, matchedPaths] of folderMap.entries()) {
+    // Only show folders with 2+ pages
+    if (matchedPaths.length < 2) continue
+    
     patterns.push({
-      id: newId(`pat_${root || "root"}`),
-      pattern: glob,
-      examples: matches.slice(0, 5),
-      count: matches.length,
+      id: newId(`folder_${pattern.replace(/[^a-z0-9]/gi, '_')}`),
+      pattern,
+      examples: matchedPaths.slice(0, 3),
+      count: matchedPaths.length,
     })
   }
 
-  // Sort: most common first
+  // Sort: most pages first
   return patterns.sort((a, b) => b.count - a.count)
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-function defaultRuleForPattern(pattern: string): PageTypeRule {
-  const now = new Date().toISOString()
-  return {
-    id: newId("rule"),
-    name: pattern,
-    pattern,
-    matchType: "glob",
-    pageType: "unknown",
-    enabled: true,
-    createdAt: now,
-    updatedAt: now,
-  }
 }
 
 interface PageTypeReviewDialogProps {
@@ -140,119 +106,124 @@ export function PageTypeReviewDialog({
   existingRules,
   onSaveRules,
 }: PageTypeReviewDialogProps) {
-  const existingPatterns = useMemo(() => new Set(existingRules.map((r) => `${r.matchType}:${r.pattern}`)), [existingRules])
-
-  const [selected, setSelected] = useState<Record<string, boolean>>({})
-  const [draft, setDraft] = useState<Record<string, PageTypeRule>>({})
+  // Filter out patterns that already have rules
+  const existingPatternSet = useMemo(() => new Set(existingRules.map((r) => r.pattern)), [existingRules])
 
   const usablePatterns = useMemo(() => {
-    return detectedPatterns.filter((p) => !existingPatterns.has(`glob:${p.pattern}`))
-  }, [detectedPatterns, existingPatterns])
+    return detectedPatterns.filter((p) => !existingPatternSet.has(p.pattern))
+  }, [detectedPatterns, existingPatternSet])
 
-  const selectedCount = Object.values(selected).filter(Boolean).length
+  // Track which patterns are marked as CMS (checked = CMS, unchecked = Static)
+  const [markedAsCMS, setMarkedAsCMS] = useState<Set<string>>(new Set())
 
-  const toggle = (id: string, v: boolean) => {
-    setSelected((prev) => ({ ...prev, [id]: v }))
-    setDraft((prev) => {
-      if (!prev[id]) {
-        const pat = usablePatterns.find((p) => p.id === id)
-        if (!pat) return prev
-        return { ...prev, [id]: defaultRuleForPattern(pat.pattern) }
+  const toggleCMS = (patternId: string) => {
+    setMarkedAsCMS((prev) => {
+      const next = new Set(prev)
+      if (next.has(patternId)) {
+        next.delete(patternId)
+      } else {
+        next.add(patternId)
       }
-      return prev
-    })
-  }
-
-  const updateDraft = (id: string, patch: Partial<PageTypeRule>) => {
-    setDraft((prev) => {
-      const current = prev[id]
-      if (!current) return prev
-      return { ...prev, [id]: { ...current, ...patch, updatedAt: new Date().toISOString() } }
+      return next
     })
   }
 
   const save = () => {
-    const additions = usablePatterns
-      .filter((p) => selected[p.id])
-      .map((p) => draft[p.id] || defaultRuleForPattern(p.pattern))
-      .filter((r) => r.pattern.trim().length > 0)
+    const now = new Date().toISOString()
+    
+    // Create rules for all patterns - CMS if checked, Static if unchecked
+    const newRules: PageTypeRule[] = usablePatterns.map((p) => ({
+      pattern: p.pattern,
+      pageType: markedAsCMS.has(p.id) ? 'collection' : 'static',
+      createdAt: now,
+    }))
 
-    const next = [...existingRules, ...additions]
+    const allRules = [...existingRules, ...newRules]
 
-    // Persist to localStorage (no backend API yet)
+    // Persist to localStorage
     try {
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(`pageTypeRules:${projectId}`, JSON.stringify(next))
+        window.localStorage.setItem(`pageTypeRules:${projectId}`, JSON.stringify(allRules))
       }
     } catch {
       // ignore
     }
 
-    onSaveRules(next)
+    onSaveRules(allRules)
   }
+
+  const cmsCount = markedAsCMS.size
+  const staticCount = usablePatterns.length - cmsCount
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => (!o ? onClose() : undefined)}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Review detected URL patterns</DialogTitle>
+          <DialogTitle>Review Folder Patterns</DialogTitle>
           <DialogDescription>
-            These patterns are inferred from your current page URLs. Select any patterns you want to turn into page-type rules.
+            We detected folder patterns in your pages. Check the boxes to mark folders as <strong>CMS</strong> (collection pages). 
+            Unchecked folders will be treated as <strong>Static</strong> pages.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="text-sm text-muted-foreground">
-          Saving will store rules locally in this browser for project <span className="font-mono">{projectId}</span>.
+        <div className="flex gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-cyan-600" />
+            <span>CMS: {cmsCount}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <File className="h-4 w-4 text-slate-600" />
+            <span>Static: {staticCount}</span>
+          </div>
         </div>
 
-        <ScrollArea className="max-h-[60vh] pr-4">
-          <div className="space-y-4">
+        <ScrollArea className="max-h-[50vh] pr-4">
+          <div className="space-y-3">
             {usablePatterns.length === 0 ? (
-              <div className="rounded-md border p-6 text-center text-muted-foreground">No new patterns detected.</div>
+              <div className="rounded-md border p-6 text-center text-muted-foreground">
+                No new folder patterns to review. All folders have been categorized.
+              </div>
             ) : (
               usablePatterns.map((p) => {
-                const isChecked = Boolean(selected[p.id])
-                const rule = draft[p.id] || defaultRuleForPattern(p.pattern)
+                const isCMS = markedAsCMS.has(p.id)
                 return (
-                  <div key={p.id} className="rounded-md border p-4 space-y-3">
-                    <div className="flex items-start gap-3">
-                      <Checkbox checked={isChecked} onCheckedChange={(v) => toggle(p.id, Boolean(v))} />
+                  <div 
+                    key={p.id} 
+                    className={`rounded-md border p-4 cursor-pointer transition-colors ${
+                      isCMS 
+                        ? 'bg-cyan-500/10 border-cyan-500/30' 
+                        : 'hover:bg-muted/50'
+                    }`}
+                    onClick={() => toggleCMS(p.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Checkbox 
+                        checked={isCMS} 
+                        onCheckedChange={() => toggleCMS(p.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="font-mono text-sm break-all">{p.pattern}</div>
-                          <Badge variant="secondary">{p.count} pages</Badge>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-medium">{p.pattern}</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {p.count} pages
+                          </Badge>
+                          {isCMS ? (
+                            <Badge className="text-xs bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border-cyan-500/30">
+                              CMS
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs">
+                              Static
+                            </Badge>
+                          )}
                         </div>
-                        <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                          {p.examples.map((ex) => (
-                            <div key={ex} className="font-mono truncate" title={ex}>
-                              {ex}
-                            </div>
-                          ))}
+                        <div className="mt-1 text-xs text-muted-foreground truncate">
+                          {p.examples.join(', ')}
                         </div>
                       </div>
                     </div>
-
-                    {isChecked && (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <Label>Rule name</Label>
-                          <Input value={rule.name} onChange={(e) => updateDraft(p.id, { name: e.target.value })} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Page type</Label>
-                          <Select value={rule.pageType} onValueChange={(v) => updateDraft(p.id, { pageType: v as any })}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="unknown">Unknown</SelectItem>
-                              <SelectItem value="static">Static</SelectItem>
-                              <SelectItem value="collection">CMS (collection)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )
               })
@@ -262,14 +233,13 @@ export function PageTypeReviewDialog({
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>
-            Close
+            Cancel
           </Button>
-          <Button onClick={save} disabled={selectedCount === 0}>
-            Save {selectedCount > 0 ? `(${selectedCount})` : ""}
+          <Button onClick={save} disabled={usablePatterns.length === 0}>
+            Save Rules ({usablePatterns.length})
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
-

@@ -137,20 +137,20 @@ function matchesPattern(pathname: string, pattern: string): boolean {
 /**
  * Detect page type (collection/CMS vs static) using:
  * 1. User-defined PageTypeRules (highest priority)
- * 2. Webflow API data
- * 3. Path-based heuristics (fallback)
+ * 2. Webflow API data (if available)
+ * 3. Default to 'static' (no heuristics - user must explicitly mark as CMS)
  */
 function detectPageType(
     url: string,
     webflowPageTypeMap: Map<string, 'collection' | 'static'>,
-    pageTypeRules: Array<{ pattern: string; pageType: 'static' | 'collection'; priority: number }> = []
+    pageTypeRules: Array<{ pattern: string; pageType: 'static' | 'collection'; priority?: number }> = []
 ): 'collection' | 'static' {
     try {
         const normalizedUrl = url.replace(/\/$/, '').toLowerCase();
         const pathname = new URL(url).pathname.replace(/\/$/, '').toLowerCase();
 
-        // Sort rules by priority (higher first)
-        const sortedRules = [...pageTypeRules].sort((a, b) => b.priority - a.priority);
+        // Sort rules by priority (higher first), default priority = 0
+        const sortedRules = [...pageTypeRules].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
 
         // First try: Check user-defined rules
         for (const rule of sortedRules) {
@@ -169,20 +169,9 @@ function detectPageType(
             return webflowPageTypeMap.get(pathname)!;
         }
 
-        // Fallback: path-based heuristic
-        const pathSegments = pathname.split('/').filter(Boolean);
-
-        // Filter out locale segments (e.g., es-mx, pt-br, de, fr-ca)
-        // A locale segment is 2 letters optionally followed by -2-3 letters
-        const nonLocaleSegments = pathSegments.filter(seg =>
-            !seg.match(/^[a-z]{2}(-[a-z]{2,3})?$/i)
-        );
-
-        // If after removing locale we have 0 or 1 segments, it's static
-        // e.g., /es-mx/ -> 0 segments after filtering -> static
-        // e.g., /es-mx/about -> 1 segment after filtering -> static  
-        // e.g., /blog/my-post -> 2 segments -> collection
-        return nonLocaleSegments.length > 1 ? 'collection' : 'static';
+        // Default: All pages are static unless explicitly marked as CMS
+        // User can review and mark folders as CMS through the dashboard
+        return 'static';
     } catch {
         return 'static'; // Default to static on error
     }

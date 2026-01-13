@@ -84,6 +84,37 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     [projectId],
   )
 
+  // Check if a folder pattern has an existing rule
+  const hasRuleForPattern = useCallback((folderPattern: string): boolean => {
+    return localRules.some(rule => rule.pattern === folderPattern)
+  }, [localRules])
+
+  // Mark a folder as CMS (add a PageTypeRule)
+  const markFolderAsCMS = useCallback((folderPattern: string) => {
+    const newRule: PageTypeRule = {
+      pattern: folderPattern,
+      pageType: 'collection',
+      createdAt: new Date().toISOString()
+    }
+    const updatedRules = [...localRules.filter(r => r.pattern !== folderPattern), newRule]
+    persistRules(updatedRules)
+    // Reload to apply the change
+    window.location.reload()
+  }, [localRules, persistRules])
+
+  // Mark a folder as Static (add a PageTypeRule or remove CMS rule)
+  const markFolderAsStatic = useCallback((folderPattern: string) => {
+    const newRule: PageTypeRule = {
+      pattern: folderPattern,
+      pageType: 'static',
+      createdAt: new Date().toISOString()
+    }
+    const updatedRules = [...localRules.filter(r => r.pattern !== folderPattern), newRule]
+    persistRules(updatedRules)
+    // Reload to apply the change
+    window.location.reload()
+  }, [localRules, persistRules])
+
   // Bulk scan state
   const [isBulkScanning, setIsBulkScanning] = useState(false)
   const [bulkScanProgress, setBulkScanProgress] = useState({ 
@@ -782,6 +813,9 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                               {!isTypeCollapsed && typeGroup.folders.map((folder) => {
                                 const folderId = `${typeId}-${folder.folder}`;
                                 const isFolderCollapsed = collapsedSections.has(folderId);
+                                const folderPattern = folder.label; // e.g., "/blog/*" or "Root Pages"
+                                const isRootFolder = folder.folder === '/';
+                                const needsReview = !isRootFolder && !hasRuleForPattern(folderPattern);
                                 
                                 return (
                                   <React.Fragment key={folderId}>
@@ -802,6 +836,42 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                                           <Badge variant="outline" className="text-xs">
                                             {folder.pages.length}
                                           </Badge>
+                                          {/* Needs Review badge for uncategorized folders */}
+                                          {needsReview && (
+                                            <Badge variant="outline" className="text-xs bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30">
+                                              Needs Review
+                                            </Badge>
+                                          )}
+                                          {/* Mark as CMS button for static folders without rules */}
+                                          {needsReview && typeGroup.type === 'static' && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 px-2 text-xs ml-auto"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                markFolderAsCMS(folderPattern);
+                                              }}
+                                            >
+                                              <Database className="h-3 w-3 mr-1" />
+                                              Mark as CMS
+                                            </Button>
+                                          )}
+                                          {/* Mark as Static button for CMS folders */}
+                                          {needsReview && typeGroup.type === 'collection' && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 px-2 text-xs ml-auto"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                markFolderAsStatic(folderPattern);
+                                              }}
+                                            >
+                                              <File className="h-3 w-3 mr-1" />
+                                              Mark as Static
+                                            </Button>
+                                          )}
                                         </div>
                                       </TableCell>
                                     </TableRow>
