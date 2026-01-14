@@ -3,6 +3,26 @@ import { projectsService } from '@/services/database';
 import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditService } from '@/services/AuditService';
 
+// Recursively remove undefined values from objects
+function removeUndefined<T>(obj: T): T {
+    if (obj === null || obj === undefined) {
+        return obj;
+    }
+    if (Array.isArray(obj)) {
+        return obj.map(item => removeUndefined(item)) as T;
+    }
+    if (typeof obj === 'object') {
+        const cleaned: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+            if (value !== undefined) {
+                cleaned[key] = removeUndefined(value);
+            }
+        }
+        return cleaned as T;
+    }
+    return obj;
+}
+
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -69,15 +89,21 @@ export async function POST(request: NextRequest) {
         // Update the project link with the new screenshot
         const existingLink = project.links[linkIndex];
         const updatedLinks = [...project.links];
-        updatedLinks[linkIndex] = {
-            ...existingLink,
-            auditResult: {
-                ...existingLink.auditResult,
-                screenshot: screenshotResult.screenshot,
-                previousScreenshot,
-                screenshotCapturedAt: capturedAt,
-            } as typeof existingLink.auditResult
+        
+        // Build auditResult, only including previousScreenshot if it exists
+        const updatedAuditResult = {
+            ...existingLink.auditResult,
+            screenshot: screenshotResult.screenshot,
+            screenshotCapturedAt: capturedAt,
         };
+        if (previousScreenshot) {
+            (updatedAuditResult as Record<string, unknown>).previousScreenshot = previousScreenshot;
+        }
+        
+        updatedLinks[linkIndex] = removeUndefined({
+            ...existingLink,
+            auditResult: updatedAuditResult as typeof existingLink.auditResult
+        });
 
         await projectsService.updateProjectLinks(projectId, updatedLinks);
 
