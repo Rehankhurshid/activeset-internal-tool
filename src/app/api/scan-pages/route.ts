@@ -4,7 +4,7 @@ import { pageScanner } from '@/services/PageScanner';
 import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
-import { computeChangeStatus, computeFieldChanges, generateDiffPatch, computeBodyTextDiff } from '@/lib/scan-utils';
+import { computeChangeStatus, computeFieldChanges, generateDiffPatch, computeBodyTextDiff, compactAuditResult } from '@/lib/scan-utils';
 import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot } from '@/types';
 
 const corsHeaders = {
@@ -200,34 +200,37 @@ export async function POST(request: NextRequest) {
             diffSummary, // Store diff summary for display
         });
 
-        // Update project link
+        // Update project link with compact auditResult to stay under Firestore 1MB limit
         const updatedLinks = [...project.links];
         updatedLinks[linkIndex] = removeUndefined({
             ...existingLink,
             title: scanResult.contentSnapshot.title || existingLink.title,
-            auditResult
+            auditResult: compactAuditResult(auditResult)
         });
 
         await projectsService.updateProjectLinks(projectId, updatedLinks);
 
-        // Save to audit_logs for history (only store new screenshot, not preserved ones)
-        const auditLogData: Record<string, unknown> = {
-            projectId,
-            linkId,
-            url,
-            timestamp: lastRunTimestamp,
-            fullHash: scanResult.fullHash,
-            contentHash: scanResult.contentHash,
-            htmlSource: scanResult.htmlSource
-        };
-        if (diffPatch) auditLogData.diffPatch = diffPatch;
-        // Only store screenshot in audit_logs if we actually captured a new one
-        if (shouldCaptureScreenshot && screenshot) {
-            auditLogData.screenshot = screenshot;
-        }
+        // Save to audit_logs for history ONLY if content changed
+        // This saves ~80% storage costs by skipping NO_CHANGE pages
+        if (changeStatus !== 'NO_CHANGE') {
+            const auditLogData: Record<string, unknown> = {
+                projectId,
+                linkId,
+                url,
+                timestamp: lastRunTimestamp,
+                fullHash: scanResult.fullHash,
+                contentHash: scanResult.contentHash,
+                htmlSource: scanResult.htmlSource
+            };
+            if (diffPatch) auditLogData.diffPatch = diffPatch;
+            // Only store screenshot in audit_logs if we actually captured a new one
+            if (shouldCaptureScreenshot && screenshot) {
+                auditLogData.screenshot = screenshot;
+            }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await AuditService.saveAuditLog(auditLogData as any);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await AuditService.saveAuditLog(auditLogData as any);
+        }
 
         // Check if we have any history for this link to bootstrap if needed
         const latestLog = await changeLogService.getLatestEntry(linkId);

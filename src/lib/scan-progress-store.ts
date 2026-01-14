@@ -6,13 +6,14 @@
 export interface ScanProgress {
   scanId: string;
   projectId: string;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
   current: number;
   total: number;
   currentUrl: string;
   startedAt: string;
   completedAt?: string;
   error?: string;
+  cancelRequested?: boolean; // Flag to signal cancellation to the running scan
   summary?: {
     noChange: number;
     techChange: number;
@@ -21,8 +22,22 @@ export interface ScanProgress {
   };
 }
 
+// Use global to persist across hot reloads in development
+// In production, this is just a regular module-level Map
+declare global {
+  // eslint-disable-next-line no-var
+  var scanProgressStore: Map<string, ScanProgress> | undefined;
+}
+
 // In-memory store - Map keyed by scanId
-const progressStore = new Map<string, ScanProgress>();
+// Attach to global in development to survive hot reloads
+const progressStore: Map<string, ScanProgress> = 
+  globalThis.scanProgressStore ?? new Map<string, ScanProgress>();
+
+// Persist to global in development
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.scanProgressStore = progressStore;
+}
 
 // Auto-cleanup timeout (10 minutes after completion)
 const CLEANUP_DELAY_MS = 10 * 60 * 1000;
@@ -104,4 +119,56 @@ export function getRunningScansForProject(projectId: string): ScanProgress[] {
     }
   });
   return running;
+}
+
+/**
+ * Get all scans in the store (for debugging)
+ */
+export function getAllScans(): ScanProgress[] {
+  return Array.from(progressStore.values());
+}
+
+/**
+ * Request cancellation of a scan
+ * The running scan should check isScanCancelled() periodically
+ */
+export function requestScanCancel(scanId: string): boolean {
+  const progress = progressStore.get(scanId);
+  if (!progress || progress.status !== 'running') {
+    return false;
+  }
+  
+  progress.cancelRequested = true;
+  progressStore.set(scanId, progress);
+  console.log(`[ScanProgress] Cancel requested for scan: ${scanId}`);
+  return true;
+}
+
+/**
+ * Check if a scan has been cancelled
+ * The running scan loop should call this and stop if true
+ */
+export function isScanCancelled(scanId: string): boolean {
+  const progress = progressStore.get(scanId);
+  return progress?.cancelRequested === true;
+}
+
+/**
+ * Mark a scan as cancelled (called by the scan loop when it stops)
+ */
+export function markScanCancelled(scanId: string): ScanProgress | null {
+  const progress = progressStore.get(scanId);
+  if (!progress) return null;
+  
+  progress.status = 'cancelled';
+  progress.completedAt = new Date().toISOString();
+  progressStore.set(scanId, progress);
+  
+  // Schedule cleanup
+  setTimeout(() => {
+    progressStore.delete(scanId);
+  }, CLEANUP_DELAY_MS);
+  
+  console.log(`[ScanProgress] Scan cancelled: ${scanId}`);
+  return progress;
 }

@@ -1,5 +1,100 @@
-import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot } from '@/types';
+import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot, AuditResult } from '@/types';
 import { createTwoFilesPatch } from 'diff';
+
+/**
+ * Create a compact version of auditResult for storing in project document.
+ * Strips large fields to stay under Firestore's 1MB document limit.
+ * Full data is preserved in audit_logs collection.
+ */
+export function compactAuditResult(result: AuditResult): AuditResult {
+    // Deep clone to avoid mutating original
+    const compact: AuditResult = JSON.parse(JSON.stringify(result));
+
+    // Truncate contentSnapshot - remove large arrays, limit strings
+    if (compact.contentSnapshot) {
+        const snapshot = compact.contentSnapshot as ExtendedContentSnapshot;
+        compact.contentSnapshot = {
+            title: snapshot.title?.substring(0, 200) || '',
+            h1: snapshot.h1?.substring(0, 200) || '',
+            metaDescription: snapshot.metaDescription?.substring(0, 300) || '',
+            wordCount: snapshot.wordCount || 0,
+            headings: (snapshot.headings || []).slice(0, 10), // Max 10 headings
+            // EXCLUDE large fields: bodyText, bodyTextPreview, images, links, sections
+        };
+    }
+
+    // Strip rawSchemas from schema category (can be very large)
+    if (compact.categories?.schema) {
+        compact.categories.schema = {
+            ...compact.categories.schema,
+            rawSchemas: [], // Remove full schemas, keep metadata
+        };
+    }
+
+    // Limit headingStructure headings
+    if (compact.categories?.headingStructure?.headings) {
+        compact.categories.headingStructure.headings = 
+            compact.categories.headingStructure.headings.slice(0, 20);
+    }
+
+    // Limit brokenLinks array
+    if (compact.categories?.links?.brokenLinks) {
+        compact.categories.links.brokenLinks = 
+            compact.categories.links.brokenLinks.slice(0, 10);
+    }
+
+    // Limit accessibility issues
+    if (compact.categories?.accessibility?.issues) {
+        compact.categories.accessibility.issues = 
+            compact.categories.accessibility.issues.slice(0, 20);
+    }
+
+    // Remove screenshots from project doc (kept in audit_logs)
+    delete compact.screenshot;
+    delete compact.previousScreenshot;
+    delete compact.mobileScreenshot;
+    delete compact.tabletScreenshot;
+    delete compact.desktopScreenshot;
+
+    // Limit fieldChanges to avoid large diffs
+    if (compact.fieldChanges) {
+        compact.fieldChanges = compact.fieldChanges.slice(0, 10).map(change => ({
+            ...change,
+            // Truncate large values in field changes
+            oldValue: truncateFieldValue(change.oldValue) as FieldChange['oldValue'],
+            newValue: truncateFieldValue(change.newValue) as FieldChange['newValue'],
+        }));
+    }
+
+    // Truncate diffSummary and diffPatch
+    if (compact.diffSummary && compact.diffSummary.length > 500) {
+        compact.diffSummary = compact.diffSummary.substring(0, 500) + '...';
+    }
+    delete compact.diffPatch; // Remove full diff patch
+
+    return compact;
+}
+
+/**
+ * Truncate field values to prevent large data in compact result
+ */
+function truncateFieldValue(value: unknown): unknown {
+    if (value === null || value === undefined) return value;
+    
+    if (typeof value === 'string') {
+        return value.length > 200 ? value.substring(0, 200) + '...' : value;
+    }
+    
+    if (Array.isArray(value)) {
+        // For arrays (images, links), just keep count
+        if (value.length > 5) {
+            return value.slice(0, 3); // Keep first 3 items
+        }
+        return value;
+    }
+    
+    return value;
+}
 
 // Compute change status by comparing hashes
 export function computeChangeStatus(

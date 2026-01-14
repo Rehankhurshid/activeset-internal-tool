@@ -107,6 +107,9 @@ When `widget.js` loads on a client's website:
 | [/api/save-audit](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/save-audit/route.ts) | POST | **Main sync endpoint** - saves audit, computes diffs, logs changes |
 | [/api/scan-pages](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-pages/route.ts) | POST | Server-side page scan with field change detection |
 | [/api/scan-bulk](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-bulk/route.ts) | POST | Bulk page scanning for multiple URLs |
+| [/api/scan-bulk/status](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-bulk/status/route.ts) | GET | Poll bulk scan progress |
+| [/api/scan-bulk/running](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-bulk/running/route.ts) | GET | Check for running scans (resume detection) |
+| [/api/scan-bulk/cancel](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-bulk/cancel/route.ts) | POST | Cancel an in-progress bulk scan |
 | [/api/audit](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/audit/route.ts) | POST | AI-powered content analysis via Gemini |
 | [/api/check-text](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/check-text/route.ts) | POST | Spell checking via LanguageTool (with nspell fallback) |
 | [/api/audit-config](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/audit-config/route.ts) | POST | Cost control - disables spellcheck for high-volume folders (>20 pages) |
@@ -378,6 +381,63 @@ This prevents excessive API costs on CMS-heavy sections like `/blogs/*` or `/pro
 | **Blocked** | Placeholders detected | Red badge |
 | **Scan failed** | Error during audit | Gray badge |
 | **Pending** | Never scanned | Gray badge |
+| **Scanning...** | Currently being scanned | Blue badge with pulse animation |
+| **Queued** | Waiting to be scanned (bulk scan) | Gray badge |
+
+### Bulk Scan Real-Time Status
+
+During a bulk scan, each page displays its real-time status:
+
+```
+Page 1: No change       ← Already scanned, shows actual result
+Page 2: Content changed ← Already scanned, shows actual result  
+Page 3: Scanning...     ← Currently being scanned (pulsing)
+Page 4: Queued          ← Waiting in queue
+Page 5: Queued          ← Waiting in queue
+```
+
+**Status Logic During Bulk Scan:**
+
+| Condition | Status Displayed |
+|-----------|------------------|
+| Page is the current URL being scanned | **Scanning...** (blue, pulsing) |
+| Page was scanned after bulk scan started | **Actual status** (No change, Changed, etc.) |
+| Page has not been scanned yet in this run | **Queued** (gray) |
+
+**Implementation Details:**
+
+The dashboard tracks `startedAt` timestamp when a bulk scan begins. For each page, it compares:
+- `bulkScanProgress.currentUrl` — Is this the page currently being scanned?
+- `audit.lastRun` vs `bulkScanProgress.startedAt` — Was this page scanned after the bulk scan started?
+
+```typescript
+if (isBulkScanning) {
+  const isCurrentPage = bulkScanProgress.currentUrl === link.url;
+  const wasScannedInThisRun = scanStarted && pageLastRun && 
+    new Date(pageLastRun).getTime() >= new Date(scanStarted).getTime();
+  
+  if (isCurrentPage) {
+    displayStatus = "Scanning...";
+  } else if (wasScannedInThisRun) {
+    // Show actual status from audit result
+  } else {
+    displayStatus = "Queued";
+  }
+}
+```
+
+**Bulk Scan Progress State:**
+
+```typescript
+interface BulkScanProgress {
+  current: number;      // Pages scanned so far
+  total: number;        // Total pages to scan
+  percentage: number;   // Completion percentage
+  currentUrl: string;   // URL currently being scanned
+  scanId: string;       // Unique scan identifier
+  startedAt: string;    // ISO timestamp when scan started
+}
+```
 
 ### Compact Toolbar
 
@@ -392,6 +452,7 @@ The dashboard features a compact, icon-based toolbar for efficient navigation:
 | **Collapse/Expand** | ⇅ | Toggle collapse/expand all page groups |
 | **Edit Folder Types** | ✏ | Enter edit mode for bulk folder classification |
 | **Scan All** | ▶ | Trigger bulk scan of all pages |
+| **Stop Scan** | ⏹ | Stop an in-progress bulk scan |
 
 ### Active Filters Display
 
@@ -417,6 +478,41 @@ Filters: [Search: "term" ×] [Status: Changed ×] [Type: CMS ×]  Clear all
 - Most recently scanned (default)
 - Lowest score first
 - Critical issues first (Blocked pages)
+
+### Bulk Scan Controls
+
+The dashboard includes controls for managing bulk scans:
+
+| Control | Description |
+|---------|-------------|
+| **Start Scan** | Initiates a bulk scan of all pages (or selected scope) |
+| **Stop Scan** | Gracefully cancels an in-progress scan, saving partial results |
+| **Progress Bar** | Shows completion percentage and current URL |
+| **Resume Detection** | Automatically detects and resumes running scans after page refresh |
+
+**Scan Lifecycle:**
+
+```
+[Start] → scanning → [Stop] → cancelled
+                   ↘ completed ↙
+```
+
+**Related API Endpoints:**
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/scan-bulk` | POST | Start a bulk scan |
+| `/api/scan-bulk/status` | GET | Poll scan progress |
+| `/api/scan-bulk/running` | GET | Check for running scans (resume detection) |
+| `/api/scan-bulk/cancel` | POST | Request scan cancellation |
+
+**Scan Progress Persistence:**
+
+The scan progress store uses `globalThis` in development to persist across Next.js hot reloads. When a user refreshes the page during a scan:
+
+1. Dashboard calls `/api/scan-bulk/running?projectId=...` on mount
+2. If an active scan is found, it resumes displaying progress
+3. Polling continues until scan completes or is cancelled
 
 ---
 

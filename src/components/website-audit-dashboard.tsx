@@ -33,6 +33,7 @@ import {
   X,
   Check,
   SlidersHorizontal,
+  Square,
 } from "lucide-react"
 import {
   Tooltip,
@@ -134,12 +135,13 @@ export function WebsiteAuditDashboard({
 
   // Bulk scan state
   const [isBulkScanning, setIsBulkScanning] = useState(false)
-  const [bulkScanProgress, setBulkScanProgress] = useState({ 
-    current: 0, 
-    total: 0, 
+  const [bulkScanProgress, setBulkScanProgress] = useState({
+    current: 0,
+    total: 0,
     percentage: 0,
     currentUrl: '',
-    scanId: '' 
+    scanId: '',
+    startedAt: '' // Track when scan started to determine which pages have been scanned
   })
   const [showCollectionDialog, setShowCollectionDialog] = useState(false)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -155,16 +157,18 @@ export function WebsiteAuditDashboard({
 
       const data = await response.json()
       
-      setBulkScanProgress({
+      setBulkScanProgress(prev => ({
+        ...prev,
         current: data.current,
         total: data.total,
         percentage: data.percentage,
         currentUrl: data.currentUrl || '',
         scanId: data.scanId
-      })
+        // Keep startedAt from previous state
+      }))
 
-      // Check if scan is completed or failed
-      if (data.status === 'completed' || data.status === 'failed') {
+      // Check if scan is completed, failed, or cancelled
+      if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
         // Stop polling
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current)
@@ -177,6 +181,10 @@ export function WebsiteAuditDashboard({
           console.log('[BulkScan] Completed:', data.summary)
           // Refresh the page to show updated results
           window.location.reload()
+        } else if (data.status === 'cancelled') {
+          console.log('[BulkScan] Cancelled by user')
+          // Refresh to show partial results
+          window.location.reload()
         } else {
           console.error('[BulkScan] Failed:', data.error)
         }
@@ -186,6 +194,39 @@ export function WebsiteAuditDashboard({
     }
   }, [])
 
+  // Cancel/stop a running scan
+  const [isCancelling, setIsCancelling] = useState(false)
+  
+  const handleCancelScan = useCallback(async () => {
+    if (!bulkScanProgress.scanId) return
+    
+    setIsCancelling(true)
+    try {
+      const response = await fetch('/api/scan-bulk/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scanId: bulkScanProgress.scanId })
+      })
+      
+      if (response.ok) {
+        console.log('[BulkScan] Cancel requested')
+        // Stop polling - the scan will update its status
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        setIsBulkScanning(false)
+        setBulkScanProgress({ current: 0, total: 0, percentage: 0, currentUrl: '', scanId: '', startedAt: '' })
+      } else {
+        console.error('[BulkScan] Cancel failed')
+      }
+    } catch (error) {
+      console.error('[BulkScan] Cancel error:', error)
+    } finally {
+      setIsCancelling(false)
+    }
+  }, [bulkScanProgress.scanId])
+
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
@@ -194,6 +235,67 @@ export function WebsiteAuditDashboard({
       }
     }
   }, [])
+
+  // Check for running scans on mount (handles page refresh during scan)
+  // Use a ref to track if we've already checked to avoid duplicate checks
+  const hasCheckedForRunningScans = useRef(false)
+  
+  useEffect(() => {
+    const checkRunningScans = async () => {
+      // Only check once per mount
+      if (hasCheckedForRunningScans.current) return
+      hasCheckedForRunningScans.current = true
+      
+      console.log('[BulkScan] Checking for running scans for project:', projectId)
+      
+      try {
+        const response = await fetch(`/api/scan-bulk/running?projectId=${projectId}`)
+        console.log('[BulkScan] Running scans response status:', response.status)
+        
+        if (!response.ok) {
+          console.error('[BulkScan] Failed to fetch running scans')
+          return
+        }
+
+        const data = await response.json()
+        console.log('[BulkScan] Running scans data:', data)
+        
+        if (data.hasRunningScans && data.scans && data.scans.length > 0) {
+          const activeScan = data.scans[0]
+          console.log('[BulkScan] Found running scan, resuming:', activeScan.scanId)
+          
+          // Resume displaying scan progress
+          setIsBulkScanning(true)
+          setBulkScanProgress({
+            scanId: activeScan.scanId,
+            current: activeScan.current,
+            total: activeScan.total,
+            percentage: activeScan.percentage,
+            currentUrl: activeScan.currentUrl || '',
+            startedAt: activeScan.startedAt || new Date().toISOString()
+          })
+          
+          // Resume polling for progress updates
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+          }
+          pollingIntervalRef.current = setInterval(
+            () => pollScanProgress(activeScan.scanId),
+            2000
+          )
+        } else {
+          console.log('[BulkScan] No running scans found')
+        }
+      } catch (error) {
+        console.error('[BulkScan] Failed to check running scans:', error)
+      }
+    }
+
+    // Only check if we're not already scanning and projectId is available
+    if (!isBulkScanning && projectId) {
+      checkRunningScans()
+    }
+  }, [projectId, isBulkScanning, pollScanProgress])
 
   // Helper for relative time
   function getRelativeTime(timestamp: string): string {
@@ -253,10 +355,24 @@ export function WebsiteAuditDashboard({
       else if (audit.changeStatus === 'TECH_CHANGE_ONLY') displayStatus = "Tech-only change";
       if (audit?.changeStatus === 'SCAN_FAILED') displayStatus = "Scan failed";
 
-      // Override status during bulk scan to provide immediate feedback
-      // This solves the "Pending" confusion while the server is crushing through the list
+      // Override status during bulk scan based on scan state
       if (isBulkScanning) {
-        displayStatus = "Scanning...";
+        // Check if this page is currently being scanned
+        const isCurrentPage = bulkScanProgress.currentUrl === link.url;
+        
+        // Check if page was scanned AFTER the bulk scan started (has fresh results)
+        const scanStarted = bulkScanProgress.startedAt;
+        const pageLastRun = audit?.lastRun;
+        const wasScannedInThisRun = scanStarted && pageLastRun && 
+          new Date(pageLastRun).getTime() >= new Date(scanStarted).getTime();
+        
+        if (isCurrentPage) {
+          displayStatus = "Scanning...";
+        } else if (wasScannedInThisRun) {
+          // Page was already scanned in this batch - show actual status (already set above)
+        } else {
+          displayStatus = "Queued";
+        }
       }
 
       // Findings aggregation
@@ -589,6 +705,8 @@ export function WebsiteAuditDashboard({
         return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20"
       case "Scanning...":
         return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 animate-pulse"
+      case "Queued":
+        return "bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20"
       default:
         return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20"
     }
@@ -603,12 +721,14 @@ export function WebsiteAuditDashboard({
     const estimatedTotal = staticPages + (includeCollections ? collectionPages : 0)
     
     setIsBulkScanning(true)
-    setBulkScanProgress({ 
-      current: 0, 
+    const scanStartTime = new Date().toISOString()
+    setBulkScanProgress({
+      current: 0,
       total: estimatedTotal,
       percentage: 0,
       currentUrl: 'Starting scan...',
-      scanId: ''
+      scanId: '',
+      startedAt: scanStartTime
     })
     setShowCollectionDialog(false)
 
@@ -1003,17 +1123,33 @@ export function WebsiteAuditDashboard({
         </CardHeader>
         {isBulkScanning && (
           <div className="px-6 pb-4 space-y-2">
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between text-sm items-center">
               <span className="font-medium">
                 Scanning {bulkScanProgress.current} of {bulkScanProgress.total} pages
               </span>
-              <span className="text-muted-foreground">
-                {bulkScanProgress.percentage}%
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">
+                  {bulkScanProgress.percentage}%
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelScan}
+                  disabled={isCancelling}
+                  className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+                >
+                  {isCancelling ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  ) : (
+                    <Square className="h-3 w-3 mr-1" />
+                  )}
+                  Stop
+                </Button>
+              </div>
             </div>
-            <Progress 
-              value={bulkScanProgress.percentage} 
-              className="h-2 w-full" 
+            <Progress
+              value={bulkScanProgress.percentage}
+              className="h-2 w-full"
             />
             {bulkScanProgress.currentUrl && (
               <div className="text-xs text-muted-foreground truncate" title={bulkScanProgress.currentUrl}>

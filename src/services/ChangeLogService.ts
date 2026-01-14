@@ -208,5 +208,87 @@ export const changeLogService = {
             console.error('Failed to delete change log entries:', error);
             return 0;
         }
+    },
+
+    /**
+     * Delete content change entries older than specified days
+     * Keeps the most recent N entries per link to preserve history
+     * @param maxAgeDays - Delete entries older than this many days
+     * @param keepPerLink - Keep at least this many entries per link (default: 2)
+     * @returns Number of deleted and kept documents
+     */
+    async cleanupOldEntries(maxAgeDays: number = 30, keepPerLink: number = 2): Promise<{ deleted: number; kept: number }> {
+        try {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
+            const cutoffTimestamp = cutoffDate.toISOString();
+
+            console.log(`[ChangeLogService] Cleaning up entries older than ${cutoffTimestamp}`);
+
+            // Get all entries
+            const q = query(collection(db, CHANGE_LOG_COLLECTION));
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+                return { deleted: 0, kept: 0 };
+            }
+
+            // Group entries by linkId
+            const entriesByLink = new Map<string, { id: string; timestamp: string }[]>();
+            
+            snapshot.docs.forEach(docSnapshot => {
+                const data = docSnapshot.data();
+                const linkId = data.linkId as string;
+                const timestamp = data.timestamp as string;
+                
+                if (!entriesByLink.has(linkId)) {
+                    entriesByLink.set(linkId, []);
+                }
+                entriesByLink.get(linkId)!.push({ id: docSnapshot.id, timestamp });
+            });
+
+            const toDelete: string[] = [];
+            let kept = 0;
+
+            // For each link, keep the most recent N entries, delete old ones
+            for (const [linkId, entries] of entriesByLink) {
+                // Sort by timestamp descending (newest first)
+                entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+                // Keep the first N entries
+                const entriesToKeep = entries.slice(0, keepPerLink);
+                const entriesToCheck = entries.slice(keepPerLink);
+
+                kept += entriesToKeep.length;
+
+                // From remaining entries, delete those older than cutoff
+                for (const entry of entriesToCheck) {
+                    if (entry.timestamp < cutoffTimestamp) {
+                        toDelete.push(entry.id);
+                    } else {
+                        kept++;
+                    }
+                }
+            }
+
+            // Delete in batches of 500 (Firestore limit)
+            const batchSize = 500;
+            for (let i = 0; i < toDelete.length; i += batchSize) {
+                const batch = toDelete.slice(i, i + batchSize);
+                const deletePromises = batch.map(docId =>
+                    deleteDoc(doc(db, CHANGE_LOG_COLLECTION, docId))
+                );
+                await Promise.all(deletePromises);
+                console.log(`[ChangeLogService] Deleted batch ${Math.floor(i / batchSize) + 1}: ${batch.length} entries`);
+            }
+
+            console.log(`[ChangeLogService] Cleanup complete: deleted ${toDelete.length}, kept ${kept}`);
+            return { deleted: toDelete.length, kept };
+
+        } catch (error) {
+            logError(error, 'changeLogService.cleanupOldEntries');
+            console.error('Failed to cleanup old change log entries:', error);
+            return { deleted: 0, kept: 0 };
+        }
     }
 };
