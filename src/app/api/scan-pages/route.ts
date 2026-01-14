@@ -145,7 +145,8 @@ export async function POST(request: NextRequest) {
         // 3. Any content change detected (CONTENT_CHANGED)
         // Skip for: TECH_CHANGE_ONLY (only scripts/styles) and NO_CHANGE (when screenshot exists)
         const isFirstScan = !prevResult;
-        const hasNoScreenshot = !prevResult?.screenshot;
+        // Check for both old (screenshot) and new (screenshotUrl) field names for backward compatibility
+        const hasNoScreenshot = !prevResult?.screenshotUrl && !prevResult?.screenshot;
         const shouldCaptureScreenshot = isFirstScan || hasNoScreenshot || changeStatus === 'CONTENT_CHANGED';
         
         let screenshotUrl: string | undefined;
