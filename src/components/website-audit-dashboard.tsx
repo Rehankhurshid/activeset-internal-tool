@@ -2,19 +2,15 @@
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import NextLink from "next/link"
-import { ProjectLink, AuditResult, PageTypeRule } from "@/types"
-import { PageTypeRulesDialog } from "@/components/PageTypeRulesEditor"
-import { PageTypeReviewDialog, detectPatterns } from "@/components/PageTypeReviewDialog"
+import { ProjectLink, FolderPageTypes } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import {
   FileText,
   TrendingUp,
@@ -22,98 +18,119 @@ import {
   CheckCircle2,
   Activity,
   Loader2,
-  Clock,
-  MoreVertical,
   Search,
-  Filter,
   Play,
   XCircle,
-  FileX,
   ChevronDown,
-  ChevronUp,
   ChevronRight,
   Globe,
   Database,
   File,
   FolderOpen,
-  Settings2,
+  ChevronsUpDown,
+  ChevronsDownUp,
+  Pencil,
+  X,
+  Check,
+  SlidersHorizontal,
 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface WebsiteAuditDashboardProps {
   links: ProjectLink[];
   projectId: string;
-  pageTypeRules?: PageTypeRule[];
+  folderPageTypes?: FolderPageTypes;  // Simple folder → CMS/Static mapping
+  detectedLocales?: string[];  // Canonical locales from sitemap hreflang
+  pathToLocaleMap?: Record<string, string>;  // Path prefix to locale mapping
 }
 
-export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: WebsiteAuditDashboardProps) {
+export function WebsiteAuditDashboard({ 
+  links, 
+  projectId, 
+  folderPageTypes: initialFolderPageTypes = {},
+  detectedLocales = [],
+  pathToLocaleMap = {}
+}: WebsiteAuditDashboardProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [localeFilter, setLocaleFilter] = useState("all")
   const [pageTypeFilter, setPageTypeFilter] = useState("all")
-  const [showOnlyChanged, setShowOnlyChanged] = useState(false)
   const [sortBy, setSortBy] = useState("recent")
-  const [showHistory, setShowHistory] = useState(false)
-  const [localRules, setLocalRules] = useState<PageTypeRule[]>(pageTypeRules)
+  const [folderTypes, setFolderTypes] = useState<FolderPageTypes>(initialFolderPageTypes)
+  const [isEditingFolderTypes, setIsEditingFolderTypes] = useState(false)
+  const [pendingFolderTypes, setPendingFolderTypes] = useState<FolderPageTypes>({})
 
-  // Load persisted rules (no backend API yet)
+  // Load persisted folder types
   useEffect(() => {
     try {
       if (typeof window === "undefined") return
-      const raw = window.localStorage.getItem(`pageTypeRules:${projectId}`)
+      const raw = window.localStorage.getItem(`folderPageTypes:${projectId}`)
       if (!raw) return
-      const parsed = JSON.parse(raw) as PageTypeRule[]
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setLocalRules(parsed)
+      const parsed = JSON.parse(raw) as FolderPageTypes
+      if (parsed && typeof parsed === 'object') {
+        setFolderTypes(prev => ({ ...prev, ...parsed }))
       }
     } catch {
       // ignore
     }
   }, [projectId])
 
-  const persistRules = useCallback(
-    (rules: PageTypeRule[]) => {
-      setLocalRules(rules)
-      try {
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(`pageTypeRules:${projectId}`, JSON.stringify(rules))
-        }
-      } catch {
-        // ignore
+  // Toggle a folder's pending type (for edit mode)
+  const toggleFolderType = useCallback((folder: string) => {
+    setPendingFolderTypes(prev => {
+      const current = prev[folder] || folderTypes[folder] || 'static'
+      const newType = current === 'collection' ? 'static' : 'collection'
+      return { ...prev, [folder]: newType }
+    })
+  }, [folderTypes])
+
+  // Get the effective type (pending or saved)
+  const getEffectiveFolderType = useCallback((folder: string): 'static' | 'collection' => {
+    return pendingFolderTypes[folder] || folderTypes[folder] || 'static'
+  }, [pendingFolderTypes, folderTypes])
+
+  // Check if folder has pending changes
+  const hasPendingChange = useCallback((folder: string): boolean => {
+    return folder in pendingFolderTypes && pendingFolderTypes[folder] !== folderTypes[folder]
+  }, [pendingFolderTypes, folderTypes])
+
+  // Save all pending changes
+  const saveAllFolderTypes = useCallback(async () => {
+    const updated = { ...folderTypes, ...pendingFolderTypes }
+    setFolderTypes(updated)
+    setPendingFolderTypes({})
+    setIsEditingFolderTypes(false)
+    
+    // Persist locally
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(`folderPageTypes:${projectId}`, JSON.stringify(updated))
       }
-    },
-    [projectId],
-  )
-
-  // Check if a folder pattern has an existing rule
-  const hasRuleForPattern = useCallback((folderPattern: string): boolean => {
-    return localRules.some(rule => rule.pattern === folderPattern)
-  }, [localRules])
-
-  // Mark a folder as CMS (add a PageTypeRule)
-  const markFolderAsCMS = useCallback((folderPattern: string) => {
-    const newRule: PageTypeRule = {
-      pattern: folderPattern,
-      pageType: 'collection',
-      createdAt: new Date().toISOString()
+    } catch {
+      // ignore
     }
-    const updatedRules = [...localRules.filter(r => r.pattern !== folderPattern), newRule]
-    persistRules(updatedRules)
+    
     // Reload to apply the change
     window.location.reload()
-  }, [localRules, persistRules])
+  }, [folderTypes, pendingFolderTypes, projectId])
 
-  // Mark a folder as Static (add a PageTypeRule or remove CMS rule)
-  const markFolderAsStatic = useCallback((folderPattern: string) => {
-    const newRule: PageTypeRule = {
-      pattern: folderPattern,
-      pageType: 'static',
-      createdAt: new Date().toISOString()
-    }
-    const updatedRules = [...localRules.filter(r => r.pattern !== folderPattern), newRule]
-    persistRules(updatedRules)
-    // Reload to apply the change
-    window.location.reload()
-  }, [localRules, persistRules])
+  // Cancel edit mode
+  const cancelEditMode = useCallback(() => {
+    setPendingFolderTypes({})
+    setIsEditingFolderTypes(false)
+  }, [])
+
+  // Count pending changes
+  const pendingChangesCount = useMemo(() => {
+    return Object.keys(pendingFolderTypes).filter(folder => 
+      pendingFolderTypes[folder] !== folderTypes[folder]
+    ).length
+  }, [pendingFolderTypes, folderTypes])
 
   // Bulk scan state
   const [isBulkScanning, setIsBulkScanning] = useState(false)
@@ -178,14 +195,6 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     }
   }, [])
 
-  // Review page types dialog state
-  const [showReviewDialog, setShowReviewDialog] = useState(false)
-  const [showRulesDialog, setShowRulesDialog] = useState(false)
-  const detectedPatternsFromLinks = useMemo(() => {
-    const urls = links.map(l => l.url)
-    return detectPatterns(urls)
-  }, [links])
-
   // Helper for relative time
   function getRelativeTime(timestamp: string): string {
     const now = new Date();
@@ -203,20 +212,33 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     return date.toLocaleDateString();
   }
 
-  // Helper to detect locale from URL path
+  // Helper to detect locale from URL path using the project's path-to-locale mapping
   const detectLocaleFromUrl = useCallback((url: string): string | undefined => {
     try {
       const pathname = new URL(url).pathname;
       // Match patterns like /es/, /pt/, /es-mx/, /pt-br/
-      const localeMatch = pathname.match(/^\/([a-z]{2}(?:-[a-z]{2,3})?)\//i);
+      const localeMatch = pathname.match(/^\/([a-z]{2}(?:-[a-z]{2,3})?)(\/|$)/i);
       if (localeMatch) {
+        const pathPrefix = `/${localeMatch[1].toLowerCase()}`;
+        
+        // Use the path-to-locale mapping if available
+        if (pathToLocaleMap && pathToLocaleMap[pathPrefix]) {
+          return pathToLocaleMap[pathPrefix];
+        }
+        
+        // Fallback to the raw path segment
         return localeMatch[1].toLowerCase();
+      }
+      
+      // No locale prefix - check if root maps to a locale
+      if (pathToLocaleMap && pathToLocaleMap['/']) {
+        return pathToLocaleMap['/'];
       }
     } catch {
       // ignore
     }
     return undefined;
-  }, []);
+  }, [pathToLocaleMap]);
 
   // 1. Process Links into Page Data
   const pagesData = useMemo(() => {
@@ -266,11 +288,32 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     });
   }, [links]);
 
-  // Normalize locale - treat 'en' and undefined/default as the same (base English)
+  // Normalize locale - use project's detected locales to map short codes to canonical values
+  // e.g., if project has 'es-ar' but not 'es', map 'es' → 'es-ar'
   const normalizeLocale = useCallback((locale: string | undefined): string => {
-    if (!locale || locale === 'default' || locale === 'en') return 'default';
-    return locale.toLowerCase();
-  }, []);
+    if (!locale || locale === 'default') return 'default';
+    
+    const lower = locale.toLowerCase();
+    
+    // Treat 'en' as default (English without prefix)
+    if (lower === 'en') return 'default';
+    
+    // If the project has detected locales, use them for normalization
+    if (detectedLocales.length > 0) {
+      // Check if exact match exists in detected locales
+      if (detectedLocales.includes(lower)) {
+        return lower;
+      }
+      
+      // Check for regional variant (es → es-ar if es-ar exists but es doesn't)
+      const regional = detectedLocales.find(l => l.startsWith(lower + '-'));
+      if (regional) {
+        return regional;
+      }
+    }
+    
+    return lower;
+  }, [detectedLocales]);
 
   // Compute available locales for the filter dropdown (normalized)
   const availableLocales = useMemo(() => {
@@ -289,6 +332,26 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     return sorted;
   }, [links, detectLocaleFromUrl, normalizeLocale]);
 
+  // Helper to get folder pattern from URL (for filtering)
+  const getFolderPatternFromUrl = useCallback((url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/').filter(Boolean);
+      
+      // Remove locale segments
+      const nonLocaleParts = pathParts.filter(part => 
+        !/^[a-z]{2}(-[a-z]{2})?$/i.test(part)
+      );
+      
+      if (nonLocaleParts.length <= 1) {
+        return 'Root Pages';
+      }
+      return `/${nonLocaleParts[0]}/*`;
+    } catch {
+      return 'Root Pages';
+    }
+  }, []);
+
   // 2. Filter & Sort
   const filteredPages = useMemo(() => {
     return pagesData.filter((page) => {
@@ -296,10 +359,12 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       if (statusFilter !== "all" && page.status !== statusFilter) return false
       if (localeFilter !== "all" && normalizeLocale(page.locale) !== localeFilter) return false
       if (pageTypeFilter !== "all") {
-        if (pageTypeFilter === "static" && page.pageType === "collection") return false;
-        if (pageTypeFilter === "collection" && page.pageType !== "collection") return false;
+        // Get folder pattern for this page and check its classification
+        const folderPattern = getFolderPatternFromUrl(page.path);
+        const folderType = folderTypes[folderPattern] || 'static'; // Default to static if not classified
+        if (pageTypeFilter === "static" && folderType === "collection") return false;
+        if (pageTypeFilter === "collection" && folderType !== "collection") return false;
       }
-      if (showOnlyChanged && page.status === "No change") return false
       return true
     }).sort((a, b) => {
       if (sortBy === 'score') return a.score - b.score;
@@ -311,7 +376,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       // Recent (default)
       return new Date(b.lastScan).getTime() - new Date(a.lastScan).getTime();
     });
-  }, [pagesData, searchQuery, statusFilter, localeFilter, pageTypeFilter, showOnlyChanged, sortBy, normalizeLocale]);
+  }, [pagesData, searchQuery, statusFilter, localeFilter, pageTypeFilter, sortBy, normalizeLocale, getFolderPatternFromUrl, folderTypes]);
 
   // Helper to extract folder path from URL
   const getFolderPath = useCallback((url: string): string => {
@@ -361,7 +426,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       }));
   }, [getFolderPath]);
 
-  // Group filtered pages by locale first, then by type (CMS/Static), then by folder
+  // Group filtered pages by locale first, then by folder type (CMS/Static based on folderTypes)
   const groupedByLocale = useMemo(() => {
     // Group pages by normalized locale
     const localeMap = new Map<string, typeof filteredPages>();
@@ -384,7 +449,6 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     // Helper to get readable locale label
     const getLocaleLabel = (locale: string): string => {
       if (locale === 'default') return 'English';
-      // Map common locale codes to readable names
       const localeNames: Record<string, string> = {
         'en': 'English',
         'es': 'Spanish',
@@ -413,12 +477,25 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
     };
 
     return sortedLocales.map(([locale, pages]) => {
-      const cmsPages = pages.filter(p => p.pageType === 'collection');
-      const staticPages = pages.filter(p => p.pageType !== 'collection');
+      // First group all pages by folder
+      const allFolders = groupPagesByFolder(pages);
+      
+      // Then separate folders by their classification (using folderTypes or pendingFolderTypes)
+      const cmsFolders = allFolders.filter(f => {
+        const effectiveType = pendingFolderTypes[f.label] || folderTypes[f.label];
+        return effectiveType === 'collection';
+      });
+      const staticFolders = allFolders.filter(f => {
+        const effectiveType = pendingFolderTypes[f.label] || folderTypes[f.label];
+        return effectiveType !== 'collection'; // includes undefined (unclassified)
+      });
+      
+      const cmsPageCount = cmsFolders.reduce((sum, f) => sum + f.pages.length, 0);
+      const staticPageCount = staticFolders.reduce((sum, f) => sum + f.pages.length, 0);
       
       const typeGroups = [
-        { type: 'collection', label: 'CMS Pages', icon: Database, folders: groupPagesByFolder(cmsPages), totalCount: cmsPages.length },
-        { type: 'static', label: 'Static Pages', icon: File, folders: groupPagesByFolder(staticPages), totalCount: staticPages.length }
+        { type: 'collection', label: 'CMS Pages', icon: Database, folders: cmsFolders, totalCount: cmsPageCount },
+        { type: 'static', label: 'Static Pages', icon: File, folders: staticFolders, totalCount: staticPageCount }
       ].filter(group => group.totalCount > 0);
       
       return {
@@ -428,7 +505,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
         totalCount: pages.length
       };
     }).filter(group => group.totalCount > 0);
-  }, [filteredPages, groupPagesByFolder, normalizeLocale]);
+  }, [filteredPages, groupPagesByFolder, normalizeLocale, pendingFolderTypes, folderTypes]);
 
   // Track collapsed state for locales, types, and folders
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -444,6 +521,36 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
       return next;
     });
   }, []);
+
+  // Collapse all sections
+  const collapseAll = useCallback(() => {
+    const allSections = new Set<string>();
+    groupedByLocale.forEach(localeGroup => {
+      const localeId = `locale-${localeGroup.locale}`;
+      allSections.add(localeId);
+      localeGroup.typeGroups.forEach(typeGroup => {
+        const typeId = `${localeId}-${typeGroup.type}`;
+        allSections.add(typeId);
+        typeGroup.folders.forEach(folder => {
+          allSections.add(`${typeId}-${folder.folder}`);
+        });
+      });
+    });
+    setCollapsedSections(allSections);
+  }, [groupedByLocale]);
+
+  // Expand all sections
+  const expandAll = useCallback(() => {
+    setCollapsedSections(new Set());
+  }, []);
+
+  // Check if all are collapsed
+  const isAllCollapsed = useMemo(() => {
+    if (groupedByLocale.length === 0) return false;
+    return groupedByLocale.every(localeGroup => 
+      collapsedSections.has(`locale-${localeGroup.locale}`)
+    );
+  }, [groupedByLocale, collapsedSections]);
 
   // 3. Compute KPI Metrics
   const metrics = useMemo(() => {
@@ -644,131 +751,255 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
 
       {/* Pages Table */}
       <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <CardTitle>Pages</CardTitle>
-              <Button
-                size="sm"
-                onClick={handleScanAllClick}
-                disabled={isBulkScanning || links.length === 0}
-              >
-                {isBulkScanning ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Scanning...
-                  </>
-                ) : (
-                  <>
-                    <Play className="mr-2 h-4 w-4" />
-                    Scan All Pages
-                  </>
-                )}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <Settings2 className="h-4 w-4" />
-                    Page Types
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setShowRulesDialog(true)}>
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    Manage Rules
-                    {localRules.length > 0 && <span className="ml-2 text-muted-foreground">({localRules.length})</span>}
-                  </DropdownMenuItem>
-                  {links.length > 0 && (
-                    <DropdownMenuItem onClick={() => setShowReviewDialog(true)}>
-                      <Database className="mr-2 h-4 w-4" />
-                      Review Detected Patterns
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <div className="relative flex-1 md:w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <CardHeader className="py-3 px-4">
+          <TooltipProvider delayDuration={100}>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Left: Title + Primary Actions */}
+              <div className="flex items-center gap-2 mr-auto">
+                <CardTitle className="text-base">Pages</CardTitle>
+                <Badge variant="secondary" className="text-xs font-normal">
+                  {filteredPages.length}
+                </Badge>
+              </div>
+
+              {/* Search */}
+              <div className="relative w-48">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by URL or Title..."
+                  placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
+                  className="h-8 pl-8 text-sm"
                 />
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40">
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="No change">No change</SelectItem>
-                  <SelectItem value="Content changed">Content changed</SelectItem>
-                  <SelectItem value="Tech-only change">Tech-only</SelectItem>
-                  <SelectItem value="Blocked">Blocked</SelectItem>
-                  <SelectItem value="Scan failed">Failed</SelectItem>
-                </SelectContent>
-              </Select>
-              {availableLocales.length > 1 && (
-                <Select value={localeFilter} onValueChange={setLocaleFilter}>
-                  <SelectTrigger className="w-44">
-                    <Globe className="mr-2 h-4 w-4" />
-                    <SelectValue placeholder="Locale" />
-                  </SelectTrigger>
+
+              {/* Filters + View Controls */}
+              <div className="flex items-center border rounded-md bg-muted/30">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SelectTrigger className="h-8 w-8 border-0 bg-transparent justify-center [&>svg:last-child]:hidden">
+                        <SlidersHorizontal className={`h-4 w-4 ${statusFilter !== 'all' ? 'text-primary' : ''}`} />
+                      </SelectTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>Status filter</TooltipContent>
+                  </Tooltip>
                   <SelectContent>
-                    <SelectItem value="all">All locales</SelectItem>
-                    {availableLocales.map(locale => {
-                      const localeNames: Record<string, string> = {
-                        'default': 'English',
-                        'en': 'English',
-                        'es': 'Spanish',
-                        'es-mx': 'Spanish (MX)',
-                        'pt': 'Portuguese',
-                        'pt-br': 'Portuguese (BR)',
-                        'da': 'Danish',
-                      };
-                      const label = localeNames[locale.toLowerCase()] || locale.toUpperCase();
-                      return (
-                        <SelectItem key={locale} value={locale}>
-                          {label}
-                        </SelectItem>
-                      );
-                    })}
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="No change">No change</SelectItem>
+                    <SelectItem value="Content changed">Changed</SelectItem>
+                    <SelectItem value="Tech-only change">Tech-only</SelectItem>
+                    <SelectItem value="Blocked">Blocked</SelectItem>
+                    <SelectItem value="Scan failed">Failed</SelectItem>
                   </SelectContent>
                 </Select>
-              )}
-              <Select value={pageTypeFilter} onValueChange={setPageTypeFilter}>
-                <SelectTrigger className="w-32">
-                  <Database className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All types</SelectItem>
-                  <SelectItem value="static">Static</SelectItem>
-                  <SelectItem value="collection">CMS</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="recent">Most recently scanned</SelectItem>
-                  <SelectItem value="score">Lowest score</SelectItem>
-                  <SelectItem value="critical">Critical issues first</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant={showOnlyChanged ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowOnlyChanged(!showOnlyChanged)}
-              >
-                Show only changed
-              </Button>
+
+                {availableLocales.length > 1 && (
+                  <Select value={localeFilter} onValueChange={setLocaleFilter}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SelectTrigger className="h-8 w-8 border-0 bg-transparent justify-center [&>svg:last-child]:hidden">
+                          <Globe className={`h-4 w-4 ${localeFilter !== 'all' ? 'text-primary' : ''}`} />
+                        </SelectTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent>Locale filter</TooltipContent>
+                    </Tooltip>
+                    <SelectContent>
+                      <SelectItem value="all">All locales</SelectItem>
+                      {availableLocales.map(locale => {
+                        const localeNames: Record<string, string> = {
+                          'default': 'English', 'en': 'English', 'es': 'Spanish',
+                          'es-mx': 'Spanish (MX)', 'pt': 'Portuguese', 'pt-br': 'Portuguese (BR)', 'da': 'Danish',
+                        };
+                        return (
+                          <SelectItem key={locale} value={locale}>
+                            {localeNames[locale.toLowerCase()] || locale.toUpperCase()}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                <Select value={pageTypeFilter} onValueChange={setPageTypeFilter}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SelectTrigger className="h-8 w-8 border-0 bg-transparent justify-center [&>svg:last-child]:hidden">
+                        <Database className={`h-4 w-4 ${pageTypeFilter !== 'all' ? 'text-primary' : ''}`} />
+                      </SelectTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>Type filter</TooltipContent>
+                  </Tooltip>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    <SelectItem value="static">Static</SelectItem>
+                    <SelectItem value="collection">CMS</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <div className="w-px h-5 bg-border" />
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={isAllCollapsed ? expandAll : collapseAll}
+                    >
+                      {isAllCollapsed ? (
+                        <ChevronsUpDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronsDownUp className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{isAllCollapsed ? 'Expand all' : 'Collapse all'}</TooltipContent>
+                </Tooltip>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1">
+                {isEditingFolderTypes ? (
+                  <div className="flex items-center border rounded-md bg-muted/30">
+                    {pendingChangesCount > 0 && (
+                      <Badge variant="secondary" className="text-xs mx-2">
+                        {pendingChangesCount}
+                      </Badge>
+                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={cancelEditMode}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Cancel</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          className="h-8 w-8 rounded-l-none"
+                          onClick={saveAllFolderTypes}
+                          disabled={pendingChangesCount === 0}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Save changes</TooltipContent>
+                    </Tooltip>
+                  </div>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setIsEditingFolderTypes(true)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit folder types</TooltipContent>
+                  </Tooltip>
+                )}
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleScanAllClick}
+                      disabled={isBulkScanning || links.length === 0}
+                    >
+                      {isBulkScanning ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Scan all pages</TooltipContent>
+                </Tooltip>
+              </div>
             </div>
-          </div>
+
+            {/* Active Filters Display */}
+            {(searchQuery || statusFilter !== 'all' || localeFilter !== 'all' || pageTypeFilter !== 'all') && (
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="text-xs text-muted-foreground">Filters:</span>
+                
+                {searchQuery && (
+                  <Badge variant="secondary" className="text-xs gap-1 pl-2 pr-1 py-0.5">
+                    Search: &quot;{searchQuery.length > 15 ? searchQuery.slice(0, 15) + '...' : searchQuery}&quot;
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="ml-0.5 hover:bg-muted rounded-sm"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                
+                {statusFilter !== 'all' && (
+                  <Badge variant="secondary" className="text-xs gap-1 pl-2 pr-1 py-0.5">
+                    Status: {statusFilter}
+                    <button
+                      onClick={() => setStatusFilter('all')}
+                      className="ml-0.5 hover:bg-muted rounded-sm"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                
+                {localeFilter !== 'all' && (
+                  <Badge variant="secondary" className="text-xs gap-1 pl-2 pr-1 py-0.5">
+                    Locale: {localeFilter.toUpperCase()}
+                    <button
+                      onClick={() => setLocaleFilter('all')}
+                      className="ml-0.5 hover:bg-muted rounded-sm"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                
+                {pageTypeFilter !== 'all' && (
+                  <Badge variant="secondary" className="text-xs gap-1 pl-2 pr-1 py-0.5">
+                    Type: {pageTypeFilter === 'collection' ? 'CMS' : 'Static'}
+                    <button
+                      onClick={() => setPageTypeFilter('all')}
+                      className="ml-0.5 hover:bg-muted rounded-sm"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+
+                {/* Clear All */}
+                {(searchQuery || statusFilter !== 'all' || localeFilter !== 'all' || pageTypeFilter !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setStatusFilter('all');
+                      setLocaleFilter('all');
+                      setPageTypeFilter('all');
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground underline ml-1"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+            )}
+          </TooltipProvider>
         </CardHeader>
         {isBulkScanning && (
           <div className="px-6 pb-4 space-y-2">
@@ -820,6 +1051,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                         {/* Locale Header - Only show if multiple locales */}
                         {showLocaleHeader && (
                           <TableRow 
+                            key={`${localeId}-header`}
                             className="bg-purple-500/10 hover:bg-purple-500/15 cursor-pointer"
                             onClick={() => toggleSection(localeId)}
                           >
@@ -850,6 +1082,7 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                             <React.Fragment key={typeId}>
                               {/* Type Header (CMS/Static) */}
                               <TableRow 
+                                key={`${typeId}-header`}
                                 className="bg-muted/70 hover:bg-muted/60 cursor-pointer"
                                 onClick={() => toggleSection(typeId)}
                               >
@@ -875,13 +1108,15 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                                 const isFolderCollapsed = collapsedSections.has(folderId);
                                 const folderPattern = folder.label; // e.g., "/blog/*" or "Root Pages"
                                 const isRootFolder = folder.folder === '/';
-                                const needsReview = !isRootFolder && !hasRuleForPattern(folderPattern);
+                                const effectiveType = getEffectiveFolderType(folderPattern);
+                                const isPending = hasPendingChange(folderPattern);
                                 
                                 return (
                                   <React.Fragment key={folderId}>
                                     {/* Folder Header - Collapsible */}
                                     <TableRow 
-                                      className="bg-muted/30 hover:bg-muted/40 cursor-pointer"
+                                      key={`${folderId}-header`}
+                                      className={`bg-muted/30 hover:bg-muted/40 cursor-pointer ${isPending ? 'ring-2 ring-blue-500/50' : ''}`}
                                       onClick={() => toggleSection(folderId)}
                                     >
                                       <TableCell colSpan={6} className={`py-1.5 ${showLocaleHeader ? 'pl-14' : 'pl-8'}`}>
@@ -896,40 +1131,37 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
                                           <Badge variant="outline" className="text-xs">
                                             {folder.pages.length}
                                           </Badge>
-                                          {/* Needs Review badge for uncategorized folders */}
-                                          {needsReview && (
-                                            <Badge variant="outline" className="text-xs bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30">
-                                              Needs Review
+                                          {/* Show current type badge */}
+                                          {!isRootFolder && (
+                                            <Badge 
+                                              variant={effectiveType === 'collection' ? 'default' : 'secondary'} 
+                                              className={`text-xs ${isPending ? 'ring-1 ring-blue-500' : ''}`}
+                                            >
+                                              {effectiveType === 'collection' ? 'CMS' : 'Static'}
                                             </Badge>
                                           )}
-                                          {/* Mark as CMS button for static folders without rules */}
-                                          {needsReview && typeGroup.type === 'static' && (
+                                          {/* Toggle button - only show in edit mode for non-root folders */}
+                                          {isEditingFolderTypes && !isRootFolder && (
                                             <Button
-                                              variant="ghost"
+                                              variant="outline"
                                               size="sm"
-                                              className="h-6 px-2 text-xs ml-auto"
+                                              className="ml-auto h-6 px-2 text-xs"
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                markFolderAsCMS(folderPattern);
+                                                toggleFolderType(folderPattern);
                                               }}
                                             >
-                                              <Database className="h-3 w-3 mr-1" />
-                                              Mark as CMS
-                                            </Button>
-                                          )}
-                                          {/* Mark as Static button for CMS folders */}
-                                          {needsReview && typeGroup.type === 'collection' && (
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-6 px-2 text-xs ml-auto"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                markFolderAsStatic(folderPattern);
-                                              }}
-                                            >
-                                              <File className="h-3 w-3 mr-1" />
-                                              Mark as Static
+                                              {effectiveType === 'collection' ? (
+                                                <>
+                                                  <File className="h-3 w-3 mr-1" />
+                                                  Switch to Static
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Database className="h-3 w-3 mr-1" />
+                                                  Switch to CMS
+                                                </>
+                                              )}
                                             </Button>
                                           )}
                                         </div>
@@ -999,30 +1231,6 @@ export function WebsiteAuditDashboard({ links, projectId, pageTypeRules = [] }: 
           </div>
         </CardContent>
       </Card>
-
-      {/* Page Type Rules Dialog */}
-      <PageTypeRulesDialog
-        projectId={projectId}
-        rules={localRules}
-        onRulesChange={persistRules}
-        open={showRulesDialog}
-        onOpenChange={setShowRulesDialog}
-      />
-
-      {/* Review Page Types Dialog for existing pages */}
-      <PageTypeReviewDialog
-        isOpen={showReviewDialog}
-        onClose={() => setShowReviewDialog(false)}
-        projectId={projectId}
-        detectedPatterns={detectedPatternsFromLinks}
-        existingRules={localRules}
-        onSaveRules={(rules) => {
-          persistRules(rules)
-          setShowReviewDialog(false)
-          // Reload to apply new rules
-          window.location.reload()
-        }}
-      />
     </div>
   )
 }

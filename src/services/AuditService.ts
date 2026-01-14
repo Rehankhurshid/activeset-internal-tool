@@ -25,6 +25,7 @@ export interface AuditLogEntry {
     contentHash: string;
     htmlSource: string; // The full page source
     diffPatch?: string | null; // Unified diff against previous version
+    screenshot?: string; // Base64 PNG screenshot for visual comparison
 }
 
 export const auditService = {
@@ -77,6 +78,29 @@ export const auditService = {
         }
     },
 
+    // Get the N most recent audit logs for a link (for current/previous comparison)
+    async getRecentAuditLogs(projectId: string, linkId: string, count: number = 2): Promise<AuditLogEntry[]> {
+        try {
+            const q = query(
+                collection(db, AUDIT_LOGS_COLLECTION),
+                where('projectId', '==', projectId),
+                where('linkId', '==', linkId)
+            );
+
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) return [];
+
+            // Manual sort locally and take the first N
+            const docs = snapshot.docs.map(d => d.data() as AuditLogEntry);
+            docs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+            return docs.slice(0, count);
+        } catch (error) {
+            logError(error, 'getRecentAuditLogs');
+            return [];
+        }
+    },
+
     // Delete all audit logs for a given link (used during sitemap sync cleanup)
     async deleteAuditLogsForLink(linkId: string): Promise<number> {
         try {
@@ -111,6 +135,10 @@ export class AuditService {
 
     static async getLatestAuditLog(projectId: string, linkId: string): Promise<AuditLogEntry | null> {
         return auditService.getLatestAuditLog(projectId, linkId);
+    }
+
+    static async getRecentAuditLogs(projectId: string, linkId: string, count: number = 2): Promise<AuditLogEntry[]> {
+        return auditService.getRecentAuditLogs(projectId, linkId, count);
     }
 
     static async deleteAuditLogsForLink(linkId: string): Promise<number> {

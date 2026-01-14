@@ -10,6 +10,71 @@ interface SitemapEntry {
     locale?: string;
 }
 
+interface LocaleMapping {
+    pathToLocale: Map<string, string>;  // e.g., "/es" → "es-ar"
+    detectedLocales: string[];           // e.g., ["en", "da", "es-ar", "pt-br"]
+}
+
+/**
+ * Build a mapping of URL path prefixes to hreflang locale codes.
+ * This allows us to correctly normalize path-based locales to their canonical hreflang values.
+ * 
+ * Example: /es/ paths with hreflang="es-AR" → pathToLocale.set("/es", "es-ar")
+ */
+function buildLocaleMapping(xmlText: string): LocaleMapping {
+    const pathToLocale = new Map<string, string>();
+    const localeSet = new Set<string>();
+    
+    // Match all xhtml:link hreflang entries across the entire sitemap
+    const hreflangRegex = /<xhtml:link[^>]*hreflang="([^"]+)"[^>]*href="([^"]+)"/g;
+    let match;
+    
+    while ((match = hreflangRegex.exec(xmlText)) !== null) {
+        const hreflang = match[1];
+        const href = match[2];
+        
+        // Skip x-default as it's not a real locale
+        if (hreflang === 'x-default') continue;
+        
+        // Normalize hreflang to lowercase
+        const normalizedHreflang = hreflang.toLowerCase();
+        localeSet.add(normalizedHreflang);
+        
+        // Extract path prefix from href (e.g., "/es" from "/es/billetera")
+        try {
+            const url = new URL(href);
+            const pathParts = url.pathname.split('/').filter(Boolean);
+            
+            if (pathParts.length > 0) {
+                const firstSegment = pathParts[0].toLowerCase();
+                // Check if first segment looks like a locale (2 chars or 2-2/2-3 format)
+                if (/^[a-z]{2}(-[a-z]{2,3})?$/i.test(firstSegment)) {
+                    const pathPrefix = `/${firstSegment}`;
+                    // Only set if not already set, or if this is a more specific match
+                    // e.g., prefer "es-ar" over "es" if both map to "/es"
+                    const existing = pathToLocale.get(pathPrefix);
+                    if (!existing || normalizedHreflang.length > existing.length) {
+                        pathToLocale.set(pathPrefix, normalizedHreflang);
+                    }
+                }
+            } else {
+                // Root path (no locale prefix) - this is typically "en" or x-default
+                // Map empty prefix to this locale
+                if (!pathToLocale.has('/')) {
+                    pathToLocale.set('/', normalizedHreflang);
+                }
+            }
+        } catch {
+            // Invalid URL, skip
+        }
+    }
+    
+    return {
+        pathToLocale,
+        detectedLocales: Array.from(localeSet).sort()
+    };
+}
+
 /**
  * Parse sitemap XML and extract URLs with locale information.
  * Supports both standard sitemaps and multi-lingual sitemaps with xhtml:link hreflang.
@@ -20,10 +85,22 @@ interface SitemapEntry {
  * 
  * We detect the locale of the primary URL by finding the hreflang entry 
  * whose href matches the <loc> URL.
+ * 
+ * @returns Object containing entries, detected locales, and path-to-locale mapping
  */
-function parseSitemap(xmlText: string): SitemapEntry[] {
+function parseSitemap(xmlText: string): { 
+    entries: SitemapEntry[]; 
+    localeMapping: LocaleMapping;
+} {
     const entries: SitemapEntry[] = [];
     const seenUrls = new Set<string>();
+    
+    // First, build the locale mapping from all hreflang entries
+    const localeMapping = buildLocaleMapping(xmlText);
+    console.log(`[parseSitemap] Built locale mapping:`, {
+        pathToLocale: Object.fromEntries(localeMapping.pathToLocale),
+        detectedLocales: localeMapping.detectedLocales
+    });
 
     // Match each <url> block
     const urlBlockRegex = /<url>([\s\S]*?)<\/url>/g;
@@ -55,15 +132,18 @@ function parseSitemap(xmlText: string): SitemapEntry[] {
                 const normalizedHref = href.trim().replace(/\/$/, '').toLowerCase();
                 if (normalizedHref === normalizedPrimaryUrl) {
                     // Found matching hreflang for this URL
-                    detectedLocale = hreflang === 'x-default' ? 'en' : hreflang;
+                    detectedLocale = hreflang === 'x-default' ? undefined : hreflang.toLowerCase();
                     break;
                 }
             }
 
-            // Fallback: if no exact match found, try to detect from URL path
+            // Fallback: use path-to-locale mapping if no exact hreflang match found
             if (!detectedLocale) {
-                detectedLocale = detectLocaleFromPath(primaryUrl);
+                detectedLocale = detectLocaleFromPath(primaryUrl, localeMapping.pathToLocale);
             }
+        } else {
+            // No hreflang entries - use path-based detection with mapping
+            detectedLocale = detectLocaleFromPath(primaryUrl, localeMapping.pathToLocale);
         }
 
         seenUrls.add(normalizedPrimaryUrl);
@@ -84,30 +164,43 @@ function parseSitemap(xmlText: string): SitemapEntry[] {
                 seenUrls.add(normalizedUrl);
                 entries.push({
                     url,
-                    locale: detectLocaleFromPath(url)
+                    locale: detectLocaleFromPath(url, localeMapping.pathToLocale)
                 });
             }
         }
     }
 
-    return entries;
+    return { entries, localeMapping };
 }
 
 /**
  * Detect locale from URL path patterns like /es-mx/, /pt-br/, /de/, etc.
+ * Uses the pathToLocale mapping to normalize short codes to their canonical hreflang values.
+ * 
+ * @param url - The URL to detect locale from
+ * @param pathToLocaleMap - Optional mapping of path prefixes to canonical locales
  */
-function detectLocaleFromPath(url: string): string | undefined {
+function detectLocaleFromPath(url: string, pathToLocaleMap?: Map<string, string>): string | undefined {
     try {
         const pathname = new URL(url).pathname;
-        // Common locale patterns: /es-mx/, /pt-BR/, /de/, /fr-ca/, etc.
-        const localeMatch = pathname.match(/^\/([a-z]{2}(?:-[a-z]{2,3})?)\//i);
+        
+        // Extract path prefix (first segment)
+        const localeMatch = pathname.match(/^\/([a-z]{2}(?:-[a-z]{2,3})?)(\/|$)/i);
         if (localeMatch) {
+            const pathPrefix = `/${localeMatch[1].toLowerCase()}`;
+            
+            // If we have a mapping, use it to get the canonical locale
+            if (pathToLocaleMap && pathToLocaleMap.has(pathPrefix)) {
+                return pathToLocaleMap.get(pathPrefix);
+            }
+            
+            // Fallback to the raw path segment
             return localeMatch[1].toLowerCase();
         }
-        // Check if path starts with locale without trailing content (e.g., /es-mx)
-        const shortMatch = pathname.match(/^\/([a-z]{2}(?:-[a-z]{2,3})?)$/i);
-        if (shortMatch) {
-            return shortMatch[1].toLowerCase();
+        
+        // No locale prefix - check if root maps to a locale
+        if (pathToLocaleMap && pathToLocaleMap.has('/')) {
+            return pathToLocaleMap.get('/');
         }
     } catch {
         // Invalid URL, ignore
@@ -136,26 +229,25 @@ function matchesPattern(pathname: string, pattern: string): boolean {
 
 /**
  * Detect page type (collection/CMS vs static) using:
- * 1. User-defined PageTypeRules (highest priority)
+ * 1. User-defined folder classifications (highest priority)
  * 2. Webflow API data (if available)
- * 3. Default to 'static' (no heuristics - user must explicitly mark as CMS)
+ * 3. Default to 'static' (user can mark folders as CMS through dashboard)
  */
 function detectPageType(
     url: string,
     webflowPageTypeMap: Map<string, 'collection' | 'static'>,
-    pageTypeRules: Array<{ pattern: string; pageType: 'static' | 'collection'; priority?: number }> = []
+    folderPageTypes: Record<string, 'static' | 'collection'> = {}
 ): 'collection' | 'static' {
     try {
         const normalizedUrl = url.replace(/\/$/, '').toLowerCase();
         const pathname = new URL(url).pathname.replace(/\/$/, '').toLowerCase();
 
-        // Sort rules by priority (higher first), default priority = 0
-        const sortedRules = [...pageTypeRules].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-
-        // First try: Check user-defined rules
-        for (const rule of sortedRules) {
-            if (matchesPattern(pathname, rule.pattern)) {
-                return rule.pageType;
+        // Extract folder pattern from pathname (e.g., "/blog/post-1" -> "/blog/*")
+        const pathParts = pathname.split('/').filter(Boolean);
+        if (pathParts.length > 0) {
+            const folderPattern = `/${pathParts[0]}/*`;
+            if (folderPageTypes[folderPattern]) {
+                return folderPageTypes[folderPattern];
             }
         }
 
@@ -170,10 +262,9 @@ function detectPageType(
         }
 
         // Default: All pages are static unless explicitly marked as CMS
-        // User can review and mark folders as CMS through the dashboard
         return 'static';
     } catch {
-        return 'static'; // Default to static on error
+        return 'static';
     }
 }
 
@@ -202,10 +293,12 @@ export async function POST(request: NextRequest) {
         const xmlText = await response.text();
 
         // Parse sitemap with hreflang support
-        const sitemapEntries = parseSitemap(xmlText);
+        const { entries: sitemapEntries, localeMapping } = parseSitemap(xmlText);
 
         console.log(`Found ${sitemapEntries.length} URLs in sitemap`);
         console.log('URLs found:', sitemapEntries.slice(0, 5).map(e => e.url)); // Log first 5 for debugging
+        console.log('Detected locales:', localeMapping.detectedLocales);
+        console.log('Path to locale mapping:', Object.fromEntries(localeMapping.pathToLocale));
 
         if (sitemapEntries.length === 0) {
             return NextResponse.json({ count: 0, message: 'No URLs found in sitemap' });
@@ -321,8 +414,8 @@ export async function POST(request: NextRequest) {
                 // Use "Homepage" for root path, otherwise use pathname
                 const displayTitle = pathname === '/' ? 'Homepage' : pathname;
 
-                // Detect page type using rules, Webflow API data, or path heuristics
-                const pageType = detectPageType(entry.url, webflowPageTypeMap, project.pageTypeRules || []);
+                // Detect page type using folder classifications, Webflow API data
+                const pageType = detectPageType(entry.url, webflowPageTypeMap, project.folderPageTypes || {});
 
                 const title = entry.locale
                     ? `${displayTitle} [${entry.locale.toUpperCase()}]`
@@ -355,7 +448,7 @@ export async function POST(request: NextRequest) {
                 }
                 // Retroactively set or update pageType using rules/Webflow data
                 if (existingLink && !existingLink.pageType) {
-                    existingLink.pageType = detectPageType(existingLink.url, webflowPageTypeMap, project.pageTypeRules || []);
+                    existingLink.pageType = detectPageType(existingLink.url, webflowPageTypeMap, project.folderPageTypes || {});
                 }
             }
         });
@@ -366,12 +459,12 @@ export async function POST(request: NextRequest) {
         // Ensure existing links also get pageType if missing, using Webflow data
         const processedKeptAutoLinks = keptAutoLinks.map(link => {
             if (link.pageType) return link;
-            return { ...link, pageType: detectPageType(link.url, webflowPageTypeMap, project.pageTypeRules || []) };
+            return { ...link, pageType: detectPageType(link.url, webflowPageTypeMap, project.folderPageTypes || {}) };
         });
 
         const processedManualLinks = manualLinks.map(link => {
             if (link.pageType) return link;
-            return { ...link, pageType: detectPageType(link.url, webflowPageTypeMap, project.pageTypeRules || []) };
+            return { ...link, pageType: detectPageType(link.url, webflowPageTypeMap, project.folderPageTypes || {}) };
         });
 
         const updatedLinks = [...processedManualLinks, ...processedKeptAutoLinks, ...newLinks];
@@ -380,6 +473,15 @@ export async function POST(request: NextRequest) {
         // Save sitemap URL for daily scans
         if (sitemapUrl) {
             await projectsService.updateProjectSitemap(projectId, sitemapUrl);
+        }
+
+        // Save locale data extracted from sitemap hreflang
+        if (localeMapping.detectedLocales.length > 0) {
+            await projectsService.updateProjectLocaleData(projectId, {
+                detectedLocales: localeMapping.detectedLocales,
+                pathToLocaleMap: Object.fromEntries(localeMapping.pathToLocale)
+            });
+            console.log(`[scan-sitemap] Saved locale data: ${localeMapping.detectedLocales.join(', ')}`);
         }
 
         return NextResponse.json({

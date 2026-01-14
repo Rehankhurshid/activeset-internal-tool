@@ -166,7 +166,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             <div className="w-full sm:w-auto">
                                 <ScanSitemapDialog
                                     projectId={project.id}
-                                    existingRules={project.pageTypeRules}
                                 />
                             </div>
                         )}
@@ -176,7 +175,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         <WebsiteAuditDashboard
                             links={project.links.filter(l => l.source === 'auto')}
                             projectId={project.id}
-                            pageTypeRules={project.pageTypeRules}
+                            folderPageTypes={project.folderPageTypes}
+                            detectedLocales={project.detectedLocales}
+                            pathToLocaleMap={project.pathToLocaleMap}
                         />
                     </TabsContent>
 

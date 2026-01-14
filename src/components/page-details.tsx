@@ -1,700 +1,820 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import {
   ChevronRight,
   Copy,
   Play,
-  GitCompare,
   Download,
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  ExternalLink,
+  Eye,
+  Search,
+  Code,
+  Link2,
+  Share2,
+  Globe,
+  FileText,
+  Heading,
+  Image,
+  RefreshCw,
   Clock,
   Hash,
-  TrendingUp,
-  Info,
-  ExternalLink,
-  Zap,
-  Eye,
-  Shield,
-  Search,
+  Type,
+  AlignLeft,
+  Check,
+  X,
+  Accessibility,
+  ChevronDown,
+  ChevronUp,
+  Smartphone,
 } from "lucide-react"
 import { projectsService } from "@/services/database"
-import { ProjectLink, AuditResult, FieldChange, ImageInfo, LinkInfo } from "@/types"
+import { ProjectLink, FieldChange, ImageInfo, LinkInfo } from "@/types"
 import { ChangeLogTimeline } from "@/components/change-log-timeline"
+import { SocialPreviewTabs } from "@/components/social-card-preview"
+import { ResponsivePreview, ScreenshotDiff } from "@/components/screenshot-diff"
+import { ChangeDiffViewer, ChangeSummaryBadge } from "@/components/change-diff-viewer"
+import { HtmlPreview } from "@/components/html-preview"
 
 interface PageDetailsProps {
   projectId?: string;
   linkId?: string;
 }
 
-interface DiffItem {
-  type: string;
-  severity: string;
-  title: string;
-  before?: string;
-  after?: string;
-  content?: string;
-  detectedBy: string;
-}
-
-interface StaticIssue {
-  severity: "critical" | "warning" | "info";
-  title: string;
-  description: string;
-  fix: string[];
-}
-
-interface ScanRun {
-  timestamp: string;
-  duration: string;
-  fullHashChanged: boolean;
-  contentHashChanged: boolean;
-  contentScore: number;
-  blockers: number;
-  status: string;
-}
-
 export function PageDetails({ projectId, linkId }: PageDetailsProps) {
-  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [currentLink, setCurrentLink] = useState<ProjectLink | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [checkingLinks, setCheckingLinks] = useState(false)
+  const [brokenLinks, setBrokenLinks] = useState<{ href: string; status: number; text: string; error?: string }[]>([])
+  const [linksCheckedAt, setLinksCheckedAt] = useState<string | null>(null)
+  const [schemaExpanded, setSchemaExpanded] = useState(false)
+  const [capturingScreenshot, setCapturingScreenshot] = useState(false)
+  const [visualTab, setVisualTab] = useState<'changes' | 'preview' | 'screenshot'>('changes')
 
-  const [compareA, setCompareA] = useState("scan-1")
-  const [compareB, setCompareB] = useState("scan-2")
-  const [showContentOnly, setShowContentOnly] = useState(true)
-
-  // Handle Re-scan button click - calls server-side page scanner
   const handleRescan = async () => {
     if (!projectId || !linkId || !currentLink?.url) return;
-
     setScanning(true);
     try {
       const response = await fetch('/api/scan-pages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId,
-          linkId,
-          url: currentLink.url
-        })
+        body: JSON.stringify({ projectId, linkId, url: currentLink.url })
       });
-
       if (!response.ok) {
         const error = await response.json();
-        console.error('Scan failed:', error);
         alert(`Scan failed: ${error.error || 'Unknown error'}`);
-      } else {
-        const result = await response.json();
-        console.log('Scan complete:', result);
-        // The real-time subscription will update the UI automatically
       }
-    } catch (error) {
-      console.error('Scan request failed:', error);
+    } catch {
       alert('Scan request failed. Please try again.');
     } finally {
       setScanning(false);
     }
   };
 
+  const handleCheckLinks = async () => {
+    if (!projectId || !linkId || !currentLink?.url) return;
+    setCheckingLinks(true);
+    try {
+      const response = await fetch('/api/check-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, linkId, url: currentLink.url })
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setBrokenLinks(result.brokenLinks || []);
+        setLinksCheckedAt(new Date().toISOString());
+      }
+    } catch {
+      // Silent fail
+    } finally {
+      setCheckingLinks(false);
+    }
+  };
+
+  const handleCaptureScreenshot = async () => {
+    if (!projectId || !linkId || !currentLink?.url) return;
+    setCapturingScreenshot(true);
+    try {
+      const response = await fetch('/api/capture-screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, linkId, url: currentLink.url })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Screenshot capture failed: ${error.error || 'Unknown error'}`);
+      }
+    } catch {
+      alert('Screenshot capture failed. Please try again.');
+    } finally {
+      setCapturingScreenshot(false);
+    }
+  };
+
   useEffect(() => {
     if (!projectId || !linkId) return;
-
-    // Subscribe to project updates to get real-time audit results
     const unsubscribe = projectsService.subscribeToProject(projectId, (project) => {
       if (project) {
         const link = project.links.find(l => l.id === linkId);
-        if (link) {
-          setCurrentLink(link);
-        }
+        if (link) setCurrentLink(link);
       }
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, [projectId, linkId]);
 
-  if (loading) return <div className="p-8 flex justify-center text-muted-foreground">Loading audit details...</div>;
-  if (!currentLink) return <div className="p-8 flex justify-center text-muted-foreground">Page not found or not audited yet.</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading...</div>;
+  if (!currentLink) return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Page not found</div>;
 
   const audit = currentLink.auditResult;
+  const path = new URL(currentLink.url).pathname;
+  const score = audit?.score || 0;
+  const wordCount = audit?.categories?.readability?.wordCount || 0;
+  const lastScan = audit?.lastRun ? new Date(audit.lastRun) : null;
+  const placeholders = audit?.categories?.placeholders?.issues || [];
+  const spellingErrors = audit?.categories?.spelling?.issues || [];
+  
+  const getScoreColor = (s: number) => {
+    if (s >= 80) return 'text-green-600';
+    if (s >= 60) return 'text-yellow-600';
+    return 'text-red-600';
+  };
 
-  // Map real data to display structure
-  const pageData = {
-    path: new URL(currentLink.url).pathname,
-    fullUrl: currentLink.url,
-    status: audit?.changeStatus === 'CONTENT_CHANGED' ? "Content changed" :
-      audit?.changeStatus === 'TECH_CHANGE_ONLY' ? "Tech-only change" :
-        audit?.changeStatus === 'SCAN_FAILED' ? "Scan failed" :
-          !audit?.canDeploy ? "Blocked" : "No change",
-    contentScore: audit?.score || 0,
-    lastContentChange: audit?.lastRun ? new Date(audit.lastRun).toLocaleDateString() : "-",
-    lastScan: audit?.lastRun ? new Date(audit.lastRun).toLocaleString() : "-",
-    scanDuration: "1.2s", // Placeholder for now
-    openIssues: {
-      critical: !audit?.canDeploy ? 1 : 0,
-      warnings: (audit?.categories?.completeness?.issues?.length || 0) + (audit?.categories?.spelling?.issues?.length || 0),
-    },
-  }
-
-  const hashData = {
-    fullHash: audit?.fullHash || "N/A",
-    contentHash: audit?.contentHash || "N/A",
-    fullHashChanged: audit?.changeStatus !== 'NO_CHANGE',
-    contentHashChanged: audit?.changeStatus === 'CONTENT_CHANGED',
-  }
-
-  // Derived arrays
-  const changeHistory = [
-    { date: "Today", contentChanged: audit?.changeStatus === 'CONTENT_CHANGED', techOnly: audit?.changeStatus === 'TECH_CHANGE_ONLY' }
-    // No history backend yet
-  ];
-
-  // Map changed fields to diff items - now with before/after values
-  const differences: DiffItem[] = [];
-
-  if (audit?.changeStatus === 'CONTENT_CHANGED') {
-    // Use fieldChanges if available (new smart change detection)
-    if (audit.fieldChanges && audit.fieldChanges.length > 0) {
-      audit.fieldChanges.forEach((change: FieldChange) => {
-        const fieldNames: Record<string, string> = {
-          'title': 'Page Title',
-          'h1': 'H1 Heading',
-          'metaDescription': 'Meta Description',
-          'wordCount': 'Word Count',
-          'headings': 'Heading Structure',
-          'heading': 'Heading',
-          'images': 'Images',
-          'links': 'Links',
-          'bodyText': 'Body Text'
-        };
-
-        const formatValue = (val: FieldChange['oldValue'], field: string): string => {
-          if (val === null || val === undefined) return '(empty)';
-          if (typeof val === 'number') return String(val);
-          if (typeof val === 'string') return val.length > 100 ? val.substring(0, 100) + '...' : val;
-          if (Array.isArray(val)) {
-            if (field === 'images') return `${(val as ImageInfo[]).length} image(s)`;
-            if (field === 'links') return `${(val as LinkInfo[]).length} link(s)`;
-            if (field === 'headings') return (val as string[]).slice(0, 3).join(' → ');
-            return val.join(', ').substring(0, 100);
-          }
-          return String(val);
-        };
-
-        differences.push({
-          type: change.changeType === 'added' ? 'added' : change.changeType === 'removed' ? 'removed' : 'text',
-          severity: change.changeType === 'modified' ? 'warning' : 'info',
-          title: `${fieldNames[change.field] || change.field} ${change.changeType}`,
-          before: change.oldValue !== null ? formatValue(change.oldValue, change.field) : undefined,
-          after: change.newValue !== null ? formatValue(change.newValue, change.field) : undefined,
-          content: change.changeType === 'added'
-            ? `Added: ${formatValue(change.newValue, change.field)}`
-            : change.changeType === 'removed'
-              ? `Removed: ${formatValue(change.oldValue, change.field)}`
-              : undefined,
-          detectedBy: 'Smart Change Detection'
-        });
-      });
-    } else if (audit.diffSummary) {
-      // Fallback to summary if no fieldChanges
-      differences.push({
-        type: 'info',
-        severity: 'info',
-        title: audit.diffSummary,
-        content: 'Detected changes in latest scan',
-        detectedBy: 'System'
-      });
-    } else if (audit.changedFields && audit.changedFields.length > 0) {
-      // Legacy: show individual fields without before/after
-      audit.changedFields.forEach(field => {
-        differences.push({
-          type: 'modified',
-          severity: 'warning',
-          title: `${field.charAt(0).toUpperCase() + field.slice(1)} Changed`,
-          content: `${field} was modified since the last scan.`,
-          detectedBy: 'Content Hash'
-        });
-      });
-    } else {
-      // Fallback if no specific fields listed but content changed
-      differences.push({
-        type: 'modified',
-        severity: 'warning',
-        title: 'Content Modified',
-        content: 'The page content hash has changed, but specific fields were not identified.',
-        detectedBy: 'Hash Comparison'
-      });
-    }
-  } else if (audit?.changeStatus === 'TECH_CHANGE_ONLY') {
-    differences.push({
-      type: 'tech',
-      severity: 'info',
-      title: 'Source Code Update',
-      content: 'Underlying HTML source changed (scripts, styles, or markup) without visible content text changes.',
-      detectedBy: 'Full Hash'
-    });
-  }
-
-  const placeholders = audit?.categories?.placeholders?.issues || []
-  const spellingErrors = audit?.categories?.spelling?.issues.map(i => ({
-    word: i.word,
-    suggestion: i.suggestion || '',
-    occurrences: 1,
-    firstSeen: "Today"
-  })) || []
-
-  // Word count for completeness check (readability card removed)
-  const wordCount = audit?.categories?.readability?.wordCount || 0
-
-  const completenessChecks = [
-    { check: "Word count > 300", passed: wordCount > 300, count: wordCount },
-    ...(audit?.categories?.completeness?.issues?.map(issue => ({ check: issue.detail, passed: false, count: 1 })) || [])
-  ];
-
-  const performanceIssues: StaticIssue[] = []
-  const accessibilityIssues: StaticIssue[] = []
-  const seoIssues: StaticIssue[] = audit?.categories?.seo?.issues?.map(i => ({ severity: "warning" as const, title: i, description: "", fix: [] })) || []
-  const securityIssues: StaticIssue[] = []
-
-  const scanRunHistory: ScanRun[] = audit?.lastRun ? [{
-    timestamp: new Date(audit.lastRun).toLocaleString(),
-    duration: "1.2s",
-    fullHashChanged: audit.changeStatus !== 'NO_CHANGE',
-    contentHashChanged: audit.changeStatus === 'CONTENT_CHANGED',
-    contentScore: audit.score || 0,
-    blockers: !audit.canDeploy ? 1 : 0,
-    status: audit.changeStatus || 'Success'
-  }] : [];
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "No change":
-        return "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
-      case "Content changed":
-        return "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20"
-      case "Tech-only change":
-        return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
-      case "Blocked":
-        return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
-      case "Scan failed":
-        return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20"
-      default:
-        return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20"
-    }
-  }
-
-  const getSeverityIcon = (severity: string) => {
-    switch (severity) {
-      case "critical":
-        return <XCircle className="h-4 w-4 text-red-500" />
-      case "warning":
-        return <AlertTriangle className="h-4 w-4 text-orange-500" />
-      default:
-        return <Info className="h-4 w-4 text-blue-500" />
-    }
-  }
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-  }
+  const StatusIndicator = ({ ok }: { ok: boolean }) => (
+    ok ? <Check className="h-3.5 w-3.5 text-green-500" /> : <X className="h-3.5 w-3.5 text-red-400" />
+  );
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Page Header */}
-      <div className="border-b bg-card">
-        <div className="container mx-auto px-4 py-6">
-          {/* Breadcrumb */}
-          <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-            <a href="/" className="hover:text-foreground">
-              Website Audit Dashboard
-            </a>
-            <ChevronRight className="h-4 w-4" />
-            <a href="/" className="hover:text-foreground">
-              Pages
-            </a>
-            <ChevronRight className="h-4 w-4" />
-            <span className="text-foreground">{pageData.path}</span>
-          </div>
-
-          {/* Title and Status */}
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold text-foreground">{pageData.path}</h1>
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{pageData.fullUrl}</span>
-                <Button variant="ghost" size="sm" onClick={() => copyToClipboard(pageData.fullUrl)}>
-                  <Copy className="h-3 w-3" />
-                </Button>
-                <Button variant="ghost" size="sm" asChild>
-                  <a href={pageData.fullUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </Button>
+    <div className="min-h-screen bg-[#fafafa] dark:bg-[#0a0a0a]">
+      {/* Header */}
+      <header className="sticky top-0 z-10 border-b border-neutral-200 dark:border-neutral-800 bg-white/80 dark:bg-black/80 backdrop-blur-sm">
+        <div className="max-w-6xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-xs text-neutral-500 mb-1">
+                <a href="/" className="hover:text-neutral-900 dark:hover:text-white transition-colors">Audit</a>
+                <ChevronRight className="h-3 w-3" />
+                <span className="truncate font-mono">{path}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-lg font-semibold text-neutral-900 dark:text-white truncate">{audit?.contentSnapshot?.title || path}</h1>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-neutral-400 hover:text-neutral-900" onClick={() => navigator.clipboard.writeText(currentLink.url)}>
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-neutral-400 hover:text-neutral-900" asChild>
+                    <a href={currentLink.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" /></a>
+                  </Button>
+                </div>
               </div>
             </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge variant="outline" className={getStatusColor(pageData.status)}>
-                {pageData.status}
-              </Badge>
-              <Button onClick={handleRescan} disabled={scanning}>
-                <Play className={`mr-2 h-4 w-4 ${scanning ? 'animate-spin' : ''}`} />
-                {scanning ? 'Scanning...' : 'Re-scan now'}
-              </Button>
-              <Button variant="secondary">
-                <GitCompare className="mr-2 h-4 w-4" />
-                Compare scans
-              </Button>
-              <Button variant="ghost">
-                <Download className="mr-2 h-4 w-4" />
-                Export
+            <div className="flex items-center gap-2">
+              {audit?.changeStatus === 'CONTENT_CHANGED' && (
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">Changed</Badge>
+              )}
+              {!audit?.canDeploy && (
+                <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800">Blocked</Badge>
+              )}
+              <Button size="sm" variant="outline" onClick={handleRescan} disabled={scanning} className="h-8 px-3 text-xs font-medium">
+                <Play className={`h-3 w-3 mr-1.5 ${scanning ? 'animate-spin' : ''}`} />
+                {scanning ? 'Scanning...' : 'Re-scan'}
               </Button>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="container mx-auto px-4 py-8">
-        {/* Section A: Overview Cards */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-sm font-medium text-muted-foreground">Content score</div>
-              <div className="mt-2 text-3xl font-bold">{pageData.contentScore}</div>
-              <Progress value={pageData.contentScore} className="mt-3 h-2" />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-sm font-medium text-muted-foreground">Last content change</div>
-              <div className="mt-2 text-lg font-semibold">{pageData.lastContentChange}</div>
-              <div className="mt-2 text-xs text-muted-foreground">contentHash changed</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-sm font-medium text-muted-foreground">Last scan</div>
-              <div className="mt-2 text-lg font-semibold">{pageData.lastScan}</div>
-              <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="h-3 w-3" />
-                {pageData.scanDuration}
+      <main className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+        {/* Metrics Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
+            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-2">Score</div>
+            <div className="flex items-end gap-2">
+              <span className={`text-3xl font-bold tabular-nums ${getScoreColor(score)}`}>{score}</span>
+              <span className="text-sm text-neutral-400 mb-1">/100</span>
+            </div>
+            <Progress value={score} className="h-1 mt-3" />
+          </div>
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
+            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-2">Word Count</div>
+            <div className="text-3xl font-bold tabular-nums text-neutral-900 dark:text-white">{wordCount.toLocaleString()}</div>
+            <div className="text-xs text-neutral-400 mt-1">{wordCount >= 300 ? 'Good length' : 'Consider adding content'}</div>
+          </div>
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
+            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-2">Last Scan</div>
+            <div className="text-lg font-medium text-neutral-900 dark:text-white">{lastScan ? lastScan.toLocaleDateString() : '—'}</div>
+            <div className="text-xs text-neutral-400 mt-1 flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {lastScan ? lastScan.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+            </div>
+          </div>
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
+            <div className="text-xs text-neutral-500 uppercase tracking-wide mb-2">Issues</div>
+            <div className="flex items-center gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold tabular-nums text-red-600">{placeholders.length > 0 ? 1 : 0}</div>
+                <div className="text-xs text-neutral-400">Critical</div>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-sm font-medium text-muted-foreground">Open issues</div>
-              <div className="mt-2 flex items-center gap-4">
-                <div>
-                  <div className="text-2xl font-bold text-red-600">{pageData.openIssues.critical}</div>
-                  <div className="text-xs text-muted-foreground">Critical</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-orange-600">{pageData.openIssues.warnings}</div>
-                  <div className="text-xs text-muted-foreground">Warnings</div>
-                </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold tabular-nums text-amber-600">{spellingErrors.length}</div>
+                <div className="text-xs text-neutral-400">Spelling</div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
-        {/* Section: Page Screenshot */}
-        {audit?.screenshot && (
-          <Card className="mb-8">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Eye className="h-5 w-5" />
-                    Page Snapshot
-                  </CardTitle>
-                  <CardDescription>
-                    Captured {audit.screenshotCapturedAt
-                      ? new Date(audit.screenshotCapturedAt).toLocaleString()
-                      : 'recently'} (after scroll to trigger animations)
-                  </CardDescription>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const link = document.createElement('a');
-                    link.href = `data:image/png;base64,${audit.screenshot}`;
-                    link.download = `screenshot-${new Date().toISOString()}.png`;
-                    link.click();
-                  }}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download
-                </Button>
+        {/* Placeholder Alert */}
+        {placeholders.length > 0 && (
+          <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <XCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+              <div>
+                <h3 className="font-semibold text-red-900 dark:text-red-200">Deployment Blocked</h3>
+                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                  Placeholder content detected: {placeholders.map(p => `${p.type} (${p.count})`).join(', ')}
+                </p>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-hidden rounded-lg border bg-muted/50">
-                <img
-                  src={`data:image/png;base64,${audit.screenshot}`}
-                  alt="Page screenshot"
-                  className="w-full h-auto"
+            </div>
+          </div>
+        )}
+
+        {/* Content Changes & Visual QA Section */}
+        <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+          {/* Header with tabs */}
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-neutral-500" />
+                <span className="font-medium text-neutral-900 dark:text-white">Content Changes</span>
+                <ChangeSummaryBadge 
+                  fieldChanges={audit?.fieldChanges || []} 
+                  changeStatus={audit?.changeStatus} 
                 />
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Section B: Change Detection (Condensed) */}
-        {(audit?.changeStatus === 'CONTENT_CHANGED' || audit?.changeStatus === 'TECH_CHANGE_ONLY') && (
-          <Card className={`mb-8 border-opacity-20 bg-opacity-5 ${audit?.changeStatus === 'CONTENT_CHANGED'
-            ? 'border-orange-500 bg-orange-500'
-            : 'border-blue-500 bg-blue-500'
-            }`}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className={`h-5 w-5 ${audit?.changeStatus === 'CONTENT_CHANGED' ? 'text-orange-600' : 'text-blue-600'
-                    }`} />
-                  <CardTitle className={
-                    audit?.changeStatus === 'CONTENT_CHANGED' ? 'text-orange-700' : 'text-blue-700'
-                  }>
-                    {audit?.changeStatus === 'CONTENT_CHANGED' ? 'Content Updates Detected' : 'Source Code Updated'}
-                  </CardTitle>
-                </div>
-                <Badge variant="outline" className={`bg-background ${audit?.changeStatus === 'CONTENT_CHANGED' ? 'text-orange-700 border-orange-200' : 'text-blue-700 border-blue-200'
-                  }`}>
-                  {pageData.lastContentChange}
-                </Badge>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-7 text-xs"
+                  onClick={handleCaptureScreenshot}
+                  disabled={capturingScreenshot}
+                >
+                  {capturingScreenshot ? (
+                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <Eye className="h-3 w-3 mr-1" />
+                  )}
+                  {capturingScreenshot ? 'Capturing...' : 'Capture Screenshot'}
+                </Button>
               </div>
-              <CardDescription className={
-                audit?.changeStatus === 'CONTENT_CHANGED' ? 'text-orange-600/80' : 'text-blue-600/80'
-              }>
-                {audit.diffSummary || (audit?.changeStatus === 'CONTENT_CHANGED' ? "Changes detected in page content" : "Technical or hidden changes detected")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Accordion type="single" collapsible className="w-full bg-background/50 rounded-lg border px-4">
-                {differences.length === 0 ? (
-                  <div className="py-4 text-center text-muted-foreground text-sm">Review content changes below.</div>
-                ) : (
-                  differences.map((diff, idx) => (
-                    <AccordionItem key={idx} value={`item-${idx}`} className="border-b-0">
-                      <AccordionTrigger className="hover:no-underline py-3">
-                        <div className="flex items-center gap-3">
-                          {getSeverityIcon(diff.severity)}
-                          <span className="font-medium text-sm">{diff.title}</span>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="space-y-2 pb-3 pl-7">
-                          {diff.type === "text" ? (
-                            <div className="grid grid-cols-2 gap-4 text-xs">
-                              <div className="p-2 bg-red-500/5 rounded border border-red-500/10">
-                                <span className="font-semibold text-red-600 block mb-1">Before:</span>
-                                <span className="whitespace-pre-line">{diff.before}</span>
-                              </div>
-                              <div className="p-2 bg-green-500/5 rounded border border-green-500/10">
-                                <span className="font-semibold text-green-600 block mb-1">After:</span>
-                                <span className="whitespace-pre-line">{diff.after}</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-sm text-muted-foreground">{diff.content}</div>
-                          )}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))
-                )}
-
-                {/* Exact Source Diff Viewer */}
-                {audit.diffPatch && (
-                  <AccordionItem value="source-diff" className="border-b-0 border-t">
-                    <AccordionTrigger className="hover:no-underline py-3">
-                      <div className="flex items-center gap-3">
-                        <GitCompare className="h-4 w-4 text-purple-500" />
-                        <span className="font-medium text-sm">View Exact Source Changes</span>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="font-mono text-[10px] sm:text-xs overflow-x-auto p-3 bg-muted rounded border max-h-64 overflow-y-auto whitespace-pre">
-                        {audit.diffPatch.split('\n').filter(l => !l.startsWith('---') && !l.startsWith('+++')).map((line, i) => {
-                          let colorClass = "text-muted-foreground";
-                          if (line.startsWith('+')) colorClass = "text-green-600 bg-green-500/10 block w-full";
-                          if (line.startsWith('-')) colorClass = "text-red-600 bg-red-500/10 block w-full";
-                          if (line.startsWith('@@')) colorClass = "text-purple-500 block w-full mt-2 mb-1 font-bold";
-                          return (
-                            <div key={i} className={colorClass}>
-                              {line}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )}
-              </Accordion>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Section D: Content Quality */}
-        <div className="mb-8 space-y-6">
-          <h2 className="text-2xl font-bold">Content quality</h2>
-
-          {/* Critical Blocker Alert */}
-          {placeholders.length > 0 && (
-            <Alert className="border-red-500/50 bg-red-500/10">
-              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-              <AlertTitle className="text-red-700 dark:text-red-400">
-                Deployment blocked: Placeholder content detected
-              </AlertTitle>
-              <AlertDescription className="text-red-600 dark:text-red-400">
-                <ul className="my-3 list-inside list-disc space-y-1">
-                  {placeholders.map((placeholder, idx) => (
-                    <li key={idx}>
-                      {placeholder.type} ({placeholder.count})
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex gap-2">
-                  <Button variant="destructive" size="sm">
-                    <Eye className="mr-2 h-4 w-4" />
-                    View in page
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    Create task
-                  </Button>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Spelling */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Spelling</CardTitle>
-                <CardDescription>Spelling error rate: {(spellingErrors.length * 0.1).toFixed(1)}%</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Word</TableHead>
-                      <TableHead>Suggestion</TableHead>
-                      <TableHead>Count</TableHead>
-                      <TableHead>First seen</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {spellingErrors.map((error, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-mono text-sm text-red-600">{error.word}</TableCell>
-                        <TableCell className="font-mono text-sm text-green-600">{error.suggestion}</TableCell>
-                        <TableCell>{error.occurrences}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{error.firstSeen}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            {/* Word Count Card (simplified from Readability) */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle>Word Count</CardTitle>
-                <CardDescription>Content length indicator</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-4">
-                  <div className="text-3xl font-bold">{wordCount}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {wordCount >= 300 ? (
-                      <span className="text-green-600">✓ Good length</span>
-                    ) : (
-                      <span className="text-orange-600">Consider adding more content</span>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* SEO (Promoted from Tabs) */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle>SEO</CardTitle>
-                <CardDescription>MetaData and ranking signals</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {seoIssues.length > 0 ? (
-                  <ul className="space-y-2">
-                    {seoIssues.map((issue, idx) => (
-                      <li key={idx} className="flex gap-2 text-sm text-muted-foreground p-2 rounded bg-muted/50">
-                        <Info className="h-4 w-4 text-blue-500 mt-0.5" />
-                        {issue.title}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
-                    <CheckCircle2 className="h-8 w-8 text-green-500/50 mb-2" />
-                    <p>No SEO issues detected</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            </div>
+            
+            {/* Tab buttons */}
+            <div className="flex gap-1 p-1 bg-neutral-100 dark:bg-neutral-800 rounded-lg w-fit">
+              <button
+                onClick={() => setVisualTab('changes')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  visualTab === 'changes' 
+                    ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm' 
+                    : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                }`}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Changes
+              </button>
+              <button
+                onClick={() => setVisualTab('preview')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  visualTab === 'preview' 
+                    ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm' 
+                    : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                }`}
+              >
+                <Globe className="h-3.5 w-3.5" />
+                HTML Preview
+              </button>
+              <button
+                onClick={() => setVisualTab('screenshot')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  visualTab === 'screenshot' 
+                    ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm' 
+                    : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                }`}
+                disabled={!audit?.screenshot}
+              >
+                <Image className="h-3.5 w-3.5" />
+                Screenshot
+                {!audit?.screenshot && <span className="text-xs text-neutral-400 ml-1">(none)</span>}
+              </button>
+            </div>
           </div>
-
-          {/* Completeness */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Completeness</CardTitle>
-              <CardDescription>Content quality checklist</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {completenessChecks.map((check, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="flex items-center gap-3">
-                      {check.passed ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-red-500" />
-                      )}
-                      <span className="text-sm font-medium">{check.check}</span>
+          
+          {/* Tab content */}
+          <div className="p-4">
+            {/* Changes Tab */}
+            {visualTab === 'changes' && (
+              <ChangeDiffViewer 
+                fieldChanges={audit?.fieldChanges || []} 
+                summary={audit?.diffSummary}
+              />
+            )}
+            
+            {/* HTML Preview Tab */}
+            {visualTab === 'preview' && projectId && linkId && (
+              <HtmlPreview 
+                projectId={projectId}
+                linkId={linkId}
+                url={currentLink.url}
+              />
+            )}
+            
+            {/* Screenshot Tab */}
+            {visualTab === 'screenshot' && audit?.screenshot && (
+              <div className="space-y-4">
+                {audit.previousScreenshot ? (
+                  <ScreenshotDiff
+                    before={audit.previousScreenshot}
+                    after={audit.screenshot}
+                    beforeLabel="Previous"
+                    afterLabel="Current"
+                    onGenerateDiff={async () => {
+                      if (!audit.previousScreenshot || !audit.screenshot) return null;
+                      try {
+                        const response = await fetch('/api/compare-screenshots', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ before: audit.previousScreenshot, after: audit.screenshot })
+                        });
+                        if (!response.ok) return null;
+                        const result = await response.json();
+                        return { diffImage: result.diffImage, diffPercentage: result.diffPercentage };
+                      } catch {
+                        return null;
+                      }
+                    }}
+                  />
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm text-neutral-500">Current snapshot</span>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = `data:image/png;base64,${audit.screenshot}`;
+                        link.download = 'screenshot.png';
+                        link.click();
+                      }}>
+                        <Download className="h-3 w-3 mr-1" />
+                        Download
+                      </Button>
                     </div>
-                    {!check.passed && check.count !== undefined && check.count > 0 && (
-                      <Badge variant="destructive">{check.count}</Badge>
-                    )}
+                    <img src={`data:image/png;base64,${audit.screenshot}`} alt="Page" className="w-full rounded border border-neutral-200 dark:border-neutral-700" />
                   </div>
-                ))}
+                )}
               </div>
-            </CardContent>
-          </Card>
+            )}
+            
+            {visualTab === 'screenshot' && !audit?.screenshot && (
+              <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
+                <Eye className="h-12 w-12 mb-3 text-neutral-300 dark:text-neutral-600" />
+                <p className="text-sm mb-2">No screenshot available</p>
+                <p className="text-xs text-neutral-400 mb-4">Screenshots are captured on first scan or when significant changes occur</p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleCaptureScreenshot}
+                  disabled={capturingScreenshot}
+                >
+                  {capturingScreenshot ? (
+                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <Eye className="h-3 w-3 mr-1" />
+                  )}
+                  {capturingScreenshot ? 'Capturing...' : 'Capture Now'}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Content Change History Timeline */}
+        {/* Main Content Grid */}
+        <div className="grid lg:grid-cols-2 gap-4">
+          {/* SEO Metadata */}
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+              <Search className="h-4 w-4 text-neutral-500" />
+              <span className="font-medium text-neutral-900 dark:text-white">SEO Metadata</span>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* Title */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+                    <Type className="h-3.5 w-3.5" />
+                    Title
+                  </div>
+                  <span className={`text-xs font-mono ${(audit?.categories?.seo?.titleLength || 0) >= 30 && (audit?.categories?.seo?.titleLength || 0) <= 60 ? 'text-green-600' : 'text-amber-600'}`}>
+                    {audit?.categories?.seo?.titleLength || 0}/60
+                  </span>
+                </div>
+                <div className="bg-neutral-50 dark:bg-neutral-800 rounded px-3 py-2 text-sm font-mono text-neutral-900 dark:text-white">
+                  {audit?.categories?.seo?.title || audit?.contentSnapshot?.title || '(empty)'}
+                </div>
+              </div>
+              {/* Description */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+                    <AlignLeft className="h-3.5 w-3.5" />
+                    Meta Description
+                  </div>
+                  <span className={`text-xs font-mono ${(audit?.categories?.seo?.metaDescriptionLength || 0) >= 50 && (audit?.categories?.seo?.metaDescriptionLength || 0) <= 160 ? 'text-green-600' : 'text-amber-600'}`}>
+                    {audit?.categories?.seo?.metaDescriptionLength || 0}/160
+                  </span>
+                </div>
+                <div className="bg-neutral-50 dark:bg-neutral-800 rounded px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
+                  {audit?.categories?.seo?.metaDescription || audit?.contentSnapshot?.metaDescription || '(empty)'}
+                </div>
+              </div>
+              {/* Images */}
+              {(audit?.categories?.seo?.imagesWithoutAlt || 0) > 0 && (
+                <div className="flex items-center gap-2 text-sm text-amber-600">
+                  <Image className="h-4 w-4" />
+                  <span>{audit?.categories?.seo?.imagesWithoutAlt} images missing alt text</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Schema Markup - Enhanced with JSON viewer */}
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+              <Code className="h-4 w-4 text-neutral-500" />
+              <span className="font-medium text-neutral-900 dark:text-white">Schema Markup</span>
+              {audit?.categories?.schema?.hasSchema ? (
+                <CheckCircle2 className="h-4 w-4 text-green-500 ml-auto" />
+              ) : (
+                <span className="text-xs text-neutral-400 ml-auto">Not found</span>
+              )}
+            </div>
+            <div className="p-4">
+              {audit?.categories?.schema?.hasSchema ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {audit.categories.schema.schemaTypes?.map((type, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-xs font-mono bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">{type}</Badge>
+                    ))}
+                  </div>
+                  {audit.categories.schema.issues?.length > 0 && (
+                    <div className="space-y-1.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                      {audit.categories.schema.issues.map((issue, idx) => (
+                        <div key={idx} className="flex items-start gap-2 text-xs text-amber-600">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          <span><span className="font-medium">{issue.type}:</span> {issue.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* JSON-LD Viewer */}
+                  {audit.categories.schema.rawSchemas && audit.categories.schema.rawSchemas.length > 0 && (
+                    <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                      <button 
+                        onClick={() => setSchemaExpanded(!schemaExpanded)}
+                        className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
+                      >
+                        {schemaExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        {schemaExpanded ? 'Hide' : 'View'} JSON-LD
+                      </button>
+                      {schemaExpanded && (
+                        <div className="mt-2 bg-neutral-50 dark:bg-neutral-800 rounded p-3 max-h-64 overflow-auto">
+                          <pre className="text-xs font-mono text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap">
+                            {JSON.stringify(audit.categories.schema.rawSchemas, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Google Rich Results Test Link */}
+                  <div className="pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      asChild
+                    >
+                      <a 
+                        href={`https://search.google.com/test/rich-results?url=${encodeURIComponent(currentLink.url)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1.5" />
+                        Test on Google
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-neutral-500">No JSON-LD structured data found. Consider adding schema for better search visibility.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    asChild
+                  >
+                    <a 
+                      href={`https://search.google.com/test/rich-results?url=${encodeURIComponent(currentLink.url)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="h-3 w-3 mr-1.5" />
+                      Test on Google
+                    </a>
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Spelling */}
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-neutral-500" />
+              <span className="font-medium text-neutral-900 dark:text-white">Spelling</span>
+              {spellingErrors.length === 0 ? (
+                <CheckCircle2 className="h-4 w-4 text-green-500 ml-auto" />
+              ) : (
+                <Badge variant="destructive" className="ml-auto text-xs">{spellingErrors.length}</Badge>
+              )}
+            </div>
+            <div className="p-4">
+              {spellingErrors.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {spellingErrors.map((error, idx) => (
+                    <div key={idx} className="flex items-center gap-3 text-sm font-mono">
+                      <span className="text-red-600 line-through">{error.word}</span>
+                      <span className="text-neutral-400">→</span>
+                      <span className="text-green-600">{error.suggestion || '?'}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-500">No spelling errors detected</p>
+              )}
+            </div>
+          </div>
+
+          {/* Links */}
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-neutral-500" />
+              <span className="font-medium text-neutral-900 dark:text-white">Links</span>
+              <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={handleCheckLinks} disabled={checkingLinks}>
+                <RefreshCw className={`h-3.5 w-3.5 ${checkingLinks ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold tabular-nums text-neutral-900 dark:text-white">{audit?.categories?.links?.totalLinks || 0}</div>
+                  <div className="text-xs text-neutral-500">Total</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold tabular-nums text-blue-600">{audit?.categories?.links?.internalLinks || 0}</div>
+                  <div className="text-xs text-neutral-500">Internal</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold tabular-nums text-purple-600">{audit?.categories?.links?.externalLinks || 0}</div>
+                  <div className="text-xs text-neutral-500">External</div>
+                </div>
+              </div>
+              {brokenLinks.length > 0 ? (
+                <div className="space-y-1.5 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+                  <div className="flex items-center gap-2 text-sm font-medium text-red-600 mb-2">
+                    <XCircle className="h-4 w-4" />
+                    {brokenLinks.length} broken links
+                  </div>
+                  {brokenLinks.slice(0, 5).map((link, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs">
+                      <span className="font-mono text-red-500">{link.status}</span>
+                      <span className="truncate text-neutral-600 dark:text-neutral-400">{link.href}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : linksCheckedAt ? (
+                <div className="flex items-center gap-2 text-sm text-green-600 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+                  <CheckCircle2 className="h-4 w-4" />
+                  All links valid
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-500 pt-3 border-t border-neutral-100 dark:border-neutral-800">Click refresh to check for broken links</p>
+              )}
+            </div>
+          </div>
+
+          {/* Headings */}
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+              <Heading className="h-4 w-4 text-neutral-500" />
+              <span className="font-medium text-neutral-900 dark:text-white">Heading Structure</span>
+              <span className="text-xs text-neutral-400 ml-auto">{audit?.categories?.headingStructure?.h1Count || 0} H1</span>
+            </div>
+            <div className="p-4">
+              {(audit?.categories?.headingStructure?.headings?.length ?? 0) > 0 ? (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {audit?.categories?.headingStructure?.headings?.map((h, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-sm">
+                      <span className="font-mono text-xs text-neutral-400 w-6">H{h.level}</span>
+                      <span className="text-neutral-700 dark:text-neutral-300 truncate">{h.text}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-500">No headings found</p>
+              )}
+              {(audit?.categories?.headingStructure?.issues?.length ?? 0) > 0 && (
+                <div className="space-y-1 mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+                  {audit?.categories?.headingStructure?.issues?.map((issue, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs text-amber-600">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {issue}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Social Card Previews - Enhanced Open Graph */}
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800 lg:col-span-2">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+              <Share2 className="h-4 w-4 text-neutral-500" />
+              <span className="font-medium text-neutral-900 dark:text-white">Social Card Previews</span>
+              {audit?.categories?.openGraph?.hasOpenGraph ? (
+                <CheckCircle2 className="h-4 w-4 text-green-500 ml-auto" />
+              ) : (
+                <span className="text-xs text-neutral-400 ml-auto">Not configured</span>
+              )}
+            </div>
+            <div className="p-4">
+              {audit?.categories?.openGraph?.hasOpenGraph || audit?.categories?.twitterCards?.hasTwitterCards ? (
+                <SocialPreviewTabs
+                  title={audit?.categories?.openGraph?.title}
+                  description={audit?.categories?.openGraph?.description}
+                  image={audit?.categories?.openGraph?.image}
+                  url={currentLink.url}
+                  twitterTitle={audit?.categories?.twitterCards?.title}
+                  twitterDescription={audit?.categories?.twitterCards?.description}
+                  twitterImage={audit?.categories?.twitterCards?.image}
+                />
+              ) : (
+                <div className="text-center py-8">
+                  <Share2 className="h-8 w-8 text-neutral-300 dark:text-neutral-600 mx-auto mb-3" />
+                  <p className="text-sm text-neutral-500 mb-2">No Open Graph or Twitter Card tags configured</p>
+                  <p className="text-xs text-neutral-400">Add these tags to control how your page appears when shared on social media</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Technical Meta */}
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+              <Globe className="h-4 w-4 text-neutral-500" />
+              <span className="font-medium text-neutral-900 dark:text-white">Technical</span>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <StatusIndicator ok={!!audit?.categories?.metaTags?.canonicalUrl} />
+                  <span className="text-neutral-700 dark:text-neutral-300">Canonical URL</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <StatusIndicator ok={!!audit?.categories?.metaTags?.hasViewport} />
+                  <span className="text-neutral-700 dark:text-neutral-300">Viewport</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <StatusIndicator ok={!!audit?.categories?.metaTags?.language} />
+                  <span className="text-neutral-700 dark:text-neutral-300">Language</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <StatusIndicator ok={!!audit?.categories?.metaTags?.favicon} />
+                  <span className="text-neutral-700 dark:text-neutral-300">Favicon</span>
+                </div>
+              </div>
+              {audit?.categories?.metaTags?.canonicalUrl && (
+                <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+                  <span className="text-xs text-neutral-500">Canonical</span>
+                  <p className="text-xs font-mono text-neutral-600 dark:text-neutral-400 truncate">{audit.categories.metaTags.canonicalUrl}</p>
+                </div>
+              )}
+              {audit?.categories?.metaTags?.robots && (
+                <div className="mt-2">
+                  <span className="text-xs text-neutral-500">Robots</span>
+                  <p className="text-xs font-mono text-neutral-600 dark:text-neutral-400">{audit.categories.metaTags.robots}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Accessibility */}
+          <div className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+              <Accessibility className="h-4 w-4 text-neutral-500" />
+              <span className="font-medium text-neutral-900 dark:text-white">Accessibility</span>
+              {audit?.categories?.accessibility ? (
+                <Badge 
+                  variant={audit.categories.accessibility.score >= 80 ? 'secondary' : 'destructive'} 
+                  className="ml-auto text-xs"
+                >
+                  {audit.categories.accessibility.score}/100
+                </Badge>
+              ) : (
+                <span className="text-xs text-neutral-400 ml-auto">Not checked</span>
+              )}
+            </div>
+            <div className="p-4">
+              {audit?.categories?.accessibility ? (
+                <div className="space-y-4">
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <StatusIndicator ok={audit.categories.accessibility.hasSkipLink} />
+                      <span className="text-neutral-700 dark:text-neutral-300">Skip Link</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <StatusIndicator ok={audit.categories.accessibility.ariaLandmarks.includes('main')} />
+                      <span className="text-neutral-700 dark:text-neutral-300">Main Landmark</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <StatusIndicator ok={audit.categories.accessibility.formInputsWithoutLabels === 0} />
+                      <span className="text-neutral-700 dark:text-neutral-300">Form Labels</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <StatusIndicator ok={audit.categories.accessibility.linksWithGenericText === 0} />
+                      <span className="text-neutral-700 dark:text-neutral-300">Link Text</span>
+                    </div>
+                  </div>
+
+                  {/* ARIA Landmarks */}
+                  {audit.categories.accessibility.ariaLandmarks.length > 0 && (
+                    <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800">
+                      <span className="text-xs text-neutral-500">ARIA Landmarks</span>
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {audit.categories.accessibility.ariaLandmarks.map((landmark, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-xs font-mono bg-neutral-100 dark:bg-neutral-800">{landmark}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Issues */}
+                  {audit.categories.accessibility.issues?.length > 0 && (
+                    <div className="space-y-1.5 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+                      <div className="text-xs text-neutral-500 mb-2">Issues ({audit.categories.accessibility.issues.length})</div>
+                      <div className="max-h-32 overflow-y-auto space-y-1.5">
+                        {audit.categories.accessibility.issues.map((issue, idx) => (
+                          <div key={idx} className={`flex items-start gap-2 text-xs ${issue.severity === 'error' ? 'text-red-600' : 'text-amber-600'}`}>
+                            {issue.severity === 'error' ? (
+                              <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                            ) : (
+                              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                            )}
+                            <span>{issue.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {audit.categories.accessibility.issues?.length === 0 && (
+                    <div className="flex items-center gap-2 text-sm text-green-600 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+                      <CheckCircle2 className="h-4 w-4" />
+                      No accessibility issues detected
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-500">Accessibility checks will be available after the next scan</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Change History */}
         {projectId && linkId && (
-          <div className="mb-8">
+          <div className="mt-8">
             <ChangeLogTimeline linkId={linkId} projectId={projectId} />
           </div>
         )}
-      </div>
+      </main>
     </div>
   )
 }

@@ -28,6 +28,63 @@ interface ChangeLogTimelineProps {
   projectId: string;
 }
 
+// Helper to decode HTML entities
+function decodeHtmlEntities(text: string): string {
+  if (!text) return text;
+  const textarea = typeof document !== 'undefined' ? document.createElement('textarea') : null;
+  if (textarea) {
+    textarea.innerHTML = text;
+    return textarea.value;
+  }
+  // Fallback for SSR - decode common entities
+  return text
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+// Helper to generate a compact change summary
+function getCompactChangeSummary(changes: FieldChange[]): string {
+  if (!changes || changes.length === 0) return '';
+  
+  const summaries: string[] = [];
+  
+  for (const change of changes) {
+    if (change.field === 'wordCount' && typeof change.oldValue === 'number' && typeof change.newValue === 'number') {
+      const diff = change.newValue - change.oldValue;
+      const sign = diff >= 0 ? '+' : '';
+      summaries.push(`${sign}${diff} words`);
+    } else if (change.field === 'bodyText') {
+      // Don't show full body text, just indicate it changed
+      summaries.push('Body text updated');
+    } else if (change.field === 'title') {
+      summaries.push('Title changed');
+    } else if (change.field === 'h1') {
+      summaries.push('H1 changed');
+    } else if (change.field === 'metaDescription') {
+      summaries.push('Meta description changed');
+    } else if (change.field === 'images' && Array.isArray(change.newValue) && Array.isArray(change.oldValue)) {
+      const diff = change.newValue.length - change.oldValue.length;
+      if (diff > 0) summaries.push(`+${diff} images`);
+      else if (diff < 0) summaries.push(`${diff} images`);
+      else summaries.push('Images updated');
+    } else if (change.field === 'links' && Array.isArray(change.newValue) && Array.isArray(change.oldValue)) {
+      const diff = change.newValue.length - change.oldValue.length;
+      if (diff > 0) summaries.push(`+${diff} links`);
+      else if (diff < 0) summaries.push(`${diff} links`);
+      else summaries.push('Links updated');
+    }
+  }
+  
+  return summaries.slice(0, 3).join(', ') + (summaries.length > 3 ? ` +${summaries.length - 3} more` : '');
+}
+
 // Helper to get relative time string
 function getRelativeTime(timestamp: string): string {
   const now = new Date();
@@ -193,21 +250,29 @@ export function ChangeLogTimeline({ linkId, projectId }: ChangeLogTimelineProps)
     if (value === null || value === undefined) return '(empty)';
 
     if (typeof value === 'number') return String(value);
-    if (typeof value === 'string') return value.substring(0, 150) + (value.length > 150 ? '...' : '');
+    if (typeof value === 'string') {
+      // Decode HTML entities and truncate
+      const decoded = decodeHtmlEntities(value);
+      return decoded.substring(0, 150) + (decoded.length > 150 ? '...' : '');
+    }
 
     if (Array.isArray(value)) {
       if (field === 'images') {
         const images = value as ImageInfo[];
-        return images.map(i => i.alt || i.src.split('/').pop() || 'image').join(', ').substring(0, 100);
+        const text = images.map(i => decodeHtmlEntities(i.alt) || i.src.split('/').pop() || 'image').join(', ');
+        return text.substring(0, 100) + (text.length > 100 ? '...' : '');
       }
       if (field === 'links') {
         const links = value as LinkInfo[];
-        return links.map(l => l.text || new URL(l.href).pathname).join(', ').substring(0, 100);
+        const text = links.map(l => decodeHtmlEntities(l.text) || new URL(l.href).pathname).join(', ');
+        return text.substring(0, 100) + (text.length > 100 ? '...' : '');
       }
       if (field === 'headings') {
-        return (value as string[]).join(' → ').substring(0, 100);
+        const text = (value as string[]).map(h => decodeHtmlEntities(h)).join(' → ');
+        return text.substring(0, 100) + (text.length > 100 ? '...' : '');
       }
-      return value.join(', ').substring(0, 100);
+      const text = value.map(v => typeof v === 'string' ? decodeHtmlEntities(v) : String(v)).join(', ');
+      return text.substring(0, 100) + (text.length > 100 ? '...' : '');
     }
 
     return String(value);
@@ -411,9 +476,32 @@ export function ChangeLogTimeline({ linkId, projectId }: ChangeLogTimelineProps)
                           )}
                         </div>
 
+                        {/* Summary line */}
                         <p className="text-sm font-medium">
-                          {entry.summary || (entry.changeType === 'FIRST_SCAN' ? 'Initial page scan' : 'No changes detected')}
+                          {entry.changeType === 'FIRST_SCAN' 
+                            ? 'Initial page scan' 
+                            : (entry.fieldChanges && entry.fieldChanges.length > 0
+                                ? getCompactChangeSummary(entry.fieldChanges)
+                                : entry.summary || 'Changes detected'
+                              )
+                          }
                         </p>
+
+                        {/* Compact details when collapsed */}
+                        {expandedEntry !== entry.id && entry.fieldChanges && entry.fieldChanges.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {entry.fieldChanges.slice(0, 4).map((change, idx) => (
+                              <Badge key={idx} variant="outline" className="text-[10px] px-1.5 py-0.5">
+                                {formatFieldName(change.field)}
+                              </Badge>
+                            ))}
+                            {entry.fieldChanges.length > 4 && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                                +{entry.fieldChanges.length - 4} more
+                              </Badge>
+                            )}
+                          </div>
+                        )}
 
                         {entry.auditScore !== undefined && (
                           <div className="mt-2 text-xs text-muted-foreground">

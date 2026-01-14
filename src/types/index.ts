@@ -12,24 +12,10 @@ export interface ProjectLink {
   pageType?: 'static' | 'collection' | 'unknown'; // Detected from Webflow or URL patterns
 }
 
-// --- PAGE TYPE RULES ---
-// Used by the audit dashboard to classify pages based on URL patterns.
-export interface PageTypeRule {
-  id: string;
-  name: string;
-  /**
-   * A simple URL-matching pattern. Interpreted as:
-   * - `matchType: 'contains'`: substring match
-   * - `matchType: 'glob'`: `*` wildcards supported
-   * - `matchType: 'regex'`: JavaScript RegExp source
-   */
-  pattern: string;
-  matchType: 'contains' | 'glob' | 'regex';
-  pageType: 'static' | 'collection' | 'unknown';
-  enabled: boolean;
-  createdAt?: string; // ISO string
-  updatedAt?: string; // ISO string
-}
+// --- FOLDER PAGE TYPES ---
+// Simple mapping of folder paths to page types (CMS vs Static)
+// e.g., { "/blog/*": "collection", "/features/*": "static" }
+export type FolderPageTypes = Record<string, 'static' | 'collection'>;
 
 // Change status classification based on hash comparison
 export type ChangeStatus = 'NO_CHANGE' | 'TECH_CHANGE_ONLY' | 'CONTENT_CHANGED' | 'SCAN_FAILED';
@@ -57,7 +43,11 @@ export interface AuditResult {
   diffSummary?: string; // Human readable summary of changes (e.g. "Title updated, Word count +20")
   diffPatch?: string;  // Unified diff string showing exact changes
   screenshot?: string; // Base64 encoded PNG screenshot of the page
+  previousScreenshot?: string; // Base64 PNG of previous scan's screenshot (for comparison)
   screenshotCapturedAt?: string; // ISO timestamp when screenshot was taken
+  mobileScreenshot?: string; // Base64 PNG at 375px width
+  tabletScreenshot?: string; // Base64 PNG at 768px width
+  desktopScreenshot?: string; // Base64 PNG at 1280px width
   categories: {
     placeholders: {
       status: 'passed' | 'failed' | 'warning' | 'info';
@@ -85,12 +75,88 @@ export interface AuditResult {
     seo: {
       status: 'passed' | 'failed' | 'warning' | 'info';
       issues: string[];
+      title?: string;
+      titleLength?: number;
+      metaDescription?: string;
+      metaDescriptionLength?: number;
+      imagesWithoutAlt?: number;
       score: number;
     };
     technical: {
       status: 'passed' | 'failed' | 'warning' | 'info';
       issues: string[];
       score: number;
+    };
+    // New QA categories
+    schema?: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      hasSchema: boolean;
+      schemaTypes: string[]; // e.g., ['Organization', 'WebPage', 'BreadcrumbList']
+      issues: { type: string; message: string }[];
+      rawSchemas?: object[]; // The parsed JSON-LD objects
+      score: number;
+    };
+    links?: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      totalLinks: number;
+      internalLinks: number;
+      externalLinks: number;
+      brokenLinks: { href: string; status: number; text: string; error?: string }[];
+      checkedAt?: string; // ISO timestamp when links were last checked
+      score: number;
+    };
+    openGraph?: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      hasOpenGraph: boolean;
+      title?: string;
+      description?: string;
+      image?: string;
+      url?: string;
+      type?: string;
+      issues: string[];
+      score: number;
+    };
+    twitterCards?: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      hasTwitterCards: boolean;
+      card?: string;
+      title?: string;
+      description?: string;
+      image?: string;
+      issues: string[];
+      score: number;
+    };
+    metaTags?: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      canonicalUrl?: string;
+      hasViewport: boolean;
+      viewport?: string;
+      language?: string;
+      robots?: string;
+      favicon?: string;
+      issues: string[];
+      score: number;
+    };
+    headingStructure?: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      headings: { level: number; text: string }[];
+      h1Count: number;
+      issues: string[];
+      score: number;
+    };
+    accessibility?: {
+      status: 'passed' | 'failed' | 'warning' | 'info';
+      score: number;
+      issues: {
+        type: 'alt-text' | 'form-label' | 'aria' | 'skip-link' | 'link-text' | 'heading-order';
+        severity: 'error' | 'warning';
+        element?: string;
+        message: string;
+      }[];
+      ariaLandmarks: string[];
+      hasSkipLink: boolean;
+      formInputsWithoutLabels: number;
+      linksWithGenericText: number;
     };
   };
   // Legacy fields for backward compatibility
@@ -123,6 +189,22 @@ export interface LinkInfo {
   href: string;
   text: string;
   isExternal: boolean;
+}
+
+// Broken link info for link checking
+export interface BrokenLinkInfo {
+  href: string;
+  text: string;
+  status: number;
+  error?: string;
+}
+
+// Schema markup info
+export interface SchemaMarkupInfo {
+  type: string;
+  properties: Record<string, unknown>;
+  isValid: boolean;
+  issues: string[];
 }
 
 // Section info for tracking
@@ -169,14 +251,6 @@ export interface ChangeLogQueryOptions {
   limit?: number;
 }
 
-// Rule for automatic page type detection based on URL patterns
-export interface PageTypeRule {
-  id: string;
-  pattern: string; // glob-like pattern, e.g., "/blog/*", "/features/*"
-  pageType: 'static' | 'collection';
-  priority: number; // Higher priority rules are checked first
-}
-
 export interface Project {
   id: string;
   name: string;
@@ -186,7 +260,10 @@ export interface Project {
   userId: string;
   webflowConfig?: WebflowConfig;
   sitemapUrl?: string; // For daily scheduled scans
-  pageTypeRules?: PageTypeRule[]; // User-defined rules for page type detection
+  folderPageTypes?: FolderPageTypes; // Simple folder → CMS/Static mapping
+  // Locale data extracted from sitemap hreflang
+  detectedLocales?: string[]; // Canonical list of locales, e.g., ["en", "da", "es-ar", "pt-br"]
+  pathToLocaleMap?: Record<string, string>; // Path prefix to locale mapping, e.g., { "/es": "es-ar", "/pt": "pt-br" }
 }
 
 export type CreateProjectInput = Pick<Project, 'name' | 'userId'>;

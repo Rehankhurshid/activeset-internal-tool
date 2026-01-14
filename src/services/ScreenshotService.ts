@@ -10,6 +10,13 @@ export interface ScreenshotResult {
     capturedAt: string;
 }
 
+export interface ResponsiveScreenshotResult {
+    mobile: string; // Base64 PNG at 375px width
+    tablet: string; // Base64 PNG at 768px width
+    desktop: string; // Base64 PNG at 1280px width
+    capturedAt: string;
+}
+
 /**
  * Service for capturing page screenshots using Puppeteer.
  * Scrolls the page first to trigger lazy-loaded content and animations.
@@ -194,6 +201,68 @@ export class ScreenshotService {
             window.scrollTo(0, scrollHeight);
             await new Promise(r => setTimeout(r, scrollDelay));
         }, delay);
+    }
+
+    /**
+     * Capture screenshots at multiple viewport sizes for responsive testing.
+     * @param url The page URL to capture
+     */
+    async captureResponsiveScreenshots(url: string): Promise<ResponsiveScreenshotResult> {
+        const viewports = [
+            { name: 'mobile', width: 375, height: 812 },   // iPhone X
+            { name: 'tablet', width: 768, height: 1024 },  // iPad
+            { name: 'desktop', width: 1280, height: 800 }  // Desktop
+        ] as const;
+
+        const browser = await this.getBrowser();
+        const page = await browser.newPage();
+
+        const screenshots: Record<string, string> = {};
+
+        try {
+            for (const { name, width, height } of viewports) {
+                // Set viewport
+                await page.setViewport({ width, height });
+
+                // Navigate to the page (or just reload if already loaded)
+                if (name === 'mobile') {
+                    await page.goto(url, {
+                        waitUntil: 'networkidle2',
+                        timeout: 30000
+                    });
+                    await page.waitForFunction(() => document.readyState === 'complete', { timeout: 10000 });
+                } else {
+                    // Just resize and wait for layout to settle
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+                // Scroll to trigger lazy loading
+                await this.scrollPage(page, 300);
+                
+                // Scroll back to top
+                await page.evaluate(() => window.scrollTo(0, 0));
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+                // Capture screenshot
+                const screenshotBuffer = await page.screenshot({
+                    type: 'png',
+                    encoding: 'binary',
+                    fullPage: false
+                }) as Buffer;
+
+                screenshots[name] = screenshotBuffer.toString('base64');
+            }
+
+            return {
+                mobile: screenshots.mobile,
+                tablet: screenshots.tablet,
+                desktop: screenshots.desktop,
+                capturedAt: new Date().toISOString()
+            };
+
+        } finally {
+            await page.close();
+        }
     }
 
     /**

@@ -12,6 +12,28 @@ import {
 } from '@/lib/scan-progress-store';
 import { ChangeStatus, FieldChange, ProjectLink } from '@/types';
 
+/**
+ * Recursively remove undefined values from an object (Firestore doesn't accept undefined)
+ */
+function removeUndefined<T>(obj: T): T {
+    if (obj === null || obj === undefined) {
+        return obj;
+    }
+    if (Array.isArray(obj)) {
+        return obj.map(item => removeUndefined(item)) as unknown as T;
+    }
+    if (typeof obj === 'object') {
+        const result: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+            if (value !== undefined) {
+                result[key] = removeUndefined(value);
+            }
+        }
+        return result as T;
+    }
+    return obj;
+}
+
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -285,8 +307,8 @@ async function scanSinglePage(
 
     const lastRunTimestamp = new Date().toISOString();
 
-    // Save audit result to project link
-    const auditResult = {
+    // Save audit result to project link (remove undefined values for Firestore)
+    const auditResult = removeUndefined({
         score: scanResult.score,
         summary: diffSummary || (changeStatus === 'NO_CHANGE' ? 'No changes detected.' : 'Changes detected.'),
         canDeploy: scanResult.canDeploy,
@@ -296,7 +318,7 @@ async function scanSinglePage(
         lastRun: lastRunTimestamp,
         contentSnapshot: scanResult.contentSnapshot,
         categories: scanResult.categories
-    };
+    });
 
     // Return the updated link object instead of saving it immediately
     const updatedLink: ProjectLink = {
@@ -330,7 +352,7 @@ async function scanSinglePage(
             ? 'FIRST_SCAN'
             : (changeStatus as 'CONTENT_CHANGED' | 'TECH_CHANGE_ONLY');
 
-        await changeLogService.saveEntry({
+        await changeLogService.saveEntry(removeUndefined({
             projectId,
             linkId: link.id,
             url: link.url,
@@ -342,7 +364,7 @@ async function scanSinglePage(
             fullHash: scanResult.fullHash,
             contentHash: scanResult.contentHash,
             auditScore: scanResult.score
-        });
+        }));
     }
 
     return { score: scanResult.score, changeStatus, updatedLink };

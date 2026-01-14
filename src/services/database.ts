@@ -140,6 +140,22 @@ export const projectsService = {
     });
   },
 
+  // Update project locale data (extracted from sitemap hreflang)
+  async updateProjectLocaleData(
+    projectId: string, 
+    localeData: { 
+      detectedLocales: string[]; 
+      pathToLocaleMap: Record<string, string>;
+    }
+  ): Promise<void> {
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+      detectedLocales: localeData.detectedLocales,
+      pathToLocaleMap: localeData.pathToLocaleMap,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
   // Delete a project
   async deleteProject(projectId: string): Promise<void> {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
@@ -292,17 +308,17 @@ export const projectsService = {
     }
   },
 
-  // Update page type rules for a project
-  async updateProjectPageTypeRules(projectId: string, rules: import('@/types').PageTypeRule[]): Promise<void> {
+  // Update folder page types for a project
+  async updateProjectFolderPageTypes(projectId: string, folderPageTypes: import('@/types').FolderPageTypes): Promise<void> {
     try {
       const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
       await updateDoc(projectRef, {
-        pageTypeRules: rules,
+        folderPageTypes,
         updatedAt: Timestamp.now(),
       });
     } catch (error) {
-      logError(error, 'updateProjectPageTypeRules');
-      throw new DatabaseError('Failed to update page type rules');
+      logError(error, 'updateProjectFolderPageTypes');
+      throw new DatabaseError('Failed to update folder page types');
     }
   },
 }; 

@@ -105,10 +105,16 @@ When `widget.js` loads on a client's website:
 | Route | Method | Purpose |
 |-------|--------|---------|
 | [/api/save-audit](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/save-audit/route.ts) | POST | **Main sync endpoint** - saves audit, computes diffs, logs changes |
+| [/api/scan-pages](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-pages/route.ts) | POST | Server-side page scan with field change detection |
+| [/api/scan-bulk](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-bulk/route.ts) | POST | Bulk page scanning for multiple URLs |
 | [/api/audit](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/audit/route.ts) | POST | AI-powered content analysis via Gemini |
 | [/api/check-text](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/check-text/route.ts) | POST | Spell checking via LanguageTool (with nspell fallback) |
 | [/api/audit-config](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/audit-config/route.ts) | POST | Cost control - disables spellcheck for high-volume folders (>20 pages) |
 | [/api/scan-sitemap](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-sitemap/route.ts) | POST | Auto-discovers pages from sitemap.xml |
+| [/api/capture-screenshot](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/capture-screenshot/route.ts) | POST | Manual on-demand screenshot capture |
+| [/api/compare-screenshots](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/compare-screenshots/route.ts) | POST | Server-side image diff using pixelmatch |
+| [/api/audit-logs/previous](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/audit-logs/previous/route.ts) | GET | Fetches current + previous HTML versions for comparison |
+| [/api/proxy-image](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/proxy-image/route.ts) | GET | Proxies external images to avoid CORS issues |
 
 <!-- slide -->
 
@@ -125,10 +131,42 @@ When `widget.js` loads on a client's website:
 
 | Component | Purpose |
 |-----------|---------|
-| [website-audit-dashboard.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/website-audit-dashboard.tsx) | Main dashboard with KPIs, filters, pages table |
-| [page-details.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/page-details.tsx) | Single page view with scan history, diff viewer |
-| [change-log-timeline.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/change-log-timeline.tsx) | Timeline of content changes with before/after values |
+| [website-audit-dashboard.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/website-audit-dashboard.tsx) | Main dashboard with KPIs, filters, hierarchical page table |
+| [page-details.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/page-details.tsx) | Single page view with scan history, visual QA, diff viewer |
+| [change-log-timeline.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/change-log-timeline.tsx) | Timeline of content changes with collapsible cards |
 | [AuditDetailDialog.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/projects/AuditDetailDialog.tsx) | Modal with tabbed category breakdown |
+| [scan-sitemap-dialog.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/scan-sitemap-dialog.tsx) | Dialog for scanning sitemaps and discovering pages |
+| [social-card-preview.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/social-card-preview.tsx) | Facebook/Twitter/LinkedIn social card mockups |
+| [screenshot-diff.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/screenshot-diff.tsx) | Visual screenshot comparison with diff overlay |
+| [html-preview.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/html-preview.tsx) | Sandboxed iframe HTML previews (current/previous) |
+| [change-diff-viewer.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/change-diff-viewer.tsx) | Field-by-field change display with inline diffs |
+
+### Hierarchical Page Grouping
+
+Pages are displayed in a collapsible tree structure:
+
+```
+📍 English (96)
+  └─ 📊 CMS Pages (64)
+       └─ 📁 /blog/* (40)
+            └─ Page: Blog Post Title
+       └─ 📁 /jobs/* (14)
+  └─ 📄 Static Pages (32)
+       └─ 📁 Root Pages (2)
+       └─ 📁 /about/* (5)
+
+📍 German (95)
+  └─ 📊 CMS Pages (...)
+  └─ 📄 Static Pages (...)
+```
+
+**Grouping Levels:**
+1. **Locale** - Groups pages by detected language (shown when multiple locales exist)
+2. **Type** - Groups by CMS or Static folder classification
+3. **Folder** - Groups by URL path folder (e.g., `/blog/*`)
+4. **Page** - Individual page rows
+
+Each level is collapsible and shows a count badge.
 
 ---
 
@@ -150,7 +188,11 @@ interface AuditResult {
   lastRun: string;                  // ISO timestamp
   contentSnapshot?: ContentSnapshot; // Extracted page metadata
   fieldChanges?: FieldChange[];     // Detailed before/after changes
+  diffSummary?: string;             // Human-readable summary (e.g., "Title updated, +20 words")
   diffPatch?: string;               // Unified diff of source changes
+  screenshot?: string;              // Base64 PNG screenshot of the page
+  previousScreenshot?: string;      // Base64 PNG of previous scan (for comparison)
+  screenshotCapturedAt?: string;    // ISO timestamp when screenshot was taken
   categories: {
     placeholders: CategoryResult;
     spelling: CategoryResult;
@@ -158,6 +200,7 @@ interface AuditResult {
     completeness: CategoryResult;
     seo: CategoryResult;
     technical: CategoryResult;
+    accessibility?: AccessibilityResult; // Skip links, ARIA, form labels, link text
   };
 }
 
@@ -336,14 +379,41 @@ This prevents excessive API costs on CMS-heavy sections like `/blogs/*` or `/pro
 | **Scan failed** | Error during audit | Gray badge |
 | **Pending** | Never scanned | Gray badge |
 
-### Filtering & Sorting
+### Compact Toolbar
 
-Filter options:
-- All statuses
-- By specific status
-- "Show only changed" toggle
+The dashboard features a compact, icon-based toolbar for efficient navigation:
 
-Sort options:
+| Control | Icon | Purpose |
+|---------|------|---------|
+| **Search** | 🔍 | Filter pages by URL or title |
+| **Status Filter** | ⚙ | Filter by scan status (Changed, No change, etc.) |
+| **Locale Filter** | 🌐 | Filter by language/locale (shown when multiple locales exist) |
+| **Type Filter** | 💾 | Filter by folder type (CMS or Static) |
+| **Collapse/Expand** | ⇅ | Toggle collapse/expand all page groups |
+| **Edit Folder Types** | ✏ | Enter edit mode for bulk folder classification |
+| **Scan All** | ▶ | Trigger bulk scan of all pages |
+
+### Active Filters Display
+
+When filters are applied, a row appears below the toolbar showing active filters:
+
+```
+Filters: [Search: "term" ×] [Status: Changed ×] [Type: CMS ×]  Clear all
+```
+
+- Each filter displays as a badge with an **×** button to clear individually
+- **"Clear all"** link resets all filters at once
+- Row only appears when at least one filter is active
+
+### Collapse/Expand All
+
+- **Collapse All**: Hides all nested groups (locales → types → folders → pages)
+- **Expand All**: Shows all nested content
+- Single toggle button switches between states
+- Useful for getting a quick overview vs. detailed inspection
+
+### Sorting Options
+
 - Most recently scanned (default)
 - Lowest score first
 - Critical issues first (Blocked pages)
@@ -375,36 +445,53 @@ The dashboard supports filtering by locale:
 - Filter options: "All locales", "No locale", or specific locales (e.g., "EN", "ES-MX")
 - Locale badge displayed on each page row
 
-### CMS Page Type Detection
+### Folder Type Classification (CMS vs Static)
 
-The sitemap scanner includes a **post-scan review workflow** for selecting CMS vs Static page patterns:
+The dashboard supports classifying folders as **CMS** (collection pages) or **Static**:
 
-1. **Post-Scan Review Dialog**: After scanning a sitemap:
-   - A dialog appears showing all detected path patterns (e.g., `/blog/*`, `/features/*`)
-   - Each pattern shows page count and example URLs
-   - Patterns are pre-selected based on heuristics (nested paths = likely CMS)
-   - Users can **check/uncheck** patterns to classify as CMS or Static
-   - Selections are saved as **Page Type Rules**
+#### Edit Mode Workflow
 
-2. **Page Type Rules**: User-defined pattern → type mappings:
-   - Stored at project level (`pageTypeRules` field)
-   - Checked in priority order during scans
-   - Can be managed anytime via "Page Type Rules" button in dashboard
-   - Patterns support wildcards: `/blog/*` matches all blog posts
+1. **Enter Edit Mode**: Click the pencil (✏) icon in the toolbar
+2. **Toggle Folder Types**: Each folder row shows a toggle button:
+   - "Switch to CMS" - marks folder as CMS-generated content
+   - "Switch to Static" - marks folder as static pages
+3. **Pending Changes**: Modified folders are highlighted with a blue ring
+4. **Save/Cancel**: 
+   - Click ✓ (check) to save all changes
+   - Click ✕ to discard pending changes
+   - Badge shows count of pending changes
 
-3. **Automatic Detection** (when Webflow configured):
-   - Fetches pages from Webflow API during sitemap scan
-   - Uses `collectionId` to identify CMS template pages
-   - More accurate than path-based heuristics
+#### Folder Grouping
 
-4. **Fallback Detection** (when no Webflow or rules):
-   - Uses path-based heuristics (nested paths > 1 non-locale segment = CMS)
-   - Filters out locale segments from path analysis (e.g., `/es-mx/` = static)
+Pages are automatically grouped by their folder classification:
+- **CMS Pages** group (📊 icon) - folders marked as CMS
+- **Static Pages** group (📄 icon) - folders marked as Static or unclassified
 
-5. **Type Filtering**: Dashboard includes a Type filter dropdown:
-   - "All types" - Show all pages
-   - "Static" - Only static pages
-   - "CMS" - Only collection pages
+#### Type Filtering
+
+Dashboard includes a Type filter (💾 icon):
+- "All types" - Show all pages
+- "Static" - Only pages in Static folders
+- "CMS" - Only pages in CMS folders
+
+#### Data Storage
+
+Folder classifications are stored as a simple mapping:
+
+```typescript
+type FolderPageTypes = Record<string, 'static' | 'collection'>;
+
+// Example:
+{
+  "/blog/*": "collection",
+  "/jobs/*": "collection", 
+  "/about/*": "static"
+}
+```
+
+- Stored at project level (`folderPageTypes` field)
+- Also persisted to localStorage for offline access
+- Unclassified folders default to "static" behavior
 
 
 ### Widget Embed
@@ -437,6 +524,135 @@ The widget:
 | Modify dashboard UI | [website-audit-dashboard.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/website-audit-dashboard.tsx) |
 | Modify page details | [page-details.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/page-details.tsx) |
 | Modify change timeline | [change-log-timeline.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/change-log-timeline.tsx) |
+
+---
+
+## Visual QA & Change Detection
+
+The page details view (`page-details.tsx`) includes comprehensive visual QA features beyond basic content checking.
+
+### Schema Markup Validation
+
+Displays structured data (JSON-LD) found on the page:
+
+| Feature | Description |
+|---------|-------------|
+| **Raw Schema Display** | Expandable view of all JSON-LD schemas on the page |
+| **Type Detection** | Shows schema types (e.g., `Organization`, `Product`, `Article`) |
+| **Google Rich Results Test** | Direct link to test schemas in Google's tool |
+
+### Open Graph & Social Card Previews
+
+Live mockups of how the page appears when shared on social media:
+
+| Platform | Preview Shows |
+|----------|---------------|
+| **Facebook** | Title, description, image, site name |
+| **Twitter/X** | Card format with title, description, image |
+| **LinkedIn** | Professional card layout |
+
+Images are proxied through `/api/proxy-image` to avoid CORS issues.
+
+### Accessibility Checks
+
+Automated accessibility validation:
+
+| Check | What It Detects |
+|-------|-----------------|
+| **Skip Link** | Presence of skip navigation link |
+| **ARIA Landmarks** | `main`, `nav`, `banner`, `contentinfo` regions |
+| **Form Labels** | Inputs without associated `<label>` elements |
+| **Link Text** | Links with generic text ("click here", "read more") |
+| **Images Alt** | Images missing `alt` attributes |
+
+### Smart Screenshot Capture
+
+Screenshots are captured intelligently to reduce storage costs:
+
+```
+First Scan → Capture screenshot (baseline)
+Subsequent Scans:
+  - If word count changed >10% → Capture new screenshot
+  - If no significant change → Reuse previous screenshot
+```
+
+Manual capture available via "Capture Now" button in the UI.
+
+### Visual Comparison Modes
+
+| Mode | Description |
+|------|-------------|
+| **Side by Side** | Current and previous screenshots side by side |
+| **Diff Overlay** | Pixel difference highlighted in red |
+| **Before/After** | Toggle between previous and current |
+
+The diff is computed server-side via `/api/compare-screenshots` using `pixelmatch`.
+
+### HTML Preview
+
+Live preview of page HTML with version comparison:
+
+| Tab | Content |
+|-----|---------|
+| **Current** | Most recent scan's HTML rendered in sandboxed iframe |
+| **Previous** | Second-most-recent scan's HTML for comparison |
+
+The `/api/audit-logs/previous` endpoint returns both versions:
+- `current`: Latest audit log entry
+- `previous`: Second-latest audit log entry (the actual "previous" version)
+
+### Change Detection & Field Tracking
+
+When content changes are detected, the system tracks specific fields:
+
+| Field | Storage |
+|-------|---------|
+| `fieldChanges` | Array of `FieldChange` objects with before/after values |
+| `diffSummary` | Human-readable summary (e.g., "Title updated, +20 words") |
+
+These are saved to `AuditResult` and displayed in the Changes tab.
+
+### Change Log Timeline Improvements
+
+The `change-log-timeline.tsx` component includes:
+
+| Feature | Description |
+|---------|-------------|
+| **Collapsible Cards** | Click to expand/collapse change details |
+| **Compact Summaries** | Shows "+44 words" instead of full body text |
+| **HTML Entity Decoding** | Converts `&#x27;` to `'` for readability |
+| **Field Badges** | Quick visual of which fields changed |
+| **Smart Array Diffs** | Shows added/removed items for images and links |
+
+### Responsive Preview
+
+Captures page at multiple viewport widths via `ScreenshotService`:
+
+| Viewport | Width |
+|----------|-------|
+| Mobile | 375px |
+| Tablet | 768px |
+| Desktop | 1280px |
+
+### Related API Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/api/scan-pages` | Triggers scan with field change detection |
+| `/api/capture-screenshot` | Manual screenshot capture |
+| `/api/compare-screenshots` | Server-side image diff |
+| `/api/audit-logs/previous` | Fetches current + previous HTML versions |
+| `/api/proxy-image` | Proxies external images for OG previews |
+
+### Related Components
+
+| Component | Purpose |
+|-----------|---------|
+| `social-card-preview.tsx` | Facebook/Twitter/LinkedIn mockups |
+| `screenshot-diff.tsx` | Visual comparison UI |
+| `html-preview.tsx` | Sandboxed iframe previews |
+| `change-diff-viewer.tsx` | Field-by-field change display |
+| `change-log-timeline.tsx` | Historical change timeline |
 
 ---
 
