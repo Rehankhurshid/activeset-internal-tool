@@ -4,6 +4,7 @@ import { pageScanner } from '@/services/PageScanner';
 import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
+import { uploadScreenshot } from '@/services/ScreenshotStorageService';
 import { computeChangeStatus, computeFieldChanges, generateDiffPatch, computeBodyTextDiff, compactAuditResult } from '@/lib/scan-utils';
 import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot } from '@/types';
 
@@ -147,8 +148,8 @@ export async function POST(request: NextRequest) {
         const hasNoScreenshot = !prevResult?.screenshot;
         const shouldCaptureScreenshot = isFirstScan || hasNoScreenshot || changeStatus === 'CONTENT_CHANGED';
         
-        let screenshot: string | undefined;
-        let previousScreenshot: string | undefined;
+        let screenshotUrl: string | undefined;
+        let previousScreenshotUrl: string | undefined;
         
         if (shouldCaptureScreenshot) {
             const reason = isFirstScan ? 'first scan' : hasNoScreenshot ? 'no existing screenshot' : 'content changed';
@@ -159,24 +160,39 @@ export async function POST(request: NextRequest) {
                     width: 1280,
                     height: 800
                 });
-                screenshot = screenshotResult.screenshot;
                 
-                // Get previous screenshot from audit logs for comparison
+                // Upload screenshot to Firebase Storage and get URL
+                screenshotUrl = await uploadScreenshot(
+                    projectId,
+                    linkId,
+                    screenshotResult.screenshot,
+                    lastRunTimestamp
+                );
+                console.log(`[scan-pages] Screenshot uploaded to Storage`);
+                
+                // Get previous screenshot URL from audit logs for comparison
                 if (!isFirstScan) {
                     const prevLog = await AuditService.getLatestAuditLog(projectId, linkId);
-                    if (prevLog?.screenshot) {
-                        previousScreenshot = prevLog.screenshot;
+                    if (prevLog?.screenshotUrl) {
+                        previousScreenshotUrl = prevLog.screenshotUrl;
+                    } else if (prevLog?.screenshot) {
+                        // Backward compatibility: old logs may have base64
+                        previousScreenshotUrl = prevLog.screenshot;
                     }
                 }
             } catch (screenshotError) {
-                console.warn('[scan-pages] Screenshot capture failed:', screenshotError);
+                console.warn('[scan-pages] Screenshot capture/upload failed:', screenshotError);
                 // Continue without screenshot
             }
         } else {
             console.log(`[scan-pages] Skipping screenshot: no significant change`);
-            // Preserve existing screenshot if available
-            if (prevResult?.screenshot) {
-                screenshot = prevResult.screenshot;
+            // Preserve existing screenshot URL if available
+            const prevLog = await AuditService.getLatestAuditLog(projectId, linkId);
+            if (prevLog?.screenshotUrl) {
+                screenshotUrl = prevLog.screenshotUrl;
+            } else if (prevLog?.screenshot) {
+                // Backward compatibility
+                screenshotUrl = prevLog.screenshot;
             }
         }
 
@@ -191,9 +207,9 @@ export async function POST(request: NextRequest) {
             lastRun: lastRunTimestamp,
             contentSnapshot: scanResult.contentSnapshot,
             categories: scanResult.categories,
-            screenshot,
-            previousScreenshot, // Store previous screenshot for comparison UI
-            screenshotCapturedAt: screenshot ? lastRunTimestamp : undefined,
+            screenshotUrl, // URL to screenshot in Firebase Storage
+            previousScreenshotUrl, // URL to previous screenshot for comparison UI
+            screenshotCapturedAt: screenshotUrl ? lastRunTimestamp : undefined,
             fieldChanges: fieldChanges.length > 0 ? fieldChanges : undefined, // Store field changes for UI
             diffSummary, // Store diff summary for display
         });
@@ -221,9 +237,9 @@ export async function POST(request: NextRequest) {
                 htmlSource: scanResult.htmlSource
             };
             if (diffPatch) auditLogData.diffPatch = diffPatch;
-            // Only store screenshot in audit_logs if we actually captured a new one
-            if (shouldCaptureScreenshot && screenshot) {
-                auditLogData.screenshot = screenshot;
+            // Only store screenshot URL in audit_logs if we actually captured a new one
+            if (shouldCaptureScreenshot && screenshotUrl) {
+                auditLogData.screenshotUrl = screenshotUrl;
             }
             // Store fieldChanges for easy retrieval in page-details UI
             if (fieldChanges.length > 0) {

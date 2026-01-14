@@ -59,8 +59,8 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
   const [visualTab, setVisualTab] = useState<'changes' | 'preview' | 'screenshot'>('changes')
   // Audit log data (screenshots and full fieldChanges are stored in audit_logs, not project doc)
   const [auditLogData, setAuditLogData] = useState<{
-    screenshot?: string;
-    previousScreenshot?: string;
+    screenshotUrl?: string;
+    previousScreenshotUrl?: string;
     fieldChanges?: FieldChange[];
   } | null>(null)
 
@@ -147,10 +147,11 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
         if (response.ok) {
           const data = await response.json();
           // The API returns { current, previous } with full audit log data
+          // screenshotUrl is either a Storage URL or a data:image/png;base64,... URL for backward compat
           if (data.current) {
             setAuditLogData({
-              screenshot: data.current.screenshot,
-              previousScreenshot: data.previous?.screenshot,
+              screenshotUrl: data.current.screenshotUrl,
+              previousScreenshotUrl: data.previous?.screenshotUrl,
               fieldChanges: data.current.fieldChanges,
             });
           }
@@ -340,11 +341,11 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                     ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm' 
                     : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
                 }`}
-                disabled={!auditLogData?.screenshot}
+                disabled={!auditLogData?.screenshotUrl}
               >
                 <Image className="h-3.5 w-3.5" />
                 Screenshot
-                {!auditLogData?.screenshot && <span className="text-xs text-neutral-400 ml-1">(none)</span>}
+                {!auditLogData?.screenshotUrl && <span className="text-xs text-neutral-400 ml-1">(none)</span>}
               </button>
             </div>
           </div>
@@ -369,21 +370,21 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
             )}
             
             {/* Screenshot Tab */}
-            {visualTab === 'screenshot' && auditLogData?.screenshot && (
+            {visualTab === 'screenshot' && auditLogData?.screenshotUrl && (
               <div className="space-y-4">
-                {auditLogData.previousScreenshot ? (
+                {auditLogData.previousScreenshotUrl ? (
                   <ScreenshotDiff
-                    before={auditLogData.previousScreenshot}
-                    after={auditLogData.screenshot}
+                    before={auditLogData.previousScreenshotUrl}
+                    after={auditLogData.screenshotUrl}
                     beforeLabel="Previous"
                     afterLabel="Current"
                     onGenerateDiff={async () => {
-                      if (!auditLogData.previousScreenshot || !auditLogData.screenshot) return null;
+                      if (!auditLogData.previousScreenshotUrl || !auditLogData.screenshotUrl) return null;
                       try {
                         const response = await fetch('/api/compare-screenshots', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ before: auditLogData.previousScreenshot, after: auditLogData.screenshot })
+                          body: JSON.stringify({ before: auditLogData.previousScreenshotUrl, after: auditLogData.screenshotUrl })
                         });
                         if (!response.ok) return null;
                         const result = await response.json();
@@ -398,22 +399,24 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm text-neutral-500">Current snapshot</span>
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+                        // Download works with both Storage URLs and data URLs
                         const link = document.createElement('a');
-                        link.href = `data:image/png;base64,${auditLogData.screenshot}`;
+                        link.href = auditLogData.screenshotUrl!;
                         link.download = 'screenshot.png';
+                        link.target = '_blank';
                         link.click();
                       }}>
                         <Download className="h-3 w-3 mr-1" />
                         Download
                       </Button>
                     </div>
-                    <img src={`data:image/png;base64,${auditLogData.screenshot}`} alt="Page" className="w-full rounded border border-neutral-200 dark:border-neutral-700" />
+                    <img src={auditLogData.screenshotUrl} alt="Page" className="w-full rounded border border-neutral-200 dark:border-neutral-700" />
                   </div>
                 )}
               </div>
             )}
             
-            {visualTab === 'screenshot' && !auditLogData?.screenshot && (
+            {visualTab === 'screenshot' && !auditLogData?.screenshotUrl && (
               <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
                 <Eye className="h-12 w-12 mb-3 text-neutral-300 dark:text-neutral-600" />
                 <p className="text-sm mb-2">No screenshot available</p>

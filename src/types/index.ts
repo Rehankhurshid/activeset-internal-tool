@@ -42,8 +42,10 @@ export interface AuditResult {
   fieldChanges?: FieldChange[]; // Detailed changes with before/after values
   diffSummary?: string; // Human readable summary of changes (e.g. "Title updated, Word count +20")
   diffPatch?: string;  // Unified diff string showing exact changes
-  screenshot?: string; // Base64 encoded PNG screenshot of the page
-  previousScreenshot?: string; // Base64 PNG of previous scan's screenshot (for comparison)
+  screenshot?: string; // DEPRECATED: Base64 encoded PNG screenshot (for backward compatibility)
+  previousScreenshot?: string; // DEPRECATED: Base64 PNG of previous scan's screenshot
+  screenshotUrl?: string; // URL to screenshot in Firebase Storage
+  previousScreenshotUrl?: string; // URL to previous screenshot in Firebase Storage
   screenshotCapturedAt?: string; // ISO timestamp when screenshot was taken
   mobileScreenshot?: string; // Base64 PNG at 375px width
   tabletScreenshot?: string; // Base64 PNG at 768px width

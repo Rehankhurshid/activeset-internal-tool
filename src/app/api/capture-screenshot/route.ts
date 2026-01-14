@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
 import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditService } from '@/services/AuditService';
+import { uploadScreenshot } from '@/services/ScreenshotStorageService';
 
 // Recursively remove undefined values from objects
 function removeUndefined<T>(obj: T): T {
@@ -79,35 +80,47 @@ export async function POST(request: NextRequest) {
 
         const capturedAt = new Date().toISOString();
 
-        // Get previous screenshot for comparison (if any)
-        let previousScreenshot: string | undefined;
+        // Upload screenshot to Firebase Storage
+        const screenshotUrl = await uploadScreenshot(
+            projectId,
+            linkId,
+            screenshotResult.screenshot,
+            capturedAt
+        );
+        console.log(`[capture-screenshot] Screenshot uploaded to Storage`);
+
+        // Get previous screenshot URL for comparison (if any)
+        let previousScreenshotUrl: string | undefined;
         const prevLog = await AuditService.getLatestAuditLog(projectId, linkId);
-        if (prevLog?.screenshot) {
-            previousScreenshot = prevLog.screenshot;
+        if (prevLog?.screenshotUrl) {
+            previousScreenshotUrl = prevLog.screenshotUrl;
+        } else if (prevLog?.screenshot) {
+            // Backward compatibility with old base64 screenshots
+            previousScreenshotUrl = `data:image/png;base64,${prevLog.screenshot}`;
         }
 
-        // Update the project link with the new screenshot
+        // Update the project link with the new screenshot URL
         const existingLink = project.links[linkIndex];
         const updatedLinks = [...project.links];
         
-        // Build auditResult, only including previousScreenshot if it exists
-        const updatedAuditResult = {
+        // Build auditResult with screenshot URL
+        const updatedAuditResult: Record<string, unknown> = {
             ...existingLink.auditResult,
-            screenshot: screenshotResult.screenshot,
+            screenshotUrl,
             screenshotCapturedAt: capturedAt,
         };
-        if (previousScreenshot) {
-            (updatedAuditResult as Record<string, unknown>).previousScreenshot = previousScreenshot;
+        if (previousScreenshotUrl) {
+            updatedAuditResult.previousScreenshotUrl = previousScreenshotUrl;
         }
         
         updatedLinks[linkIndex] = removeUndefined({
             ...existingLink,
-            auditResult: updatedAuditResult as typeof existingLink.auditResult
+            auditResult: updatedAuditResult as unknown as typeof existingLink.auditResult
         });
 
         await projectsService.updateProjectLinks(projectId, updatedLinks);
 
-        // Save screenshot to audit_logs for future comparison
+        // Save screenshot URL to audit_logs for future comparison
         const auditLogData = {
             projectId,
             linkId,
@@ -116,7 +129,7 @@ export async function POST(request: NextRequest) {
             fullHash: existingLink.auditResult?.fullHash || '',
             contentHash: existingLink.auditResult?.contentHash || '',
             htmlSource: '', // Don't re-fetch HTML for just a screenshot
-            screenshot: screenshotResult.screenshot
+            screenshotUrl
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -126,8 +139,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            screenshot: screenshotResult.screenshot,
-            previousScreenshot,
+            screenshotUrl,
+            previousScreenshotUrl,
             capturedAt,
             message: 'Screenshot captured successfully'
         }, { headers: corsHeaders });

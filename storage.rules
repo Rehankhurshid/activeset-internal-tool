@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// Firebase Storage Rules for Screenshot Storage
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Screenshot storage for audit dashboard
+    match /screenshots/{projectId}/{linkId}/{filename} {
+      // Allow public read access (screenshots are not sensitive)
+      allow read: if true;
+      
+      // Allow write only from authenticated users or server-side operations
+      // In production, you may want to restrict this further
+      allow write: if true; // Temporarily allow all writes for API routes
+                            // TODO: Add proper authentication check when ready
+    }
+    
+    // Default deny for all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

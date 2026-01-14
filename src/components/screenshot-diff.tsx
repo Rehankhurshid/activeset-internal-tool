@@ -4,11 +4,24 @@ import { useState, useEffect, useMemo } from "react"
 import { Layers, ArrowLeftRight, Minus, RefreshCw } from "lucide-react"
 
 interface ScreenshotDiffProps {
-  before?: string // Base64 PNG
-  after?: string // Base64 PNG
+  before?: string // Base64 PNG or URL
+  after?: string // Base64 PNG or URL
   beforeLabel?: string
   afterLabel?: string
   onGenerateDiff?: () => Promise<{ diffImage: string; diffPercentage: number } | null>
+}
+
+/**
+ * Get the src attribute for an image - handles both URLs and base64 strings
+ */
+function getImageSrc(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  // If it's already a URL or data URL, use as-is
+  if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:')) {
+    return value;
+  }
+  // Otherwise, treat as base64 and create data URL
+  return `data:image/png;base64,${value}`;
 }
 
 type ViewMode = 'before' | 'after' | 'diff' | 'side-by-side'
@@ -139,7 +152,7 @@ export function ScreenshotDiff({
                 {beforeLabel}
               </div>
               <img 
-                src={`data:image/png;base64,${before}`}
+                src={getImageSrc(before)}
                 alt={beforeLabel}
                 className="w-full h-auto"
               />
@@ -149,7 +162,7 @@ export function ScreenshotDiff({
                 {afterLabel}
               </div>
               <img 
-                src={`data:image/png;base64,${after}`}
+                src={getImageSrc(after)}
                 alt={afterLabel}
                 className="w-full h-auto"
               />
@@ -159,7 +172,7 @@ export function ScreenshotDiff({
 
         {viewMode === 'before' && hasBefore && (
           <img 
-            src={`data:image/png;base64,${before}`}
+            src={getImageSrc(before)}
             alt={beforeLabel}
             className="w-full h-auto"
           />
@@ -167,7 +180,7 @@ export function ScreenshotDiff({
 
         {viewMode === 'after' && hasAfter && (
           <img 
-            src={`data:image/png;base64,${after}`}
+            src={getImageSrc(after)}
             alt={afterLabel}
             className="w-full h-auto"
           />
@@ -176,7 +189,7 @@ export function ScreenshotDiff({
         {viewMode === 'diff' && diffImage && (
           <div>
             <img 
-              src={`data:image/png;base64,${diffImage}`}
+              src={getImageSrc(diffImage || undefined)}
               alt="Visual diff"
               className="w-full h-auto"
             />
@@ -273,7 +286,7 @@ export function ResponsivePreview({
           
           {currentDevice?.screenshot ? (
             <img 
-              src={`data:image/png;base64,${currentDevice.screenshot}`}
+              src={getImageSrc(currentDevice.screenshot)}
               alt={`${currentDevice.label} preview`}
               className={`w-full h-auto ${
                 activeDevice === 'mobile' ? 'rounded-[1.5rem]' : 

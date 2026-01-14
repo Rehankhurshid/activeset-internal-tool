@@ -25,7 +25,8 @@ export interface AuditLogEntry {
     contentHash: string;
     htmlSource: string; // The full page source
     diffPatch?: string | null; // Unified diff against previous version
-    screenshot?: string; // Base64 PNG screenshot for visual comparison
+    screenshot?: string; // DEPRECATED: Base64 PNG (for backward compatibility with old logs)
+    screenshotUrl?: string; // URL to screenshot in Firebase Storage
     fieldChanges?: Array<{
         field: string;
         oldValue: unknown;

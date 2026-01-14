@@ -46,10 +46,11 @@ export async function GET(request: NextRequest) {
         const previousLog = recentLogs.length > 1 ? recentLogs[1] : null; // Second most recent
 
         // Return both current and previous
+        // Support both old (screenshot base64) and new (screenshotUrl) formats
         return NextResponse.json({
             current: currentLog ? {
                 htmlSource: currentLog.htmlSource,
-                screenshot: currentLog.screenshot,
+                screenshotUrl: currentLog.screenshotUrl || (currentLog.screenshot ? `data:image/png;base64,${currentLog.screenshot}` : undefined),
                 timestamp: currentLog.timestamp,
                 fullHash: currentLog.fullHash,
                 contentHash: currentLog.contentHash,
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
             } : null,
             previous: previousLog ? {
                 htmlSource: previousLog.htmlSource,
-                screenshot: previousLog.screenshot,
+                screenshotUrl: previousLog.screenshotUrl || (previousLog.screenshot ? `data:image/png;base64,${previousLog.screenshot}` : undefined),
                 timestamp: previousLog.timestamp,
                 fullHash: previousLog.fullHash,
                 contentHash: previousLog.contentHash,
