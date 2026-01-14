@@ -140,16 +140,19 @@ export async function POST(request: NextRequest) {
         // Smart Screenshot Strategy:
         // Only capture screenshots when:
         // 1. First scan (no previous result) - baseline
-        // 2. Any content change detected (CONTENT_CHANGED)
-        // Skip for: TECH_CHANGE_ONLY (only scripts/styles) and NO_CHANGE
+        // 2. No existing screenshot (pages added before screenshot feature)
+        // 3. Any content change detected (CONTENT_CHANGED)
+        // Skip for: TECH_CHANGE_ONLY (only scripts/styles) and NO_CHANGE (when screenshot exists)
         const isFirstScan = !prevResult;
-        const shouldCaptureScreenshot = isFirstScan || changeStatus === 'CONTENT_CHANGED';
+        const hasNoScreenshot = !prevResult?.screenshot;
+        const shouldCaptureScreenshot = isFirstScan || hasNoScreenshot || changeStatus === 'CONTENT_CHANGED';
         
         let screenshot: string | undefined;
         let previousScreenshot: string | undefined;
         
         if (shouldCaptureScreenshot) {
-            console.log(`[scan-pages] Capturing screenshot: ${isFirstScan ? 'first scan' : 'content changed'}`);
+            const reason = isFirstScan ? 'first scan' : hasNoScreenshot ? 'no existing screenshot' : 'content changed';
+            console.log(`[scan-pages] Capturing screenshot: ${reason}`);
             try {
                 const screenshotService = getScreenshotService();
                 const screenshotResult = await screenshotService.captureScreenshot(url, {
