@@ -90,11 +90,11 @@ export class ScreenshotService {
             await page.evaluate(() => window.scrollTo(0, 0));
             await new Promise(resolve => setTimeout(resolve, 300));
 
-            // Capture screenshot
+            // Capture full page screenshot (captures entire scrollable page, not just viewport)
             const screenshotBuffer = await page.screenshot({
                 type: 'png',
                 encoding: 'binary',
-                fullPage: false
+                fullPage: true
             }) as Buffer;
 
             const screenshot = screenshotBuffer.toString('base64');
@@ -243,11 +243,11 @@ export class ScreenshotService {
                 await page.evaluate(() => window.scrollTo(0, 0));
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                // Capture screenshot
+                // Capture full page screenshot
                 const screenshotBuffer = await page.screenshot({
                     type: 'png',
                     encoding: 'binary',
-                    fullPage: false
+                    fullPage: true
                 }) as Buffer;
 
                 screenshots[name] = screenshotBuffer.toString('base64');
