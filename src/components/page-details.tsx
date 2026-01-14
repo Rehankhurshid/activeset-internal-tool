@@ -57,6 +57,12 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
   const [schemaExpanded, setSchemaExpanded] = useState(false)
   const [capturingScreenshot, setCapturingScreenshot] = useState(false)
   const [visualTab, setVisualTab] = useState<'changes' | 'preview' | 'screenshot'>('changes')
+  // Audit log data (screenshots and full fieldChanges are stored in audit_logs, not project doc)
+  const [auditLogData, setAuditLogData] = useState<{
+    screenshot?: string;
+    previousScreenshot?: string;
+    fieldChanges?: FieldChange[];
+  } | null>(null)
 
   const handleRescan = async () => {
     if (!projectId || !linkId || !currentLink?.url) return;
@@ -130,6 +136,32 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
     });
     return () => unsubscribe();
   }, [projectId, linkId]);
+
+  // Fetch full audit data from audit_logs (screenshots and complete fieldChanges)
+  useEffect(() => {
+    if (!projectId || !linkId) return;
+    
+    const fetchAuditLogData = async () => {
+      try {
+        const response = await fetch(`/api/audit-logs/previous?projectId=${projectId}&linkId=${linkId}`);
+        if (response.ok) {
+          const data = await response.json();
+          // The API returns { current, previous } with full audit log data
+          if (data.current) {
+            setAuditLogData({
+              screenshot: data.current.screenshot,
+              previousScreenshot: data.previous?.screenshot,
+              fieldChanges: data.current.fieldChanges,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch audit log data:', error);
+      }
+    };
+    
+    fetchAuditLogData();
+  }, [projectId, linkId, currentLink?.auditResult?.lastRun]); // Re-fetch when lastRun changes (after rescan)
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading...</div>;
   if (!currentLink) return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Page not found</div>;
@@ -255,7 +287,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                 <Eye className="h-4 w-4 text-neutral-500" />
                 <span className="font-medium text-neutral-900 dark:text-white">Content Changes</span>
                 <ChangeSummaryBadge 
-                  fieldChanges={audit?.fieldChanges || []} 
+                  fieldChanges={auditLogData?.fieldChanges || audit?.fieldChanges || []} 
                   changeStatus={audit?.changeStatus} 
                 />
               </div>
@@ -308,11 +340,11 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                     ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm' 
                     : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
                 }`}
-                disabled={!audit?.screenshot}
+                disabled={!auditLogData?.screenshot}
               >
                 <Image className="h-3.5 w-3.5" />
                 Screenshot
-                {!audit?.screenshot && <span className="text-xs text-neutral-400 ml-1">(none)</span>}
+                {!auditLogData?.screenshot && <span className="text-xs text-neutral-400 ml-1">(none)</span>}
               </button>
             </div>
           </div>
@@ -322,7 +354,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
             {/* Changes Tab */}
             {visualTab === 'changes' && (
               <ChangeDiffViewer 
-                fieldChanges={audit?.fieldChanges || []} 
+                fieldChanges={auditLogData?.fieldChanges || audit?.fieldChanges || []} 
                 summary={audit?.diffSummary}
               />
             )}
@@ -337,21 +369,21 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
             )}
             
             {/* Screenshot Tab */}
-            {visualTab === 'screenshot' && audit?.screenshot && (
+            {visualTab === 'screenshot' && auditLogData?.screenshot && (
               <div className="space-y-4">
-                {audit.previousScreenshot ? (
+                {auditLogData.previousScreenshot ? (
                   <ScreenshotDiff
-                    before={audit.previousScreenshot}
-                    after={audit.screenshot}
+                    before={auditLogData.previousScreenshot}
+                    after={auditLogData.screenshot}
                     beforeLabel="Previous"
                     afterLabel="Current"
                     onGenerateDiff={async () => {
-                      if (!audit.previousScreenshot || !audit.screenshot) return null;
+                      if (!auditLogData.previousScreenshot || !auditLogData.screenshot) return null;
                       try {
                         const response = await fetch('/api/compare-screenshots', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ before: audit.previousScreenshot, after: audit.screenshot })
+                          body: JSON.stringify({ before: auditLogData.previousScreenshot, after: auditLogData.screenshot })
                         });
                         if (!response.ok) return null;
                         const result = await response.json();
@@ -367,7 +399,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                       <span className="text-sm text-neutral-500">Current snapshot</span>
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
                         const link = document.createElement('a');
-                        link.href = `data:image/png;base64,${audit.screenshot}`;
+                        link.href = `data:image/png;base64,${auditLogData.screenshot}`;
                         link.download = 'screenshot.png';
                         link.click();
                       }}>
@@ -375,13 +407,13 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                         Download
                       </Button>
                     </div>
-                    <img src={`data:image/png;base64,${audit.screenshot}`} alt="Page" className="w-full rounded border border-neutral-200 dark:border-neutral-700" />
+                    <img src={`data:image/png;base64,${auditLogData.screenshot}`} alt="Page" className="w-full rounded border border-neutral-200 dark:border-neutral-700" />
                   </div>
                 )}
               </div>
             )}
             
-            {visualTab === 'screenshot' && !audit?.screenshot && (
+            {visualTab === 'screenshot' && !auditLogData?.screenshot && (
               <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
                 <Eye className="h-12 w-12 mb-3 text-neutral-300 dark:text-neutral-600" />
                 <p className="text-sm mb-2">No screenshot available</p>

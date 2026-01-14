@@ -26,6 +26,12 @@ export interface AuditLogEntry {
     htmlSource: string; // The full page source
     diffPatch?: string | null; // Unified diff against previous version
     screenshot?: string; // Base64 PNG screenshot for visual comparison
+    fieldChanges?: Array<{
+        field: string;
+        oldValue: unknown;
+        newValue: unknown;
+        changeType: 'added' | 'removed' | 'modified';
+    }>; // Detailed field-level changes
 }
 
 export const auditService = {

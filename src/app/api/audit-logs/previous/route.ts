@@ -52,14 +52,16 @@ export async function GET(request: NextRequest) {
                 screenshot: currentLog.screenshot,
                 timestamp: currentLog.timestamp,
                 fullHash: currentLog.fullHash,
-                contentHash: currentLog.contentHash
+                contentHash: currentLog.contentHash,
+                fieldChanges: currentLog.fieldChanges || []
             } : null,
             previous: previousLog ? {
                 htmlSource: previousLog.htmlSource,
                 screenshot: previousLog.screenshot,
                 timestamp: previousLog.timestamp,
                 fullHash: previousLog.fullHash,
-                contentHash: previousLog.contentHash
+                contentHash: previousLog.contentHash,
+                fieldChanges: previousLog.fieldChanges || []
             } : null
         }, { headers: corsHeaders });
 

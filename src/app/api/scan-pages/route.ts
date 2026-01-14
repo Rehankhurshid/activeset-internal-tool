@@ -225,6 +225,10 @@ export async function POST(request: NextRequest) {
             if (shouldCaptureScreenshot && screenshot) {
                 auditLogData.screenshot = screenshot;
             }
+            // Store fieldChanges for easy retrieval in page-details UI
+            if (fieldChanges.length > 0) {
+                auditLogData.fieldChanges = fieldChanges;
+            }
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await AuditService.saveAuditLog(auditLogData as any);
