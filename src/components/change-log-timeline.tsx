@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { ChangeLogEntry, FieldChange, ImageInfo, LinkInfo } from "@/types"
 import { changeLogService } from "@/services/ChangeLogService"
+import { diffWords } from "diff"
 
 interface ChangeLogTimelineProps {
   linkId: string;
@@ -278,6 +279,70 @@ export function ChangeLogTimeline({ linkId, projectId }: ChangeLogTimelineProps)
     return String(value);
   }
 
+  // Render inline word-level diff for text changes
+  function renderTextDiff(oldText: string, newText: string) {
+    const oldDecoded = decodeHtmlEntities(oldText || '');
+    const newDecoded = decodeHtmlEntities(newText || '');
+    
+    // Limit text length to avoid performance issues with very long diffs
+    const maxLength = 2000;
+    const truncatedOld = oldDecoded.substring(0, maxLength);
+    const truncatedNew = newDecoded.substring(0, maxLength);
+    const wasTruncated = oldDecoded.length > maxLength || newDecoded.length > maxLength;
+    
+    const changes = diffWords(truncatedOld, truncatedNew);
+    
+    return (
+      <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+        <div className="text-xs text-muted-foreground mb-2 font-medium">
+          Changes highlighted: <span className="text-red-600 dark:text-red-400 line-through">removed</span> / <span className="text-green-600 dark:text-green-400 underline">added</span>
+        </div>
+        <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+          {changes.map((part, index) => {
+            if (part.added) {
+              return (
+                <span 
+                  key={index} 
+                  className="bg-green-500/20 text-green-700 dark:text-green-400 underline decoration-green-500"
+                >
+                  {part.value}
+                </span>
+              );
+            }
+            if (part.removed) {
+              return (
+                <span 
+                  key={index} 
+                  className="bg-red-500/20 text-red-700 dark:text-red-400 line-through decoration-red-500"
+                >
+                  {part.value}
+                </span>
+              );
+            }
+            // Unchanged text - show context around changes
+            const contextLength = 50;
+            if (part.value.length > contextLength * 2) {
+              // Show only start and end context for long unchanged sections
+              return (
+                <span key={index} className="text-muted-foreground">
+                  {part.value.substring(0, contextLength)}
+                  <span className="text-xs bg-muted px-1 mx-1 rounded">... {part.value.length - contextLength * 2} chars ...</span>
+                  {part.value.substring(part.value.length - contextLength)}
+                </span>
+              );
+            }
+            return <span key={index} className="text-muted-foreground">{part.value}</span>;
+          })}
+        </div>
+        {wasTruncated && (
+          <div className="text-xs text-muted-foreground mt-2 italic">
+            Text truncated for display (showing first {maxLength} characters)
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function renderFieldChange(change: FieldChange) {
     // Helper to compute array diffs
     const renderArrayDiff = (field: string, oldArr: any[], newArr: any[]) => {
@@ -363,8 +428,18 @@ export function ChangeLogTimeline({ linkId, projectId }: ChangeLogTimelineProps)
           </div>
         )}
 
-        {/* Standard View for non-array or legacy changes */}
-        {!isArrayField && change.changeType === 'modified' && (
+        {/* Inline Diff View for text fields (bodyText, title, h1, metaDescription) */}
+        {!isArrayField && change.changeType === 'modified' && 
+          (change.field === 'bodyText' || change.field === 'title' || change.field === 'h1' || change.field === 'metaDescription') &&
+          typeof change.oldValue === 'string' && typeof change.newValue === 'string' && (
+          <div className="mt-2">
+            {renderTextDiff(change.oldValue, change.newValue)}
+          </div>
+        )}
+
+        {/* Standard Before/After View for other non-text modified fields */}
+        {!isArrayField && change.changeType === 'modified' && 
+          !(change.field === 'bodyText' || change.field === 'title' || change.field === 'h1' || change.field === 'metaDescription') && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
             <div className="p-2 bg-red-500/5 dark:bg-red-950/20 rounded border border-red-500/20">
               <span className="text-xs text-red-600 dark:text-red-400 font-medium block mb-1">Before:</span>

@@ -140,21 +140,16 @@ export async function POST(request: NextRequest) {
         // Smart Screenshot Strategy:
         // Only capture screenshots when:
         // 1. First scan (no previous result) - baseline
-        // 2. Significant content change (>10% word count difference)
+        // 2. Any content change detected (CONTENT_CHANGED)
+        // Skip for: TECH_CHANGE_ONLY (only scripts/styles) and NO_CHANGE
         const isFirstScan = !prevResult;
-        const prevWordCount = prevResult?.contentSnapshot?.wordCount || 0;
-        const currentWordCount = scanResult.contentSnapshot.wordCount;
-        const wordCountDiff = Math.abs(currentWordCount - prevWordCount);
-        const wordCountThreshold = Math.max(prevWordCount * 0.1, 20); // At least 10% or 20 words
-        const isSignificantChange = changeStatus === 'CONTENT_CHANGED' && wordCountDiff > wordCountThreshold;
-        
-        const shouldCaptureScreenshot = isFirstScan || isSignificantChange;
+        const shouldCaptureScreenshot = isFirstScan || changeStatus === 'CONTENT_CHANGED';
         
         let screenshot: string | undefined;
         let previousScreenshot: string | undefined;
         
         if (shouldCaptureScreenshot) {
-            console.log(`[scan-pages] Capturing screenshot: ${isFirstScan ? 'first scan' : 'significant change'}`);
+            console.log(`[scan-pages] Capturing screenshot: ${isFirstScan ? 'first scan' : 'content changed'}`);
             try {
                 const screenshotService = getScreenshotService();
                 const screenshotResult = await screenshotService.captureScreenshot(url, {
