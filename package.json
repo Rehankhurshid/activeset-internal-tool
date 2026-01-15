@@ -70,6 +70,7 @@
     "diff": "^8.0.2",
     "firebase": "^11.9.1",
     "html2canvas": "^1.4.1",
+    "htmldiff-js": "^1.0.5",
     "jspdf": "^4.0.0",
     "lexical": "^0.39.0",
     "lucide-react": "^0.514.0",

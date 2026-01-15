@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
-import type { ChangeStatus, AuditResult, ContentSnapshot, FieldChange, ExtendedContentSnapshot, ChangeLogEntry, ImageInfo, LinkInfo } from '@/types';
+import type { ChangeStatus, AuditResult, ContentSnapshot, FieldChange, ExtendedContentSnapshot, ChangeLogEntry, ImageInfo, LinkInfo, SectionInfo } from '@/types';
 import { auditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
 import { createTwoFilesPatch } from 'diff';
@@ -167,6 +167,38 @@ function computeFieldChanges(
                 oldValue: removedLinks,
                 newValue: null,
                 changeType: 'removed'
+            });
+        }
+    }
+
+    // Sections: detect added/removed blocks for DOM summary
+    if (extNew.sections && extPrev.sections) {
+        const normalizeSection = (section: SectionInfo) => ({
+            key: `${section.selector}|${section.headingText || ''}|${section.textPreview || ''}`.trim(),
+            label: section.headingText
+                ? `${section.headingText} - ${section.textPreview}`
+                : section.textPreview || section.selector
+        });
+
+        const prevNormalized = extPrev.sections.map(normalizeSection);
+        const newNormalized = extNew.sections.map(normalizeSection);
+
+        const prevKeys = new Set(prevNormalized.map(s => s.key));
+        const newKeys = new Set(newNormalized.map(s => s.key));
+
+        const addedSections = newNormalized.filter(s => !prevKeys.has(s.key)).map(s => s.label);
+        const removedSections = prevNormalized.filter(s => !newKeys.has(s.key)).map(s => s.label);
+
+        if (addedSections.length > 0 || removedSections.length > 0) {
+            changes.push({
+                field: 'sections',
+                oldValue: removedSections.length > 0 ? removedSections : null,
+                newValue: addedSections.length > 0 ? addedSections : null,
+                changeType: addedSections.length > 0 && removedSections.length === 0
+                    ? 'added'
+                    : removedSections.length > 0 && addedSections.length === 0
+                        ? 'removed'
+                        : 'modified'
             });
         }
     }

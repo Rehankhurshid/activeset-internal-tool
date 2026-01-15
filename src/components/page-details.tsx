@@ -33,14 +33,18 @@ import {
   ChevronDown,
   ChevronUp,
   Smartphone,
+  FileDiff,
 } from "lucide-react"
 import { projectsService } from "@/services/database"
-import { ProjectLink, FieldChange, ImageInfo, LinkInfo } from "@/types"
+import { ProjectLink, FieldChange, ImageInfo, LinkInfo, ContentBlock, BlockChange, TextElement, TextChange } from "@/types"
+import { compareBlocks, compareTextElements } from "@/lib/scan-utils"
 import { ChangeLogTimeline } from "@/components/change-log-timeline"
 import { SocialPreviewTabs } from "@/components/social-card-preview"
 import { ResponsivePreview, ScreenshotDiff } from "@/components/screenshot-diff"
-import { ChangeDiffViewer, ChangeSummaryBadge } from "@/components/change-diff-viewer"
+import { ChangeSummaryBadge } from "@/components/change-diff-viewer"
+import { SourceDiffViewer } from "@/components/source-diff-viewer"
 import { HtmlPreview } from "@/components/html-preview"
+import { VisualDiffViewer } from "@/components/visual-diff-viewer"
 
 interface PageDetailsProps {
   projectId?: string;
@@ -56,12 +60,15 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
   const [linksCheckedAt, setLinksCheckedAt] = useState<string | null>(null)
   const [schemaExpanded, setSchemaExpanded] = useState(false)
   const [capturingScreenshot, setCapturingScreenshot] = useState(false)
-  const [visualTab, setVisualTab] = useState<'changes' | 'preview' | 'screenshot'>('changes')
+  const [visualTab, setVisualTab] = useState<'visual-diff' | 'changes' | 'preview' | 'screenshot'>('visual-diff')
   // Audit log data (screenshots and full fieldChanges are stored in audit_logs, not project doc)
   const [auditLogData, setAuditLogData] = useState<{
     screenshotUrl?: string;
     previousScreenshotUrl?: string;
     fieldChanges?: FieldChange[];
+    blockChanges?: BlockChange[];
+    textChanges?: TextChange[];
+    diffPatch?: string;
   } | null>(null)
 
   const handleRescan = async () => {
@@ -140,7 +147,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
   // Fetch full audit data from audit_logs (screenshots and complete fieldChanges)
   useEffect(() => {
     if (!projectId || !linkId) return;
-    
+
     const fetchAuditLogData = async () => {
       try {
         const response = await fetch(`/api/audit-logs/previous?projectId=${projectId}&linkId=${linkId}`);
@@ -149,10 +156,23 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
           // The API returns { current, previous } with full audit log data
           // screenshotUrl is either a Storage URL or a data:image/png;base64,... URL for backward compat
           if (data.current) {
+            // Compute block changes if blocks are available
+            const currentBlocks = data.current.blocks as ContentBlock[] | undefined;
+            const previousBlocks = data.previous?.blocks as ContentBlock[] | undefined;
+            const blockChanges = compareBlocks(previousBlocks, currentBlocks);
+
+            // Compute text element changes for granular DOM diff
+            const currentTextElements = data.current.textElements as TextElement[] | undefined;
+            const previousTextElements = data.previous?.textElements as TextElement[] | undefined;
+            const textChanges = compareTextElements(previousTextElements, currentTextElements);
+
             setAuditLogData({
               screenshotUrl: data.current.screenshotUrl,
               previousScreenshotUrl: data.previous?.screenshotUrl,
               fieldChanges: data.current.fieldChanges,
+              blockChanges: blockChanges.length > 0 ? blockChanges : undefined,
+              textChanges: textChanges.length > 0 ? textChanges : undefined,
+              diffPatch: data.current.diffPatch,
             });
           }
         }
@@ -160,7 +180,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
         console.error('Failed to fetch audit log data:', error);
       }
     };
-    
+
     fetchAuditLogData();
   }, [projectId, linkId, currentLink?.auditResult?.lastRun]); // Re-fetch when lastRun changes (after rescan)
 
@@ -174,7 +194,8 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
   const lastScan = audit?.lastRun ? new Date(audit.lastRun) : null;
   const placeholders = audit?.categories?.placeholders?.issues || [];
   const spellingErrors = audit?.categories?.spelling?.issues || [];
-  
+  const hasSectionChanges = (auditLogData?.fieldChanges || audit?.fieldChanges || []).some(change => change.field === 'sections');
+
   const getScoreColor = (s: number) => {
     if (s >= 80) return 'text-green-600';
     if (s >= 60) return 'text-yellow-600';
@@ -287,15 +308,18 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
               <div className="flex items-center gap-2">
                 <Eye className="h-4 w-4 text-neutral-500" />
                 <span className="font-medium text-neutral-900 dark:text-white">Content Changes</span>
-                <ChangeSummaryBadge 
-                  fieldChanges={auditLogData?.fieldChanges || audit?.fieldChanges || []} 
-                  changeStatus={audit?.changeStatus} 
+                <ChangeSummaryBadge
+                  fieldChanges={auditLogData?.fieldChanges || audit?.fieldChanges || []}
+                  changeStatus={audit?.changeStatus}
                 />
+                {hasSectionChanges && (
+                  <Badge variant="secondary" className="text-xs">DOM Summary</Badge>
+                )}
               </div>
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="h-7 text-xs"
                   onClick={handleCaptureScreenshot}
                   disabled={capturingScreenshot}
@@ -309,38 +333,45 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                 </Button>
               </div>
             </div>
-            
+
             {/* Tab buttons */}
             <div className="flex gap-1 p-1 bg-neutral-100 dark:bg-neutral-800 rounded-lg w-fit">
               <button
-                onClick={() => setVisualTab('changes')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  visualTab === 'changes' 
-                    ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm' 
-                    : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
-                }`}
+                onClick={() => setVisualTab('visual-diff')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${visualTab === 'visual-diff'
+                  ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  }`}
               >
-                <FileText className="h-3.5 w-3.5" />
-                Changes
+                <Eye className="h-3.5 w-3.5" />
+                Visual Diff
+              </button>
+              <button
+                onClick={() => setVisualTab('changes')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${visualTab === 'changes'
+                  ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  }`}
+              >
+                <FileDiff className="h-3.5 w-3.5" />
+                Source Diff
               </button>
               <button
                 onClick={() => setVisualTab('preview')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  visualTab === 'preview' 
-                    ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm' 
-                    : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
-                }`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${visualTab === 'preview'
+                  ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  }`}
               >
                 <Globe className="h-3.5 w-3.5" />
                 HTML Preview
               </button>
               <button
                 onClick={() => setVisualTab('screenshot')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  visualTab === 'screenshot' 
-                    ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm' 
-                    : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
-                }`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${visualTab === 'screenshot'
+                  ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  }`}
                 disabled={!auditLogData?.screenshotUrl}
               >
                 <Image className="h-3.5 w-3.5" />
@@ -349,26 +380,33 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
               </button>
             </div>
           </div>
-          
+
           {/* Tab content */}
           <div className="p-4">
-            {/* Changes Tab */}
-            {visualTab === 'changes' && (
-              <ChangeDiffViewer 
-                fieldChanges={auditLogData?.fieldChanges || audit?.fieldChanges || []} 
-                summary={audit?.diffSummary}
+            {/* Visual Diff Tab */}
+            {visualTab === 'visual-diff' && projectId && linkId && (
+              <VisualDiffViewer
+                projectId={projectId}
+                linkId={linkId}
               />
             )}
-            
+
+            {/* Source Diff Tab */}
+            {visualTab === 'changes' && (
+              <SourceDiffViewer
+                diffPatch={auditLogData?.diffPatch || audit?.diffPatch}
+              />
+            )}
+
             {/* HTML Preview Tab */}
             {visualTab === 'preview' && projectId && linkId && (
-              <HtmlPreview 
+              <HtmlPreview
                 projectId={projectId}
                 linkId={linkId}
                 url={currentLink.url}
               />
             )}
-            
+
             {/* Screenshot Tab */}
             {visualTab === 'screenshot' && auditLogData?.screenshotUrl && (
               <div className="space-y-4">
@@ -415,14 +453,14 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                 )}
               </div>
             )}
-            
+
             {visualTab === 'screenshot' && !auditLogData?.screenshotUrl && (
               <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
                 <Eye className="h-12 w-12 mb-3 text-neutral-300 dark:text-neutral-600" />
                 <p className="text-sm mb-2">No screenshot available</p>
                 <p className="text-xs text-neutral-400 mb-4">Screenshots are captured on first scan or when significant changes occur</p>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={handleCaptureScreenshot}
                   disabled={capturingScreenshot}
@@ -520,7 +558,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                   {/* JSON-LD Viewer */}
                   {audit.categories.schema.rawSchemas && audit.categories.schema.rawSchemas.length > 0 && (
                     <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                      <button 
+                      <button
                         onClick={() => setSchemaExpanded(!schemaExpanded)}
                         className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
                       >
@@ -544,7 +582,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                       className="h-7 text-xs"
                       asChild
                     >
-                      <a 
+                      <a
                         href={`https://search.google.com/test/rich-results?url=${encodeURIComponent(currentLink.url)}`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -564,7 +602,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                     className="h-7 text-xs"
                     asChild
                   >
-                    <a 
+                    <a
                       href={`https://search.google.com/test/rich-results?url=${encodeURIComponent(currentLink.url)}`}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -765,8 +803,8 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
               <Accessibility className="h-4 w-4 text-neutral-500" />
               <span className="font-medium text-neutral-900 dark:text-white">Accessibility</span>
               {audit?.categories?.accessibility ? (
-                <Badge 
-                  variant={audit.categories.accessibility.score >= 80 ? 'secondary' : 'destructive'} 
+                <Badge
+                  variant={audit.categories.accessibility.score >= 80 ? 'secondary' : 'destructive'}
                   className="ml-auto text-xs"
                 >
                   {audit.categories.accessibility.score}/100

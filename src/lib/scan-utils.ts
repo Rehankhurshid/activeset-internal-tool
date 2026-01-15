@@ -1,5 +1,5 @@
-import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot, AuditResult } from '@/types';
-import { createTwoFilesPatch } from 'diff';
+import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot, AuditResult, SectionInfo, ContentBlock, BlockChange, TextElement, TextChange } from '@/types';
+import { createTwoFilesPatch, diffLines } from 'diff';
 
 /**
  * Create a compact version of auditResult for storing in project document.
@@ -33,19 +33,19 @@ export function compactAuditResult(result: AuditResult): AuditResult {
 
     // Limit headingStructure headings
     if (compact.categories?.headingStructure?.headings) {
-        compact.categories.headingStructure.headings = 
+        compact.categories.headingStructure.headings =
             compact.categories.headingStructure.headings.slice(0, 20);
     }
 
     // Limit brokenLinks array
     if (compact.categories?.links?.brokenLinks) {
-        compact.categories.links.brokenLinks = 
+        compact.categories.links.brokenLinks =
             compact.categories.links.brokenLinks.slice(0, 10);
     }
 
     // Limit accessibility issues
     if (compact.categories?.accessibility?.issues) {
-        compact.categories.accessibility.issues = 
+        compact.categories.accessibility.issues =
             compact.categories.accessibility.issues.slice(0, 20);
     }
 
@@ -80,11 +80,11 @@ export function compactAuditResult(result: AuditResult): AuditResult {
  */
 function truncateFieldValue(value: unknown): unknown {
     if (value === null || value === undefined) return value;
-    
+
     if (typeof value === 'string') {
         return value.length > 200 ? value.substring(0, 200) + '...' : value;
     }
-    
+
     if (Array.isArray(value)) {
         // For arrays (images, links), just keep count
         if (value.length > 5) {
@@ -92,7 +92,7 @@ function truncateFieldValue(value: unknown): unknown {
         }
         return value;
     }
-    
+
     return value;
 }
 
@@ -119,7 +119,7 @@ export function computeChangeStatus(
     return 'CONTENT_CHANGED';
 }
 
-// Compare snapshots and generate field changes
+// Compare snapshots and generate field changes (Intelligent Source Comparison)
 export function computeFieldChanges(
     newSnapshot: ExtendedContentSnapshot | ContentSnapshot | undefined,
     prevSnapshot: ExtendedContentSnapshot | ContentSnapshot | undefined
@@ -127,6 +127,8 @@ export function computeFieldChanges(
     const changes: FieldChange[] = [];
 
     if (!newSnapshot || !prevSnapshot) return changes;
+
+    // 1. High-Value SEO Fields (Keep these as they are critical)
 
     // Title
     if (newSnapshot.title !== prevSnapshot.title) {
@@ -168,114 +170,78 @@ export function computeFieldChanges(
         });
     }
 
-    // Images
-    const prevImages = (prevSnapshot as ExtendedContentSnapshot).images || [];
-    const newImages = (newSnapshot as ExtendedContentSnapshot).images || [];
+    // 2. Intelligent Source Comparison using "Simplified Content"
+    // This replaces the noisy Images/Links/Sections/Headings logic
 
-    // Check if content changed (src based)
-    const prevImgSrcs = new Set(prevImages.map(img => img.src));
-    const newImgSrcs = new Set(newImages.map(img => img.src));
+    const prevSource = (prevSnapshot as ExtendedContentSnapshot).simplifiedContent || '';
+    const newSource = (newSnapshot as ExtendedContentSnapshot).simplifiedContent || '';
 
-    // We treat it as changed if sets differ OR arrays look different (backup check)
-    // Actually hashing is better but expensive. Src check is good enough.
-    // Also check for alt changes? 
-    // Let's just strict compare JSON stringification of arrays if needed, but src set is primary for "Added/Removed"
+    // If we have simplified source (new scan format), use it for comparison
+    if (prevSource && newSource && prevSource !== newSource) {
+        const diffs = diffLines(prevSource, newSource);
 
-    let imagesChanged = false;
-    if (prevImages.length !== newImages.length) imagesChanged = true;
-    else {
-        // Same length, check if all new srcs are in old (and thus old in new)
-        for (const src of newImgSrcs) {
-            if (!prevImgSrcs.has(src)) {
-                imagesChanged = true;
-                break;
-            }
-        }
-    }
+        // Group diffs to avoid noisy line-by-line reporting
+        // We look for chunks of added/removed content
 
-    if (imagesChanged) {
-        changes.push({
-            field: 'images',
-            oldValue: prevImages,
-            newValue: newImages,
-            changeType: newImages.length > prevImages.length ? 'added' : newImages.length < prevImages.length ? 'removed' : 'modified'
-        });
-    }
+        for (const part of diffs) {
+            if (!part.added && !part.removed) continue;
 
-    // Links
-    const prevLinks = (prevSnapshot as ExtendedContentSnapshot).links || [];
-    const newLinks = (newSnapshot as ExtendedContentSnapshot).links || [];
+            // Ignore whitespace-only changes
+            if (!part.value.trim()) continue;
 
-    // Check hrefs
-    const prevLinkHrefs = new Set(prevLinks.map(l => l.href));
-    const newLinkHrefs = new Set(newLinks.map(l => l.href));
+            const cleanValue = part.value.trim();
+            // If it's short structure noise (e.g. just </div>), skip
+            if (cleanValue.length < 5 && /<\/?[a-z]+>/.test(cleanValue)) continue;
 
-    let linksChanged = false;
-    if (prevLinks.length !== newLinks.length) linksChanged = true;
-    else {
-        for (const href of newLinkHrefs) {
-            if (!prevLinkHrefs.has(href)) {
-                linksChanged = true;
-                break;
-            }
-        }
-    }
+            // Map to 'bodyText' field which UI renders well (pencil icon ✏️)
+            // Or 'sections' (box icon 📦) for HTML structure
+            const isStructural = /<[a-z][\s\S]*>/i.test(cleanValue);
+            const fieldName = isStructural ? 'sections' : 'bodyText';
 
-    if (linksChanged) {
-        changes.push({
-            field: 'links',
-            oldValue: prevLinks,
-            newValue: newLinks,
-            changeType: newLinks.length > prevLinks.length ? 'added' : newLinks.length < prevLinks.length ? 'removed' : 'modified'
-        });
-    }
-
-    // Headings (H1-H3)
-    const prevHeadings = (prevSnapshot as ExtendedContentSnapshot).headingsWithTags ||
-        ((prevSnapshot as ExtendedContentSnapshot).headings || []).map(h => ({ tag: 'H?', text: h }));
-    const newHeadings = (newSnapshot as ExtendedContentSnapshot).headingsWithTags ||
-        ((newSnapshot as ExtendedContentSnapshot).headings || []).map(h => ({ tag: 'H?', text: h }));
-
-    // Compare headings array
-    const prevHeadingTexts = prevHeadings.map(h => `[${h.tag}] ${h.text}`).join('\n');
-    const newHeadingTexts = newHeadings.map(h => `[${h.tag}] ${h.text}`).join('\n');
-
-    if (prevHeadingTexts !== newHeadingTexts) {
-        // Smart Diff: Find differences
-        // Only show added/removed lines to avoid giant lists of identical headings
-        const oldLines = prevHeadings.map(h => `[${h.tag}] ${h.text}`);
-        const newLines = newHeadings.map(h => `[${h.tag}] ${h.text}`);
-
-        const oldSet = new Set(oldLines);
-        const newSet = new Set(newLines);
-
-        const removed = oldLines.filter(l => !newSet.has(l));
-        const added = newLines.filter(l => !oldSet.has(l));
-
-        if (removed.length > 0 || added.length > 0) {
             changes.push({
-                field: 'headings',
-                oldValue: removed.join('\n'),
-                newValue: added.join('\n'),
+                field: fieldName,
+                oldValue: part.removed ? cleanValue : null,
+                newValue: part.added ? cleanValue : null,
+                changeType: part.added ? 'added' : 'removed'
+            });
+        }
+    } else {
+        // Fallback checks for old format (if simplifiedContent missing)
+        // Body Text Preview Check
+        const prevBody = (prevSnapshot as ExtendedContentSnapshot).bodyTextPreview || '';
+        const newBody = (newSnapshot as ExtendedContentSnapshot).bodyTextPreview || '';
+        if (prevBody && newBody && prevBody !== newBody) {
+            changes.push({
+                field: 'bodyText',
+                oldValue: prevBody.substring(0, 50) + '...',
+                newValue: newBody.substring(0, 50) + '...',
                 changeType: 'modified'
             });
         }
     }
 
-    // Body Text Preview (check hash if available, or text)
-    const prevBody = (prevSnapshot as ExtendedContentSnapshot).bodyTextPreview || '';
-    const newBody = (newSnapshot as ExtendedContentSnapshot).bodyTextPreview || '';
-    if (prevBody !== newBody) {
-        // We only store a snippet, so comparison is limited, but useful for "Body Text" change alert
-        changes.push({
-            field: 'bodyText',
-            oldValue: prevBody.substring(0, 50) + '...',
-            newValue: newBody.substring(0, 50) + '...',
-            changeType: 'modified'
-        });
-    }
-
     return changes;
+}
+
+// Helper to strip purely technical/navigation sections that add noise to diffs
+function stripIgnoredContent(html: string): string {
+    if (!html) return '';
+    return html
+        // Remove Navigation
+        .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gi, '\n<!-- [NAV IGNORED] -->\n')
+        .replace(/<div\b[^>]*class="[^"]*nav[^"]*"[^>]*>[\s\S]*?<\/div>/gi, (match) => {
+            // Be careful with divs, only basic heuristics or skip if risky.
+            // For now, let's stick to semantic <nav> and common id/class patterns if fairly safe
+            return match; // Skipping aggressive div replacement to avoid false positives
+        })
+        // Remove Footer
+        .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gi, '\n<!-- [FOOTER IGNORED] -->\n')
+        // Remove Scripts (Technical noise)
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '\n<!-- [SCRIPT IGNORED] -->\n')
+        // Remove Styles (Technical noise)
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '\n<!-- [STYLE IGNORED] -->\n')
+        // Remove SVG (often huge and noisy)
+        .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '<!-- [SVG ICON] -->');
 }
 
 // Generate diff patch
@@ -283,28 +249,38 @@ export function generateDiffPatch(
     oldText: string,
     newText: string
 ): string | undefined {
-    if (!oldText || !newText || oldText === newText) return undefined;
+    if (!oldText || !newText) return undefined;
+
+    // Strip ignored content before diffing to focus on main content
+    const cleanOld = stripIgnoredContent(oldText);
+    const cleanNew = stripIgnoredContent(newText);
+
+    if (cleanOld === cleanNew) return undefined;
 
     // Create unified diff
     return createTwoFilesPatch(
         'Previous Version',
         'Current Version',
-        oldText,
-        newText,
+        cleanOld,
+        cleanNew,
         'Old Header',
         'New Header',
         { context: 3 }
     );
 }
 
+// Deprecated: No longer used for logic, but kept for UI compatibility
+export function compareBlocks(prev: ContentBlock[] | undefined, curr: ContentBlock[] | undefined): BlockChange[] {
+    return [];
+}
+
+// Deprecated: No longer used for logic, but kept for UI compatibility
+export function compareTextElements(prev: TextElement[] | undefined, curr: TextElement[] | undefined): TextChange[] {
+    return [];
+}
+
 // Extract clean text from HTML
 function extractTextFromHtml(html: string): string {
-    // Basic text extraction to avoid heavy cheerio dependency if possible, 
-    // but we likely need cheerio for quality. 
-    // Since this runs in Next.js API route, we can dynamic import or ensure cheerio is available.
-    // However, simplicity: Remove script/style, then strip tags.
-
-    // Simple regex-based stripper for speed (approximate)
     const noScript = html.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gmi, "");
     const noStyle = noScript.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gmi, "");
     const text = noStyle.replace(/<[^>]+>/g, " ");
@@ -323,19 +299,6 @@ export function computeBodyTextDiff(
 
     if (oldText === newText) return null;
 
-    // Find the changed segments
-    // We can use the 'diff' package's diffWords or diffSentences ideally, 
-    // but createTwoFilesPatch is line based.
-    // Let's manually find the first diff point and context?
-    // Or just return the texts if short?
-    // User wants "See What We Did..." vs "Nyuway..." lines.
-
-    // If we return the whole text, it's too long.
-    // We should return the *changed sentences* or *lines*.
-    // Since we flattened text, we effectively have one long line or paragraphs.
-    // Let's try to preserve some structure in extractText?
-
-    // Better extraction:
     const cleanOld = oldHtml.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gmi, "")
         .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gmi, "")
         .replace(/<br\s*\/?>/gi, "\n")

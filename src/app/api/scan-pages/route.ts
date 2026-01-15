@@ -246,6 +246,15 @@ export async function POST(request: NextRequest) {
             if (fieldChanges.length > 0) {
                 auditLogData.fieldChanges = fieldChanges;
             }
+            // Store blocks for smart card diff
+            const extendedSnapshot = scanResult.contentSnapshot as ExtendedContentSnapshot;
+            if (extendedSnapshot.blocks && extendedSnapshot.blocks.length > 0) {
+                auditLogData.blocks = extendedSnapshot.blocks;
+            }
+            // Store text elements for granular DOM diff
+            if (extendedSnapshot.textElements && extendedSnapshot.textElements.length > 0) {
+                auditLogData.textElements = extendedSnapshot.textElements;
+            }
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await AuditService.saveAuditLog(auditLogData as any);

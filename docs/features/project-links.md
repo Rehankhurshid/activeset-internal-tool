@@ -51,7 +51,7 @@ src/app/modules/project-links/
 
 The main entry point displays all user projects in a card grid layout.
 
-- **Project Cards**: Shows project name, link count, and quick stats
+- **Project Cards**: Premium card design with rich visual hierarchy, hover-revealed actions (Edit/Delete), and subtle animations
 - **Create Project**: Add new projects with a unique name
 - **Access Control**: Only users with `project-links` module access can view
 - **Real-time Updates**: Uses Firebase subscriptions for live data sync

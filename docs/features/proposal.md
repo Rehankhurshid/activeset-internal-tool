@@ -208,7 +208,8 @@ Full-featured editor with live preview and template support.
 - Electronic signature capture (when client signs)
 
 **Key Features**:
-- **Live Preview**: Side-by-side editor and preview
+- **Live Preview**: Real-time, scaled-down high-fidelity preview that mirrors the final output
+- **Sticky Sidebar**: Progress tracker and preview panel stay visible while scrolling
 - **Auto-save**: Drafts saved automatically
 - **Template System**: Save current proposal as template
 - **Rich Text Support**: Full formatting for key sections (Lexical-based editor)

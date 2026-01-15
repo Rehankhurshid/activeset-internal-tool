@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
 import { pageScanner } from '@/services/PageScanner';
+import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
+import { uploadScreenshot } from '@/services/ScreenshotStorageService';
 import { computeChangeStatus, computeFieldChanges, generateDiffPatch, computeBodyTextDiff, compactAuditResult } from '@/lib/scan-utils';
-import { 
-    generateScanId, 
-    initScanProgress, 
-    updateScanProgress, 
+import {
+    generateScanId,
+    initScanProgress,
+    updateScanProgress,
     getRunningScansForProject,
     isScanCancelled,
     markScanCancelled
@@ -95,9 +97,9 @@ export async function POST(request: NextRequest) {
         const runningScans = getRunningScansForProject(projectId);
         if (runningScans.length > 0) {
             return NextResponse.json(
-                { 
+                {
                     error: 'A scan is already running for this project',
-                    scanId: runningScans[0].scanId 
+                    scanId: runningScans[0].scanId
                 },
                 { status: 409, headers: corsHeaders }
             );
@@ -131,10 +133,10 @@ export async function POST(request: NextRequest) {
 
         if (totalPages === 0) {
             return NextResponse.json(
-                { 
+                {
                     scanId: null,
                     message: 'No pages to scan',
-                    totalPages: 0 
+                    totalPages: 0
                 },
                 { headers: corsHeaders }
             );
@@ -150,18 +152,18 @@ export async function POST(request: NextRequest) {
         // This allows us to return immediately with the scanId
         runBulkScan(scanId, projectId, project.links, linksToScan, scanCollections).catch(error => {
             console.error(`[scan-bulk] Background scan ${scanId} failed:`, error);
-            updateScanProgress(scanId, { 
-                status: 'failed', 
-                error: error instanceof Error ? error.message : 'Unknown error' 
+            updateScanProgress(scanId, {
+                status: 'failed',
+                error: error instanceof Error ? error.message : 'Unknown error'
             });
         });
 
         // Return immediately with scanId
         return NextResponse.json(
-            { 
+            {
                 scanId,
                 totalPages,
-                message: 'Scan started. Poll /api/scan-bulk/status for progress.' 
+                message: 'Scan started. Poll /api/scan-bulk/status for progress.'
             },
             { headers: corsHeaders }
         );
@@ -204,114 +206,135 @@ async function runBulkScan(
     // Batch pending writes for efficiency
     const pendingAuditLogs: Record<string, unknown>[] = [];
     const pendingChangeLogs: Record<string, unknown>[] = [];
-    const BATCH_SIZE = 10; // Write every N pages
+    const BATCH_SIZE = 10;
+    const CONCURRENCY_LIMIT = 5;
 
-    // Scan pages in sequence to avoid rate limits
-    for (let i = 0; i < linksToScan.length; i++) {
-        // Check if cancellation was requested
-        if (isScanCancelled(scanId)) {
-            console.log(`[scan-bulk] Scan cancelled by user at page ${i}/${linksToScan.length}`);
-            
-            // Save any pending progress before stopping
-            await projectsService.updateProjectLinks(projectId, projectLinks);
-            
-            // Flush any pending writes sequentially to avoid rate limits
-            if (pendingAuditLogs.length > 0) {
-                await writeSequentially(pendingAuditLogs, log => AuditService.saveAuditLog(log as any));
+    let currentIndex = 0;
+    let completedCount = 0;
+
+    // Simple mutex for thread-safe updates to results/pending arrays
+    let isSaving = false;
+
+    // Worker function to process pages
+    const worker = async () => {
+        while (currentIndex < linksToScan.length) {
+            // Check cancellation
+            if (isScanCancelled(scanId)) {
+                return;
             }
-            if (pendingChangeLogs.length > 0) {
-                await writeSequentially(pendingChangeLogs, entry => changeLogService.saveEntry(entry as any));
-            }
-            
-            // Mark as cancelled
-            markScanCancelled(scanId);
-            
-            console.log(`[scan-bulk] Scan ${scanId} stopped. Completed ${i} of ${linksToScan.length} pages.`);
-            return; // Exit the function
-        }
 
-        const link = linksToScan[i];
+            // Claim next task (atomic-ish in JS event loop)
+            const index = currentIndex++;
+            const link = linksToScan[index];
 
-        // Update progress with current URL being scanned
-        updateScanProgress(scanId, {
-            current: i,
-            currentUrl: link.url
-        });
-
-        try {
-            console.log(`[scan-bulk] Scanning: ${link.url}`);
-
-            const { score, changeStatus, updatedLink, pendingWrite } = await scanSinglePage(projectId, link, projectLinks);
-
-            results.push({
-                linkId: link.id,
-                url: link.url,
-                success: true,
-                score,
-                changeStatus
+            // Update progress
+            updateScanProgress(scanId, {
+                current: completedCount, // Use completed count for progress 
+                currentUrl: link.url
             });
 
-            // Update the link in our local list
-            const idx = projectLinks.findIndex(l => l.id === link.id);
-            if (idx !== -1 && updatedLink) {
-                projectLinks[idx] = updatedLink;
-            }
+            try {
+                console.log(`[scan-bulk] Scanning (${index + 1}/${linksToScan.length}): ${link.url}`);
 
-            // Collect pending writes for batching
-            if (pendingWrite?.auditLog) {
-                pendingAuditLogs.push(pendingWrite.auditLog);
-            }
-            if (pendingWrite?.changeLogEntry) {
-                pendingChangeLogs.push(pendingWrite.changeLogEntry);
-            }
+                const { score, changeStatus, updatedLink, pendingWrite } = await scanSinglePage(projectId, link, projectLinks);
 
-            // Batch save: every BATCH_SIZE items
-            if (results.length % BATCH_SIZE === 0) {
-                console.log(`[scan-bulk] Batch saving progress (${results.length}/${linksToScan.length})...`);
-                
-                // Save project links
-                await projectsService.updateProjectLinks(projectId, projectLinks);
-                
-                // Flush pending audit logs sequentially to avoid rate limits
-                if (pendingAuditLogs.length > 0) {
-                    console.log(`[scan-bulk] Writing ${pendingAuditLogs.length} audit logs...`);
-                    await writeSequentially(pendingAuditLogs, log => AuditService.saveAuditLog(log as any));
-                    pendingAuditLogs.length = 0; // Clear array
+                // Critical section: Update results and check for batch save
+                // We use a simple spin-wait if another worker is saving
+                while (isSaving) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
                 }
 
-                // Flush pending change logs sequentially
-                if (pendingChangeLogs.length > 0) {
-                    console.log(`[scan-bulk] Writing ${pendingChangeLogs.length} change logs...`);
-                    await writeSequentially(pendingChangeLogs, entry => changeLogService.saveEntry(entry as any));
-                    pendingChangeLogs.length = 0; // Clear array
+                // Add to results
+                results.push({
+                    linkId: link.id,
+                    url: link.url,
+                    success: true,
+                    score,
+                    changeStatus
+                });
+
+                // Update summary
+                if (changeStatus === 'NO_CHANGE') summary.noChange++;
+                else if (changeStatus === 'TECH_CHANGE_ONLY') summary.techChange++;
+                else if (changeStatus === 'CONTENT_CHANGED') summary.contentChanged++;
+
+                // Update local link copy
+                const idx = projectLinks.findIndex(l => l.id === link.id);
+                if (idx !== -1 && updatedLink) {
+                    projectLinks[idx] = updatedLink;
                 }
+
+                // Add to pending writes
+                if (pendingWrite?.auditLog) pendingAuditLogs.push(pendingWrite.auditLog);
+                if (pendingWrite?.changeLogEntry) pendingChangeLogs.push(pendingWrite.changeLogEntry);
+
+                completedCount++;
+
+                // Check if we need to batch save
+                if (results.length % BATCH_SIZE === 0 || pendingAuditLogs.length >= BATCH_SIZE) {
+                    isSaving = true; // Lock
+                    try {
+                        console.log(`[scan-bulk] Batch saving progress (${results.length}/${linksToScan.length})...`);
+
+                        await projectsService.updateProjectLinks(projectId, projectLinks);
+
+                        // Flush pending logs
+                        if (pendingAuditLogs.length > 0) {
+                            await writeSequentially(pendingAuditLogs, log => AuditService.saveAuditLog(log as any));
+                            pendingAuditLogs.length = 0;
+                        }
+
+                        if (pendingChangeLogs.length > 0) {
+                            await writeSequentially(pendingChangeLogs, entry => changeLogService.saveEntry(entry as any));
+                            pendingChangeLogs.length = 0;
+                        }
+                    } finally {
+                        isSaving = false; // Unlock
+                    }
+                }
+
+            } catch (error) {
+                console.error(`[scan-bulk] Failed to scan ${link.url}:`, error);
+
+                while (isSaving) await new Promise(resolve => setTimeout(resolve, 50));
+
+                results.push({
+                    linkId: link.id,
+                    url: link.url,
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+                summary.failed++;
+                completedCount++;
             }
+        }
+    };
 
-            // Update summary
-            if (changeStatus === 'NO_CHANGE') summary.noChange++;
-            else if (changeStatus === 'TECH_CHANGE_ONLY') summary.techChange++;
-            else if (changeStatus === 'CONTENT_CHANGED') summary.contentChanged++;
+    // Run workers concurrently
+    await Promise.all(Array(Math.min(linksToScan.length, CONCURRENCY_LIMIT)).fill(null).map(() => worker()));
 
-        } catch (error) {
-            console.error(`[scan-bulk] Failed to scan ${link.url}:`, error);
-            results.push({
-                linkId: link.id,
-                url: link.url,
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            summary.failed++;
+    // Check if cancelled after workers finish
+    if (isScanCancelled(scanId)) {
+        console.log(`[scan-bulk] Scan cancelled by user.`);
+
+        // Save whatever we have
+        await projectsService.updateProjectLinks(projectId, projectLinks);
+
+        if (pendingAuditLogs.length > 0) {
+            await writeSequentially(pendingAuditLogs, log => AuditService.saveAuditLog(log as any));
+        }
+        if (pendingChangeLogs.length > 0) {
+            await writeSequentially(pendingChangeLogs, entry => changeLogService.saveEntry(entry as any));
         }
 
-        // Small delay between scans to be nice to servers
-        await new Promise(resolve => setTimeout(resolve, 500));
+        markScanCancelled(scanId);
+        return;
     }
 
-    // Final Save: Ensure all remaining changes are persisted
+    // Final Save
     console.log('[scan-bulk] Saving final results...');
     await projectsService.updateProjectLinks(projectId, projectLinks);
-    
-    // Flush any remaining pending writes sequentially to avoid rate limits
+
     if (pendingAuditLogs.length > 0) {
         console.log(`[scan-bulk] Writing final ${pendingAuditLogs.length} audit logs...`);
         await writeSequentially(pendingAuditLogs, log => AuditService.saveAuditLog(log as any));
@@ -321,7 +344,7 @@ async function runBulkScan(
         await writeSequentially(pendingChangeLogs, entry => changeLogService.saveEntry(entry as any));
     }
 
-    // Mark scan as completed
+    // Mark completed
     updateScanProgress(scanId, {
         current: linksToScan.length,
         currentUrl: '',
@@ -396,6 +419,67 @@ async function scanSinglePage(
 
     const lastRunTimestamp = new Date().toISOString();
 
+    // Smart Screenshot Strategy:
+    // Only capture screenshots when:
+    // 1. First scan (no previous result) - baseline
+    // 2. No existing screenshot (pages added before screenshot feature)
+    // 3. Any content change detected (CONTENT_CHANGED)
+    const isFirstScan = !prevResult;
+    const hasNoScreenshot = !prevResult?.screenshotUrl && !prevResult?.screenshot;
+    const shouldCaptureScreenshot = isFirstScan || hasNoScreenshot || changeStatus === 'CONTENT_CHANGED';
+
+    let screenshotUrl: string | undefined;
+    let previousScreenshotUrl: string | undefined;
+
+    if (shouldCaptureScreenshot) {
+        try {
+            console.log(`[scan-bulk] Capturing screenshot for ${link.url}`);
+            const screenshotService = getScreenshotService();
+            const screenshotResult = await screenshotService.captureScreenshot(link.url, {
+                width: 1280,
+                height: 800
+            });
+
+            // Upload screenshot to Firebase Storage and get URL
+            screenshotUrl = await uploadScreenshot(
+                projectId,
+                link.id,
+                screenshotResult.screenshot,
+                lastRunTimestamp
+            );
+
+            // Get previous screenshot URL from audit logs for comparison
+            if (!isFirstScan) {
+                try {
+                    const prevLog = await AuditService.getLatestAuditLog(projectId, link.id);
+                    if (prevLog?.screenshotUrl) {
+                        previousScreenshotUrl = prevLog.screenshotUrl;
+                    } else if (prevLog?.screenshot) {
+                        // Backward compatibility: old logs may have base64
+                        previousScreenshotUrl = prevLog.screenshot;
+                    }
+                } catch (e) {
+                    // Ignore error fetching prev log if slightly fail
+                }
+            }
+        } catch (screenshotError) {
+            console.warn(`[scan-bulk] Screenshot capture/upload failed for ${link.url}:`, screenshotError);
+            // Continue without screenshot
+        }
+    } else {
+        // Preserve existing screenshot URL if available
+        try {
+            const prevLog = await AuditService.getLatestAuditLog(projectId, link.id);
+            if (prevLog?.screenshotUrl) {
+                screenshotUrl = prevLog.screenshotUrl;
+            } else if (prevLog?.screenshot) {
+                screenshotUrl = prevLog.screenshot;
+            }
+        } catch (e) {
+            // Ignore
+        }
+    }
+
     // Save audit result to project link (remove undefined values for Firestore)
     const auditResult = removeUndefined({
         score: scanResult.score,
@@ -406,7 +490,10 @@ async function scanSinglePage(
         changeStatus,
         lastRun: lastRunTimestamp,
         contentSnapshot: scanResult.contentSnapshot,
-        categories: scanResult.categories
+        categories: scanResult.categories,
+        screenshotUrl, // Added screenshot
+        previousScreenshotUrl, // Added previous screenshot
+        screenshotCapturedAt: screenshotUrl ? lastRunTimestamp : undefined
     });
 
     // Return the updated link object with compact auditResult to stay under Firestore 1MB limit
@@ -432,6 +519,12 @@ async function scanSinglePage(
             htmlSource: scanResult.htmlSource
         };
         if (diffPatch) auditLogData.diffPatch = diffPatch;
+
+        // Only store screenshot URL in audit_logs if we actually captured a new one
+        if (shouldCaptureScreenshot && screenshotUrl) {
+            auditLogData.screenshotUrl = screenshotUrl;
+        }
+
         pendingWrite.auditLog = auditLogData;
     }
 

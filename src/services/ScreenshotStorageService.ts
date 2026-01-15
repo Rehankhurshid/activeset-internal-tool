@@ -22,7 +22,7 @@ export async function uploadScreenshot(
     try {
         // Create a clean filename from timestamp
         const safeTimestamp = timestamp.replace(/[:.]/g, '-');
-        const path = `screenshots/${projectId}/${linkId}/${safeTimestamp}.png`;
+        const path = `screenshots/${projectId}/${linkId}/${safeTimestamp}.webp`;
         const storageRef = ref(storage, path);
 
         // Convert base64 to Uint8Array (works in Node.js)
@@ -31,13 +31,13 @@ export async function uploadScreenshot(
 
         // Upload the file
         await uploadBytes(storageRef, uint8Array, {
-            contentType: 'image/png',
+            contentType: 'image/webp',
         });
 
         // Get and return the download URL
         const downloadUrl = await getDownloadURL(storageRef);
         console.log(`[ScreenshotStorage] Uploaded to: ${path}`);
-        
+
         return downloadUrl;
     } catch (error) {
         console.error('[ScreenshotStorage] Upload failed:', error);
@@ -58,12 +58,12 @@ export function isScreenshotUrl(value: string | undefined): boolean {
  */
 export function getScreenshotSrc(value: string | undefined): string | undefined {
     if (!value) return undefined;
-    
+
     // If it's already a URL, return as-is
     if (isScreenshotUrl(value)) {
         return value;
     }
-    
+
     // Otherwise, treat as base64 and create data URL
     return `data:image/png;base64,${value}`;
 }

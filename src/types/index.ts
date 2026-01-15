@@ -209,7 +209,7 @@ export interface SchemaMarkupInfo {
   issues: string[];
 }
 
-// Section info for tracking
+// Section info for tracking (legacy)
 export interface SectionInfo {
   selector: string;
   headingText: string;
@@ -217,13 +217,52 @@ export interface SectionInfo {
   textPreview: string;
 }
 
+// Content block for card/block tracking (improved)
+export interface ContentBlock {
+  id: string;           // Hash for matching
+  heading: string;      // The main heading text (e.g., "Decaf")
+  tag?: string;         // Tag/category text (e.g., "Development")
+  html: string;         // Raw HTML snippet for preview
+  selector: string;     // CSS selector used to find this block
+  index: number;        // Position in the page (for ordering)
+}
+
+// Text element for granular DOM diff
+export interface TextElement {
+  selector: string;     // CSS selector used
+  text: string;         // Text content
+  html: string;         // Raw HTML snippet
+  isAnimated?: boolean; // True if element has animation-related attributes (for smarter filtering)
+}
+
+// Block change for diff display
+export interface BlockChange {
+  type: 'added' | 'removed' | 'modified';
+  before?: ContentBlock;
+  after?: ContentBlock;
+  changeLabel?: string;  // e.g., "Decaf → Decaf (Web)"
+}
+
+// Text element change for inline diff
+export interface TextChange {
+  type: 'added' | 'removed' | 'modified';
+  selector: string;
+  beforeText?: string;
+  afterText?: string;
+  beforeHtml?: string;
+  afterHtml?: string;
+}
+
 // Extended content snapshot with images/links/sections
 export interface ExtendedContentSnapshot extends ContentSnapshot {
   images: ImageInfo[];
   links: LinkInfo[];
   sections: SectionInfo[];
+  blocks?: ContentBlock[];  // Individual cards/blocks for diff display
+  textElements?: TextElement[];  // Text elements for granular DOM diff
   bodyTextHash: string;
   bodyTextPreview?: string; // First 500 chars of body text for change comparison
+  simplifiedContent?: string; // Cleaned, structural HTML for intelligent comparison (no scripts/styles/noise)
   headingsWithTags?: Array<{ tag: string, text: string }>; // Headings with H1/H2/H3 tags
 }
 

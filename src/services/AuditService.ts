@@ -16,6 +16,29 @@ import { COLLECTIONS } from '@/lib/constants';
 // We'll use a new collection for audit logs
 const AUDIT_LOGS_COLLECTION = 'audit_logs';
 
+/**
+ * Recursively remove undefined values from an object.
+ * Firestore doesn't accept undefined values - only null or omission is allowed.
+ */
+function removeUndefined<T>(obj: T): T {
+    if (obj === null || obj === undefined) {
+        return obj;
+    }
+    if (Array.isArray(obj)) {
+        return obj.map(item => removeUndefined(item)) as unknown as T;
+    }
+    if (typeof obj === 'object') {
+        const result: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+            if (value !== undefined) {
+                result[key] = removeUndefined(value);
+            }
+        }
+        return result as T;
+    }
+    return obj;
+}
+
 export interface AuditLogEntry {
     projectId: string;
     linkId: string;
@@ -33,6 +56,19 @@ export interface AuditLogEntry {
         newValue: unknown;
         changeType: 'added' | 'removed' | 'modified';
     }>; // Detailed field-level changes
+    blocks?: Array<{
+        id: string;
+        heading: string;
+        tag?: string;
+        html: string;
+        selector: string;
+        index: number;
+    }>; // Content blocks for smart diff
+    textElements?: Array<{
+        selector: string;
+        text: string;
+        html: string;
+    }>; // Text elements for granular DOM diff
 }
 
 export const auditService = {
@@ -47,10 +83,13 @@ export const auditService = {
                 safeEntry.htmlSource = entry.htmlSource.substring(0, 900000) + '... (truncated)';
             }
 
-            const docRef = await addDoc(collection(db, AUDIT_LOGS_COLLECTION), {
+            // Remove undefined values - Firestore doesn't accept undefined
+            const cleanedEntry = removeUndefined({
                 ...safeEntry,
                 timestamp: new Date().toISOString()
             });
+
+            const docRef = await addDoc(collection(db, AUDIT_LOGS_COLLECTION), cleanedEntry);
             return docRef.id;
         } catch (error) {
             logError(error, 'saveAuditLog');
@@ -158,12 +197,12 @@ export const auditService = {
 
             // Group logs by linkId
             const logsByLink = new Map<string, { id: string; timestamp: string }[]>();
-            
+
             snapshot.docs.forEach(docSnapshot => {
                 const data = docSnapshot.data();
                 const linkId = data.linkId as string;
                 const timestamp = data.timestamp as string;
-                
+
                 if (!logsByLink.has(linkId)) {
                     logsByLink.set(linkId, []);
                 }

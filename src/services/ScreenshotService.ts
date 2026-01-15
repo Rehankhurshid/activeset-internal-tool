@@ -1,7 +1,7 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
 
 export interface ScreenshotResult {
-    screenshot: string; // Base64 encoded PNG
+    screenshot: string; // Base64 encoded WebP
     fullPageScreenshot?: string; // Full page screenshot (optional)
     viewport: {
         width: number;
@@ -11,9 +11,9 @@ export interface ScreenshotResult {
 }
 
 export interface ResponsiveScreenshotResult {
-    mobile: string; // Base64 PNG at 375px width
-    tablet: string; // Base64 PNG at 768px width
-    desktop: string; // Base64 PNG at 1280px width
+    mobile: string; // Base64 WebP at 375px width
+    tablet: string; // Base64 WebP at 768px width
+    desktop: string; // Base64 WebP at 1280px width
     capturedAt: string;
 }
 
@@ -60,7 +60,7 @@ export class ScreenshotService {
         const {
             width = 1280,
             height = 800,
-            scrollDelay = 500,
+            scrollDelay = 200,
             fullPage = false
         } = options;
 
@@ -84,15 +84,16 @@ export class ScreenshotService {
             await this.scrollPage(page, scrollDelay);
 
             // Wait a bit more for animations to settle
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             // Scroll back to top for the main screenshot
             await page.evaluate(() => window.scrollTo(0, 0));
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             // Capture full page screenshot (captures entire scrollable page, not just viewport)
             const screenshotBuffer = await page.screenshot({
-                type: 'png',
+                type: 'webp',
+                quality: 80,
                 encoding: 'binary',
                 fullPage: true
             }) as Buffer;
@@ -103,7 +104,8 @@ export class ScreenshotService {
             let fullPageScreenshot: string | undefined;
             if (fullPage) {
                 const fullPageBuffer = await page.screenshot({
-                    type: 'png',
+                    type: 'webp',
+                    quality: 80,
                     encoding: 'binary',
                     fullPage: true
                 }) as Buffer;
@@ -238,14 +240,15 @@ export class ScreenshotService {
 
                 // Scroll to trigger lazy loading
                 await this.scrollPage(page, 300);
-                
+
                 // Scroll back to top
                 await page.evaluate(() => window.scrollTo(0, 0));
                 await new Promise(resolve => setTimeout(resolve, 300));
 
                 // Capture full page screenshot
                 const screenshotBuffer = await page.screenshot({
-                    type: 'png',
+                    type: 'webp',
+                    quality: 80,
                     encoding: 'binary',
                     fullPage: true
                 }) as Buffer;
