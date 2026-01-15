@@ -25,5 +25,11 @@ service cloud.firestore {
       // Allow unauthenticated writes for signature events (clients signing)
       allow create: if request.resource.data.changeType == 'signed';
     }
+    
+    // Webflow Sessions - allow public access for extension communication
+    match /webflow_sessions/{sessionId} {
+      // Allow anyone to read/write sessions (extension runs without auth)
+      allow read, write: if true;
+    }
   }
 }
