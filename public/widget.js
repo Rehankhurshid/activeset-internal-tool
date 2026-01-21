@@ -1107,7 +1107,10 @@
     }
 
     renderDropdown(data) {
-      const links = data.links || [];
+      // Filter out auto-discovered links (sitemap links)
+      const allLinks = data.links || [];
+      const links = allLinks.filter(link => link.source !== 'auto'); // Only manual links
+
       if (links.length === 0) return;
 
       const positionStyles = {
