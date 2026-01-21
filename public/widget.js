@@ -831,7 +831,7 @@
              
              .circle {
                 fill: none;
-                stroke-width: 2.5;
+                stroke-width: 3; /* Thicker stroke */
                 stroke-linecap: round;
                 animation: progress 1s ease-out forwards;
                 transition: stroke 0.3s;
@@ -996,9 +996,10 @@
                               auditResult: result
                           })
                       });
-                  } catch (e) {
-                      console.warn('Audit Sync Failed', e);
-                  }
+                   } catch (e) {
+                       // Suppress error if blocked by client (common for analytics/tracking)
+                       console.warn('Audit Sync prevented (likely blocked by client):', e.message);
+                   }
              }
 
           } catch (err) {
@@ -1120,6 +1121,17 @@
 
       const posKey = this.config.position || "center-left"; 
       const styleString = positionStyles[posKey] || positionStyles["center-left"];
+
+      // Calculate where the dropdown content should appear relative to the button
+      // If widget is at the bottom, menu goes up (bottom: 100%). If top, menu goes down (top: 100%).
+      let dropdownPosition = "bottom: 100%; margin-bottom: 12px;";
+      if (posKey.startsWith("top")) {
+        dropdownPosition = "top: 100%; margin-top: 12px;";
+      } else if (posKey.includes("center")) {
+        // For center positions, align to the side? Or keep default?
+        // Let's assume bottom-up for center for now, or maybe top-0 relative to button
+        dropdownPosition = "bottom: 100%; margin-bottom: 12px;";
+      }
 
       // Ensure container is fixed and positioned correctly matches old style
       this.container.style.cssText = `
@@ -1328,9 +1340,10 @@
           }
 
           .detail-item {
-             font-size: 12px;
-             color: #a1a1aa;
-             padding: 3px 0;
+             font-size: 13px; /* Bump size slightly */
+             color: #e4e4e7 !important; /* Lighter gray and enforced */
+             padding: 4px 0;
+             line-height: 1.4;
           }
         </style>
       `;
