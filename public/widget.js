@@ -690,9 +690,10 @@
       const isAllowedDomain = this.config.showOnDomains && this.config.showOnDomains.some(d => hostname.includes(d));
 
       // Allow localhost, webflow, framer, or explicitly allowed domains
+      // RELAXED CHECK: Warn but don't block for now to ensure visibility
       if (!isWebflow && !isFramer && !isLocalhost && !isAllowedDomain) {
-        console.warn("Project Links Widget: Domain not allowed", hostname);
-        return;
+        console.warn("Project Links Widget: Running on unchecked domain", hostname);
+        // return; // Allow execution for now
       }
 
       console.log("Project Links Widget: Initializing on", hostname);
@@ -1421,8 +1422,9 @@
 
   // Auto-inject functionality for script tags
   function autoInjectWidget() {
-    const scripts = document.querySelectorAll(
-      'script[data-auto-inject="true"]'
+    // Find scripts with EITHER data-auto-inject="true" OR just data-project-id
+    const scripts = Array.from(document.querySelectorAll('script')).filter(s => 
+      s.dataset.autoInject === "true" || s.dataset.projectId
     );
 
     scripts.forEach((script) => {
