@@ -56,8 +56,7 @@ export async function GET(request: NextRequest) {
                 contentHash: currentLog.contentHash,
                 fieldChanges: currentLog.fieldChanges || [],
                 blocks: currentLog.blocks || [],
-                textElements: currentLog.textElements || [],
-                diffPatch: currentLog.diffPatch
+                textElements: currentLog.textElements || []
             } : null,
             previous: previousLog ? {
                 htmlSource: previousLog.htmlSource,
@@ -67,8 +66,7 @@ export async function GET(request: NextRequest) {
                 contentHash: previousLog.contentHash,
                 fieldChanges: previousLog.fieldChanges || [],
                 blocks: previousLog.blocks || [],
-                textElements: previousLog.textElements || [],
-                diffPatch: previousLog.diffPatch
+                textElements: previousLog.textElements || []
             } : null
         }, { headers: corsHeaders });
 

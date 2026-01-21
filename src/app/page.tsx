@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { AppNavigation } from '@/components/navigation/AppNavigation';
 import { cn } from '@/lib/utils';
 
+
+
 export default function Home() {
   const { user, loading, isAdmin } = useAuth();
   const { hasAccess: hasProposalAccess, loading: proposalAccessLoading } = useModuleAccess('proposal');
@@ -87,7 +89,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <AppNavigation title="Dashboard" />
-      
+
       <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
         <div className="mb-6 sm:mb-8 lg:mb-12">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight mb-2">
@@ -98,34 +100,40 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
-          {/* Project Links Module */}
-          {renderModuleCard(
-            "/modules/project-links",
-            <FolderOpen className="h-6 w-6 text-blue-500" />,
-            "bg-blue-500/10 dark:bg-blue-500/20",
-            "Project Links",
-            "Manage and organize all your project links in one place.",
-            hasProjectLinksAccess,
-            projectLinksAccessLoading
-          )}
 
-          {/* Proposal Generator Module */}
-          {renderModuleCard(
-            "/modules/proposal",
-            <FileText className="h-6 w-6 text-purple-500" />,
-            "bg-purple-500/10 dark:bg-purple-500/20",
-            "Proposal Generator",
-            "Create professional website proposals using Gemini AI.",
-            hasProposalAccess,
-            proposalAccessLoading,
-            <div className="flex items-center gap-1.5 text-xs text-purple-500 font-medium">
-              <Sparkles className="h-3 w-3" />
-              <span>AI Powered</span>
-            </div>
-          )}
+
+        <div className="max-w-6xl mx-auto">
+          <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+            {/* Project Links Module */}
+            {renderModuleCard(
+              "/modules/project-links",
+              <FolderOpen className="h-6 w-6 text-blue-500" />,
+              "bg-blue-500/10 dark:bg-blue-500/20",
+              "Project Links",
+              "Manage and organize all your project links in one place.",
+              hasProjectLinksAccess,
+              projectLinksAccessLoading
+            )}
+
+            {/* Proposal Generator Module */}
+            {renderModuleCard(
+              "/modules/proposal",
+              <FileText className="h-6 w-6 text-purple-500" />,
+              "bg-purple-500/10 dark:bg-purple-500/20",
+              "Proposal Generator",
+              "Create professional website proposals using Gemini AI.",
+              hasProposalAccess,
+              proposalAccessLoading,
+              <div className="flex items-center gap-1.5 text-xs text-purple-500 font-medium">
+                <Sparkles className="h-3 w-3" />
+                <span>AI Powered</span>
+              </div>
+            )}
+          </div>
+
+
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   );
 }

@@ -232,7 +232,6 @@ export interface TextElement {
   selector: string;     // CSS selector used
   text: string;         // Text content
   html: string;         // Raw HTML snippet
-  isAnimated?: boolean; // True if element has animation-related attributes (for smarter filtering)
 }
 
 // Block change for diff display
@@ -262,7 +261,6 @@ export interface ExtendedContentSnapshot extends ContentSnapshot {
   textElements?: TextElement[];  // Text elements for granular DOM diff
   bodyTextHash: string;
   bodyTextPreview?: string; // First 500 chars of body text for change comparison
-  simplifiedContent?: string; // Cleaned, structural HTML for intelligent comparison (no scripts/styles/noise)
   headingsWithTags?: Array<{ tag: string, text: string }>; // Headings with H1/H2/H3 tags
 }
 

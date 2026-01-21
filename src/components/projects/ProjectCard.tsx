@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
-import { Trash2, ChevronRight, ChevronDown, Link as LinkIcon, Edit, MoreHorizontal, ExternalLink, MoreVertical, Folder } from 'lucide-react';
+import { Trash2, ChevronRight, ChevronDown, Link as LinkIcon, Edit, MoreHorizontal, ExternalLink, MoreVertical, Folder, Plus } from 'lucide-react';
 import { Project, ProjectLink } from '@/types';
 import { projectsService } from '@/services/database';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,7 @@ import {
     DropdownMenuTrigger,
     DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { AddLinkDialog } from './AddLinkDialog';
 
 interface ProjectCardProps {
     project: Project;
@@ -37,6 +38,16 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             setIsDeleting(false);
             setIsDeleteOpen(false);
         }
+    };
+
+    const handleAddLink = async (title: string, url: string) => {
+        await projectsService.addLinkToProject(project.id, {
+            title,
+            url,
+            order: (project.links?.length || 0),
+            isDefault: false,
+            source: 'manual'
+        });
     };
 
     // ONLY manual links (source !== 'auto')
@@ -121,10 +132,34 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                     </span>
                                 </div>
                             )}
+
+                            {/* Add Link Button (Compact) */}
+                            <div className="pt-2 px-1">
+                                <AddLinkDialog
+                                    onAddLink={handleAddLink}
+                                    trigger={
+                                        <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] gap-1.5 text-muted-foreground hover:text-primary justify-start px-2">
+                                            <div className="flex items-center justify-center w-4 h-4 rounded-full border border-current opacity-60">
+                                                <Plus className="w-2.5 h-2.5" />
+                                            </div>
+                                            Add generic link
+                                        </Button>
+                                    }
+                                />
+                            </div>
                         </>
                     ) : (
-                        <div className="flex flex-col items-center justify-center h-20 text-center border-2 border-dashed border-muted rounded-lg bg-muted/10 mx-1">
-                            <p className="text-xs text-muted-foreground">No links</p>
+                        <div className="flex flex-col items-center justify-center h-24 text-center border-2 border-dashed border-muted rounded-lg bg-muted/10 mx-1">
+                            <p className="text-xs text-muted-foreground mb-2">No links</p>
+                            <AddLinkDialog
+                                onAddLink={handleAddLink}
+                                trigger={
+                                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Add Link
+                                    </Button>
+                                }
+                            />
                         </div>
                     )}
                 </div>

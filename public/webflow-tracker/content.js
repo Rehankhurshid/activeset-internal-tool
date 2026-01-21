@@ -7,6 +7,70 @@
   let lastEmail = null;
   let lastProject = null;
   let isInitialized = false;
+  let intervalId = null;
+
+  /**
+   * Check if extension context is still valid
+   */
+  function isExtensionValid() {
+    try {
+      // This will throw if context is invalidated
+      return !!chrome.runtime?.id;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Safe wrapper for chrome.storage.local.get
+   */
+  async function safeStorageGet(keys) {
+    if (!isExtensionValid()) return {};
+    try {
+      return await chrome.storage.local.get(keys);
+    } catch (e) {
+      console.log('[Webflow Tracker] Extension context invalidated');
+      cleanup();
+      return {};
+    }
+  }
+
+  /**
+   * Safe wrapper for chrome.storage.local.set
+   */
+  async function safeStorageSet(data) {
+    if (!isExtensionValid()) return;
+    try {
+      await chrome.storage.local.set(data);
+    } catch (e) {
+      console.log('[Webflow Tracker] Extension context invalidated');
+      cleanup();
+    }
+  }
+
+  /**
+   * Safe wrapper for chrome.runtime.sendMessage
+   */
+  async function safeSendMessage(message) {
+    if (!isExtensionValid()) return;
+    try {
+      await chrome.runtime.sendMessage(message);
+    } catch (e) {
+      console.log('[Webflow Tracker] Extension context invalidated');
+      cleanup();
+    }
+  }
+
+  /**
+   * Cleanup when extension is invalidated
+   */
+  function cleanup() {
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    console.log('[Webflow Tracker] Cleaned up - please reload the page');
+  }
 
   /**
    * Decode HTML entities in a string
@@ -134,10 +198,11 @@
    * Handle logout - differentiate between manual logout and kicked out
    */
   async function handleLogout(previousEmail, reason = 'manual') {
+    if (!isExtensionValid()) return;
+    
     console.log('[Webflow Tracker] Logout detected:', { previousEmail, reason });
     
-    // Set state to 'logged_out' (different from 'no_tabs')
-    await chrome.storage.local.set({ 
+    await safeStorageSet({ 
       currentEmail: null, 
       currentProject: null,
       sessionState: 'logged_out',
@@ -145,15 +210,11 @@
     });
     
     if (previousEmail) {
-      try {
-        await chrome.runtime.sendMessage({
-          type: 'LOGOUT_DETECTED',
-          email: previousEmail,
-          reason: reason
-        });
-      } catch (e) {
-        console.error('[Webflow Tracker] Error sending logout message:', e);
-      }
+      await safeSendMessage({
+        type: 'LOGOUT_DETECTED',
+        email: previousEmail,
+        reason: reason
+      });
     }
     
     lastEmail = null;
@@ -164,24 +225,22 @@
    * Handle login/session update
    */
   async function handleLogin(email, project) {
+    if (!isExtensionValid()) return;
+    
     console.log('[Webflow Tracker] Session update:', { email, project });
     
-    await chrome.storage.local.set({ 
+    await safeStorageSet({ 
       currentEmail: email, 
       currentProject: project,
       sessionState: 'active',
       lastLogoutReason: null
     });
 
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'SESSION_UPDATE',
-        email: email,
-        project: project
-      });
-    } catch (e) {
-      console.error('[Webflow Tracker] Error sending session update:', e);
-    }
+    await safeSendMessage({
+      type: 'SESSION_UPDATE',
+      email: email,
+      project: project
+    });
     
     lastEmail = email;
     lastProject = project;
@@ -191,13 +250,17 @@
    * Detect current state and notify background script
    */
   async function detectAndNotify() {
+    if (!isExtensionValid()) {
+      cleanup();
+      return;
+    }
+    
     const isLoggedOut = isOnLoginPage();
     
     if (isLoggedOut) {
-      const stored = await chrome.storage.local.get(['currentEmail']);
+      const stored = await safeStorageGet(['currentEmail']);
       const emailToRelease = lastEmail || stored.currentEmail;
       
-      // Check if this might be a force logout (kicked by another user)
       const url = window.location.href;
       const isKickedOut = url.includes('m=WW91') || url.includes('logged%20out');
       const reason = isKickedOut ? 'kicked' : 'manual';
@@ -205,8 +268,7 @@
       if (emailToRelease || lastEmail) {
         await handleLogout(emailToRelease, reason);
       } else {
-        // Just on login page without prior session
-        await chrome.storage.local.set({ sessionState: 'logged_out' });
+        await safeStorageSet({ sessionState: 'logged_out' });
       }
       return;
     }
@@ -214,11 +276,22 @@
     const email = extractEmail();
     const project = extractProjectAndPage();
 
-    console.log('[Webflow Tracker] Detection:', { email, project, lastEmail, lastProject });
+    // Use detected email, or fall back to last known email for heartbeats
+    const effectiveEmail = email || lastEmail;
 
-    if (email) {
-      if (email !== lastEmail || project !== lastProject) {
+    console.log('[Webflow Tracker] Detection:', { email, effectiveEmail, project, lastEmail, lastProject });
+
+    if (effectiveEmail) {
+      if (email && (email !== lastEmail || project !== lastProject)) {
+        // Email detected and changed - send full session update
         await handleLogin(email, project);
+      } else {
+        // Same email/project OR using fallback - send heartbeat
+        await safeSendMessage({
+          type: 'HEARTBEAT',
+          email: effectiveEmail,
+          project: project || lastProject || 'dashboard'
+        });
       }
     }
   }
@@ -228,12 +301,14 @@
    */
   function monitorLogoutClicks() {
     document.addEventListener('click', async (e) => {
+      if (!isExtensionValid()) return;
+      
       const target = e.target.closest('a[href*="/dashboard/logout"], a[href*="logout"], button[aria-label*="logout" i]');
       const textContent = e.target.textContent?.toLowerCase() || '';
       
       if (target || textContent.includes('sign out')) {
         console.log('[Webflow Tracker] Logout click detected');
-        const stored = await chrome.storage.local.get(['currentEmail']);
+        const stored = await safeStorageGet(['currentEmail']);
         const emailToRelease = lastEmail || stored.currentEmail;
         if (emailToRelease) {
           await handleLogout(emailToRelease, 'manual');
@@ -247,21 +322,29 @@
    */
   async function init() {
     if (isInitialized) return;
+    if (!isExtensionValid()) return;
+    
     isInitialized = true;
     
     console.log('[Webflow Team Tracker] Initializing on:', window.location.href);
     
-    const stored = await chrome.storage.local.get(['currentEmail', 'currentProject']);
+    const stored = await safeStorageGet(['currentEmail', 'currentProject']);
     lastEmail = stored.currentEmail;
     lastProject = stored.currentProject;
     
     setTimeout(detectAndNotify, 1000);
     monitorLogoutClicks();
+    
     // Periodic check for changes
-    setInterval(detectAndNotify, 2000);
+    intervalId = setInterval(detectAndNotify, 2000);
 
     let lastUrl = window.location.href;
     const observer = new MutationObserver(() => {
+      if (!isExtensionValid()) {
+        observer.disconnect();
+        cleanup();
+        return;
+      }
       if (window.location.href !== lastUrl) {
         lastUrl = window.location.href;
         console.log('[Webflow Tracker] URL changed:', lastUrl);

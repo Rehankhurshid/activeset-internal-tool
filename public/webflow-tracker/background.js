@@ -7,9 +7,13 @@ const API_BASE = 'https://app.activeset.co';
 // Heartbeat interval - 30 seconds
 const HEARTBEAT_INTERVAL_MINUTES = 0.5;
 
-// Track last sent state to avoid duplicate POSTs
+// Track last sent state to throttle API calls
 let lastSentEmail = null;
 let lastSentProject = null;
+let lastSentTime = 0;
+
+// Throttle heartbeats to max 1 per 3 seconds
+const HEARTBEAT_THROTTLE_MS = 3000;
 
 /**
  * Send session update to API (only if needed)
@@ -24,10 +28,11 @@ async function sendSessionUpdate(action, email, project, force = false) {
       return;
     }
 
-    // Skip duplicate heartbeats (same email + project)
+    // Throttle heartbeats - only send if 5+ seconds since last send
+    const now = Date.now();
     if (action === 'heartbeat' && !force) {
-      if (email === lastSentEmail && project === lastSentProject) {
-        console.log('[Webflow Tracker] Skipping duplicate heartbeat');
+      if (email === lastSentEmail && (now - lastSentTime) < HEARTBEAT_THROTTLE_MS) {
+        // Skip - sent too recently
         return;
       }
     }
@@ -52,9 +57,11 @@ async function sendSessionUpdate(action, email, project, force = false) {
       if (action === 'claim' || action === 'heartbeat') {
         lastSentEmail = email;
         lastSentProject = project;
+        lastSentTime = Date.now();
       } else if (action === 'release') {
         lastSentEmail = null;
         lastSentProject = null;
+        lastSentTime = 0;
       }
     } else {
       console.error('[Webflow Tracker] API error:', data.error);
@@ -90,7 +97,7 @@ async function handleHeartbeat() {
 }
 
 /**
- * Handle messages from content script
+ * Handle messages from content script and popup
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('[Webflow Tracker] Received message:', message.type);
@@ -99,6 +106,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'SESSION_UPDATE':
       // Always claim on session update (user is actively using Webflow)
       sendSessionUpdate('claim', message.email, message.project, true);
+      break;
+
+    case 'FORCE_SYNC':
+      // Popup detected local session not in API - force a claim
+      console.log('[Webflow Tracker] Force sync requested from popup');
+      sendSessionUpdate('claim', message.email, message.project, true);
+      break;
+
+    case 'HEARTBEAT':
+      // Content script heartbeat (every 2 seconds while tab is open)
+      sendSessionUpdate('heartbeat', message.email, message.project, false);
       break;
 
     case 'LOGOUT_DETECTED':

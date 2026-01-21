@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
@@ -21,7 +21,8 @@ if (!firebaseConfig.apiKey) {
   }
 }
 
-const app = initializeApp(firebaseConfig);
+// Prevent multiple initializations (essential for Next.js hot reload servers)
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // Initialize Firebase Authentication only on the client.
 // Next.js may import modules during build/server evaluation; initializing auth there can crash builds
@@ -39,4 +40,4 @@ export const googleProvider =
 // Initialize Cloud Firestore and get a reference to the service
 export const db = getFirestore(app);
 
-export default app; 
+export default app;

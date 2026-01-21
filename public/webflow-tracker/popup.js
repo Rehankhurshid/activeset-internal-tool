@@ -21,7 +21,7 @@ const yourNameMini = document.getElementById('your-name-mini');
 const yourAccountMini = document.getElementById('your-account-mini');
 const accountsList = document.getElementById('accounts-list');
 
-// LocalStorage key for known accounts
+// LocalStorage keys
 const KNOWN_ACCOUNTS_KEY = 'knownActivesetAccounts';
 
 // State
@@ -33,7 +33,8 @@ let refreshInterval = null;
  */
 async function init() {
   const result = await chrome.storage.local.get(['userName', 'currentEmail', 'currentProject']);
-  
+
+  // Show user status
   if (result.userName) {
     currentUserName = result.userName;
     showStatus(result.userName, result.currentEmail, result.currentProject);
@@ -41,8 +42,10 @@ async function init() {
     showSetup();
   }
 
+  // Show loading state, then fetch from API
+  renderAccountsList(SEED_ACCOUNTS, [], true);
   await refreshAccountStatus();
-  refreshInterval = setInterval(refreshAccountStatus, 5000);
+  refreshInterval = setInterval(refreshAccountStatus, 10000);
 }
 
 /**
@@ -77,7 +80,7 @@ function showStatus(name, email, project) {
  */
 saveNameBtn.addEventListener('click', async () => {
   const name = nameInput.value.trim();
-  
+
   if (!name) {
     nameInput.style.border = '1px solid #f72585';
     return;
@@ -85,9 +88,15 @@ saveNameBtn.addEventListener('click', async () => {
 
   await chrome.storage.local.set({ userName: name });
   currentUserName = name;
-  
+
   const result = await chrome.storage.local.get(['currentEmail', 'currentProject']);
   showStatus(name, result.currentEmail, result.currentProject);
+
+  // If already logged into Webflow, sync the session with new name
+  if (result.currentEmail) {
+    hasSyncedThisSession = false; // Reset to allow sync
+    await refreshAccountStatus();
+  }
 });
 
 /**
@@ -115,15 +124,15 @@ async function refreshAccountStatus() {
 
     if (data.success) {
       const sessions = data.sessions || [];
-      
+
       // Filter to only @activeset.co accounts
-      const activesetSessions = sessions.filter(s => 
+      const activesetSessions = sessions.filter(s =>
         s.email && s.email.endsWith('@activeset.co')
       );
-      
+
       // Start with seed accounts
       let allAccounts = [...SEED_ACCOUNTS];
-      
+
       // Get additional known accounts from storage
       const storedAccounts = await getKnownAccounts();
       storedAccounts.forEach(email => {
@@ -131,14 +140,14 @@ async function refreshAccountStatus() {
           allAccounts.push(email);
         }
       });
-      
+
       // Add any new accounts discovered from sessions
       activesetSessions.forEach(s => {
         if (!allAccounts.includes(s.email)) {
           allAccounts.push(s.email);
         }
       });
-      
+
       // Also add current user's account if it's @activeset.co
       const localData = await chrome.storage.local.get(['currentEmail']);
       if (localData.currentEmail && localData.currentEmail.endsWith('@activeset.co')) {
@@ -146,14 +155,14 @@ async function refreshAccountStatus() {
           allAccounts.push(localData.currentEmail);
         }
       }
-      
+
       // Sort alphabetically
       allAccounts.sort();
-      
+
       // Save new accounts (excluding seed) to storage for persistence
       const newAccounts = allAccounts.filter(a => !SEED_ACCOUNTS.includes(a));
       await saveKnownAccounts(newAccounts);
-      
+
       // Render the accounts
       renderAccountsList(allAccounts, activesetSessions);
     }
@@ -168,8 +177,11 @@ async function refreshAccountStatus() {
 
 /**
  * Render the list of known accounts with current users
+ * @param {string[]} knownAccounts - List of email addresses
+ * @param {object[]} sessions - Active sessions from API
+ * @param {boolean} isLoading - Whether we're still loading from API
  */
-function renderAccountsList(knownAccounts, sessions) {
+function renderAccountsList(knownAccounts, sessions, isLoading = false) {
   // Create a map of email -> session for quick lookup
   const sessionMap = {};
   sessions.forEach(s => {
@@ -191,14 +203,19 @@ function renderAccountsList(knownAccounts, sessions) {
     const isActive = !!session;
     const userName = session?.userName || null;
     const projectPath = session?.projectPath || null;
-    
-    // Check if session is fresh (within last 60 seconds)
-    let isOnline = false;
-    if (session?.lastActive) {
-      const lastActiveMs = session.lastActive._seconds 
-        ? session.lastActive._seconds * 1000 
-        : (session.lastActive.seconds ? session.lastActive.seconds * 1000 : Date.now());
-      isOnline = (Date.now() - lastActiveMs) < 60000;
+
+    // Determine status - simple: if session exists, show username
+    let statusText;
+    let statusClass;
+    if (isLoading) {
+      statusText = '...';
+      statusClass = 'empty';
+    } else if (isActive) {
+      statusText = escapeHtml(userName);
+      statusClass = '';
+    } else {
+      statusText = 'No one using';
+      statusClass = 'empty';
     }
 
     return `
@@ -208,10 +225,10 @@ function renderAccountsList(knownAccounts, sessions) {
           ${projectPath ? `<div class="account-project">${escapeHtml(projectPath)}</div>` : ''}
         </div>
         <div class="account-user">
-          <span class="account-user-name ${isActive ? '' : 'empty'}">
-            ${isActive ? escapeHtml(userName) : 'No one using'}
+          <span class="account-user-name ${statusClass}">
+            ${statusText}
           </span>
-          <span class="status-dot ${isActive && isOnline ? 'active' : 'inactive'}"></span>
+          <span class="status-dot ${isActive ? 'active' : 'inactive'}"></span>
         </div>
       </div>
     `;

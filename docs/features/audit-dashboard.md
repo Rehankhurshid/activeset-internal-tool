@@ -142,8 +142,7 @@ When `widget.js` loads on a client's website:
 | [social-card-preview.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/social-card-preview.tsx) | Facebook/Twitter/LinkedIn social card mockups |
 | [screenshot-diff.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/screenshot-diff.tsx) | Visual screenshot comparison with diff overlay |
 | [html-preview.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/html-preview.tsx) | Sandboxed iframe HTML previews (current/previous) |
-| [source-diff-viewer.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/source-diff-viewer.tsx) | **Core Diff Component**: Unified source diff with inline highlighting and smart context truncation |
-| [change-diff-viewer.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/change-diff-viewer.tsx) | Summary badge and high-level field change list (e.g., "Title updated") |
+| [change-diff-viewer.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/change-diff-viewer.tsx) | Field-by-field change display with inline diffs |
 
 ### Hierarchical Page Grouping
 
@@ -164,15 +163,11 @@ Pages are displayed in a collapsible tree structure:
   └─ 📄 Static Pages (...)
 ```
 
-
 **Grouping Levels:**
-1. **Locale** - Groups pages by detected language (shown when multiple locales exist).
-2. **Type** - Groups by CMS or Static folder classification.
-3. **Folder** - Groups by URL path folder (e.g., `/blog/*`).
-   - **Pattern Detection**: Uses smart pattern matching to identify folders.
-   - **Min-Count Rule**: Only groups folders with multiple child pages (prevents single-page folders).
-   - **Locale Transparency**: Ignores locale prefixes (e.g., `/es-mx/blog` groups with `/blog`).
-4. **Page** - Individual page rows.
+1. **Locale** - Groups pages by detected language (shown when multiple locales exist)
+2. **Type** - Groups by CMS or Static folder classification
+3. **Folder** - Groups by URL path folder (e.g., `/blog/*`)
+4. **Page** - Individual page rows
 
 Each level is collapsible and shows a count badge.
 
@@ -295,28 +290,6 @@ When `CONTENT_CHANGED` is detected, the system compares snapshots:
 | `images` | Set comparison of `src` attributes |
 | `links` | Set comparison of `href` attributes |
 | `bodyText` | Fallback if hash changed but no specific fields |
-
-### Noise Reduction Strategy (Deep Context)
-
-To ensure the "Source Diff" view is useful and not cluttered with global site changes, the system implements a multi-layer noise reduction strategy:
-
-#### 1. Content Stripping (Pre-Diff)
-Before generating the `diffPatch`, the raw HTML is processed to remove "boilerplate" that changes globally but isn't relevant to the specific page content:
-*   **Navigation & Footer**: `<nav>` and `<footer>` tags are stripped and replaced with placeholders like `<!-- [NAV IGNORED] -->`. This prevents a single menu link update from flagging *every single page* as "Changed".
-*   **Technical Assets**: `<script>` and `<style>` tags are stripped. We care about *content* changes, not minified JS bundle hash updates.
-*   **Heavy Markup**: `<svg>` icons are collapsed to `<!-- [SVG ICON] -->` to avoid diff pollution from large path data string changes.
-
-#### 2. Diff Computation
-The system generates a **Unified Diff** (`createTwoFilesPatch`) solely on this "Cleaned" content. This ensures the dashboard only reports a `CONTENT_CHANGED` status if the actual `<body>` content (articles, headings, text) has been modified.
-
-#### 3. Visual Presentation (UI Truncation)
-In the high-density `SourceDiffViewer`:
-*   **Smart Context**: Long lines are truncated to show only ~40 characters of context around the actual change.
-    *   *Before*: `...<div class="container mx-auto px-4 py-8 flex flex-col items-center justify-center">...`
-    *   *After*: `...s-center justify-center">...`
-*   **Inline Highlighting**: Changes are highlighted at the character level, so a fixed typo stands out instantly.
-
-This three-tier approach (Strip → Diff → Truncate) transforms the diff view from a raw "file compare" into a specialized "content audit" tool.
 
 ---
 
@@ -729,28 +702,17 @@ The `/api/audit-logs/previous` endpoint returns both versions:
 - `previous`: Second-latest audit log entry (the actual "previous" version)
 - `screenshotUrl`: Firebase Storage URL (falls back to base64 for legacy logs)
 
-### Source Diff Viewer (New)
-
-The primary way to inspect changes is now the **Source Diff Viewer**. It replaces the older "Field Change" list for detailed inspection:
-
-*   **Unified Patch View**: Shows the strict added/removed lines from the HTML source.
-*   **Noise-Filtered**: As detailed in "Change Detection Logic," this view hides Nav/Footer/Scripts to focus purely on content.
-*   **Syntax Highlighting**: Uses green/red backgrounds with character-level diffing to pinpoint exact edits (typos, word swaps).
-*   **Header/Meta Handling**: Appropriately displays diff headers (`@@ -1,4 +1,4 @@`) to separate non-contiguous changes.
-
-This view is powered by the `diffPatch` field stored in `audit_logs`.
-
 ### Change Detection & Field Tracking
 
-While the Source Diff shows *everything*, we still track high-level semantic fields for quick summaries:
+When content changes are detected, the system tracks specific fields:
 
-| Field | Purpose |
+| Field | Storage |
 |-------|---------|
-| `fieldChanges` | Array of detected changes in high-value fields (Title, H1, Meta Description) |
-| `diffSummary` | One-line summary for the timeline (e.g., "Title updated, +20 words") |
-| `sections` | (Deprecated) DOM summary blocks |
+| `fieldChanges` | Array of `FieldChange` objects with before/after values |
+| `diffSummary` | Human-readable summary (e.g., "Title updated, +20 words") |
+| `sections` | DOM summary of added/removed content blocks (heading + preview) |
 
-These are saved to `AuditResult` and used to generate the "Change Summary" badge in the UI.
+These are saved to `AuditResult` and displayed in the Changes tab.
 
 ### Change Log Timeline Improvements
 

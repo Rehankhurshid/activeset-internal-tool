@@ -150,7 +150,7 @@ export class PageScanner {
                     const parsed = JSON.parse(content);
                     // Handle @graph arrays
                     const schemaItems = Array.isArray(parsed['@graph']) ? parsed['@graph'] : [parsed];
-
+                    
                     for (const item of schemaItems) {
                         if (item && typeof item === 'object') {
                             schemas.push(item);
@@ -184,7 +184,7 @@ export class PageScanner {
         for (const schema of schemas) {
             const type = (schema as Record<string, unknown>)['@type'];
             const types = Array.isArray(type) ? type : [type];
-
+            
             for (const t of types) {
                 if (typeof t === 'string' && requiredProperties[t]) {
                     for (const prop of requiredProperties[t]) {
@@ -332,7 +332,7 @@ export class PageScanner {
             const tagName = (el as unknown as { name: string }).name?.toLowerCase() || 'h1';
             const level = parseInt(tagName.replace('h', ''), 10);
             const text = $el.text().trim();
-
+            
             if (text) {
                 headings.push({ level, text: text.substring(0, 100) });
             }
@@ -389,14 +389,14 @@ export class PageScanner {
         // Check ARIA landmarks
         const ariaLandmarks: string[] = [];
         const landmarkRoles = ['banner', 'navigation', 'main', 'contentinfo', 'complementary', 'region', 'search'];
-
+        
         // Check for role attributes
         landmarkRoles.forEach(role => {
             if ($(`[role="${role}"]`).length > 0) {
                 ariaLandmarks.push(role);
             }
         });
-
+        
         // Check for semantic HTML5 elements that imply landmarks
         if ($('header').length > 0 && !ariaLandmarks.includes('banner')) ariaLandmarks.push('banner');
         if ($('nav').length > 0 && !ariaLandmarks.includes('navigation')) ariaLandmarks.push('navigation');
@@ -426,7 +426,7 @@ export class PageScanner {
             '[class*="skip-to"]'
         ];
         const hasSkipLink = skipLinkSelectors.some(sel => $(sel).length > 0);
-
+        
         if (!hasSkipLink) {
             issues.push({
                 type: 'skip-link',
@@ -440,7 +440,7 @@ export class PageScanner {
         $('input, select, textarea').each((_, el) => {
             const $el = $(el);
             const type = $el.attr('type');
-
+            
             // Skip hidden, submit, button, reset types
             if (['hidden', 'submit', 'button', 'reset', 'image'].includes(type || '')) {
                 return;
@@ -450,13 +450,13 @@ export class PageScanner {
             const ariaLabel = $el.attr('aria-label');
             const ariaLabelledby = $el.attr('aria-labelledby');
             const placeholder = $el.attr('placeholder');
-
+            
             // Check if there's an associated label
-            const hasLabel = (id && $(`label[for="${id}"]`).length > 0) ||
-                ariaLabel ||
-                ariaLabelledby ||
-                $el.closest('label').length > 0;
-
+            const hasLabel = (id && $(`label[for="${id}"]`).length > 0) || 
+                             ariaLabel || 
+                             ariaLabelledby ||
+                             $el.closest('label').length > 0;
+            
             if (!hasLabel) {
                 formInputsWithoutLabels++;
                 // Only add first few issues to avoid spam
@@ -483,15 +483,15 @@ export class PageScanner {
         // Check for generic link text
         const genericLinkTexts = ['click here', 'read more', 'learn more', 'here', 'more', 'link', 'click'];
         let linksWithGenericText = 0;
-
+        
         $('a').each((_, el) => {
             const $el = $(el);
             const text = $el.text().trim().toLowerCase();
             const ariaLabel = $el.attr('aria-label');
-
+            
             // Skip if has aria-label
             if (ariaLabel) return;
-
+            
             if (genericLinkTexts.includes(text)) {
                 linksWithGenericText++;
                 // Only add first few issues
@@ -541,10 +541,10 @@ export class PageScanner {
         }
 
         const htmlSource = await response.text();
-
+        
         // Extract new metadata BEFORE removing scripts
         const schemaResult = this.extractSchemaMarkup(htmlSource);
-
+        
         const $ = cheerio.load(htmlSource);
 
         // Extract additional metadata before content cleaning
@@ -654,7 +654,7 @@ export class PageScanner {
             '.collection-item',
             '.w-dyn-item',  // Webflow dynamic items
         ];
-
+        
         // Try each selector and extract cards
         let blockIndex = 0;
         for (const selector of cardSelectors) {
@@ -665,18 +665,18 @@ export class PageScanner {
                     // Get the heading (H2 or H3)
                     const heading = $el.find('h2, h3').first().text().trim();
                     if (!heading) return; // Skip blocks without headings
-
+                    
                     // Get the tag/category if present
                     const tagEl = $el.find('[class*="tag"], [class*="category"], [data-project-tag="tag"]');
                     const tag = tagEl.first().text().trim() || undefined;
-
+                    
                     // Get the HTML snippet (limited to avoid huge payloads)
                     const html = $el.html()?.substring(0, 2000) || '';
-
+                    
                     // Generate an ID hash from heading + tag + index
                     const idSource = `${heading}|${tag || ''}|${blockIndex}`;
                     const id = createHash('md5').update(idSource).digest('hex').substring(0, 12);
-
+                    
                     blocks.push({
                         id,
                         heading,
@@ -687,12 +687,12 @@ export class PageScanner {
                     });
                     blockIndex++;
                 });
-
+                
                 // If we found cards with this selector, don't try others to avoid duplicates
                 if (blocks.length > 0) break;
             }
         }
-
+        
         // Fallback: if no cards found with specific selectors, look for any repeated H2-containing elements
         if (blocks.length === 0) {
             const h2Elements = $('h2');
@@ -700,14 +700,14 @@ export class PageScanner {
                 const $el = $(el);
                 const heading = $el.text().trim();
                 if (!heading || heading.length > 100) return; // Skip empty or very long headings
-
+                
                 // Get the parent container
                 const $parent = $el.parent();
                 const html = $parent.html()?.substring(0, 1500) || '';
-
+                
                 // Generate ID
                 const id = createHash('md5').update(`${heading}|${idx}`).digest('hex').substring(0, 12);
-
+                
                 blocks.push({
                     id,
                     heading,
@@ -718,10 +718,34 @@ export class PageScanner {
                 });
             });
         }
-
-        // Generate Simplified Content for Intelligent Comparison
-        // This replaces the granular "textElements" looping which was noisy
-        const simplifiedContent = getSimplifiedSource($);
+        
+        // Extract text elements for granular DOM diff (subtext, labels, etc.)
+        const textElements: Array<{ selector: string; text: string; html: string }> = [];
+        const textSelectors = [
+            '.subtext-component',
+            '.subtext_text',
+            '[class*="subtext"]',
+            '[class*="label"]',
+            '[class*="caption"]',
+            '[class*="subtitle"]',
+            '.hero_text',
+            '[class*="hero"]',
+            '[data-subtext-animate]',
+        ];
+        
+        for (const selector of textSelectors) {
+            $(selector).slice(0, 30).each((_, el) => {
+                const $el = $(el);
+                const text = $el.text().trim();
+                if (text && text.length > 2 && text.length < 500) {
+                    textElements.push({
+                        selector,
+                        text,
+                        html: ($el.prop('outerHTML') || '').substring(0, 1000)
+                    });
+                }
+            });
+        }
 
         // Compute hashes
         const contentHash = bodyTextHash;
@@ -733,33 +757,29 @@ export class PageScanner {
             h1,
             metaDescription,
             wordCount,
-            headings: headingsWithTags.map(h => h.text),
-            images: images.map(img => img.src), // Only hash src
-            links: links.map(l => l.href),      // Only hash href
-            // We use simplifiedContent for the structural hash instead of raw HTML
-            structure: simplifiedContent.length
+            headingsWithTags,
+            images,
+            links,
+            bodyText // Include full body text in hash
         };
-
-        // Compute canonical hash
         const fullHash = createHash('sha256').update(JSON.stringify(dataForHash)).digest('hex');
 
-        // Create snapshot
+        // Build content snapshot
         const contentSnapshot: ExtendedContentSnapshot = {
             title,
             h1,
             metaDescription,
             wordCount,
             headings,
+            headingsWithTags,
             images,
             links,
             sections,
             blocks,  // Individual cards/blocks for diff display
-            textElements: [], // Deprecated: No longer using granular text elements
-
+            textElements,  // Text elements for granular DOM diff
             bodyTextHash,
-            bodyTextPreview: bodyText.substring(0, 500),
-            headingsWithTags,
-            simplifiedContent // New field for intelligent comparison
+            // First 500 chars of body text for change comparison display
+            bodyTextPreview: bodyText.substring(0, 500)
         };
 
         // Check for placeholders
@@ -790,7 +810,7 @@ export class PageScanner {
 
         // SEO checks (enhanced with title validation)
         const seoIssues: string[] = [];
-
+        
         // Title checks
         if (!title) {
             seoIssues.push('Missing page title');
@@ -799,7 +819,7 @@ export class PageScanner {
         } else if (title.length > 60) {
             seoIssues.push(`Title too long (${title.length} chars, recommended: 30-60)`);
         }
-
+        
         // Meta description checks
         if (!metaDescription) {
             seoIssues.push('Missing meta description');
@@ -813,28 +833,28 @@ export class PageScanner {
         if (imagesWithoutAlt.length > 0) {
             seoIssues.push(`${imagesWithoutAlt.length} image(s) missing alt text`);
         }
-
+        
         // Link stats for the links category
         const internalLinks = links.filter(l => !l.isExternal).length;
         const externalLinks = links.filter(l => l.isExternal).length;
 
         // Calculate individual category scores
-        const schemaScore = schemaResult.hasSchema
+        const schemaScore = schemaResult.hasSchema 
             ? Math.max(0, 100 - schemaResult.issues.length * 15)
             : 0;
-
+        
         const openGraphScore = openGraphResult.hasOpenGraph
             ? Math.max(0, 100 - openGraphResult.issues.length * 20)
             : 0;
-
+            
         const twitterCardsScore = twitterCardsResult.hasTwitterCards
             ? Math.max(0, 100 - twitterCardsResult.issues.length * 20)
             : 50; // Lower penalty for missing Twitter cards
-
+            
         const metaTagsScore = Math.max(0, 100 - metaTagsResult.issues.length * 15);
-
+        
         const headingStructureScore = Math.max(0, 100 - headingStructureResult.issues.length * 20);
-
+        
         // Accessibility score: errors are -20, warnings are -10
         const accessibilityErrors = accessibilityResult.issues.filter(i => i.severity === 'error').length;
         const accessibilityWarnings = accessibilityResult.issues.filter(i => i.severity === 'warning').length;
@@ -910,7 +930,7 @@ export class PageScanner {
                     score: 100
                 },
                 schema: {
-                    status: schemaResult.hasSchema
+                    status: schemaResult.hasSchema 
                         ? getStatus(schemaResult.issues.length)
                         : 'warning',
                     hasSchema: schemaResult.hasSchema,
@@ -982,53 +1002,6 @@ export class PageScanner {
             }
         };
     }
-}
-
-/**
- * Generates a simplified, canonical version of the HTML source for comparison.
- * Removes noise (scripts, styles, animations, dynamic attributes).
- * Keeps structure (divs, headings, lists) and content.
- */
-function getSimplifiedSource($: CheerioRoot): string {
-    // Clone body to avoid mutating original
-    const $body = $('body').clone();
-
-    // 1. Remove noise tags
-    $body.find('script, style, noscript, iframe, svg, meta, link, object, embed, template').remove();
-
-    // 2. Remove comments (Cheerio might do this by default depending on loading, but ensure it)
-    $body.contents().filter((_, el) => el.type === 'comment').remove();
-
-    // 3. Walk and clean attributes
-    const cleanElement = (el: cheerio.Element) => {
-        if (el.type !== 'tag') return;
-
-        const attribs = el.attribs || {};
-        const keepAttribs = ['class', 'id', 'src', 'href', 'alt', 'title']; // Only keep structural/meaningful attributes
-
-        for (const attr of Object.keys(attribs)) {
-            // Remove if not in keep list
-            if (!keepAttribs.includes(attr)) {
-                $(el).removeAttr(attr);
-            }
-        }
-
-        // Remove empty class/id
-        if ($(el).attr('class') === '') $(el).removeAttr('class');
-        if ($(el).attr('id') === '') $(el).removeAttr('id');
-
-        // Recurse
-        if (el.children) {
-            el.children.forEach(child => cleanElement(child as cheerio.Element));
-        }
-    };
-
-    // Apply cleaning
-    $body.each((_, el) => cleanElement(el));
-
-    // Return cleaned HTML
-    // Use html() which produces string. Ensures tags are on new lines for better line-diffing.
-    return ($body.html() || '').replace(/>\s*</g, '>\n<').trim();
 }
 
 export const pageScanner = new PageScanner();
