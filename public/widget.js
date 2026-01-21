@@ -690,10 +690,10 @@
       const isAllowedDomain = this.config.showOnDomains && this.config.showOnDomains.some(d => hostname.includes(d));
 
       // Allow localhost, webflow, framer, or explicitly allowed domains
-      // RELAXED CHECK: Warn but don't block for now to ensure visibility
+      // Allow localhost, webflow, framer, or explicitly allowed domains
       if (!isWebflow && !isFramer && !isLocalhost && !isAllowedDomain) {
-        console.warn("Project Links Widget: Running on unchecked domain", hostname);
-        // return; // Allow execution for now
+        console.warn("Project Links Widget: Domain not allowed", hostname);
+        return; 
       }
 
       console.log("Project Links Widget: Initializing on", hostname);
