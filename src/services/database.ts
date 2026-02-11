@@ -23,6 +23,21 @@ const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
 
 const generateLinkId = (): string => `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+/** Recursively strip undefined values from objects/arrays — Firestore rejects them. */
+function stripUndefined<T>(obj: T): T {
+  if (Array.isArray(obj)) {
+    return obj.map(stripUndefined) as T;
+  }
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefined(v)])
+    ) as T;
+  }
+  return obj;
+}
+
 // Create default links for new projects (ensure each link has a unique id)
 const getDefaultLinks = (): ProjectLink[] => [
   {
@@ -142,9 +157,9 @@ export const projectsService = {
 
   // Update project locale data (extracted from sitemap hreflang)
   async updateProjectLocaleData(
-    projectId: string, 
-    localeData: { 
-      detectedLocales: string[]; 
+    projectId: string,
+    localeData: {
+      detectedLocales: string[];
       pathToLocaleMap: Record<string, string>;
     }
   ): Promise<void> {
@@ -166,7 +181,7 @@ export const projectsService = {
   async updateProjectLinks(projectId: string, links: ProjectLink[]): Promise<void> {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
-      links,
+      links: stripUndefined(links),
       updatedAt: Timestamp.now(),
     });
   },

@@ -2,6 +2,7 @@
 export const COLLECTIONS = {
   PROJECTS: 'projects',
   PROJECT_CHECKLISTS: 'project_checklists',
+  SOP_TEMPLATES: 'sop_templates',
 } as const;
 
 // UI constants

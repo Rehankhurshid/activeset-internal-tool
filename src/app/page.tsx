@@ -6,7 +6,7 @@ import { LoginForm } from '@/components/auth/LoginForm';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { FolderOpen, FileText, Sparkles, Lock } from 'lucide-react';
+import { FolderOpen, FileText, Sparkles, Lock, ListChecks } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AppNavigation } from '@/components/navigation/AppNavigation';
 import { cn } from '@/lib/utils';
@@ -127,6 +127,21 @@ export default function Home() {
               <div className="flex items-center gap-1.5 text-xs text-purple-500 font-medium">
                 <Sparkles className="h-3 w-3" />
                 <span>AI Powered</span>
+              </div>
+            )}
+
+            {/* Checklist Creator Module */}
+            {renderModuleCard(
+              "/modules/checklist-creator",
+              <ListChecks className="h-6 w-6 text-emerald-500" />,
+              "bg-emerald-500/10 dark:bg-emerald-500/20",
+              "Checklist Creator",
+              "Generate and manage SOP templates with AI.",
+              true, // Open access for now
+              false,
+              <div className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
+                <Sparkles className="h-3 w-3" />
+                <span>New</span>
               </div>
             )}
           </div>

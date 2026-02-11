@@ -367,6 +367,8 @@ export interface ChecklistItem {
   emoji?: string;            // From the SOP (e.g., "🐸", "📑")
   status: ChecklistItemStatus;
   notes?: string;            // Free-text notes per item
+  referenceLink?: string;    // External link
+  hoverImage?: string;       // Image URL to show on hover
   assignee?: string;         // Assigned team member email
   completedAt?: string;      // ISO date
   completedBy?: string;      // User email who completed it
@@ -411,4 +413,7 @@ export interface SOPTemplate {
   description: string;
   icon: string;              // Emoji icon
   sections: SOPTemplateSection[];
+  isBuiltIn?: boolean;       // true for static templates (read-only)
+  createdAt?: Date;
+  updatedAt?: Date;
 }

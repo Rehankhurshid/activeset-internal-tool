@@ -23,7 +23,11 @@ import {
     MoreHorizontal,
     UserPlus,
     Clock,
+    Link as LinkIcon,
+    Info,
+    Trash2,
 } from 'lucide-react';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { cn } from '@/lib/utils';
 
 interface ChecklistItemProps {
@@ -31,6 +35,7 @@ interface ChecklistItemProps {
     onStatusChange: (status: ChecklistItemStatus) => void;
     onNotesChange: (notes: string) => void;
     onAssigneeChange: (assignee: string) => void;
+    onDelete?: () => void;
     readOnly?: boolean;
 }
 
@@ -76,6 +81,7 @@ export function ChecklistItemRow({
     onStatusChange,
     onNotesChange,
     onAssigneeChange,
+    onDelete,
     readOnly = false,
 }: ChecklistItemProps) {
     const config = STATUS_CONFIG[item.status];
@@ -146,6 +152,39 @@ export function ChecklistItemRow({
 
                 {/* Metadata row */}
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
+                    {/* Reference Link */}
+                    {item.referenceLink && (
+                        <a
+                            href={item.referenceLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 px-1.5 py-0.5 rounded-md transition-colors"
+                        >
+                            <LinkIcon className="h-2.5 w-2.5" />
+                            Reference
+                        </a>
+                    )}
+
+                    {/* Hover Image */}
+                    {item.hoverImage && (
+                        <HoverCard>
+                            <HoverCardTrigger asChild>
+                                <span className="inline-flex items-center gap-1 text-[10px] text-purple-500 hover:text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 px-1.5 py-0.5 rounded-md cursor-help transition-colors">
+                                    <Info className="h-2.5 w-2.5" />
+                                    Visual Guide
+                                </span>
+                            </HoverCardTrigger>
+                            <HoverCardContent className="w-80 p-0 overflow-hidden rounded-lg z-50">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={item.hoverImage}
+                                    alt="Visual Guide"
+                                    className="w-full h-auto object-cover"
+                                />
+                            </HoverCardContent>
+                        </HoverCard>
+                    )}
+
                     {item.assignee && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-md">
                             <UserPlus className="h-2.5 w-2.5" />
@@ -232,6 +271,16 @@ export function ChecklistItemRow({
                                         </DropdownMenuItem>
                                     );
                                 })}
+                            {/* Delete Option */}
+                            {onDelete && (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                                        <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                        Delete Item
+                                    </DropdownMenuItem>
+                                </>
+                            )}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
