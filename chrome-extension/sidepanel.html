@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webflow Settings Auditor</title>
+    <link rel="stylesheet" href="sidepanel.css">
+</head>
+
+<body>
+    <div class="panel">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">
+                <span class="header-icon">🛠️</span>
+                <h1>Settings Auditor</h1>
+            </div>
+            <div class="header-subtitle">Check Webflow project settings</div>
+        </header>
+
+        <!-- Site Info -->
+        <div id="siteInfo" class="site-info hidden">
+            <div class="site-badge">
+                <span class="site-icon">🌐</span>
+                <span id="siteName" class="site-name">-</span>
+            </div>
+        </div>
+
+        <!-- Not on Webflow Warning -->
+        <div id="notWebflow" class="warning-card">
+            <div class="warning-icon">⚠️</div>
+            <div class="warning-text">
+                <strong>Not on Webflow</strong>
+                <p>Open a Webflow project settings page to start auditing.</p>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls" class="controls hidden">
+            <button id="runAudit" class="btn-primary">
+                <span class="btn-icon">▶</span>
+                Run Audit
+            </button>
+        </div>
+
+        <!-- Progress -->
+        <div id="progress" class="progress-section hidden">
+            <div class="progress-header">
+                <span class="progress-spinner"></span>
+                <span id="progressText">Scanning...</span>
+            </div>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <div id="progressDetail" class="progress-detail">Starting...</div>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="results hidden">
+            <!-- Score Card -->
+            <div id="scoreCard" class="score-card">
+                <div class="score-value">
+                    <span id="scoreNumber">0</span>
+                    <span class="score-unit">%</span>
+                </div>
+                <div class="score-label">
+                    <span id="passedCount">0</span> / <span id="totalCount">0</span> checks passed
+                </div>
+            </div>
+
+            <!-- Categories -->
+            <div class="categories">
+                <!-- General -->
+                <div class="category" data-category="general">
+                    <div class="category-header">
+                        <span class="category-icon">⚙️</span>
+                        <span class="category-title">General</span>
+                        <span id="generalBadge" class="category-badge">-</span>
+                    </div>
+                    <div class="category-items">
+                        <div class="check-item" data-id="favicon32">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Favicon 32×32</span>
+                        </div>
+                        <div class="check-item" data-id="favicon256">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Webclip 256×256</span>
+                        </div>
+                        <div class="check-item" data-id="timezone">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Timezone Set</span>
+                        </div>
+                        <div class="check-item" data-id="language">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Language Code</span>
+                        </div>
+                        <div class="check-item" data-id="brandingBadge">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">"Made in Webflow" OFF</span>
+                        </div>
+                        <div class="check-item" data-id="brandingHtml">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">HTML Branding OFF</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Publishing -->
+                <div class="category" data-category="publishing">
+                    <div class="category-header">
+                        <span class="category-icon">🚀</span>
+                        <span class="category-title">Publishing</span>
+                        <span id="publishingBadge" class="category-badge">-</span>
+                    </div>
+                    <div class="category-items">
+                        <div class="check-item" data-id="defaultDomainWww">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Default Domain is www</span>
+                        </div>
+                        <div class="check-item" data-id="redirectsExist">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">301 Redirects Exist</span>
+                        </div>
+                        <div class="check-item" data-id="minifyHtml">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Minify HTML</span>
+                        </div>
+                        <div class="check-item" data-id="minifyCss">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Minify CSS</span>
+                        </div>
+                        <div class="check-item" data-id="minifyJs">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Minify JS</span>
+                        </div>
+                        <div class="check-item" data-id="hstsSubdomains">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">HSTS Subdomains</span>
+                        </div>
+                        <div class="check-item" data-id="hstsPreload">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">HSTS Preload</span>
+                        </div>
+                        <div class="check-item" data-id="secureFrameHeaders">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Secure Frame Headers OFF</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SEO -->
+                <div class="category" data-category="seo">
+                    <div class="category-header">
+                        <span class="category-icon">🔍</span>
+                        <span class="category-title">SEO</span>
+                        <span id="seoBadge" class="category-badge">-</span>
+                    </div>
+                    <div class="category-items">
+                        <div class="check-item" data-id="subdomainIndexingOff">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Subdomain Indexing OFF</span>
+                        </div>
+                        <div class="check-item" data-id="autoSitemap">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Auto-generate Sitemap</span>
+                        </div>
+                        <div class="check-item" data-id="canonicalUrl">
+                            <span class="check-icon pending">○</span>
+                            <span class="check-label">Canonical URL (www)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Section -->
+            <div id="saveSection" class="save-section hidden">
+                <div class="save-header">Save to Project Dashboard</div>
+                <select id="projectSelect" class="project-select">
+                    <option value="">Select a project...</option>
+                </select>
+                <button id="saveBtn" class="btn-secondary" disabled>
+                    <span class="btn-icon">💾</span>
+                    Save Results
+                </button>
+                <div id="saveStatus" class="save-status"></div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <span>ActiveSet</span>
+            <span class="footer-divider">•</span>
+            <span>v2.0.0</span>
+        </footer>
+    </div>
+
+    <script src="sidepanel.js"></script>
+</body>
+
+</html>

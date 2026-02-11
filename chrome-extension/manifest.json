@@ -1,0 +1,38 @@
+{
+    "manifest_version": 3,
+    "name": "Webflow Settings Auditor",
+    "version": "2.0.0",
+    "description": "Audit Webflow Project Settings against best practices. Checks favicon, branding, SEO, publishing options, and more.",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "storage",
+        "sidePanel",
+        "tabs"
+    ],
+    "host_permissions": [
+        "https://webflow.com/*",
+        "https://*.design.webflow.com/*",
+        "https://app.activeset.co/*",
+        "http://localhost:3000/*"
+    ],
+    "side_panel": {
+        "default_path": "sidepanel.html"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        },
+        "default_title": "Open Settings Auditor"
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    }
+}

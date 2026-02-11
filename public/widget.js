@@ -709,10 +709,16 @@
     async init() {
       this.initContentAudit(); // Auto-run audit on load
       loadFonts(); // Ensure fonts are loaded
+      this.checklistProgress = null; // Will be { completed, total }
       try {
         if (this.config.projectId) {
-          const data = await this.fetchProjectData();
-          this.links = data.links || []; // Store links for later use
+          // Fetch project data and checklist progress in parallel
+          const [data, clProgress] = await Promise.all([
+            this.fetchProjectData(),
+            this.fetchChecklistProgress().catch(() => null),
+          ]);
+          this.links = data.links || [];
+          this.checklistProgress = clProgress;
           this.render(data);
         } else if (this.config.initialLinks) {
           this.links = this.config.initialLinks;
@@ -733,6 +739,14 @@
       return response.json();
     }
 
+    async fetchChecklistProgress() {
+      const response = await fetch(
+        `${this.config.baseUrl}/api/project/${this.config.projectId}/checklist`
+      );
+      if (!response.ok) return null;
+      return response.json();
+    }
+
     render(data) {
       this.renderDropdown(data);
     }
@@ -743,6 +757,9 @@
        auditContainer.id = 'plw-audit-container';
        document.body.appendChild(auditContainer);
        
+       const baseUrl = this.config.baseUrl || "https://app.activeset.co";
+       const iframeSrc = `${baseUrl}/embed?projectId=${encodeURIComponent(this.config.projectId || '')}&stagingUrl=${encodeURIComponent(this.config.stagingUrl || '')}&theme=${this.config.theme}&mode=qa`;
+
        // Inject Floating Badge + Panel HTML
        auditContainer.innerHTML = `
           <!-- Floating Score Badge -->
@@ -759,12 +776,29 @@
           <!-- Slide-out Panel -->
           <div id="plw-standalone-panel" class="standalone-panel">
              <button id="plw-close-standalone" class="close-standalone-btn">&times;</button>
+             
              <div class="panel-header">
                 <h3>Content Audit</h3>
-                <span class="panel-subtitle">Placeholder · Spelling · SEO · Technical</span>
+                <div class="panel-tabs">
+                    <button class="panel-tab active" data-tab="audit">Audit</button>
+                    <button class="panel-tab" data-tab="qa">Checklist</button>
+                </div>
              </div>
-             <div id="plw-panel-content" class="panel-content">
+
+             <!-- Audit Tab Content -->
+             <div id="plw-panel-content" class="panel-content tab-content active" data-tab="audit">
                 <!-- Results go here -->
+             </div>
+
+             <!-- QA/Checklist Tab Content (Iframe) -->
+             <div id="plw-qa-content" class="panel-content tab-content" data-tab="qa">
+                ${(this.config.stagingUrl || this.config.projectId)
+                    ? `<iframe src="${this.config.baseUrl}/embed?projectId=${this.config.projectId || ''}&stagingUrl=${encodeURIComponent(this.config.stagingUrl || '')}&theme=${this.config.theme}&mode=checklist" style="width: 100%; height: 100%; border: none; min-height: 400px; display: block;"></iframe>`
+                    : `<div style="padding: 20px; color: #a1a1aa; text-align: center; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                         <div style="margin-bottom: 8px;">No Project ID or Staging URL provided.</div>
+                         <div style="font-size: 11px; opacity: 0.7;">Add <code>data-project-id="..."</code> or <code>data-staging-url="..."</code> to your script tag.</div>
+                       </div>`
+                }
              </div>
           </div>
           
@@ -774,6 +808,45 @@
                 z-index: 10001;
              }
              
+             /* Tab Styles */
+             .panel-tabs {
+                 display: flex;
+                 gap: 16px;
+                 margin-top: 12px;
+                 border-bottom: 1px solid #27272a;
+             }
+             
+             .panel-tab {
+                 background: none;
+                 border: none;
+                 color: #71717a;
+                 padding: 8px 0;
+                 font-size: 13px;
+                 font-weight: 500;
+                 cursor: pointer;
+                 border-bottom: 2px solid transparent;
+                 transition: all 0.2s;
+             }
+             
+             .panel-tab:hover {
+                 color: #e4e4e7;
+             }
+             
+             .panel-tab.active {
+                 color: #fff;
+                 border-bottom-color: #fff;
+             }
+             
+             .tab-content {
+                 display: none;
+                 height: calc(85vh - 110px); /* Adjust based on header */
+                 flex-direction: column;
+             }
+             
+             .tab-content.active {
+                 display: flex;
+             }
+
              ::highlight(plw-typo) {
                 text-decoration: underline wavy #ef4444;
                 text-decoration-thickness: 2px;
@@ -855,7 +928,7 @@
                 top: 50%;
                 right: 0; 
                 transform: translate(100%, -50%); /* Hidden by default */
-                width: 360px;
+                width: 400px; /* Slightly wider */
                 max-height: 85vh;
                 background: #09090b;
                 border: 1px solid #27272a;
@@ -873,7 +946,7 @@
              }
              
              .panel-header {
-                padding: 16px 20px;
+                padding: 16px 20px 0; /* Adjusted padding */
                 border-bottom: 1px solid #27272a;
                 background: #09090b;
              }
@@ -888,12 +961,13 @@
              .panel-subtitle {
                 font-size: 12px;
                 color: #71717a;
+                display: none; /* Hide subtitle when tabs are active */
              }
              
              .panel-content {
                 padding: 0;
                 overflow-y: auto;
-                max-height: calc(85vh - 60px);
+                /* Height handled by tab-content flex */
              }
              
              .close-standalone-btn {
@@ -907,6 +981,7 @@
                 cursor: pointer;
                 padding: 4px;
                 line-height: 1;
+                z-index: 10;
              }
              
              .close-standalone-btn:hover { color: #fff; }
@@ -951,6 +1026,21 @@
           panel.classList.remove('open');
           badge.style.opacity = '1';
           badge.style.pointerEvents = 'auto';
+       });
+
+       // Tab Handling
+       const tabs = panel.querySelectorAll('.panel-tab');
+       tabs.forEach(tab => {
+           tab.addEventListener('click', () => {
+               // Deactivate all
+               tabs.forEach(t => t.classList.remove('active'));
+               panel.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+               
+               // Activate this
+               tab.classList.add('active');
+               const target = panel.querySelector(`.tab-content[data-tab="${tab.dataset.tab}"]`);
+               if(target) target.classList.add('active');
+           });
        });
        
        // Run Initial Audit
@@ -1145,13 +1235,30 @@
 
       this.container.innerHTML = `
         <div class="dropdown-widget-container">
-          <button class="dropdown-widget-button" id="plw-trigger-btn">
-            <div class="button-content">
-               <span>Project Links</span>
-               <div class="count-badge">${links.length}</div>
+          ${this.checklistProgress && this.checklistProgress.total > 0 ? `
+            <div class="dropdown-widget-button-group">
+              <button class="dropdown-widget-part-btn link-part" id="plw-trigger-btn">
+                <div class="button-content">
+                   <span>Project Links</span>
+                   <div class="count-badge">${links.length}</div>
+                </div>
+                <svg class="chevron-icon" id="plw-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+              </button>
+              <div class="group-divider"></div>
+              <button class="dropdown-widget-part-btn checklist-part" id="plw-checklist-btn">
+                 <svg class="checklist-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                 <span class="checklist-count">${this.checklistProgress.completed}/${this.checklistProgress.total}</span>
+              </button>
             </div>
-            <svg class="chevron-icon" id="plw-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-          </button>
+          ` : `
+            <button class="dropdown-widget-button" id="plw-trigger-btn">
+              <div class="button-content">
+                 <span>Project Links</span>
+                 <div class="count-badge">${links.length}</div>
+              </div>
+              <svg class="chevron-icon" id="plw-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+            </button>
+          `}
           
           <div class="dropdown-widget-content" id="plw-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #000000; min-width: 280px; box-shadow: 0 0 0 1px #333333, 0 4px 6px -1px rgba(0, 0, 0, 0.5); z-index: 10000; border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
              <div class="dropdown-header">
@@ -1215,6 +1322,64 @@
             border-radius: 4px;
             font-weight: 600;
             font-family: 'Funnel Sans', sans-serif;
+          }
+
+          /* Split Button Group Styles */
+          .dropdown-widget-button-group {
+            display: inline-flex;
+            align-items: stretch;
+            background-color: #000;
+            border: 1px solid #333;
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            overflow: hidden;
+            min-width: 160px;
+          }
+
+          .dropdown-widget-part-btn {
+            background: transparent;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            font-family: 'Funnel Display', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s;
+          }
+
+          .dropdown-widget-part-btn:hover {
+            background-color: #111;
+          }
+
+          .link-part {
+            flex: 1;
+            justify-content: space-between;
+            gap: 12px;
+          }
+
+          .checklist-part {
+            gap: 6px;
+          }
+
+          .group-divider {
+            width: 1px;
+            background-color: #333;
+          }
+          
+          .checklist-icon {
+             color: #22c55e;
+             width: 14px;
+             height: 14px;
+          }
+          
+          .checklist-count {
+             color: #fff;
+             font-size: 13px;
+             font-weight: 500;
+             font-family: 'Funnel Sans', sans-serif;
           }
           
           .chevron-icon {
@@ -1357,17 +1522,33 @@
 
     setupHandlers() {
        const btn = this.container.querySelector('#plw-trigger-btn');
+       const checklistBtn = this.container.querySelector('#plw-checklist-btn');
        const content = this.container.querySelector('#plw-content');
        const chevron = this.container.querySelector('#plw-chevron');
 
-       if (!btn || !content) return;
+       if (btn && content) {
+         const toggleMenu = (e) => {
+           e.stopPropagation();
+           const isHidden = content.style.display === 'none';
+           content.style.display = isHidden ? 'block' : 'none';
+           if (chevron) chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+         };
+         btn.addEventListener('click', toggleMenu);
+       }
 
-       const toggleMenu = (e) => {
-         e.stopPropagation();
-         const isHidden = content.style.display === 'none';
-         content.style.display = isHidden ? 'block' : 'none';
-         chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
-       };
+       if (checklistBtn) {
+         checklistBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Open Standalone Panel
+            const panel = document.getElementById('plw-standalone-panel');
+            if (panel) {
+                panel.classList.add('open');
+                // Switch to Checklist tab
+                const checklistTab = panel.querySelector('.panel-tab[data-tab="qa"]');
+                if (checklistTab) checklistTab.click(); 
+            }
+         });
+       }
 
        const closeMenu = (e) => {
          // Don't close if clicking inside container or if clicking the audit badge/panel
@@ -1422,6 +1603,7 @@
       const config = {
         projectId: element.dataset.projectId,
         theme: element.dataset.theme || defaultConfig.theme,
+        stagingUrl: element.dataset.stagingUrl, // Parse stagingUrl
       };
 
       if (element.dataset.initialLinks) {
@@ -1449,6 +1631,7 @@
       const config = {
         projectId: script.dataset.projectId,
         theme: script.dataset.theme || defaultConfig.theme,
+        stagingUrl: script.dataset.stagingUrl, // Parse stagingUrl
       };
 
       // Create container element

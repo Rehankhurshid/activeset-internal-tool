@@ -321,6 +321,7 @@ export interface WidgetConfig {
   theme?: 'dark' | 'light';
   allowReordering?: boolean;
   showModal?: boolean;
+  mode?: 'qa' | 'links' | 'checklist';
 }
 
 // Error types
@@ -352,4 +353,62 @@ export interface DatabaseOperationContext {
   operation: DatabaseOperation;
   resource: string;
   resourceId?: string;
-} 
+}
+
+// --- CHECKLIST / SOP TYPES ---
+
+// Checklist item status
+export type ChecklistItemStatus = 'not_started' | 'in_progress' | 'completed' | 'skipped';
+
+// Individual checklist item
+export interface ChecklistItem {
+  id: string;
+  title: string;
+  emoji?: string;            // From the SOP (e.g., "🐸", "📑")
+  status: ChecklistItemStatus;
+  notes?: string;            // Free-text notes per item
+  assignee?: string;         // Assigned team member email
+  completedAt?: string;      // ISO date
+  completedBy?: string;      // User email who completed it
+  order: number;
+}
+
+// Section of the checklist (e.g., "Step 1: Project Planning & Kickoff")
+export interface ChecklistSection {
+  id: string;
+  title: string;
+  emoji?: string;            // Section emoji (e.g., "📁", "🧱")
+  items: ChecklistItem[];
+  order: number;
+}
+
+// Full project checklist
+export interface ProjectChecklist {
+  id: string;                // Firestore doc ID
+  projectId: string;         // Reference to project
+  templateId: string;        // e.g., "webflow_migration_v1"
+  templateName: string;      // e.g., "Website Migration to Webflow"
+  sections: ChecklistSection[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// SOP template item (no id — IDs are generated at instantiation)
+export type SOPTemplateItem = Omit<ChecklistItem, 'id'>;
+
+// SOP template section (no id on section or items)
+export interface SOPTemplateSection {
+  title: string;
+  emoji?: string;
+  items: SOPTemplateItem[];
+  order: number;
+}
+
+// SOP template definition (for the template selector)
+export interface SOPTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;              // Emoji icon
+  sections: SOPTemplateSection[];
+}

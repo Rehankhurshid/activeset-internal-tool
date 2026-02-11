@@ -18,6 +18,7 @@ import {
     DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { AddLinkDialog } from './AddLinkDialog';
+import { ChecklistProgressBadge } from '@/components/checklist/ChecklistProgressBadge';
 
 interface ProjectCardProps {
     project: Project;
@@ -82,9 +83,12 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                             <h3 className="font-semibold text-base leading-tight truncate text-foreground/90 group-hover:text-primary transition-colors">
                                 {project.name}
                             </h3>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                                {manualLinks.length} {manualLinks.length === 1 ? 'link' : 'links'}
-                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                    {manualLinks.length} {manualLinks.length === 1 ? 'link' : 'links'}
+                                </p>
+                                <ChecklistProgressBadge projectId={project.id} className="ml-1" />
+                            </div>
                         </div>
                     </div>
 

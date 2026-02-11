@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Link as LinkIcon, Plus, Code, ShieldX, LayoutDashboard, List, Globe } from 'lucide-react';
+import { ArrowLeft, Link as LinkIcon, Plus, Code, ShieldX, LayoutDashboard, List, Globe, ListChecks } from 'lucide-react';
 import Link from 'next/link';
 import { LinkList } from '@/components/projects/LinkList';
 import { AddLinkDialog } from '@/components/projects/AddLinkDialog';
@@ -22,6 +22,7 @@ import { AppNavigation } from '@/components/navigation/AppNavigation';
 import { WebflowPagesDashboard } from '@/components/webflow/WebflowPagesDashboard';
 import { WebflowConfig } from '@/types/webflow';
 import { toast } from 'sonner';
+import { ChecklistOverview } from '@/components/checklist/ChecklistOverview';
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -159,6 +160,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                 <span className="hidden sm:inline">Webflow Pages</span>
                                 <span className="sm:hidden">Webflow</span>
                             </TabsTrigger>
+                            <TabsTrigger value="checklist" className="gap-2 flex-1 sm:flex-none">
+                                <ListChecks className="h-4 w-4" />
+                                <span className="hidden sm:inline">Checklist</span>
+                                <span className="sm:hidden">SOP</span>
+                            </TabsTrigger>
                         </TabsList>
 
                         {/* Show Scan Sitemap when in audit tab */}
@@ -187,6 +193,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             webflowConfig={project.webflowConfig}
                             onSaveConfig={handleSaveWebflowConfig}
                             onRemoveConfig={handleRemoveWebflowConfig}
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="checklist" className="mt-4 sm:mt-6">
+                        <ChecklistOverview
+                            projectId={project.id}
+                            userEmail={user?.email ?? undefined}
                         />
                     </TabsContent>
                 </Tabs>

@@ -7,13 +7,15 @@ import { WidgetConfig } from '@/types';
 
 function EmbedContent() {
   const searchParams = useSearchParams();
-  
+
   // Parse config from URL parameters
-  const config: WidgetConfig = {
+  const config: WidgetConfig & { stagingUrl?: string } = {
     projectId: searchParams.get('projectId') || undefined,
     theme: (searchParams.get('theme') as 'dark' | 'light') || 'dark',
     allowReordering: searchParams.get('allowReordering') !== 'false',
     showModal: searchParams.get('showModal') !== 'false',
+    stagingUrl: searchParams.get('stagingUrl') || undefined,
+    mode: (searchParams.get('mode') as 'qa' | 'links' | 'checklist') || undefined,
   };
 
   // Parse initial links if provided

@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import { createHash } from 'crypto';
 import { ExtendedContentSnapshot, ImageInfo, LinkInfo, SectionInfo, ContentBlock } from '@/types';
+import { FontScanResult } from '@/types/qa';
 
 type CategoryStatus = 'passed' | 'failed' | 'warning' | 'info';
 type CheerioRoot = ReturnType<typeof cheerio.load>;
@@ -129,6 +130,218 @@ export interface PageScanResult {
  */
 export class PageScanner {
     /**
+     * Scan fonts to verify WOFF2 usage
+     */
+    async scanFonts(url: string): Promise<FontScanResult> {
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': 'ActiveSet-Audit-Bot/1.0 (+https://activeset.co)',
+                },
+            });
+
+            if (!response.ok) {
+                return {
+                    success: false,
+                    type: 'fonts',
+                    passed: false,
+                    fontsFound: [],
+                    details: `Failed to fetch page: ${response.status} ${response.statusText}`
+                };
+            }
+
+            const html = await response.text();
+            const $ = cheerio.load(html);
+            const fontsFound: {
+                family: string;
+                source: string;
+                format?: string;
+                isWoff2: boolean;
+            }[] = [];
+
+            // 1. Check <link> tags for fonts
+            $('link[rel="preload"][as="font"]').each((_, el) => {
+                const href = $(el).attr('href') || '';
+                if (href) {
+                    const isWoff2 = href.toLowerCase().endsWith('.woff2');
+                    fontsFound.push({
+                        family: 'Unknown (Preload)',
+                        source: href,
+                        format: isWoff2 ? 'woff2' : 'other',
+                        isWoff2
+                    });
+                }
+            });
+
+            // 2. Scan internal styles for @font-face
+            const styleContent = $('style').text();
+            this.parseFontFace(styleContent, fontsFound);
+
+            // 3. Scan external stylesheets (Webflow CSS, Google Fonts, etc.)
+            const stylesheets: string[] = [];
+            $('link[rel="stylesheet"]').each((_, el) => {
+                const href = $(el).attr('href');
+                if (href) stylesheets.push(href);
+            });
+
+            // Parallel fetch of stylesheets
+            await Promise.all(stylesheets.map(async (href) => {
+                let fullUrl = href;
+                try {
+                    // Handle relative URLs
+                    fullUrl = new URL(href, url).href;
+
+                    // Specific check for Google Fonts / Adobe Fonts to report them clearly
+                    if (fullUrl.includes('fonts.googleapis.com')) {
+                        fontsFound.push({
+                            family: 'Google Fonts Collection',
+                            source: fullUrl,
+                            format: 'css-linked',
+                            isWoff2: false // CSS link itself isn't woff2, but we flag it. 
+                            // Note: We might want to mark this as Warning or allow it depending on rules.
+                            // For "Designer Defaults", usually we strictly want WOFF2 uploads.
+                        });
+                        return; // Don't parse the Google Fonts CSS manually, just report the link
+                    }
+
+                    if (fullUrl.includes('use.typekit.net')) {
+                        fontsFound.push({
+                            family: 'Adobe Fonts (Typekit)',
+                            source: fullUrl,
+                            format: 'css-linked',
+                            isWoff2: false
+                        });
+                        return;
+                    }
+
+                    // Fetch CSS content
+                    const cssRes = await fetch(fullUrl, {
+                        headers: { 'User-Agent': 'ActiveSet-Audit-Bot/1.0' }
+                    });
+
+                    if (cssRes.ok) {
+                        const cssText = await cssRes.text();
+                        this.parseFontFace(cssText, fontsFound);
+                    }
+                } catch (e) {
+                    console.warn(`Failed to fetch/parse stylesheet: ${fullUrl}`, e);
+                }
+            }));
+
+            // 4. Check for WebFont.load (JS-based loading common in Webflow)
+            $('script').each((_, el) => {
+                const scriptContent = $(el).html() || '';
+                if (scriptContent.includes('WebFont.load')) {
+                    this.parseWebFontLoad(scriptContent, fontsFound);
+                }
+            });
+
+            // Filter out icon fonts (e.g. webflow-icons) as requested
+            const filteredFonts = fontsFound.filter(f => !f.family.toLowerCase().includes('icon'));
+
+            // Check for non-WOFF2 fonts
+            // We ignore Google/Adobe/Cloud fonts for the "WOFF2 check" as they auto-serve optimized formats.
+            // We focus on finding manually uploaded fonts (src ending in .ttf, .otf, etc) that are NOT woff2.
+            const nonWoff2Fonts = filteredFonts.filter(f => {
+                // If it's a cloud service, assume it's fine (or at least not a user upload error)
+                if (f.family.includes('Google Fonts') || f.family.includes('Adobe') || f.family.includes('Typekit')) return false;
+
+                // If explicit check
+                return !f.isWoff2;
+            });
+
+            // Pass if NO non-woff2 fonts are found.
+            const passed = nonWoff2Fonts.length === 0;
+
+            let details = '';
+            if (filteredFonts.length === 0) {
+                details = 'No fonts detected (check passed manually or fonts load via CSS imports)';
+            } else if (passed) {
+                details = `All ${filteredFonts.length} fonts are WOFF2 (or cloud-hosted)`;
+            } else {
+                details = `${nonWoff2Fonts.length} non-WOFF2 fonts detected`;
+            }
+
+            return {
+                success: true,
+                type: 'fonts',
+                passed,
+                details,
+                fontsFound: filteredFonts,
+                issues: nonWoff2Fonts.map(f => {
+                    // Truncate long sources (especially data URIs) for UI display
+                    const sourceDisplay = f.source.length > 50 ? f.source.substring(0, 50) + '...' : f.source;
+                    return `Non-WOFF2 font detected: ${sourceDisplay} (${f.family})`;
+                })
+            };
+
+        } catch (error) {
+            return {
+                success: false,
+                type: 'fonts',
+                passed: false,
+                fontsFound: [],
+                details: `Error scanning fonts: ${error instanceof Error ? error.message : 'Unknown error'}`
+            };
+        }
+    }
+
+    private parseWebFontLoad(script: string, results: any[]) {
+        try {
+            // Regex to find families array in google: { families: [...] }
+            // Matches: families:\s*\[([^\]]+)\]
+            const familiesMatch = /families:\s*\[([^\]]+)\]/.exec(script);
+            if (familiesMatch && familiesMatch[1]) {
+                // "Montserrat:100,100italic...", "Oswald:..."
+                // Split by quote marks and comma
+                const rawList = familiesMatch[1].match(/["']([^"']+)["']/g);
+
+                if (rawList) {
+                    rawList.forEach(item => {
+                        // Clean quotes
+                        const familyString = item.replace(/["']/g, '');
+                        // Get just the name part "Montserrat:100..." -> "Montserrat"
+                        const familyName = familyString.split(':')[0];
+
+                        results.push({
+                            family: familyName,
+                            source: 'Google Fonts (WebFont.load)',
+                            format: 'cloud-service',
+                            isWoff2: true // Assume Google Fonts serves WOFF2
+                        });
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('Error parsing WebFont.load:', e);
+        }
+    }
+
+    private parseFontFace(css: string, results: any[]) {
+        // Very basic regex to find url(...) in @font-face
+        // This is not a robust CSS parser but works for basic checks
+        const fontFaceRegex = /@font-face\s*{([^}]+)}/g;
+        let match;
+
+        while ((match = fontFaceRegex.exec(css)) !== null) {
+            const content = match[1];
+            const urlMatch = /url\(['"]?([^)'"]+)['"]?\)/.exec(content);
+            const familyMatch = /font-family:\s*['"]?([^;'"]+)['"]?/.exec(content);
+
+            if (urlMatch) {
+                const src = urlMatch[1];
+                const isWoff2 = src.toLowerCase().endsWith('.woff2');
+                results.push({
+                    family: familyMatch ? familyMatch[1] : 'Unknown',
+                    source: src,
+                    format: isWoff2 ? 'woff2' : 'other',
+                    isWoff2
+                });
+            }
+        }
+    }
+
+    /**
      * Extract and validate JSON-LD schema markup
      */
     private extractSchemaMarkup(htmlSource: string): {
@@ -150,7 +363,7 @@ export class PageScanner {
                     const parsed = JSON.parse(content);
                     // Handle @graph arrays
                     const schemaItems = Array.isArray(parsed['@graph']) ? parsed['@graph'] : [parsed];
-                    
+
                     for (const item of schemaItems) {
                         if (item && typeof item === 'object') {
                             schemas.push(item);
@@ -184,7 +397,7 @@ export class PageScanner {
         for (const schema of schemas) {
             const type = (schema as Record<string, unknown>)['@type'];
             const types = Array.isArray(type) ? type : [type];
-            
+
             for (const t of types) {
                 if (typeof t === 'string' && requiredProperties[t]) {
                     for (const prop of requiredProperties[t]) {
@@ -332,7 +545,7 @@ export class PageScanner {
             const tagName = (el as unknown as { name: string }).name?.toLowerCase() || 'h1';
             const level = parseInt(tagName.replace('h', ''), 10);
             const text = $el.text().trim();
-            
+
             if (text) {
                 headings.push({ level, text: text.substring(0, 100) });
             }
@@ -389,14 +602,14 @@ export class PageScanner {
         // Check ARIA landmarks
         const ariaLandmarks: string[] = [];
         const landmarkRoles = ['banner', 'navigation', 'main', 'contentinfo', 'complementary', 'region', 'search'];
-        
+
         // Check for role attributes
         landmarkRoles.forEach(role => {
             if ($(`[role="${role}"]`).length > 0) {
                 ariaLandmarks.push(role);
             }
         });
-        
+
         // Check for semantic HTML5 elements that imply landmarks
         if ($('header').length > 0 && !ariaLandmarks.includes('banner')) ariaLandmarks.push('banner');
         if ($('nav').length > 0 && !ariaLandmarks.includes('navigation')) ariaLandmarks.push('navigation');
@@ -426,7 +639,7 @@ export class PageScanner {
             '[class*="skip-to"]'
         ];
         const hasSkipLink = skipLinkSelectors.some(sel => $(sel).length > 0);
-        
+
         if (!hasSkipLink) {
             issues.push({
                 type: 'skip-link',
@@ -440,7 +653,7 @@ export class PageScanner {
         $('input, select, textarea').each((_, el) => {
             const $el = $(el);
             const type = $el.attr('type');
-            
+
             // Skip hidden, submit, button, reset types
             if (['hidden', 'submit', 'button', 'reset', 'image'].includes(type || '')) {
                 return;
@@ -450,13 +663,13 @@ export class PageScanner {
             const ariaLabel = $el.attr('aria-label');
             const ariaLabelledby = $el.attr('aria-labelledby');
             const placeholder = $el.attr('placeholder');
-            
+
             // Check if there's an associated label
-            const hasLabel = (id && $(`label[for="${id}"]`).length > 0) || 
-                             ariaLabel || 
-                             ariaLabelledby ||
-                             $el.closest('label').length > 0;
-            
+            const hasLabel = (id && $(`label[for="${id}"]`).length > 0) ||
+                ariaLabel ||
+                ariaLabelledby ||
+                $el.closest('label').length > 0;
+
             if (!hasLabel) {
                 formInputsWithoutLabels++;
                 // Only add first few issues to avoid spam
@@ -483,15 +696,15 @@ export class PageScanner {
         // Check for generic link text
         const genericLinkTexts = ['click here', 'read more', 'learn more', 'here', 'more', 'link', 'click'];
         let linksWithGenericText = 0;
-        
+
         $('a').each((_, el) => {
             const $el = $(el);
             const text = $el.text().trim().toLowerCase();
             const ariaLabel = $el.attr('aria-label');
-            
+
             // Skip if has aria-label
             if (ariaLabel) return;
-            
+
             if (genericLinkTexts.includes(text)) {
                 linksWithGenericText++;
                 // Only add first few issues
@@ -541,10 +754,10 @@ export class PageScanner {
         }
 
         const htmlSource = await response.text();
-        
+
         // Extract new metadata BEFORE removing scripts
         const schemaResult = this.extractSchemaMarkup(htmlSource);
-        
+
         const $ = cheerio.load(htmlSource);
 
         // Extract additional metadata before content cleaning
@@ -654,7 +867,7 @@ export class PageScanner {
             '.collection-item',
             '.w-dyn-item',  // Webflow dynamic items
         ];
-        
+
         // Try each selector and extract cards
         let blockIndex = 0;
         for (const selector of cardSelectors) {
@@ -665,18 +878,18 @@ export class PageScanner {
                     // Get the heading (H2 or H3)
                     const heading = $el.find('h2, h3').first().text().trim();
                     if (!heading) return; // Skip blocks without headings
-                    
+
                     // Get the tag/category if present
                     const tagEl = $el.find('[class*="tag"], [class*="category"], [data-project-tag="tag"]');
                     const tag = tagEl.first().text().trim() || undefined;
-                    
+
                     // Get the HTML snippet (limited to avoid huge payloads)
                     const html = $el.html()?.substring(0, 2000) || '';
-                    
+
                     // Generate an ID hash from heading + tag + index
                     const idSource = `${heading}|${tag || ''}|${blockIndex}`;
                     const id = createHash('md5').update(idSource).digest('hex').substring(0, 12);
-                    
+
                     blocks.push({
                         id,
                         heading,
@@ -687,12 +900,12 @@ export class PageScanner {
                     });
                     blockIndex++;
                 });
-                
+
                 // If we found cards with this selector, don't try others to avoid duplicates
                 if (blocks.length > 0) break;
             }
         }
-        
+
         // Fallback: if no cards found with specific selectors, look for any repeated H2-containing elements
         if (blocks.length === 0) {
             const h2Elements = $('h2');
@@ -700,14 +913,14 @@ export class PageScanner {
                 const $el = $(el);
                 const heading = $el.text().trim();
                 if (!heading || heading.length > 100) return; // Skip empty or very long headings
-                
+
                 // Get the parent container
                 const $parent = $el.parent();
                 const html = $parent.html()?.substring(0, 1500) || '';
-                
+
                 // Generate ID
                 const id = createHash('md5').update(`${heading}|${idx}`).digest('hex').substring(0, 12);
-                
+
                 blocks.push({
                     id,
                     heading,
@@ -718,7 +931,7 @@ export class PageScanner {
                 });
             });
         }
-        
+
         // Extract text elements for granular DOM diff (subtext, labels, etc.)
         const textElements: Array<{ selector: string; text: string; html: string }> = [];
         const textSelectors = [
@@ -732,7 +945,7 @@ export class PageScanner {
             '[class*="hero"]',
             '[data-subtext-animate]',
         ];
-        
+
         for (const selector of textSelectors) {
             $(selector).slice(0, 30).each((_, el) => {
                 const $el = $(el);
@@ -810,7 +1023,7 @@ export class PageScanner {
 
         // SEO checks (enhanced with title validation)
         const seoIssues: string[] = [];
-        
+
         // Title checks
         if (!title) {
             seoIssues.push('Missing page title');
@@ -819,7 +1032,7 @@ export class PageScanner {
         } else if (title.length > 60) {
             seoIssues.push(`Title too long (${title.length} chars, recommended: 30-60)`);
         }
-        
+
         // Meta description checks
         if (!metaDescription) {
             seoIssues.push('Missing meta description');
@@ -833,28 +1046,28 @@ export class PageScanner {
         if (imagesWithoutAlt.length > 0) {
             seoIssues.push(`${imagesWithoutAlt.length} image(s) missing alt text`);
         }
-        
+
         // Link stats for the links category
         const internalLinks = links.filter(l => !l.isExternal).length;
         const externalLinks = links.filter(l => l.isExternal).length;
 
         // Calculate individual category scores
-        const schemaScore = schemaResult.hasSchema 
+        const schemaScore = schemaResult.hasSchema
             ? Math.max(0, 100 - schemaResult.issues.length * 15)
             : 0;
-        
+
         const openGraphScore = openGraphResult.hasOpenGraph
             ? Math.max(0, 100 - openGraphResult.issues.length * 20)
             : 0;
-            
+
         const twitterCardsScore = twitterCardsResult.hasTwitterCards
             ? Math.max(0, 100 - twitterCardsResult.issues.length * 20)
             : 50; // Lower penalty for missing Twitter cards
-            
+
         const metaTagsScore = Math.max(0, 100 - metaTagsResult.issues.length * 15);
-        
+
         const headingStructureScore = Math.max(0, 100 - headingStructureResult.issues.length * 20);
-        
+
         // Accessibility score: errors are -20, warnings are -10
         const accessibilityErrors = accessibilityResult.issues.filter(i => i.severity === 'error').length;
         const accessibilityWarnings = accessibilityResult.issues.filter(i => i.severity === 'warning').length;
@@ -930,7 +1143,7 @@ export class PageScanner {
                     score: 100
                 },
                 schema: {
-                    status: schemaResult.hasSchema 
+                    status: schemaResult.hasSchema
                         ? getStatus(schemaResult.issues.length)
                         : 'warning',
                     hasSchema: schemaResult.hasSchema,

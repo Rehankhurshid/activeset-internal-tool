@@ -1,0 +1,713 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>Website Migration to Webflow (1)</title><style>
+/* cspell:disable-file */
+/* webkit printing magic: print all background colors */
+html {
+	-webkit-print-color-adjust: exact;
+}
+* {
+	box-sizing: border-box;
+	-webkit-print-color-adjust: exact;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+@media only screen {
+	body {
+		margin: 2em auto;
+		max-width: 900px;
+		color: rgb(55, 53, 47);
+	}
+}
+
+body {
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+a,
+a.visited {
+	color: inherit;
+	text-decoration: underline;
+}
+
+.pdf-relative-link-path {
+	font-size: 80%;
+	color: #444;
+}
+
+h1,
+h2,
+h3 {
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+	font-weight: 600;
+	margin-bottom: 0;
+}
+
+/* Override strong tags inside headings to maintain consistent weight */
+h1 strong,
+h2 strong,
+h3 strong {
+	font-weight: 600;
+}
+
+.page-title {
+	font-size: 2.5rem;
+	font-weight: 700;
+	margin-top: 0;
+	margin-bottom: 0.75em;
+}
+
+h1 {
+	font-size: 1.875rem;
+	margin-top: 1.875rem;
+}
+
+h2 {
+	font-size: 1.5rem;
+	margin-top: 1.5rem;
+}
+
+h3 {
+	font-size: 1.25rem;
+	margin-top: 1.25rem;
+}
+
+.source {
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	padding: 1.5em;
+	word-break: break-all;
+}
+
+.callout {
+	border-radius: 10px;
+	padding: 1rem;
+}
+
+figure {
+	margin: 1.25em 0;
+	page-break-inside: avoid;
+}
+
+figcaption {
+	opacity: 0.5;
+	font-size: 85%;
+	margin-top: 0.5em;
+}
+
+mark {
+	background-color: transparent;
+}
+
+.indented {
+	padding-left: 1.5em;
+}
+
+hr {
+	background: transparent;
+	display: block;
+	width: 100%;
+	height: 1px;
+	visibility: visible;
+	border: none;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+img {
+	max-width: 100%;
+}
+
+@media only print {
+	img {
+		max-height: 100vh;
+		object-fit: contain;
+	}
+}
+
+@page {
+	margin: 1in;
+}
+
+.collection-content {
+	font-size: 0.875rem;
+}
+
+.collection-content td {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.column-list {
+	display: flex;
+	justify-content: space-between;
+}
+
+.column {
+	padding: 0 1em;
+}
+
+.column:first-child {
+	padding-left: 0;
+}
+
+.column:last-child {
+	padding-right: 0;
+}
+
+.table_of_contents-item {
+	display: block;
+	font-size: 0.875rem;
+	line-height: 1.3;
+	padding: 0.125rem;
+}
+
+.table_of_contents-indent-1 {
+	margin-left: 1.5rem;
+}
+
+.table_of_contents-indent-2 {
+	margin-left: 3rem;
+}
+
+.table_of_contents-indent-3 {
+	margin-left: 4.5rem;
+}
+
+.table_of_contents-link {
+	text-decoration: none;
+	opacity: 0.7;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.18);
+}
+
+table,
+th,
+td {
+	border: 1px solid rgba(55, 53, 47, 0.09);
+	border-collapse: collapse;
+}
+
+table {
+	border-left: none;
+	border-right: none;
+}
+
+th,
+td {
+	font-weight: normal;
+	padding: 0.25em 0.5em;
+	line-height: 1.5;
+	min-height: 1.5em;
+	text-align: left;
+}
+
+th {
+	color: rgba(55, 53, 47, 0.6);
+}
+
+ol,
+ul {
+	margin: 0;
+	margin-block-start: 0.6em;
+	margin-block-end: 0.6em;
+}
+
+li > ol:first-child,
+li > ul:first-child {
+	margin-block-start: 0.6em;
+}
+
+ul > li {
+	list-style: disc;
+}
+
+ul.to-do-list {
+	padding-inline-start: 0;
+}
+
+ul.to-do-list > li {
+	list-style: none;
+}
+
+.to-do-children-checked {
+	text-decoration: line-through;
+	opacity: 0.375;
+}
+
+ul.toggle > li {
+	list-style: none;
+}
+
+ul {
+	padding-inline-start: 1.7em;
+}
+
+ul > li {
+	padding-left: 0.1em;
+}
+
+ol {
+	padding-inline-start: 1.6em;
+}
+
+ol > li {
+	padding-left: 0.2em;
+}
+
+.mono ol {
+	padding-inline-start: 2em;
+}
+
+.mono ol > li {
+	text-indent: -0.4em;
+}
+
+.toggle {
+	padding-inline-start: 0em;
+	list-style-type: none;
+}
+
+/* Indent toggle children */
+.toggle > li > details {
+	padding-left: 1.7em;
+}
+
+.toggle > li > details > summary {
+	margin-left: -1.1em;
+}
+
+.selected-value {
+	display: inline-block;
+	padding: 0 0.5em;
+	background: rgba(206, 205, 202, 0.5);
+	border-radius: 3px;
+	margin-right: 0.5em;
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+	white-space: nowrap;
+}
+
+.collection-title {
+	display: inline-block;
+	margin-right: 1em;
+}
+
+.page-description {
+	margin-bottom: 2em;
+}
+
+.simple-table {
+	margin-top: 1em;
+	font-size: 0.875rem;
+	empty-cells: show;
+}
+.simple-table td {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table th {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table-header-color {
+	background: rgb(247, 246, 243);
+	color: black;
+}
+.simple-table-header {
+	font-weight: 500;
+}
+
+time {
+	opacity: 0.5;
+}
+
+.icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	max-width: 1.2em;
+	max-height: 1.2em;
+	text-decoration: none;
+	vertical-align: text-bottom;
+	margin-right: 0.5em;
+}
+
+img.icon {
+	border-radius: 3px;
+}
+
+.callout img.notion-static-icon {
+	width: 1em;
+	height: 1em;
+}
+
+.callout p {
+	margin: 0;
+}
+
+.callout h1,
+.callout h2,
+.callout h3 {
+	margin: 0 0 0.6rem;
+}
+
+.user-icon {
+	width: 1.5em;
+	height: 1.5em;
+	border-radius: 100%;
+	margin-right: 0.5rem;
+}
+
+.user-icon-inner {
+	font-size: 0.8em;
+}
+
+.text-icon {
+	border: 1px solid #000;
+	text-align: center;
+}
+
+.page-cover-image {
+	display: block;
+	object-fit: cover;
+	width: 100%;
+	max-height: 30vh;
+}
+
+.page-header-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.page-header-icon-with-cover {
+	margin-top: -0.72em;
+	margin-left: 0.07em;
+}
+
+.page-header-icon img {
+	border-radius: 3px;
+}
+
+.link-to-page {
+	margin: 1em 0;
+	padding: 0;
+	border: none;
+	font-weight: 500;
+}
+
+p > .user {
+	opacity: 0.5;
+}
+
+td > .user,
+td > time {
+	white-space: nowrap;
+}
+
+input[type="checkbox"] {
+	transform: scale(1.5);
+	margin-right: 0.6em;
+	vertical-align: middle;
+}
+
+p {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.image {
+	border: none;
+	margin: 1.5em 0;
+	padding: 0;
+	border-radius: 0;
+	text-align: center;
+}
+
+.code,
+code {
+	background: rgba(135, 131, 120, 0.15);
+	border-radius: 3px;
+	padding: 0.2em 0.4em;
+	border-radius: 3px;
+	font-size: 85%;
+	tab-size: 2;
+}
+
+code {
+	color: #eb5757;
+}
+
+.code {
+	padding: 1.5em 1em;
+}
+
+.code-wrap {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.code > code {
+	background: none;
+	padding: 0;
+	font-size: 100%;
+	color: inherit;
+}
+
+blockquote {
+	font-size: 1em;
+	margin: 1em 0;
+	padding-left: 1em;
+	border-left: 3px solid rgb(55, 53, 47);
+}
+
+blockquote.quote-large {
+	font-size: 1.25em;
+}
+
+.bookmark {
+	text-decoration: none;
+	max-height: 8em;
+	padding: 0;
+	display: flex;
+	width: 100%;
+	align-items: stretch;
+}
+
+.bookmark-title {
+	font-size: 0.85em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	height: 1.75em;
+	white-space: nowrap;
+}
+
+.bookmark-text {
+	display: flex;
+	flex-direction: column;
+}
+
+.bookmark-info {
+	flex: 4 1 180px;
+	padding: 12px 14px 14px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.bookmark-image {
+	width: 33%;
+	flex: 1 1 180px;
+	display: block;
+	position: relative;
+	object-fit: cover;
+	border-radius: 1px;
+}
+
+.bookmark-description {
+	color: rgba(55, 53, 47, 0.6);
+	font-size: 0.75em;
+	overflow: hidden;
+	max-height: 4.5em;
+	word-break: break-word;
+}
+
+.bookmark-href {
+	font-size: 0.75em;
+	margin-top: 0.25em;
+}
+
+.sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"; }
+.code { font-family: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace; }
+.serif { font-family: Lyon-Text, Georgia, ui-serif, serif; }
+.mono { font-family: iawriter-mono, Nitti, Menlo, Courier, monospace; }
+.pdf .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK JP'; }
+.pdf:lang(zh-CN) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK SC'; }
+.pdf:lang(zh-TW) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK TC'; }
+.pdf:lang(ko-KR) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK KR'; }
+.pdf .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.pdf .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK JP'; }
+.pdf:lang(zh-CN) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK SC'; }
+.pdf:lang(zh-TW) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK TC'; }
+.pdf:lang(ko-KR) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK KR'; }
+.pdf .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.highlight-default {
+	color: rgba(44, 44, 43, 1);
+}
+.highlight-gray {
+	color: rgba(125, 122, 117, 1);
+	fill: rgba(125, 122, 117, 1);
+}
+.highlight-brown {
+	color: rgba(159, 118, 90, 1);
+	fill: rgba(159, 118, 90, 1);
+}
+.highlight-orange {
+	color: rgba(210, 123, 45, 1);
+	fill: rgba(210, 123, 45, 1);
+}
+.highlight-yellow {
+	color: rgba(203, 148, 52, 1);
+	fill: rgba(203, 148, 52, 1);
+}
+.highlight-teal {
+	color: rgba(80, 148, 110, 1);
+	fill: rgba(80, 148, 110, 1);
+}
+.highlight-blue {
+	color: rgba(56, 125, 201, 1);
+	fill: rgba(56, 125, 201, 1);
+}
+.highlight-purple {
+	color: rgba(154, 107, 180, 1);
+	fill: rgba(154, 107, 180, 1);
+}
+.highlight-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.highlight-red {
+	color: rgba(207, 81, 72, 1);
+	fill: rgba(207, 81, 72, 1);
+}
+.highlight-default_background {
+	color: rgba(44, 44, 43, 1);
+}
+.highlight-gray_background {
+	background: rgba(42, 28, 0, 0.07);
+}
+.highlight-brown_background {
+	background: rgba(139, 46, 0, 0.086);
+}
+.highlight-orange_background {
+	background: rgba(224, 101, 1, 0.129);
+}
+.highlight-yellow_background {
+	background: rgba(211, 168, 0, 0.137);
+}
+.highlight-teal_background {
+	background: rgba(0, 100, 45, 0.09);
+}
+.highlight-blue_background {
+	background: rgba(0, 124, 215, 0.094);
+}
+.highlight-purple_background {
+	background: rgba(102, 0, 178, 0.078);
+}
+.highlight-pink_background {
+	background: rgba(197, 0, 93, 0.086);
+}
+.highlight-red_background {
+	background: rgba(223, 22, 0, 0.094);
+}
+.block-color-default {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray {
+	color: rgba(125, 122, 117, 1);
+	fill: rgba(125, 122, 117, 1);
+}
+.block-color-brown {
+	color: rgba(159, 118, 90, 1);
+	fill: rgba(159, 118, 90, 1);
+}
+.block-color-orange {
+	color: rgba(210, 123, 45, 1);
+	fill: rgba(210, 123, 45, 1);
+}
+.block-color-yellow {
+	color: rgba(203, 148, 52, 1);
+	fill: rgba(203, 148, 52, 1);
+}
+.block-color-teal {
+	color: rgba(80, 148, 110, 1);
+	fill: rgba(80, 148, 110, 1);
+}
+.block-color-blue {
+	color: rgba(56, 125, 201, 1);
+	fill: rgba(56, 125, 201, 1);
+}
+.block-color-purple {
+	color: rgba(154, 107, 180, 1);
+	fill: rgba(154, 107, 180, 1);
+}
+.block-color-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.block-color-red {
+	color: rgba(207, 81, 72, 1);
+	fill: rgba(207, 81, 72, 1);
+}
+.block-color-default_background {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray_background {
+	background: rgba(240, 239, 237, 1);
+}
+.block-color-brown_background {
+	background: rgba(245, 237, 233, 1);
+}
+.block-color-orange_background {
+	background: rgba(251, 235, 222, 1);
+}
+.block-color-yellow_background {
+	background: rgba(249, 243, 220, 1);
+}
+.block-color-teal_background {
+	background: rgba(232, 241, 236, 1);
+}
+.block-color-blue_background {
+	background: rgba(229, 242, 252, 1);
+}
+.block-color-purple_background {
+	background: rgba(243, 235, 249, 1);
+}
+.block-color-pink_background {
+	background: rgba(250, 233, 241, 1);
+}
+.block-color-red_background {
+	background: rgba(252, 233, 231, 1);
+}
+.select-value-color-default { background-color: rgba(42, 28, 0, 0.07); }
+.select-value-color-gray { background-color: rgba(28, 19, 1, 0.11); }
+.select-value-color-brown { background-color: rgba(127, 51, 0, 0.156); }
+.select-value-color-orange { background-color: rgba(196, 88, 0, 0.203); }
+.select-value-color-yellow { background-color: rgba(209, 156, 0, 0.282); }
+.select-value-color-green { background-color: rgba(0, 96, 38, 0.156); }
+.select-value-color-blue { background-color: rgba(0, 118, 217, 0.203); }
+.select-value-color-purple { background-color: rgba(92, 0, 163, 0.141); }
+.select-value-color-pink { background-color: rgba(183, 0, 78, 0.152); }
+.select-value-color-red { background-color: rgba(206, 24, 0, 0.164); }
+
+.checkbox {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	width: 16;
+	height: 16;
+	background-size: 16px;
+	margin-left: 2px;
+	margin-right: 5px;
+}
+
+.checkbox-on {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%2358A9D7%22%2F%3E%0A%3Cpath%20d%3D%22M6.71429%2012.2852L14%204.9995L12.7143%203.71436L6.71429%209.71378L3.28571%206.2831L2%207.57092L6.71429%2012.2852Z%22%20fill%3D%22white%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+
+.checkbox-off {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20x%3D%220.75%22%20y%3D%220.75%22%20width%3D%2214.5%22%20height%3D%2214.5%22%20fill%3D%22white%22%20stroke%3D%22%2336352F%22%20stroke-width%3D%221.5%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+	
+</style></head><body><article id="3043865a-7802-816c-afc4-f89e9c6238dd" class="page sans"><header><img class="page-cover-image" src="Website%20Migration%20to%20Webflow%20(1)/64522a2bef4571ab4d9c3276_fg-Webflow-build-checklist-bg-min.jpg" style="object-position:center 65.11%"/><div class="page-header-icon page-header-icon-with-cover"><span class="icon">📄</span></div><h1 class="page-title" dir="auto">Website Migration to Webflow (1)</h1><p class="page-description" dir="auto"></p></header><div class="page-body"><table class="collection-content"><thead><tr><th><span class="icon property-icon"><img src="https://www.notion.so/icons/font_gray.svg" style="width:14px;height:14px;display:block"/></span>Name</th><th><span class="icon property-icon"><img src="https://www.notion.so/icons/burst_gray.svg" style="width:14px;height:14px;display:block"/></span>Status</th><th><span class="icon property-icon"><img src="https://www.notion.so/icons/stopwatch_gray.svg" style="width:14px;height:14px;display:block"/></span>Time spent</th><th><span class="icon property-icon"><img src="https://www.notion.so/icons/battery-charging_gray.svg" style="width:14px;height:14px;display:block"/></span>Progress</th></tr></thead><tbody><tr id="3043865a-7802-815a-be96-fa95627d8a96"><td class="cell-title"><a href="https://www.notion.so/List-all-the-pages-from-the-live-website-that-include-the-CMS-collection-3043865a7802815abe96fa95627d8a96?pvs=21"><span class="icon">📑</span>List all the pages from the live website that include the CMS collection.</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-blue"><div class="status-dot status-dot-color-blue"></div>In progress</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81b6-882e-de817aeb40a7"><td class="cell-title"><a href="https://www.notion.so/Add-to-Links-Widget-MarkUp-Folder-3043865a780281b6882ede817aeb40a7?pvs=21">Add to Links Widget: MarkUp Folder</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8147-8c5d-ef38ce937030"><td class="cell-title"><a href="https://www.notion.so/Add-to-Links-Widget-ClickUp-Tracker-3043865a780281478c5def38ce937030?pvs=21">Add to Links Widget: ClickUp Tracker</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8126-8f6f-e6a4765a15c0"><td class="cell-title"><a href="https://www.notion.so/Add-to-Links-Widget-Figma-Link-3043865a780281268f6fe6a4765a15c0?pvs=21">Add to Links Widget: Figma Link</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-810f-b723-e4c2c6f7c360"><td class="cell-title"><a href="https://www.notion.so/Walkthrough-Videos-for-Client-3043865a7802810fb723e4c2c6f7c360?pvs=21">Walkthrough Videos for Client</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81e9-bfab-de67a480d836"><td class="cell-title"><a href="https://www.notion.so/Intro-3043865a780281e9bfabde67a480d836?pvs=21"><img class="icon notion-static-icon" src="https://www.notion.so/icons/folder_pink.svg"/>Intro</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-8198-be9e-e747ee88f13f"><td class="cell-title"><a href="https://www.notion.so/Purpose-3043865a78028198be9ee747ee88f13f?pvs=21"><span class="icon">📁</span>Purpose</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8102-8eea-ec5b34fd30a9"><td class="cell-title"><a href="https://www.notion.so/Input-3043865a780281028eeaec5b34fd30a9?pvs=21"><img class="icon notion-static-icon" src="https://www.notion.so/icons/folder_green.svg"/>Input</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-817e-aab7-ef60a0829fe9"><td class="cell-title"><a href="https://www.notion.so/Access-to-the-Original-Project-Optional-3043865a7802817eaab7ef60a0829fe9?pvs=21"><span class="icon">✍️</span>Access to the Original Project (Optional)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8199-b9b0-d339fad4acb2"><td class="cell-title"><a href="https://www.notion.so/Run-ScreamingFrog-tool-and-scan-the-site-entirely-use-the-Sitemap-xml-to-download-all-the-page-in--3043865a78028199b9b0d339fad4acb2?pvs=21"><span class="icon">🐸</span>Run ScreamingFrog tool and scan the site entirely &amp; use the Sitemap.xml to download all the page in the sitemap</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81fb-a38b-db21476a93b1"><td class="cell-title"><a href="https://www.notion.so/Procedure-3043865a780281fba38bdb21476a93b1?pvs=21"><img class="icon notion-static-icon" src="https://www.notion.so/icons/folder_blue.svg"/>Procedure</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-8190-9f57-db8ccca5c565"><td class="cell-title"><a href="https://www.notion.so/Outputs-3043865a780281909f57db8ccca5c565?pvs=21"><img class="icon notion-static-icon" src="https://www.notion.so/icons/folder_purple.svg"/>Outputs</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-8188-b360-c5f0e90c6e78"><td class="cell-title"><a href="https://www.notion.so/Fully-functional-responsive-and-optimized-Webflow-website-3043865a78028188b360c5f0e90c6e78?pvs=21">Fully functional, responsive, and optimized Webflow website.</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-818a-90e6-c4c1cecfacaa"><td class="cell-title"><a href="https://www.notion.so/All-client-requirements-met-and-approved-3043865a7802818a90e6c4c1cecfacaa?pvs=21">All client requirements met and approved.</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8147-b6b4-ebdc46522ffb"><td class="cell-title"><a href="https://www.notion.so/Handover-documentation-delivered-3043865a78028147b6b4ebdc46522ffb?pvs=21">Handover documentation delivered.</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8193-b0f9-e3331fdd72a8"><td class="cell-title"><a href="https://www.notion.so/Site-launched-and-monitored-for-ongoing-performance-1-3043865a78028193b0f9e3331fdd72a8?pvs=21">Site launched and monitored for ongoing performance[1].</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81be-bab2-f3755a74954f"><td class="cell-title"><a href="https://www.notion.so/3043865a780281bebab2f3755a74954f?pvs=21">Untitled</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8169-a57b-c0e7ccdc00ce"><td class="cell-title"><a href="https://www.notion.so/Fill-Variables-Font-Colors-Typography-3043865a78028169a57bc0e7ccdc00ce?pvs=21"><span class="icon">✒️</span>Fill Variables: Font, Colors, Typography</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81ab-9467-d08039609c3d"><td class="cell-title"><a href="https://www.notion.so/Set-up-reference-and-multi-reference-fields-and-connect-them-to-related-CMS-collections-3043865a780281ab9467d08039609c3d?pvs=21"><span class="icon">📐</span>Set up reference and multi-reference fields and connect them to related CMS collections</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8115-88e8-df9510c56da7"><td class="cell-title"><a href="https://www.notion.so/Build-CMS-Template-Pages-Blog-Template-Case-Study-Template-3043865a7802811588e8df9510c56da7?pvs=21"><span class="icon">⛩️</span>Build CMS Template Pages (Blog Template, Case Study Template)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8128-beb5-ee9f5c67ab2f"><td class="cell-title"><a href="https://www.notion.so/Add-to-Links-Widget-Project-Tracker-Google-Sheet-3043865a78028128beb5ee9f5c67ab2f?pvs=21"><span class="icon">📟</span>Add to Links Widget: Project Tracker (Google Sheet)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-817b-9a70-e10cb06d6b88"><td class="cell-title"><a href="https://www.notion.so/Add-SEO-meta-titles-descriptions-and-Open-Graph-fields-3043865a7802817b9a70e10cb06d6b88?pvs=21"><span class="icon">⚓</span>Add SEO meta titles, descriptions, and Open Graph fields</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-817e-a853-c7f6be91f962"><td class="cell-title"><a href="https://www.notion.so/Define-the-Lead-Developer-Backup-Developer-Project-Lead-3043865a7802817ea853c7f6be91f962?pvs=21"><span class="icon">👥</span>Define the Lead Developer, Backup Developer, Project Lead.</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81a2-8e9b-d3a0860d357b"><td class="cell-title"><a href="https://www.notion.so/Step-6-Integrations-Custom-Code-3043865a780281a28e9bd3a0860d357b?pvs=21"><span class="icon">🔧</span>Step 6: Integrations &amp; Custom Code</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-81d7-8e25-c06b35530786"><td class="cell-title"><a href="https://www.notion.so/Add-Project-Links-Widget-Links-Widget-https-app-activeset-co-3043865a780281d78e25c06b35530786?pvs=21"><span class="icon">⛴️</span>Add Project Links Widget [Links Widget] https://app.activeset.co/</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8104-a05a-f6b42e506ee8"><td class="cell-title"><a href="https://www.notion.so/Cookie-Consent-Banner-https-gr3f-co-c-60899-tFmEJ-Send-this-to-client-3043865a78028104a05af6b42e506ee8?pvs=21"><span class="icon">🍪</span>Cookie Consent Banner: https://gr3f.co/c/60899/tFmEJ Send this to client</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8117-a9fe-c98716a600aa"><td class="cell-title"><a href="https://www.notion.so/Font-File-from-Client-If-not-download-from-Google-3043865a78028117a9fec98716a600aa?pvs=21"><span class="icon">⌨️</span>Font File from Client (If not, download from Google)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-817e-ab79-d1ecbbaf50dc"><td class="cell-title"><a href="https://www.notion.so/Step-9-Launch-3043865a7802817eab79d1ecbbaf50dc?pvs=21"><span class="icon">🚀</span>Step 9: Launch</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-8182-b24e-ee03fb8b7736"><td class="cell-title"><a href="https://www.notion.so/Step-4-CMS-Configuration-3043865a78028182b24eee03fb8b7736?pvs=21"><img class="icon" src="Website%20Migration%20to%20Webflow%20(1)/Step%204%20CMS%20Configuration/CleanShot_2026-02-11_at_13.08.402x.png"/>Step 4: CMS Configuration</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-8199-9f14-e4b9112e1c22"><td class="cell-title"><a href="https://www.notion.so/Build-global-components-Navbar-Footer-Buttons-Containers-3043865a780281999f14e4b9112e1c22?pvs=21"><span class="icon">🏗️</span>Build global components (Navbar, Footer, Buttons, Containers)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81ce-ac0f-cce786e9a9ea"><td class="cell-title"><a href="https://www.notion.so/Project-Lead-sends-a-Email-intro-for-the-project-introducing-team-member-3043865a780281ceac0fcce786e9a9ea?pvs=21"><span class="icon">💌</span>Project Lead sends a Email intro for the project introducing team member</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81db-85e7-c472c48a0a22"><td class="cell-title"><a href="https://www.notion.so/Upload-fonts-from-client-if-not-on-Google-Fonts-3043865a780281db85e7c472c48a0a22?pvs=21"><span class="icon">✒️</span>Upload fonts from client if not on Google Fonts</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8102-8936-d1af99eef3f2"><td class="cell-title"><a href="https://www.notion.so/Test-all-forms-submit-error-state-integration-3043865a780281028936d1af99eef3f2?pvs=21"><span class="icon">🏁</span>Test all forms (submit, error state, integration)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8139-b422-c71573ede5d3"><td class="cell-title"><a href="https://www.notion.so/Step-8-Client-Review-Handover-3043865a78028139b422c71573ede5d3?pvs=21"><span class="icon">🤝</span>Step 8: Client Review &amp; Handover</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-81a6-9759-c09af7d836dd"><td class="cell-title"><a href="https://www.notion.so/Domain-Registrar-Access-Either-share-the-credentials-or-access-OR-should-be-able-to-do-it-by-thems-3043865a780281a69759c09af7d836dd?pvs=21"><span class="icon">🌐</span>Domain Registrar Access – Either share the credentials or access OR should be able to do it by themselves</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81c0-93ce-ca2adb231254"><td class="cell-title"><a href="https://www.notion.so/Connect-domain-and-hosting-settings-3043865a780281c093ceca2adb231254?pvs=21">Connect domain and hosting settings</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8152-bb8d-cf3a34ef66e6"><td class="cell-title"><a href="https://www.notion.so/Step-3-Webflow-Project-Setup-3043865a78028152bb8dcf3a34ef66e6?pvs=21"><span class="icon">🧱</span>Step 3: Webflow Project Setup</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-8158-af69-c949e4815754"><td class="cell-title"><a href="https://www.notion.so/Create-the-MarkUp-Folder-MarkUp-3043865a78028158af69c949e4815754?pvs=21"><span class="icon">📝</span>Create the MarkUp Folder [MarkUp]</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-817e-92b9-e63ef30a6a80"><td class="cell-title"><a href="https://www.notion.so/If-form-automation-is-required-use-Zapier-or-Make-3043865a7802817e92b9e63ef30a6a80?pvs=21"><span class="icon">⚓</span>If form automation is required, use Zapier or Make</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8182-a050-dfea4380661e"><td class="cell-title"><a href="https://www.notion.so/Test-all-CMS-data-fetching-properly-on-templates-3043865a78028182a050dfea4380661e?pvs=21"><span class="icon">🏁</span>Test all CMS data fetching properly on templates</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81da-8f4c-c03afb825692"><td class="cell-title"><a href="https://www.notion.so/Check-what-content-in-Figma-should-become-CMS-3043865a780281da8f4cc03afb825692?pvs=21"><span class="icon">🧑‍✈️</span>Check what content in Figma should become CMS</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81e8-9e4d-ebc7bdce3bc0"><td class="cell-title"><a href="https://www.notion.so/Create-CMS-collections-with-all-required-fields-and-proper-field-names-3043865a780281e89e4debc7bdce3bc0?pvs=21"><span class="icon">🏑</span>Create CMS collections with all required fields and proper field names</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81f1-a3e5-e047be702cb4"><td class="cell-title"><a href="https://www.notion.so/Component-planning-with-designer-3043865a780281f1a3e5e047be702cb4?pvs=21"><span class="icon">💟</span>Component planning with designer</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81f7-ad7b-f3dc86169b77"><td class="cell-title"><a href="https://www.notion.so/Develop-a-404-page-and-a-form-success-state-3043865a780281f7ad7bf3dc86169b77?pvs=21"><span class="icon">🙅‍♂️</span>Develop a 404 page and a form success state</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8112-968f-dd1d69642872"><td class="cell-title"><a href="https://www.notion.so/Validate-SEO-settings-for-all-pages-3043865a78028112968fdd1d69642872?pvs=21"><span class="icon">🏁</span>Validate SEO settings for all pages</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8116-be2a-f5cf33f0c6af"><td class="cell-title"><a href="https://www.notion.so/Check-all-links-buttons-and-navigation-3043865a78028116be2af5cf33f0c6af?pvs=21"><span class="icon">🏁</span>Check all links, buttons, and navigation</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8161-bfd2-c8a1596a3711"><td class="cell-title"><a href="https://www.notion.so/Create-the-ClickUp-Task-List-One-Click-Setup-3043865a78028161bfd2c8a1596a3711?pvs=21"><img class="icon notion-static-icon" src="https://www.notion.so/icons/checklist_gray.svg"/>Create the ClickUp Task List: ⚙️ One Click Setup</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-816c-9ba6-c3079ec144c8"><td class="cell-title"><a href="https://www.notion.so/Use-Finsweet-for-filters-load-more-social-etc-https-finsweet-com-attributes-3043865a7802816c9ba6c3079ec144c8?pvs=21"><span class="icon">🏁</span>Use Finsweet for filters, load-more, social, etc. https://finsweet.com/attributes</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-819d-8695-e0851968d1b7"><td class="cell-title"><a href="https://www.notion.so/Step-5-Page-Development-Layout-3043865a7802819d8695e0851968d1b7?pvs=21"><span class="icon">🧩</span>Step 5: Page Development &amp; Layout</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-81e8-a31f-fdb1dd26024e"><td class="cell-title"><a href="https://www.notion.so/Verify-all-animations-are-smooth-and-device-optimized-3043865a780281e8a31ffdb1dd26024e?pvs=21"><span class="icon">🏁</span>Verify all animations are smooth and device-optimized</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8102-a1d6-e3af3241ae4b"><td class="cell-title"><a href="https://www.notion.so/If-they-have-Video-with-Sound-if-required-Vimeo-Paid-Netlify-100GB-Free-3043865a78028102a1d6e3af3241ae4b?pvs=21"><span class="icon">📺</span>If they have Video with Sound (if required) — Vimeo (Paid), Netlify (100GB Free)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-811c-aed3-ddab2e25dc78"><td class="cell-title"><a href="https://www.notion.so/Step-2-Design-Preparation-Developer-3043865a7802811caed3ddab2e25dc78?pvs=21"><span class="icon">🎨</span>Step 2: Design Preparation (Developer)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-814a-9d5d-c0c5b8332507"><td class="cell-title"><a href="https://www.notion.so/Step-1-Project-Planning-Kickoff-3043865a7802814a9d5dc0c5b8332507?pvs=21"><span class="icon">📁</span>Step 1: Project Planning &amp; Kickoff</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-819f-a52d-d8f8f9b5abdb"><td class="cell-title"><a href="https://www.notion.so/Check-with-client-if-Copy-and-Structure-remains-the-same-if-not-it-s-a-redesign-project-3043865a7802819fa52dd8f8f9b5abdb?pvs=21"><span class="icon">📝</span>Check with client if Copy and Structure remains the same (if not, it’s a redesign project)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81a2-8121-ca5cc0b600fe"><td class="cell-title"><a href="https://www.notion.so/Internal-kickoff-deadline-functionality-animations-strategy-3043865a780281a28121ca5cc0b600fe?pvs=21"><span class="icon">👥</span>Internal kickoff: deadline, functionality, animations, strategy</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81b0-9472-f7505ec27cc8"><td class="cell-title"><a href="https://www.notion.so/Ensure-all-images-are-WebP-and-compressed-with-good-quality-3043865a780281b09472f7505ec27cc8?pvs=21"><span class="icon">🖼️</span>Ensure all images are WebP and compressed with good quality</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-811f-9f74-cd3a0d2fb36d"><td class="cell-title"><a href="https://www.notion.so/Client-Webflow-account-with-a-Paid-Plan-Post-Website-is-ready-on-ActiveSet-Account-3043865a7802811f9f74cd3a0d2fb36d?pvs=21"><span class="icon">🔒</span>Client Webflow account with a Paid Plan (Post Website is ready on ActiveSet Account) –</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8158-a9cd-df7943bf4d60"><td class="cell-title"><a href="https://www.notion.so/Publish-and-run-final-live-checks-3043865a78028158a9cddf7943bf4d60?pvs=21">Publish and run final live checks</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8177-a96e-cc65ebf0de25"><td class="cell-title"><a href="https://www.notion.so/Check-website-loading-speed-and-optimize-assets-3043865a78028177a96ecc65ebf0de25?pvs=21"><span class="icon">🏁</span>Check website loading speed and optimize assets</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8186-8398-c669e16c62f7"><td class="cell-title"><a href="https://www.notion.so/Responsive-pre-check-for-tablet-and-mobile-flag-issues-early-3043865a780281868398c669e16c62f7?pvs=21"><span class="icon">🗯️</span>Responsive pre-check for tablet and mobile; flag issues early</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81d0-9d21-cd88250a5f12"><td class="cell-title"><a href="https://www.notion.so/Analytics-Google-Tag-Manager-Google-Analytics-Microsoft-Clarity-Code-3043865a780281d09d21cd88250a5f12?pvs=21"><span class="icon">📊</span>Analytics: Google Tag Manager, Google Analytics &amp; Microsoft Clarity Code.</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8123-9fe2-ec411bab6f51"><td class="cell-title"><a href="https://www.notion.so/Fix-the-markup-comments-3043865a780281239fe2ec411bab6f51?pvs=21">Fix the markup comments</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-815f-99c8-c25c71ac54c8"><td class="cell-title"><a href="https://www.notion.so/Configure-Webflow-forms-success-message-required-fields-validations-3043865a7802815f99c8c25c71ac54c8?pvs=21"><span class="icon">⚓</span>Configure Webflow forms (success message, required fields, validations)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-816b-81a3-d728be4d7d70"><td class="cell-title"><a href="https://www.notion.so/Folder-for-the-Assets-Drive-If-not-we-need-to-scrape-it-using-https-extract-pics-for-Images-3043865a7802816b81a3d728be4d7d70?pvs=21"><span class="icon">📂</span>Folder for the Assets (Drive). If not, we need to scrape it using https://extract.pics/ for Images.</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8174-a245-fe2ec2dfd2c0"><td class="cell-title"><a href="https://www.notion.so/Ensure-styleguide-consistency-spacing-typography-colors-3043865a78028174a245fe2ec2dfd2c0?pvs=21"><span class="icon">✒️</span>Ensure styleguide consistency: spacing, typography, colors</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8199-b6fc-db4cd4a5c0a5"><td class="cell-title"><a href="https://www.notion.so/Test-all-pages-on-all-breakpoints-3043865a78028199b6fcdb4cd4a5c0a5?pvs=21"><span class="icon">🏁</span>Test all pages on all breakpoints</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81a5-93dd-e24a007ba7ac"><td class="cell-title"><a href="https://www.notion.so/Share-the-staging-and-markup-links-for-feedback-3043865a780281a593dde24a007ba7ac?pvs=21">Share the staging and markup links for feedback</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81d2-9233-f7149ad69c15"><td class="cell-title"><a href="https://www.notion.so/Add-animations-and-interactions-scroll-hover-page-load-GSAP-if-needed-3043865a780281d29233f7149ad69c15?pvs=21"><span class="icon">🌀</span>Add animations and interactions (scroll, hover, page load, GSAP if needed)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81d6-8db2-f5047952367b"><td class="cell-title"><a href="https://www.notion.so/Step-7-QA-Pre-Launch-Checklist-3043865a780281d68db2f5047952367b?pvs=21"><span class="icon">🧪</span>Step 7: QA &amp; Pre-Launch Checklist</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj">0</td></tr><tr id="3043865a-7802-81f7-bdb7-ec4a9141cb48"><td class="cell-title"><a href="https://www.notion.so/Add-custom-JS-CSS-code-where-required-GSAP-SplitType-smooth-scroll-3043865a780281f7bdb7ec4a9141cb48?pvs=21"><span class="icon">⚓</span>Add custom JS/CSS code where required (GSAP, SplitType, smooth scroll)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81fb-b62f-e6bf6189ef04"><td class="cell-title"><a href="https://www.notion.so/Build-a-proper-structure-with-correct-class-names-3043865a780281fbb62fe6bf6189ef04?pvs=21"><span class="icon">🏗️</span>Build a proper structure with correct class names</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8149-8e4d-f61b8f47c388"><td class="cell-title"><a href="https://www.notion.so/Map-API-key-from-client-If-required-3043865a780281498e4df61b8f47c388?pvs=21"><span class="icon">📍</span>Map API key from client (If required)</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8185-a407-ea4bef5390a4"><td class="cell-title"><a href="https://www.notion.so/Add-website-favicon-and-webclip-3043865a78028185a407ea4bef5390a4?pvs=21"><span class="icon">⚓</span>Add website favicon and webclip</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-8194-b75e-de9699da7537"><td class="cell-title"><a href="https://www.notion.so/HubSpot-Form-For-Hubspot-Form-Integration-we-need-the-code-from-Client-and-Paid-if-we-need-to-cust-3043865a78028194b75ede9699da7537?pvs=21"><span class="icon">📄</span>HubSpot Form: For Hubspot Form Integration, we need the code from Client and Paid if we need to customize.</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81a1-8ec7-f05686c8095e"><td class="cell-title"><a href="https://www.notion.so/Duplicate-Webflow-Starter-Project-https-webflow-com-made-in-webflow-website-activeset-style-guid-3043865a780281a18ec7f05686c8095e?pvs=21"><span class="icon">🍽️</span>Duplicate Webflow Starter Project ↗ https://webflow.com/made-in-webflow/website/activeset-style-guide?ref=made-in-webflow-search&amp;searchValue=Activeset</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81e8-a8db-e83163065d86"><td class="cell-title"><a href="https://www.notion.so/Make-the-page-responsive-for-Tablet-Mobile-Landscape-Mobile-Portrait-3043865a780281e8a8dbe83163065d86?pvs=21"><span class="icon">📲</span>Make the page responsive for Tablet, Mobile Landscape, Mobile Portrait</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-81fc-b8fa-c10ba53f4d3a"><td class="cell-title"><a href="https://www.notion.so/Update-Project-Settings-3043865a780281fcb8fac10ba53f4d3a?pvs=21"><span class="icon">⚙️</span>Update Project Settings</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr><tr id="3043865a-7802-814c-99c5-d540baa9cf3b"><td class="cell-title"><a href="https://www.notion.so/Create-Slack-Channel-with-Client-Workflow-to-be-used-Setup-Channel-Webflow-Migration-3043865a7802814c99c5d540baa9cf3b?pvs=21"><span class="icon">💬</span>Create Slack Channel with Client. Workflow to be used: Setup Channel - Webflow Migration</a></td><td class="cell-qF{Y"><span class="status-value select-value-color-default"><div class="status-dot status-dot-color-default"></div>Ready to start</span></td><td class="cell-=Tnw"></td><td class="cell-@BRj"></td></tr></tbody></table><br/><br/></div></article><span class="sans" style="font-size:14px;padding-top:2em"></span></body></html>

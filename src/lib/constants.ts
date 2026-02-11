@@ -1,6 +1,7 @@
 // Database constants
 export const COLLECTIONS = {
   PROJECTS: 'projects',
+  PROJECT_CHECKLISTS: 'project_checklists',
 } as const;
 
 // UI constants
