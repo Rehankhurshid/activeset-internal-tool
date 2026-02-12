@@ -9,6 +9,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -23,7 +24,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Plus, MoreVertical, Pencil, Copy, Trash2, Lock } from 'lucide-react';
+import { Plus, MoreVertical, Pencil, Copy, Trash2, Lock, FileDown, FileText, ClipboardCopy } from 'lucide-react';
+import { downloadAsPDF, downloadAsMarkdown, copyAsMarkdown } from '@/lib/template-export';
 import { toast } from 'sonner';
 
 interface TemplateListProps {
@@ -195,6 +197,22 @@ function TemplateCard({ template, onEdit, onDuplicate, onDelete }: TemplateCardP
                                     Delete
                                 </DropdownMenuItem>
                             )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => downloadAsPDF(template)}>
+                                <FileDown className="h-4 w-4 mr-2" />
+                                Download PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => downloadAsMarkdown(template)}>
+                                <FileText className="h-4 w-4 mr-2" />
+                                Download Markdown
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={async () => {
+                                await copyAsMarkdown(template);
+                                toast.success('Copied to clipboard');
+                            }}>
+                                <ClipboardCopy className="h-4 w-4 mr-2" />
+                                Copy as Markdown
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
