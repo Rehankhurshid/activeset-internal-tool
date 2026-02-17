@@ -15,7 +15,7 @@ import {
     isScanCancelled,
     markScanCancelled
 } from '@/lib/scan-progress-store';
-import { ChangeLogEntry, ChangeStatus, FieldChange, ProjectLink } from '@/types';
+import { AuditResult, ChangeLogEntry, ChangeStatus, FieldChange, ProjectLink } from '@/types';
 
 /**
  * Recursively remove undefined values from an object (Firestore doesn't accept undefined)
@@ -316,6 +316,27 @@ async function runBulkScan(
                 console.error(`[scan-bulk] Failed to scan ${link.url}:`, error);
 
                 while (isSaving) await new Promise(resolve => setTimeout(resolve, 50));
+
+                // Persist a fresh failed scan state so UI does not keep stale "last scan" values.
+                const failedAt = new Date().toISOString();
+                const idx = projectLinks.findIndex(l => l.id === link.id);
+                if (idx !== -1) {
+                    const existingAudit = projectLinks[idx].auditResult;
+                    if (existingAudit) {
+                        const failedAudit: AuditResult = {
+                            ...existingAudit,
+                            changeStatus: 'SCAN_FAILED',
+                            lastRun: failedAt,
+                            summary: `Scan failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                        };
+
+                        projectLinks[idx] = {
+                            ...projectLinks[idx],
+                            auditResult: compactAuditResult(failedAudit)
+                        };
+                        pendingLinkUpdates++;
+                    }
+                }
 
                 results.push({
                     linkId: link.id,
