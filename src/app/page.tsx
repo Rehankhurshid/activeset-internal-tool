@@ -104,13 +104,13 @@ export default function Home() {
 
         <div className="max-w-6xl mx-auto">
           <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-            {/* Project Links Module */}
+            {/* Client Projects Module */}
             {renderModuleCard(
               "/modules/project-links",
               <FolderOpen className="h-6 w-6 text-blue-500" />,
               "bg-blue-500/10 dark:bg-blue-500/20",
-              "Project Links",
-              "Manage and organize all your project links in one place.",
+              "Client Projects",
+              "Manage and organize all your client projects in one place.",
               hasProjectLinksAccess,
               projectLinksAccessLoading
             )}

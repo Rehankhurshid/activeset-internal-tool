@@ -5,19 +5,14 @@ import { useAuth } from '@/hooks/useAuth';
 import { Project } from '@/types';
 import { projectsService } from '@/services/database';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Link as LinkIcon, Plus, Code, ShieldX, LayoutDashboard, List, Globe, ListChecks } from 'lucide-react';
-import Link from 'next/link';
-import { LinkList } from '@/components/projects/LinkList';
-import { AddLinkDialog } from '@/components/projects/AddLinkDialog';
+import { Code, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2 } from 'lucide-react';
 import { EmbedDialog } from '@/components/projects/EmbedDialog';
 import { WebsiteAuditDashboard } from '@/components/website-audit-dashboard';
 import { ScanSitemapDialog } from '@/components/scan-sitemap-dialog';
 import { InlineEdit } from '@/components/ui/inline-edit';
-import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { AppNavigation } from '@/components/navigation/AppNavigation';
 import { WebflowPagesDashboard } from '@/components/webflow/WebflowPagesDashboard';
 import { WebflowConfig } from '@/types/webflow';
@@ -34,7 +29,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const [project, setProject] = useState<Project | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
-    const { execute: executeAddLink } = useAsyncOperation();
+    const [isSyncingSitemap, setIsSyncingSitemap] = useState(false);
+    const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
 
     // Default to 'audit' tab
     const [activeTab, setActiveTab] = useState('audit');
@@ -55,19 +51,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
         return () => unsubscribe();
     }, [user, id]);
-
-    const handleAddLink = async (title: string, url: string) => {
-        if (!project) return;
-
-        await executeAddLink(async () => {
-            await projectsService.addLinkToProject(project.id, {
-                title,
-                url,
-                order: project.links.length,
-                isDefault: false
-            });
-        });
-    };
 
     const handleUpdateProjectName = async (newName: string) => {
         if (!project) return;
@@ -93,6 +76,83 @@ export default function ProjectDetailPage({ params }: PageProps) {
         } catch (error) {
             toast.error('Failed to remove Webflow configuration');
             throw error;
+        }
+    };
+
+    const handleManualSitemapSync = async () => {
+        if (!project?.sitemapUrl) {
+            toast.error('No sitemap URL saved yet. Run Scan Sitemap first.');
+            return;
+        }
+
+        setIsSyncingSitemap(true);
+        try {
+            const response = await fetch('/api/scan-sitemap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectId: project.id,
+                    sitemapUrl: project.sitemapUrl,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data?.error || 'Failed to sync sitemap');
+            }
+
+            toast.success(
+                `Sync completed: ${data?.totalFound ?? 0} pages checked, ${data?.count ?? 0} new, ${data?.removed ?? 0} removed`
+            );
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to sync sitemap';
+            toast.error(message);
+        } finally {
+            setIsSyncingSitemap(false);
+        }
+    };
+
+    const copyToClipboard = async (text: string): Promise<boolean> => {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch {
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-999999px';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                const copied = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                return copied;
+            } catch {
+                return false;
+            }
+        }
+    };
+
+    const handleShareAuditDashboard = async () => {
+        if (!project || isCreatingShareLink) return;
+
+        setIsCreatingShareLink(true);
+        try {
+            const shareUrl = await projectsService.createAuditShareLink(project.id);
+            const copied = await copyToClipboard(shareUrl);
+
+            if (copied) {
+                toast.success('Public audit link copied to clipboard');
+            } else {
+                toast.info(`Share link: ${shareUrl}`, { duration: 12000 });
+            }
+        } catch (error) {
+            console.error('Error creating public audit share link:', error);
+            toast.error('Failed to create share link');
+        } finally {
+            setIsCreatingShareLink(false);
         }
     };
 
@@ -123,6 +183,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 showBackButton
                 backHref="/modules/project-links"
             >
+                <Button variant="outline" size="sm" onClick={handleShareAuditDashboard} disabled={isCreatingShareLink}>
+                    {isCreatingShareLink ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                        <Share2 className="mr-2 h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">Share</span>
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setIsEmbedDialogOpen(true)}>
                     <Code className="mr-2 h-4 w-4" />
                     <span className="hidden sm:inline">Embed</span>
@@ -169,7 +237,17 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
                         {/* Show Scan Sitemap when in audit tab */}
                         {activeTab === 'audit' && (
-                            <div className="w-full sm:w-auto">
+                            <div className="w-full sm:w-auto flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    className="gap-2"
+                                    onClick={handleManualSitemapSync}
+                                    disabled={isSyncingSitemap || !project.sitemapUrl}
+                                    title={project.sitemapUrl ? `Sync using ${project.sitemapUrl}` : 'Run Scan Sitemap first to save a sitemap URL'}
+                                >
+                                    <RefreshCw className={`h-4 w-4 ${isSyncingSitemap ? 'animate-spin' : ''}`} />
+                                    Sync
+                                </Button>
                                 <ScanSitemapDialog
                                     projectId={project.id}
                                 />

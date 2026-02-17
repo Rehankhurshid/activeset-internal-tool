@@ -74,6 +74,7 @@ import {
   HoverCardTrigger,
 } from '@/components/ui/hover-card';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 
 export function WebflowPagesDashboard({
   projectId,
@@ -87,6 +88,7 @@ export function WebflowPagesDashboard({
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterOption>('all');
   const [sort, setSort] = useState<SortOption>('health-asc');
+  const [showDraftPages, setShowDraftPages] = useState(false);
   const [selectedPage, setSelectedPage] = useState<WebflowPageWithQC | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [bulkEditorOpen, setBulkEditorOpen] = useState(false);
@@ -106,6 +108,11 @@ export function WebflowPagesDashboard({
   // Filter and sort pages
   const filteredPages = useMemo(() => {
     let result = [...pages];
+
+    // Hide draft pages by default
+    if (!showDraftPages) {
+      result = result.filter((p) => !p.draft);
+    }
 
     // Search
     if (searchQuery) {
@@ -151,7 +158,7 @@ export function WebflowPagesDashboard({
     }
 
     return result;
-  }, [pages, searchQuery, filter, sort]);
+  }, [pages, searchQuery, filter, sort, showDraftPages]);
 
   // Group pages for display
   const { staticPagesDisplay, cmsPagesDisplay } = useMemo(() => {
@@ -441,6 +448,19 @@ export function WebflowPagesDashboard({
                 <SelectItem value="updated">Recently Updated</SelectItem>
               </SelectContent>
             </Select>
+            <div className="flex items-center gap-2 rounded-md border px-3 py-2 h-10">
+              <Switch
+                id="show-draft-pages"
+                checked={showDraftPages}
+                onCheckedChange={setShowDraftPages}
+              />
+              <label
+                htmlFor="show-draft-pages"
+                className="text-sm text-muted-foreground cursor-pointer select-none"
+              >
+                Show Draft Pages
+              </label>
+            </div>
           </div>
 
           {/* Pages List */}
@@ -542,7 +562,7 @@ export function WebflowPagesDashboard({
           {/* Results Count */}
           {!loading && filteredPages.length > 0 && (
             <div className="mt-4 text-center text-sm text-muted-foreground">
-              Showing {filteredPages.length} of {pages.length} pages
+              Showing {filteredPages.length} of {showDraftPages ? pages.length : pages.filter((p) => !p.draft).length} pages
             </div>
           )}
         </CardContent>

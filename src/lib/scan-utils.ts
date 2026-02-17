@@ -13,14 +13,30 @@ export function compactAuditResult(result: AuditResult): AuditResult {
     // Truncate contentSnapshot - remove large arrays, limit strings
     if (compact.contentSnapshot) {
         const snapshot = compact.contentSnapshot as ExtendedContentSnapshot;
+
+        // Keep a compact, prioritized image subset for quick issue triage in UI.
+        // Missing ALT images are kept first to surface accessibility/SEO problems.
+        const allImages = Array.isArray(snapshot.images) ? snapshot.images : [];
+        const imagesMissingAlt = allImages.filter(img => !img.alt || !img.alt.trim());
+        const imagesWithAlt = allImages.filter(img => img.alt && img.alt.trim());
+        const compactImages = [...imagesMissingAlt, ...imagesWithAlt]
+            .slice(0, 12)
+            .map(img => ({
+                src: img.src,
+                alt: (img.alt || '').substring(0, 160),
+                inMainContent: !!img.inMainContent,
+            }));
+
         compact.contentSnapshot = {
             title: snapshot.title?.substring(0, 200) || '',
             h1: snapshot.h1?.substring(0, 200) || '',
             metaDescription: snapshot.metaDescription?.substring(0, 300) || '',
             wordCount: snapshot.wordCount || 0,
             headings: (snapshot.headings || []).slice(0, 10), // Max 10 headings
-            // EXCLUDE large fields: bodyText, bodyTextPreview, images, links, sections
-        };
+            // Keep only a compact image set; exclude other large arrays/fields.
+            images: compactImages,
+            // EXCLUDE large fields: bodyText, bodyTextPreview, links, sections
+        } as ContentSnapshot;
     }
 
     // Strip rawSchemas from schema category (can be very large)

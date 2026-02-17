@@ -15,7 +15,7 @@ interface TeamAccessEditorProps {
 
 const MODULE_LABELS: Record<RestrictedModule, string> = {
     proposal: "Proposals",
-    'project-links': "Project Links"
+    'project-links': "Client Projects"
 };
 
 export function TeamAccessEditor({ isAdmin }: TeamAccessEditorProps) {

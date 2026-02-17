@@ -22,7 +22,7 @@ const funnelSans = Funnel_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Project Links Widget",
+  title: "Activeset Tools",
   description: "Manage your project links with real-time collaboration",
 };
 

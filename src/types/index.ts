@@ -290,9 +290,35 @@ export interface ChangeLogQueryOptions {
   limit?: number;
 }
 
+// --- PROJECT STATUS & TAG TYPES ---
+
+export type ProjectStatus = 'current' | 'past';
+
+export type ProjectTag =
+  | 'retainer'
+  | 'one_time'
+  | 'subscription'
+  | 'maintenance'
+  | 'consulting';
+
+export const PROJECT_TAG_LABELS: Record<ProjectTag, string> = {
+  retainer: 'Retainer',
+  one_time: 'One Time',
+  subscription: 'Subscription',
+  maintenance: 'Maintenance',
+  consulting: 'Consulting',
+};
+
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  current: 'Current',
+  past: 'Past',
+};
+
 export interface Project {
   id: string;
   name: string;
+  status: ProjectStatus;
+  tags: ProjectTag[];
   links: ProjectLink[];
   createdAt: Date;
   updatedAt: Date;
@@ -303,10 +329,14 @@ export interface Project {
   // Locale data extracted from sitemap hreflang
   detectedLocales?: string[]; // Canonical list of locales, e.g., ["en", "da", "es-ar", "pt-br"]
   pathToLocaleMap?: Record<string, string>; // Path prefix to locale mapping, e.g., { "/es": "es-ar", "/pt": "pt-br" }
+  // Public sharing for audit dashboard
+  publicAuditShareToken?: string;
+  publicAuditShareEnabled?: boolean;
+  publicAuditShareUpdatedAt?: string;
 }
 
 export type CreateProjectInput = Pick<Project, 'name' | 'userId'>;
-export type UpdateProjectInput = Partial<Pick<Project, 'name'>>;
+export type UpdateProjectInput = Partial<Pick<Project, 'name' | 'status' | 'tags'>>;
 
 export interface User {
   uid: string;

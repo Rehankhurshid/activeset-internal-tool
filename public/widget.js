@@ -135,17 +135,35 @@
       allImages.forEach(img => {
         // Skip nav/footer images
         if (img.closest('nav') || img.closest('footer')) return;
-        // Skip tiny images (likely icons/spacers)
-        if (img.width < 50 && img.height < 50) return;
+
+        const alt = img.alt || '';
+        const missingAlt = !alt || alt.trim() === '';
+
+        // Skip tiny images only when ALT is present.
+        // If ALT is missing, keep it so we can surface it in compact issue view.
+        if (!missingAlt && img.width < 50 && img.height < 50) return;
+
+        // Prefer currentSrc, then src, then lazy-load attrs/srcset fallbacks
+        const srcset = img.getAttribute('srcset') || img.getAttribute('data-srcset') || '';
+        const firstSrcset = srcset ? srcset.split(',')[0].trim().split(' ')[0] : '';
+        const src = img.currentSrc
+          || img.src
+          || img.getAttribute('data-src')
+          || img.getAttribute('data-lazy-src')
+          || img.getAttribute('data-original')
+          || firstSrcset
+          || '';
+
+        if (!src) return;
 
         images.push({
-          src: img.src || '',
-          alt: img.alt || '',
+          src,
+          alt,
           inMainContent: true
         });
       });
 
-      return images.slice(0, 50); // Limit to 50 images
+      return images.slice(0, 120); // Keep compact but enough for no-alt visibility
     }
 
     /**

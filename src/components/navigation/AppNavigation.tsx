@@ -14,11 +14,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
-import { 
-  Home, 
-  LogOut, 
-  User, 
-  Menu, 
+import {
+  Home,
+  LogOut,
+  User,
+  Menu,
   X,
   FolderOpen,
   FileText,
@@ -38,12 +38,12 @@ interface AppNavigationProps {
   className?: string;
 }
 
-export function AppNavigation({ 
-  title, 
-  showBackButton = false, 
+export function AppNavigation({
+  title,
+  showBackButton = false,
   backHref = '/',
   children,
-  className 
+  className
 }: AppNavigationProps) {
   const pathname = usePathname();
   const { user, logout, loading } = useAuth();
@@ -76,7 +76,7 @@ export function AppNavigation({
               </Link>
             </Button>
           )}
-          
+
           {title && (
             <div className="flex items-center gap-2 min-w-0">
               <h1 className="text-lg sm:text-xl font-semibold truncate">{title}</h1>
@@ -86,14 +86,14 @@ export function AppNavigation({
           {/* Desktop Navigation */}
           {isHomePage && (
             <nav className="hidden md:flex items-center gap-1 ml-4">
-              <NavigationLink 
-                href="/modules/project-links" 
+              <NavigationLink
+                href="/modules/project-links"
                 icon={<FolderOpen className="h-4 w-4" />}
-                label="Project Links"
+                label="Client Projects"
                 hasAccess={hasProjectLinksAccess}
               />
-              <NavigationLink 
-                href="/modules/proposal" 
+              <NavigationLink
+                href="/modules/proposal"
                 icon={<FileText className="h-4 w-4" />}
                 label="Proposals"
                 hasAccess={hasProposalAccess}
@@ -163,12 +163,12 @@ export function AppNavigation({
                       <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                     </div>
                   </div>
-                  
+
                   <nav className="flex flex-col gap-2">
                     <MobileNavLink
                       href="/modules/project-links"
                       icon={<FolderOpen className="h-4 w-4" />}
-                      label="Project Links"
+                      label="Client Projects"
                       hasAccess={hasProjectLinksAccess}
                       onClick={() => setMobileMenuOpen(false)}
                     />
@@ -183,8 +183,8 @@ export function AppNavigation({
                   </nav>
 
                   <div className="pt-4 border-t">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="w-full justify-start"
                       onClick={() => {
                         logout();
@@ -282,8 +282,8 @@ function MobileNavLink({ href, icon, label, hasAccess, badge, onClick }: MobileN
       onClick={onClick}
       className={cn(
         "flex items-center gap-3 p-3 rounded-lg transition-colors",
-        isActive 
-          ? "bg-accent text-accent-foreground" 
+        isActive
+          ? "bg-accent text-accent-foreground"
           : "hover:bg-accent hover:text-accent-foreground"
       )}
     >

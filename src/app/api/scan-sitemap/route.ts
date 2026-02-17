@@ -15,6 +15,11 @@ interface LocaleMapping {
     detectedLocales: string[];           // e.g., ["en", "da", "es-ar", "pt-br"]
 }
 
+interface WebflowTypeMaps {
+    pageTypeMap: Map<string, 'collection' | 'static'>;
+    folderTypeMap: Record<string, 'collection' | 'static'>;
+}
+
 /**
  * Build a mapping of URL path prefixes to hreflang locale codes.
  * This allows us to correctly normalize path-based locales to their canonical hreflang values.
@@ -227,41 +232,51 @@ function matchesPattern(pathname: string, pattern: string): boolean {
     return normalizedPath === normalizedPattern;
 }
 
+function getFolderPatternFromPath(pathname: string): string | null {
+    const pathParts = pathname.split('/').filter(Boolean);
+    if (pathParts.length === 0) return null;
+    return `/${pathParts[0].toLowerCase()}/*`;
+}
+
 /**
  * Detect page type (collection/CMS vs static) using:
- * 1. User-defined folder classifications (highest priority)
- * 2. Webflow API data (if available)
- * 3. Default to 'static' (user can mark folders as CMS through dashboard)
+ * 1. Webflow API exact URL/path match
+ * 2. Webflow-derived folder mapping
+ * 3. Existing project folder classifications (legacy/manual override)
+ * 4. Default to 'static'
  */
 function detectPageType(
     url: string,
     webflowPageTypeMap: Map<string, 'collection' | 'static'>,
+    webflowFolderTypeMap: Record<string, 'static' | 'collection'> = {},
     folderPageTypes: Record<string, 'static' | 'collection'> = {}
 ): 'collection' | 'static' {
     try {
         const normalizedUrl = url.replace(/\/$/, '').toLowerCase();
         const pathname = new URL(url).pathname.replace(/\/$/, '').toLowerCase();
 
-        // Extract folder pattern from pathname (e.g., "/blog/post-1" -> "/blog/*")
-        const pathParts = pathname.split('/').filter(Boolean);
-        if (pathParts.length > 0) {
-            const folderPattern = `/${pathParts[0]}/*`;
-            if (folderPageTypes[folderPattern]) {
-                return folderPageTypes[folderPattern];
-            }
-        }
-
-        // Second try: exact URL match from Webflow
+        // 1) exact URL match from Webflow
         if (webflowPageTypeMap.has(normalizedUrl)) {
             return webflowPageTypeMap.get(normalizedUrl)!;
         }
 
-        // Third try: path match from Webflow
+        // 2) path match from Webflow
         if (webflowPageTypeMap.has(pathname)) {
             return webflowPageTypeMap.get(pathname)!;
         }
 
-        // Default: All pages are static unless explicitly marked as CMS
+        // 3) folder-level mapping inferred from Webflow pages
+        const folderPattern = getFolderPatternFromPath(pathname);
+        if (folderPattern && webflowFolderTypeMap[folderPattern]) {
+            return webflowFolderTypeMap[folderPattern];
+        }
+
+        // 4) fallback to existing project mapping (legacy/manual)
+        if (folderPattern && folderPageTypes[folderPattern]) {
+            return folderPageTypes[folderPattern];
+        }
+
+        // Default: static
         return 'static';
     } catch {
         return 'static';
@@ -310,8 +325,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Project not found' }, { status: 404 });
         }
 
-        // Build Webflow page type lookup if project has Webflow config
-        const webflowPageTypeMap = new Map<string, 'collection' | 'static'>();
+        // Build Webflow page/folder type lookup if project has Webflow config
+        const webflowTypeMaps: WebflowTypeMaps = {
+            pageTypeMap: new Map<string, 'collection' | 'static'>(),
+            folderTypeMap: {}
+        };
+        let mergedFolderPageTypes: Record<string, 'static' | 'collection'> = { ...(project.folderPageTypes || {}) };
+
         if (project.webflowConfig?.siteId && project.webflowConfig?.apiToken) {
             try {
                 console.log(`[scan-sitemap] Fetching Webflow pages for accurate CMS detection...`);
@@ -329,7 +349,7 @@ export async function POST(request: NextRequest) {
                     const wfData = await wfResponse.json();
                     const pages = wfData.pages || [];
 
-                    // Get custom domain or subdomain for URL matching
+                    // Get custom domain for URL matching
                     const baseUrl = project.webflowConfig.customDomain
                         ? `https://${project.webflowConfig.customDomain}`
                         : null;
@@ -340,16 +360,35 @@ export async function POST(request: NextRequest) {
 
                         // Store the path (normalized) -> pageType mapping
                         const normalizedPath = path.replace(/\/$/, '').toLowerCase();
-                        webflowPageTypeMap.set(normalizedPath, pageType);
+                        webflowTypeMaps.pageTypeMap.set(normalizedPath, pageType);
+
+                        // Store folder-level type (e.g., "/blog/*" => "collection")
+                        const folderPattern = getFolderPatternFromPath(normalizedPath);
+                        if (folderPattern) {
+                            // If any page in a folder is CMS, keep folder as CMS
+                            if (
+                                pageType === 'collection' ||
+                                !webflowTypeMaps.folderTypeMap[folderPattern]
+                            ) {
+                                webflowTypeMaps.folderTypeMap[folderPattern] = pageType;
+                            }
+                        }
 
                         // Also store with base URL if we know the domain
                         if (baseUrl) {
                             const fullUrl = `${baseUrl}${path}`.replace(/\/$/, '').toLowerCase();
-                            webflowPageTypeMap.set(fullUrl, pageType);
+                            webflowTypeMaps.pageTypeMap.set(fullUrl, pageType);
                         }
                     });
 
-                    console.log(`[scan-sitemap] Webflow page types loaded: ${webflowPageTypeMap.size} mappings (${pages.filter((p: { collectionId?: string }) => p.collectionId).length} CMS pages)`);
+                    mergedFolderPageTypes = {
+                        ...mergedFolderPageTypes,
+                        ...webflowTypeMaps.folderTypeMap
+                    };
+
+                    console.log(
+                        `[scan-sitemap] Webflow page types loaded: ${webflowTypeMaps.pageTypeMap.size} URL/path mappings, ${Object.keys(webflowTypeMaps.folderTypeMap).length} folder mappings (${pages.filter((p: { collectionId?: string }) => p.collectionId).length} CMS pages)`
+                    );
                 } else {
                     console.warn(`[scan-sitemap] Failed to fetch Webflow pages: ${wfResponse.status} - using path heuristics`);
                 }
@@ -415,7 +454,12 @@ export async function POST(request: NextRequest) {
                 const displayTitle = pathname === '/' ? 'Homepage' : pathname;
 
                 // Detect page type using folder classifications, Webflow API data
-                const pageType = detectPageType(entry.url, webflowPageTypeMap, project.folderPageTypes || {});
+                const pageType = detectPageType(
+                    entry.url,
+                    webflowTypeMaps.pageTypeMap,
+                    webflowTypeMaps.folderTypeMap,
+                    mergedFolderPageTypes
+                );
 
                 const title = entry.locale
                     ? `${displayTitle} [${entry.locale.toUpperCase()}]`
@@ -448,7 +492,12 @@ export async function POST(request: NextRequest) {
                 }
                 // Retroactively set or update pageType using rules/Webflow data
                 if (existingLink && !existingLink.pageType) {
-                    existingLink.pageType = detectPageType(existingLink.url, webflowPageTypeMap, project.folderPageTypes || {});
+                    existingLink.pageType = detectPageType(
+                        existingLink.url,
+                        webflowTypeMaps.pageTypeMap,
+                        webflowTypeMaps.folderTypeMap,
+                        mergedFolderPageTypes
+                    );
                 }
             }
         });
@@ -459,12 +508,28 @@ export async function POST(request: NextRequest) {
         // Ensure existing links also get pageType if missing, using Webflow data
         const processedKeptAutoLinks = keptAutoLinks.map(link => {
             if (link.pageType) return link;
-            return { ...link, pageType: detectPageType(link.url, webflowPageTypeMap, project.folderPageTypes || {}) };
+            return {
+                ...link,
+                pageType: detectPageType(
+                    link.url,
+                    webflowTypeMaps.pageTypeMap,
+                    webflowTypeMaps.folderTypeMap,
+                    mergedFolderPageTypes
+                )
+            };
         });
 
         const processedManualLinks = manualLinks.map(link => {
             if (link.pageType) return link;
-            return { ...link, pageType: detectPageType(link.url, webflowPageTypeMap, project.folderPageTypes || {}) };
+            return {
+                ...link,
+                pageType: detectPageType(
+                    link.url,
+                    webflowTypeMaps.pageTypeMap,
+                    webflowTypeMaps.folderTypeMap,
+                    mergedFolderPageTypes
+                )
+            };
         });
 
         const updatedLinks = [...processedManualLinks, ...processedKeptAutoLinks, ...newLinks];
@@ -473,6 +538,18 @@ export async function POST(request: NextRequest) {
         // Save sitemap URL for daily scans
         if (sitemapUrl) {
             await projectsService.updateProjectSitemap(projectId, sitemapUrl);
+        }
+
+        // Persist auto-derived folder mapping from Webflow categories when Webflow is configured
+        if (
+            project.webflowConfig?.siteId &&
+            project.webflowConfig?.apiToken &&
+            Object.keys(webflowTypeMaps.folderTypeMap).length > 0
+        ) {
+            await projectsService.updateProjectFolderPageTypes(projectId, mergedFolderPageTypes);
+            console.log(
+                `[scan-sitemap] Saved folderPageTypes from Webflow categories (${Object.keys(webflowTypeMaps.folderTypeMap).length} folders)`
+            );
         }
 
         // Save locale data extracted from sitemap hreflang
@@ -498,4 +575,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
-

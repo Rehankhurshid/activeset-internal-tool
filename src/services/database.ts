@@ -14,7 +14,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Project, ProjectLink, CreateProjectLinkInput, UpdateProjectLinkInput } from '@/types';
+import { Project, ProjectLink, ProjectStatus, ProjectTag, CreateProjectLinkInput, UpdateProjectLinkInput } from '@/types';
 import { WebflowConfig } from '@/types/webflow';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
@@ -22,6 +22,13 @@ import { COLLECTIONS } from '@/lib/constants';
 const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
 
 const generateLinkId = (): string => `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+const generatePublicShareToken = (): string => {
+  if (typeof globalThis !== 'undefined' && globalThis.crypto && 'randomUUID' in globalThis.crypto) {
+    return globalThis.crypto.randomUUID().replace(/-/g, '');
+  }
+
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+};
 
 /** Recursively strip undefined values from objects/arrays — Firestore rejects them. */
 function stripUndefined<T>(obj: T): T {
@@ -70,6 +77,8 @@ export const projectsService = {
       const projectRef = await addDoc(collection(db, PROJECTS_COLLECTION), {
         name,
         userId,
+        status: 'current' as ProjectStatus,
+        tags: [] as ProjectTag[],
         links: getDefaultLinks(),
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -142,6 +151,24 @@ export const projectsService = {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       name,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // Update project status (current / past)
+  async updateProjectStatus(projectId: string, status: ProjectStatus): Promise<void> {
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+      status,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // Update project tags
+  async updateProjectTags(projectId: string, tags: ProjectTag[]): Promise<void> {
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+      tags,
       updatedAt: Timestamp.now(),
     });
   },
@@ -220,6 +247,53 @@ export const projectsService = {
       logError(error, 'updateLink');
       if (error instanceof DatabaseError) throw error;
       throw new DatabaseError('Failed to update link');
+    }
+  },
+
+  // Persist broken-link check results into the link's auditResult
+  async saveBrokenLinkResults(
+    projectId: string,
+    linkId: string,
+    results: {
+      totalChecked: number;
+      totalLinks: number;
+      brokenLinks: { href: string; status: number; text: string; error?: string }[];
+      validLinks: number;
+    }
+  ): Promise<void> {
+    try {
+      const project = await this.getProject(projectId);
+      if (!project) throw new DatabaseError('Project not found');
+
+      const link = project.links.find(l => l.id === linkId);
+      if (!link) throw new DatabaseError('Link not found');
+
+      const currentAudit = link.auditResult || {} as Record<string, unknown>;
+      const currentCategories = (currentAudit as { categories?: Record<string, unknown> }).categories || {};
+      const currentLinks = currentCategories.links || {};
+
+      await this.updateLink(projectId, linkId, {
+        auditResult: {
+          ...currentAudit,
+          categories: {
+            ...currentCategories,
+            links: {
+              ...currentLinks,
+              totalLinks: results.totalLinks,
+              internalLinks: (currentLinks as { internalLinks?: number }).internalLinks || 0,
+              externalLinks: (currentLinks as { externalLinks?: number }).externalLinks || 0,
+              brokenLinks: results.brokenLinks,
+              checkedAt: new Date().toISOString(),
+              status: results.brokenLinks.length > 0 ? 'failed' : 'passed',
+              score: results.brokenLinks.length === 0 ? 100 : Math.max(0, 100 - (results.brokenLinks.length * 20)),
+            },
+          },
+        } as ProjectLink['auditResult'],
+      });
+    } catch (error) {
+      logError(error, 'saveBrokenLinkResults');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to save broken link results');
     }
   },
 
@@ -336,4 +410,44 @@ export const projectsService = {
       throw new DatabaseError('Failed to update folder page types');
     }
   },
-}; 
+
+  async createAuditShareLink(projectId: string, options?: { regenerate?: boolean }): Promise<string> {
+    try {
+      const project = await this.getProject(projectId);
+      if (!project) throw new DatabaseError('Project not found');
+
+      const existingToken = project.publicAuditShareToken;
+      const shouldRegenerate = !!options?.regenerate || !existingToken;
+      const token = shouldRegenerate ? generatePublicShareToken() : existingToken;
+
+      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+      await updateDoc(projectRef, {
+        publicAuditShareToken: token,
+        publicAuditShareEnabled: true,
+        publicAuditShareUpdatedAt: new Date().toISOString(),
+        updatedAt: Timestamp.now(),
+      });
+
+      const sharePath = `/share/project-links/${token}`;
+      return typeof window === 'undefined' ? sharePath : `${window.location.origin}${sharePath}`;
+    } catch (error) {
+      logError(error, 'createAuditShareLink');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to create public audit share link');
+    }
+  },
+
+  async disableAuditShareLink(projectId: string): Promise<void> {
+    try {
+      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+      await updateDoc(projectRef, {
+        publicAuditShareEnabled: false,
+        publicAuditShareUpdatedAt: new Date().toISOString(),
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'disableAuditShareLink');
+      throw new DatabaseError('Failed to disable public audit share link');
+    }
+  },
+};

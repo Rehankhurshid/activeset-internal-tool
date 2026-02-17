@@ -2,12 +2,23 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
-import { Trash2, ChevronRight, ChevronDown, Link as LinkIcon, Edit, MoreHorizontal, ExternalLink, MoreVertical, Folder, Plus } from 'lucide-react';
-import { Project, ProjectLink } from '@/types';
+import {
+    Trash2,
+    ChevronRight,
+    Link as LinkIcon,
+    Edit,
+    MoreVertical,
+    Plus,
+    Circle,
+    Archive,
+    Tag,
+    Check,
+} from 'lucide-react';
+import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS } from '@/types';
 import { projectsService } from '@/services/database';
 import { cn } from '@/lib/utils';
 import {
@@ -16,9 +27,23 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { AddLinkDialog } from './AddLinkDialog';
 import { ChecklistProgressBadge } from '@/components/checklist/ChecklistProgressBadge';
+
+const TAG_COLORS: Record<ProjectTag, { bg: string; text: string; border: string }> = {
+    retainer: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
+    one_time: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
+    subscription: { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
+    maintenance: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
+    consulting: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20' },
+};
+
+const ALL_TAGS: ProjectTag[] = ['retainer', 'one_time', 'subscription', 'maintenance', 'consulting'];
 
 interface ProjectCardProps {
     project: Project;
@@ -30,6 +55,10 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const [isDeleting, setIsDeleting] = React.useState(false);
     const [editingLinkId, setEditingLinkId] = React.useState<string | null>(null);
 
+    const status: ProjectStatus = project.status || 'current';
+    const tags: ProjectTag[] = project.tags || [];
+    const isCurrent = status === 'current';
+
     const handleDelete = async () => {
         setIsDeleting(true);
         try {
@@ -39,6 +68,18 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             setIsDeleting(false);
             setIsDeleteOpen(false);
         }
+    };
+
+    const handleToggleStatus = async () => {
+        const newStatus: ProjectStatus = isCurrent ? 'past' : 'current';
+        await projectsService.updateProjectStatus(project.id, newStatus);
+    };
+
+    const handleToggleTag = async (tag: ProjectTag) => {
+        const newTags = tags.includes(tag)
+            ? tags.filter(t => t !== tag)
+            : [...tags, tag];
+        await projectsService.updateProjectTags(project.id, newTags);
     };
 
     const handleAddLink = async (title: string, url: string) => {
@@ -53,7 +94,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
 
     // ONLY manual links (source !== 'auto')
     const manualLinks = project.links?.filter(l => l.source !== 'auto') || [];
-    const displayLimit = 4; // Show fewer links initially for a cleaner look
+    const displayLimit = 3;
     const displayLinks = manualLinks.slice(0, displayLimit);
     const remainingCount = manualLinks.length > displayLimit ? manualLinks.length - displayLimit : 0;
 
@@ -72,37 +113,135 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
 
     return (
         <>
-            <Card className="group relative flex flex-col h-full overflow-hidden border-border/50 bg-gradient-to-b from-card to-card/50 hover:shadow-lg hover:border-border/80 transition-all duration-300">
+            <Card
+                role="article"
+                aria-label={`Project: ${project.name}`}
+                className={cn(
+                    "group relative flex flex-col h-full overflow-hidden border transition-all duration-300",
+                    "hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5",
+                    "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+                    isCurrent
+                        ? "border-border/60 bg-gradient-to-br from-card via-card to-card/80"
+                        : "border-border/30 bg-card/60 opacity-75 hover:opacity-100"
+                )}
+            >
+                {/* Accent stripe */}
+                <div className={cn(
+                    "absolute top-0 left-0 right-0 h-[3px] transition-all duration-300",
+                    isCurrent
+                        ? "bg-gradient-to-r from-primary via-primary/80 to-primary/40"
+                        : "bg-gradient-to-r from-muted-foreground/30 via-muted-foreground/20 to-transparent"
+                )} />
+
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 pb-2">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary border border-primary/20 shadow-sm flex-shrink-0">
-                            <Folder className="w-4 h-4" />
+                <div className="flex items-start justify-between p-4 pb-2 pt-5">
+                    <div className="flex items-start gap-3 overflow-hidden flex-1 min-w-0">
+                        {/* Status dot + Project initial */}
+                        <div className={cn(
+                            "relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-bold shrink-0 transition-all duration-300",
+                            "shadow-sm border",
+                            isCurrent
+                                ? "bg-primary/10 text-primary border-primary/20"
+                                : "bg-muted text-muted-foreground border-border/30"
+                        )}>
+                            {project.name.charAt(0).toUpperCase()}
+                            {/* Live dot */}
+                            <div className={cn(
+                                "absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card transition-colors",
+                                isCurrent ? "bg-emerald-500" : "bg-muted-foreground/40"
+                            )} />
                         </div>
-                        <div className="min-w-0 flex flex-col">
-                            <h3 className="font-semibold text-base leading-tight truncate text-foreground/90 group-hover:text-primary transition-colors">
+
+                        <div className="min-w-0 flex flex-col gap-1">
+                            <h3 className={cn(
+                                "font-semibold text-base leading-tight truncate transition-colors",
+                                isCurrent
+                                    ? "text-foreground group-hover:text-primary"
+                                    : "text-muted-foreground group-hover:text-foreground"
+                            )}>
                                 {project.name}
                             </h3>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <p className="text-[10px] text-muted-foreground truncate">
-                                    {manualLinks.length} {manualLinks.length === 1 ? 'link' : 'links'}
-                                </p>
-                                <ChecklistProgressBadge projectId={project.id} className="ml-1" />
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                {/* Status badge */}
+                                <Badge
+                                    variant="outline"
+                                    className={cn(
+                                        "text-[10px] px-1.5 py-0 h-[18px] font-medium border transition-colors cursor-default",
+                                        isCurrent
+                                            ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5"
+                                            : "text-muted-foreground border-border bg-muted/30"
+                                    )}
+                                >
+                                    <Circle className={cn(
+                                        "w-1.5 h-1.5 mr-1 fill-current",
+                                        isCurrent ? "text-emerald-500" : "text-muted-foreground/50"
+                                    )} />
+                                    {isCurrent ? 'Current' : 'Past'}
+                                </Badge>
+
+                                {/* Link count */}
+                                <span className="text-[10px] text-muted-foreground">
+                                    · {manualLinks.length} {manualLinks.length === 1 ? 'link' : 'links'}
+                                </span>
+
+                                <ChecklistProgressBadge projectId={project.id} className="ml-0.5" />
                             </div>
                         </div>
                     </div>
 
+                    {/* Dropdown menu */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 text-muted-foreground/50 hover:text-foreground -mr-1"
+                                className="h-7 w-7 text-muted-foreground/50 hover:text-foreground -mr-1 mt-0.5 shrink-0"
+                                aria-label={`Actions for ${project.name}`}
                             >
                                 <MoreVertical className="h-3.5 w-3.5" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" className="w-48">
+                            {/* Status toggle */}
+                            <DropdownMenuItem onClick={handleToggleStatus}>
+                                {isCurrent ? (
+                                    <>
+                                        <Archive className="mr-2 h-4 w-4" />
+                                        Mark as Past
+                                    </>
+                                ) : (
+                                    <>
+                                        <Circle className="mr-2 h-4 w-4 fill-emerald-500 text-emerald-500" />
+                                        Mark as Current
+                                    </>
+                                )}
+                            </DropdownMenuItem>
+
+                            {/* Tag sub-menu */}
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <Tag className="mr-2 h-4 w-4" />
+                                    Tags
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    {ALL_TAGS.map(tag => (
+                                        <DropdownMenuCheckboxItem
+                                            key={tag}
+                                            checked={tags.includes(tag)}
+                                            onCheckedChange={() => handleToggleTag(tag)}
+                                        >
+                                            <span className={cn(
+                                                "inline-block w-2 h-2 rounded-full mr-1.5",
+                                                TAG_COLORS[tag].bg.replace('/10', ''),
+                                            )} style={{ backgroundColor: `hsl(var(--${tag === 'retainer' ? 'primary' : 'muted-foreground'}))` }} />
+                                            {PROJECT_TAG_LABELS[tag]}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+
+                            <DropdownMenuSeparator />
+
                             <DropdownMenuItem
                                 onClick={() => setIsDeleteOpen(true)}
                                 className="text-destructive focus:text-destructive"
@@ -113,8 +252,29 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                     </DropdownMenu>
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 px-3 py-1 space-y-0.5">
+                {/* Tag pills */}
+                {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 px-4 pb-1">
+                        {tags.map(tag => {
+                            const colors = TAG_COLORS[tag];
+                            return (
+                                <Badge
+                                    key={tag}
+                                    variant="outline"
+                                    className={cn(
+                                        "text-[10px] px-1.5 py-0 h-[18px] font-medium border rounded-full",
+                                        colors.bg, colors.text, colors.border
+                                    )}
+                                >
+                                    {PROJECT_TAG_LABELS[tag]}
+                                </Badge>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* Content — Links */}
+                <div className="flex-1 px-3 py-2 space-y-0.5">
                     {manualLinks.length > 0 ? (
                         <>
                             {displayLinks.map((link) => (
@@ -136,9 +296,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                     </span>
                                 </div>
                             )}
-
-                            {/* Add Link Button (Compact) */}
-                            <div className="pt-2 px-1">
+                            <div className="pt-1.5 px-1">
                                 <AddLinkDialog
                                     onAddLink={handleAddLink}
                                     trigger={
@@ -146,15 +304,15 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                             <div className="flex items-center justify-center w-4 h-4 rounded-full border border-current opacity-60">
                                                 <Plus className="w-2.5 h-2.5" />
                                             </div>
-                                            Add generic link
+                                            Add link
                                         </Button>
                                     }
                                 />
                             </div>
                         </>
                     ) : (
-                        <div className="flex flex-col items-center justify-center h-24 text-center border-2 border-dashed border-muted rounded-lg bg-muted/10 mx-1">
-                            <p className="text-xs text-muted-foreground mb-2">No links</p>
+                        <div className="flex flex-col items-center justify-center h-20 text-center border-2 border-dashed border-muted rounded-lg bg-muted/5 mx-1">
+                            <p className="text-xs text-muted-foreground mb-2">No links yet</p>
                             <AddLinkDialog
                                 onAddLink={handleAddLink}
                                 trigger={
@@ -174,7 +332,12 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                         <Button
                             variant="default"
                             size="sm"
-                            className="w-full h-8 text-xs justify-center group/btn shadow-sm hover:shadow transition-all bg-primary/90 hover:bg-primary"
+                            className={cn(
+                                "w-full h-8 text-xs justify-center group/btn shadow-sm hover:shadow transition-all",
+                                isCurrent
+                                    ? "bg-primary/90 hover:bg-primary"
+                                    : "bg-muted hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground"
+                            )}
                         >
                             Open Project
                             <ChevronRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover/btn:translate-x-1" />
@@ -253,9 +416,16 @@ function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDe
     }
 
     return (
-        <div className="group/item relative flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/50 transition-all duration-200 cursor-pointer" onClick={onOpen}>
-            {/* Favicon Container */}
-            <div className="flex items-center justify-center w-7 h-7 rounded-md bg-background/80 border shadow-sm flex-shrink-0 group-hover/item:border-primary/20 transition-colors">
+        <div
+            className="group/item relative flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/50 transition-all duration-200 cursor-pointer"
+            onClick={onOpen}
+            role="link"
+            tabIndex={0}
+            aria-label={`Open ${link.title}`}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+        >
+            {/* Favicon */}
+            <div className="flex items-center justify-center w-7 h-7 rounded-md bg-background/80 border shadow-sm shrink-0 group-hover/item:border-primary/20 transition-colors">
                 {link.url ? (
                     <img
                         src={`https://www.google.com/s2/favicons?domain=${link.url}&sz=32`}
@@ -294,6 +464,7 @@ function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDe
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    aria-label={`Edit ${link.title}`}
                     onClick={(e) => {
                         e.stopPropagation();
                         onStartEdit();
@@ -306,6 +477,7 @@ function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDe
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    aria-label={`Delete ${link.title}`}
                     onClick={(e) => {
                         e.stopPropagation();
                         onDelete();
@@ -317,4 +489,3 @@ function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDe
         </div>
     );
 }
-

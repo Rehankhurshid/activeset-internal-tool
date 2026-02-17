@@ -13,9 +13,9 @@ export function LoginForm() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Project Links</CardTitle>
+          <CardTitle className="text-2xl font-bold">Client Projects</CardTitle>
           <CardDescription>
-            Sign in with your @activeset.co email to access your project links
+            Sign in with your @activeset.co email to access client projects
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
