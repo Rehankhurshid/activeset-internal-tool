@@ -733,6 +733,25 @@ export function WebsiteAuditDashboard({
     });
   }, [pagesData, searchQuery, statusFilter, localeFilter, pageTypeFilter, sortBy, normalizeLocale, getFolderPatternFromUrl, folderTypes, getSeverityRank]);
 
+  // Keep the open detail sheet synced to fresh row data while scanning progresses.
+  useEffect(() => {
+    if (!selectedPage) return
+
+    const latest = pagesData.find((page) => page.id === selectedPage.id)
+    if (!latest) return
+
+    const hasChanged =
+      latest.status !== selectedPage.status ||
+      latest.score !== selectedPage.score ||
+      latest.lastScanTimestamp !== selectedPage.lastScanTimestamp ||
+      latest.lastScanRelative !== selectedPage.lastScanRelative ||
+      latest.findings.join('|') !== selectedPage.findings.join('|')
+
+    if (hasChanged) {
+      setSelectedPage(latest)
+    }
+  }, [pagesData, selectedPage])
+
   // Helper to extract folder path from URL
   const getFolderPath = useCallback((url: string): string => {
     try {
@@ -1242,6 +1261,11 @@ export function WebsiteAuditDashboard({
     () => links.filter(link => !!link.auditResult?.categories?.links?.checkedAt).length,
     [links]
   )
+  const queuedCount = Math.max(0, bulkScanProgress.total - bulkScanProgress.current)
+  const startedAtMs = new Date(bulkScanProgress.startedAt).getTime()
+  const elapsedMinutes = Number.isFinite(startedAtMs)
+    ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 60000))
+    : 0
 
   const missingAltIssues = useMemo<MissingAltImageIssue[]>(() => {
     const issuesMap = new Map<string, MissingAltImageIssue>()
@@ -2017,40 +2041,66 @@ export function WebsiteAuditDashboard({
           </TooltipProvider>
         </CardHeader>
         {isBulkScanning && (
-          <div className="px-6 pb-4 space-y-2">
-            <div className="flex justify-between text-sm items-center">
-              <span className="font-medium">
-                Scanning {bulkScanProgress.current} of {bulkScanProgress.total} pages
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">
-                  {bulkScanProgress.percentage}%
-                </span>
+          <div className="px-6 pb-5">
+            <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 shadow-sm space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
+                    <p className="text-sm font-semibold">
+                      Live Scan in Progress
+                    </p>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {bulkScanProgress.scanCollections ? 'All pages' : 'Static only'}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Scanning {bulkScanProgress.current} of {bulkScanProgress.total} pages ({bulkScanProgress.percentage}%)
+                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+                    <Badge variant="outline" className="h-6 px-2 font-normal">
+                      Completed {bulkScanProgress.current}
+                    </Badge>
+                    <Badge variant="outline" className="h-6 px-2 font-normal">
+                      Queued {queuedCount}
+                    </Badge>
+                    <Badge variant="outline" className="h-6 px-2 font-normal">
+                      Elapsed {elapsedMinutes}m
+                    </Badge>
+                  </div>
+                </div>
+
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleCancelScan}
                   disabled={isCancelling}
-                  className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+                  className="h-8 px-3 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
                 >
                   {isCancelling ? (
-                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                   ) : (
-                    <Square className="h-3 w-3 mr-1" />
+                    <Square className="h-3.5 w-3.5 mr-1.5" />
                   )}
-                  Stop
+                  Stop scan
                 </Button>
               </div>
-            </div>
-            <Progress
-              value={bulkScanProgress.percentage}
-              className="h-2 w-full"
-            />
-            {bulkScanProgress.currentUrl && (
-              <div className="text-xs text-muted-foreground truncate" title={bulkScanProgress.currentUrl}>
-                Current: {bulkScanProgress.currentUrl}
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Overall progress</span>
+                  <span className="tabular-nums">{bulkScanProgress.percentage}%</span>
+                </div>
+                <Progress value={bulkScanProgress.percentage} className="h-2.5 w-full" />
               </div>
-            )}
+
+              <div className="rounded-md border bg-background/70 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Current URL</div>
+                <div className="text-xs sm:text-sm truncate" title={bulkScanProgress.currentUrl || 'Preparing scan queue...'}>
+                  {bulkScanProgress.currentUrl || 'Preparing scan queue...'}
+                </div>
+              </div>
+            </div>
           </div>
         )}
         <CardContent>

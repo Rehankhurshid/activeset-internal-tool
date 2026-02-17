@@ -19,7 +19,6 @@ import {
   LogOut,
   User,
   Menu,
-  X,
   FolderOpen,
   FileText,
   Sparkles,
@@ -29,6 +28,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { ScanActivityIndicator } from '@/components/navigation/ScanActivityIndicator';
 
 interface AppNavigationProps {
   title?: string;
@@ -57,9 +57,6 @@ export function AppNavigation({
   }
 
   const isHomePage = pathname === '/';
-  const isProjectLinks = pathname?.startsWith('/modules/project-links');
-  const isProposal = pathname?.startsWith('/modules/proposal');
-
   return (
     <header className={cn(
       "sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
@@ -105,6 +102,8 @@ export function AppNavigation({
 
         {/* Right Section */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <ScanActivityIndicator />
+
           {/* User Info - Desktop */}
           <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
             <User className="h-4 w-4" />
@@ -297,4 +296,3 @@ function MobileNavLink({ href, icon, label, hasAccess, badge, onClick }: MobileN
     </Link>
   );
 }
-

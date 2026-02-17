@@ -156,6 +156,19 @@ export function getRunningScansForProject(projectId: string): ScanProgress[] {
 }
 
 /**
+ * Get all currently running scans across projects.
+ */
+export function getAllRunningScans(): ScanProgress[] {
+  const running: ScanProgress[] = [];
+  progressStore.forEach((progress) => {
+    if (progress.status === 'running') {
+      running.push(progress);
+    }
+  });
+  return running;
+}
+
+/**
  * Get all scans in the store (for debugging)
  */
 export function getAllScans(): ScanProgress[] {
