@@ -48,7 +48,10 @@ export async function GET(request: NextRequest) {
         total: scan.total,
         percentage: scan.total > 0 ? Math.round((scan.current / scan.total) * 100) : 0,
         currentUrl: scan.currentUrl,
-        startedAt: scan.startedAt
+        startedAt: scan.startedAt,
+        scanCollections: scan.scanCollections,
+        targetLinkIds: scan.targetLinkIds,
+        completedLinkIds: scan.completedLinkIds
     }));
 
     return NextResponse.json({

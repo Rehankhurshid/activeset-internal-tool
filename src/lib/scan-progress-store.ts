@@ -11,6 +11,9 @@ export interface ScanProgress {
   total: number;
   currentUrl: string;
   startedAt: string;
+  scanCollections: boolean;
+  targetLinkIds: string[];
+  completedLinkIds: string[];
   completedAt?: string;
   error?: string;
   cancelRequested?: boolean; // Flag to signal cancellation to the running scan
@@ -52,7 +55,15 @@ export function generateScanId(): string {
 /**
  * Initialize a new scan progress entry
  */
-export function initScanProgress(scanId: string, projectId: string, total: number): ScanProgress {
+export function initScanProgress(
+  scanId: string,
+  projectId: string,
+  total: number,
+  options?: {
+    scanCollections?: boolean;
+    targetLinkIds?: string[];
+  }
+): ScanProgress {
   const progress: ScanProgress = {
     scanId,
     projectId,
@@ -61,6 +72,9 @@ export function initScanProgress(scanId: string, projectId: string, total: numbe
     total,
     currentUrl: '',
     startedAt: new Date().toISOString(),
+    scanCollections: options?.scanCollections ?? false,
+    targetLinkIds: options?.targetLinkIds ?? [],
+    completedLinkIds: [],
   };
   
   progressStore.set(scanId, progress);
@@ -77,7 +91,10 @@ export function updateScanProgress(
   const progress = progressStore.get(scanId);
   if (!progress) return null;
   
-  const updated = { ...progress, ...updates };
+  const nextCurrent = updates.current === undefined
+    ? progress.current
+    : Math.max(0, Math.min(updates.current, progress.total));
+  const updated = { ...progress, ...updates, current: nextCurrent };
   progressStore.set(scanId, updated);
   
   // Schedule cleanup if completed or failed
@@ -91,6 +108,23 @@ export function updateScanProgress(
   }
   
   return updated;
+}
+
+/**
+ * Mark a page as completed for a scan.
+ * Uses link IDs to guarantee each page contributes at most once to current progress.
+ */
+export function markScanPageCompleted(scanId: string, linkId: string): ScanProgress | null {
+  const progress = progressStore.get(scanId);
+  if (!progress) return null;
+
+  if (!progress.completedLinkIds.includes(linkId)) {
+    progress.completedLinkIds.push(linkId);
+  }
+
+  progress.current = Math.min(progress.completedLinkIds.length, progress.total);
+  progressStore.set(scanId, progress);
+  return progress;
 }
 
 /**

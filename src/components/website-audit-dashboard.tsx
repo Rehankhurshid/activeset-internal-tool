@@ -77,6 +77,18 @@ interface AuditPageRow {
   rawAudit?: ProjectLink["auditResult"];
 }
 
+interface BulkScanProgressState {
+  current: number;
+  total: number;
+  percentage: number;
+  currentUrl: string;
+  scanId: string;
+  startedAt: string;
+  scanCollections: boolean;
+  targetLinkIds: string[];
+  completedLinkIds: string[];
+}
+
 interface CompactImageItem {
   src: string;
   alt?: string;
@@ -305,13 +317,16 @@ export function WebsiteAuditDashboard({
 
   // Bulk scan state
   const [isBulkScanning, setIsBulkScanning] = useState(false)
-  const [bulkScanProgress, setBulkScanProgress] = useState({
+  const [bulkScanProgress, setBulkScanProgress] = useState<BulkScanProgressState>({
     current: 0,
     total: 0,
     percentage: 0,
     currentUrl: '',
     scanId: '',
-    startedAt: '' // Track when scan started to determine which pages have been scanned
+    startedAt: '',
+    scanCollections: false,
+    targetLinkIds: [],
+    completedLinkIds: []
   })
   const [showCollectionDialog, setShowCollectionDialog] = useState(false)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -333,8 +348,11 @@ export function WebsiteAuditDashboard({
         total: data.total,
         percentage: data.percentage,
         currentUrl: data.currentUrl || '',
-        scanId: data.scanId
-        // Keep startedAt from previous state
+        scanId: data.scanId,
+        startedAt: data.startedAt || prev.startedAt,
+        scanCollections: data.scanCollections ?? prev.scanCollections,
+        targetLinkIds: Array.isArray(data.targetLinkIds) ? data.targetLinkIds : prev.targetLinkIds,
+        completedLinkIds: Array.isArray(data.completedLinkIds) ? data.completedLinkIds : prev.completedLinkIds
       }))
 
       // Check if scan is completed, failed, or cancelled
@@ -386,7 +404,17 @@ export function WebsiteAuditDashboard({
           pollingIntervalRef.current = null
         }
         setIsBulkScanning(false)
-        setBulkScanProgress({ current: 0, total: 0, percentage: 0, currentUrl: '', scanId: '', startedAt: '' })
+        setBulkScanProgress({
+          current: 0,
+          total: 0,
+          percentage: 0,
+          currentUrl: '',
+          scanId: '',
+          startedAt: '',
+          scanCollections: false,
+          targetLinkIds: [],
+          completedLinkIds: []
+        })
       } else {
         console.error('[BulkScan] Cancel failed')
       }
@@ -442,7 +470,10 @@ export function WebsiteAuditDashboard({
             total: activeScan.total,
             percentage: activeScan.percentage,
             currentUrl: activeScan.currentUrl || '',
-            startedAt: activeScan.startedAt || new Date().toISOString()
+            startedAt: activeScan.startedAt || new Date().toISOString(),
+            scanCollections: !!activeScan.scanCollections,
+            targetLinkIds: Array.isArray(activeScan.targetLinkIds) ? activeScan.targetLinkIds : [],
+            completedLinkIds: Array.isArray(activeScan.completedLinkIds) ? activeScan.completedLinkIds : []
           })
           
           // Resume polling for progress updates
@@ -514,6 +545,10 @@ export function WebsiteAuditDashboard({
 
   // 1. Process Links into Page Data
   const pagesData = useMemo<AuditPageRow[]>(() => {
+    const targetLinkIds = bulkScanProgress.targetLinkIds
+    const completedLinkIdSet = new Set(bulkScanProgress.completedLinkIds)
+    const hasExplicitTargets = targetLinkIds.length > 0
+
     return links.map(link => {
       const audit = link.auditResult;
 
@@ -527,21 +562,24 @@ export function WebsiteAuditDashboard({
 
       // Override status during bulk scan based on scan state
       if (isBulkScanning) {
-        // Check if this page is currently being scanned
-        const isCurrentPage = bulkScanProgress.currentUrl === link.url;
-        
-        // Check if page was scanned AFTER the bulk scan started (has fresh results)
-        const scanStarted = bulkScanProgress.startedAt;
-        const pageLastRun = audit?.lastRun;
-        const wasScannedInThisRun = scanStarted && pageLastRun && 
-          new Date(pageLastRun).getTime() >= new Date(scanStarted).getTime();
-        
+        const isCurrentPage = bulkScanProgress.currentUrl === link.url
+        const isTargetPage = hasExplicitTargets
+          ? targetLinkIds.includes(link.id)
+          : link.source === 'auto' && (bulkScanProgress.scanCollections || link.pageType !== 'collection')
+        const isCompletedInCurrentRun = completedLinkIdSet.has(link.id)
+        const hasFreshAuditFromCurrentRun = !!(
+          bulkScanProgress.startedAt &&
+          audit?.lastRun &&
+          new Date(audit.lastRun).getTime() >= new Date(bulkScanProgress.startedAt).getTime()
+        )
+
         if (isCurrentPage) {
-          displayStatus = "Scanning...";
-        } else if (wasScannedInThisRun) {
-          // Page was already scanned in this batch - show actual status (already set above)
-        } else {
-          displayStatus = "Queued";
+          displayStatus = "Scanning..."
+        } else if (isTargetPage && !isCompletedInCurrentRun) {
+          displayStatus = "Queued"
+        } else if (isTargetPage && isCompletedInCurrentRun && !hasFreshAuditFromCurrentRun) {
+          // Avoid stale "Queued/Pending" while scan is still writing final data.
+          displayStatus = "Scanned"
         }
       }
 
@@ -572,7 +610,16 @@ export function WebsiteAuditDashboard({
         rawAudit: audit
       };
     });
-  }, [links, isBulkScanning, bulkScanProgress.currentUrl, bulkScanProgress.startedAt, detectLocaleFromUrl]);
+  }, [
+    links,
+    isBulkScanning,
+    bulkScanProgress.currentUrl,
+    bulkScanProgress.startedAt,
+    bulkScanProgress.scanCollections,
+    bulkScanProgress.targetLinkIds,
+    bulkScanProgress.completedLinkIds,
+    detectLocaleFromUrl
+  ]);
 
   // Normalize locale - use project's detected locales to map short codes to canonical values
   // e.g., if project has 'es-ar' but not 'es', map 'es' → 'es-ar'
@@ -652,6 +699,8 @@ export function WebsiteAuditDashboard({
       case 'Queued':
       case 'Scanning...':
         return 1
+      case 'Scanned':
+        return 0
       default:
         return 0
     }
@@ -895,6 +944,8 @@ export function WebsiteAuditDashboard({
         return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20"
       case "Scanning...":
         return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 animate-pulse"
+      case "Scanned":
+        return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
       case "Queued":
         return "bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20"
       default:
@@ -916,6 +967,8 @@ export function WebsiteAuditDashboard({
         return "bg-slate-400"
       case "Scanning...":
         return "bg-blue-400"
+      case "Scanned":
+        return "bg-emerald-400"
       default:
         return "bg-slate-400"
     }
@@ -1099,7 +1152,10 @@ export function WebsiteAuditDashboard({
       percentage: 0,
       currentUrl: 'Starting scan...',
       scanId: '',
-      startedAt: scanStartTime
+      startedAt: scanStartTime,
+      scanCollections: includeCollections,
+      targetLinkIds: [],
+      completedLinkIds: []
     })
     setShowCollectionDialog(false)
 
@@ -1119,7 +1175,19 @@ export function WebsiteAuditDashboard({
         // Check if scan is already running
         if (response.status === 409 && result.scanId) {
           console.log('[BulkScan] Scan already running, resuming polling:', result.scanId)
-          setBulkScanProgress(prev => ({ ...prev, scanId: result.scanId }))
+          setBulkScanProgress(prev => ({
+            ...prev,
+            scanId: result.scanId,
+            current: result.current ?? prev.current,
+            total: result.total ?? prev.total,
+            percentage: result.percentage ?? prev.percentage,
+            currentUrl: result.currentUrl || prev.currentUrl,
+            startedAt: result.startedAt || prev.startedAt,
+            scanCollections: result.scanCollections ?? prev.scanCollections,
+            targetLinkIds: Array.isArray(result.targetLinkIds) ? result.targetLinkIds : prev.targetLinkIds,
+            completedLinkIds: Array.isArray(result.completedLinkIds) ? result.completedLinkIds : prev.completedLinkIds
+          }))
+          pollScanProgress(result.scanId)
           // Start polling the existing scan
           pollingIntervalRef.current = setInterval(() => {
             pollScanProgress(result.scanId)
@@ -1144,8 +1212,11 @@ export function WebsiteAuditDashboard({
       setBulkScanProgress(prev => ({ 
         ...prev, 
         scanId,
-        total: totalPages
+        total: totalPages,
+        scanCollections: includeCollections
       }))
+
+      pollScanProgress(scanId)
 
       // Start polling for progress every 2 seconds
       pollingIntervalRef.current = setInterval(() => {

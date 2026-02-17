@@ -52,6 +52,9 @@ export async function GET(request: NextRequest) {
         percentage,
         currentUrl: progress.currentUrl,
         startedAt: progress.startedAt,
+        scanCollections: progress.scanCollections,
+        targetLinkIds: progress.targetLinkIds,
+        completedLinkIds: progress.completedLinkIds,
         completedAt: progress.completedAt,
         error: progress.error,
         summary: progress.summary
