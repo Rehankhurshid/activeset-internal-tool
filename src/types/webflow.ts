@@ -125,3 +125,50 @@ export interface CollectionField {
   displayName: string;
   helpText?: string;
 }
+
+export interface WebflowAssetVariant {
+  hostedUrl: string;
+  originalFileName: string;
+  displayName: string;
+  format: string;
+  width: number;
+  height: number | null;
+  quality: number;
+  error?: string | null;
+}
+
+export interface WebflowAsset {
+  id: string;
+  contentType: string;
+  size: number;
+  siteId: string;
+  hostedUrl: string;
+  originalFileName: string;
+  displayName: string;
+  lastUpdated: string;
+  createdOn: string;
+  variants: WebflowAssetVariant[];
+  altText: string | null;
+}
+
+export interface WebflowAssetFolder {
+  id: string;
+  displayName: string;
+  parentFolder: string | null;
+  assets: string[];
+  siteId: string;
+  createdOn: string;
+  lastUpdated: string;
+}
+
+export interface UpdateWebflowAssetInput {
+  localeId?: string;
+  displayName?: string;
+  altText?: string;
+}
+
+export interface WebflowAssetAltSuggestion {
+  id: string;
+  altText: string;
+  reason?: string;
+}

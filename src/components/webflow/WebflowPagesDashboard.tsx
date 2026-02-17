@@ -53,6 +53,7 @@ import { WebflowSEOHealthBadge } from './WebflowSEOHealthBadge';
 import { WebflowSEOEditor } from './WebflowSEOEditor';
 import { WebflowBulkSEOEditor } from './WebflowBulkSEOEditor';
 import { WebflowCredentialsDialog } from './WebflowCredentialsDialog';
+import { WebflowAssetsDashboard } from './WebflowAssetsDashboard';
 import { webflowService } from '@/services/WebflowService';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -567,6 +568,11 @@ export function WebflowPagesDashboard({
           )}
         </CardContent>
       </Card>
+
+      <WebflowAssetsDashboard
+        webflowConfig={webflowConfig}
+        pages={pages}
+      />
 
       {/* SEO Editor Sheet */}
       <WebflowSEOEditor
