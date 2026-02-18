@@ -46,6 +46,22 @@ export function WebflowAssetsDashboard({ webflowConfig, pages }: WebflowAssetsDa
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const shouldIgnoreMissingAlt = (asset: { displayName: string; originalFileName: string }) => {
+    const value = `${asset.displayName} ${asset.originalFileName}`.toLowerCase();
+    const ignoredPatterns = [
+      'open graph',
+      'opengraph',
+      'og image',
+      'og-image',
+      'social share',
+      'social-share',
+      'page screenshot',
+      'page-screenshot',
+      'screenshot',
+    ];
+    return ignoredPatterns.some((pattern) => value.includes(pattern));
+  };
+
   useEffect(() => {
     fetchAssets(folderId).catch((fetchError) => {
       console.error(fetchError);
@@ -91,7 +107,9 @@ export function WebflowAssetsDashboard({ webflowConfig, pages }: WebflowAssetsDa
     }
 
     if (filter === 'missing-alt') {
-      result = result.filter((asset) => !(asset.altText || '').trim());
+      result = result.filter(
+        (asset) => !(asset.altText || '').trim() && !shouldIgnoreMissingAlt(asset)
+      );
     }
 
     if (filter === 'has-alt') {
@@ -103,7 +121,10 @@ export function WebflowAssetsDashboard({ webflowConfig, pages }: WebflowAssetsDa
 
   const visibleIds = useMemo(() => filteredAssets.map((asset) => asset.id), [filteredAssets]);
   const missingAltCount = useMemo(
-    () => assets.filter((asset) => !(asset.altText || '').trim()).length,
+    () =>
+      assets.filter(
+        (asset) => !(asset.altText || '').trim() && !shouldIgnoreMissingAlt(asset)
+      ).length,
     [assets]
   );
 
@@ -144,7 +165,7 @@ export function WebflowAssetsDashboard({ webflowConfig, pages }: WebflowAssetsDa
     setSelectedIds((previous) => {
       const next = new Set(previous);
       for (const asset of filteredAssets) {
-        if (!(asset.altText || '').trim()) {
+        if (!(asset.altText || '').trim() && !shouldIgnoreMissingAlt(asset)) {
           next.add(asset.id);
         }
       }
@@ -191,7 +212,10 @@ export function WebflowAssetsDashboard({ webflowConfig, pages }: WebflowAssetsDa
   const runAIForMissingAlt = async () => {
     setIsGenerating(true);
     try {
-      const suggestions = await generateAltSuggestions(assets, pages, 'missing_only');
+      const missingTargets = assets.filter(
+        (asset) => !(asset.altText || '').trim() && !shouldIgnoreMissingAlt(asset)
+      );
+      const suggestions = await generateAltSuggestions(missingTargets, pages, 'missing_only');
       if (!suggestions.length) {
         toast.info('No missing ALT text found');
         return;
