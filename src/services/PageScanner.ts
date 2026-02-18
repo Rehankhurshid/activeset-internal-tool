@@ -1051,6 +1051,24 @@ export class PageScanner {
         const internalLinks = links.filter(l => !l.isExternal).length;
         const externalLinks = links.filter(l => l.isExternal).length;
 
+        const isLowImpactCompletenessIssue = (issue: { check: string; detail: string }) =>
+            issue.check === 'Low word count';
+
+        const isLowImpactSeoIssue = (issue: string) =>
+            /^(Title too short|Title too long|Meta description too short|Meta description too long)/i.test(issue);
+
+        const completenessPenaltyForScore = (issue: { check: string; detail: string }) =>
+            isLowImpactCompletenessIssue(issue) ? 6 : 20;
+
+        const completenessPenaltyForOverall = (issue: { check: string; detail: string }) =>
+            isLowImpactCompletenessIssue(issue) ? 2 : 10;
+
+        const seoPenaltyForScore = (issue: string) =>
+            isLowImpactSeoIssue(issue) ? 3 : 10;
+
+        const seoPenaltyForOverall = (issue: string) =>
+            isLowImpactSeoIssue(issue) ? 1 : 5;
+
         // Calculate individual category scores
         const schemaScore = schemaResult.hasSchema
             ? Math.max(0, 100 - schemaResult.issues.length * 15)
@@ -1074,10 +1092,19 @@ export class PageScanner {
         const accessibilityScore = Math.max(0, 100 - accessibilityErrors * 20 - accessibilityWarnings * 10);
 
         // Calculate overall score
+        const completenessOverallPenalty = completenessIssues.reduce(
+            (sum, issue) => sum + completenessPenaltyForOverall(issue),
+            0
+        );
+        const seoOverallPenalty = seoIssues.reduce(
+            (sum, issue) => sum + seoPenaltyForOverall(issue),
+            0
+        );
+
         let score = 100;
         if (hasPlaceholders) score -= 30; // Major penalty
-        if (completenessIssues.length > 0) score -= completenessIssues.length * 10;
-        if (seoIssues.length > 0) score -= seoIssues.length * 5;
+        score -= completenessOverallPenalty;
+        score -= seoOverallPenalty;
         if (!schemaResult.hasSchema) score -= 5; // Minor penalty for no schema
         if (schemaResult.issues.length > 0) score -= schemaResult.issues.length * 2;
         if (openGraphResult.issues.length > 0) score -= openGraphResult.issues.length * 2;
@@ -1125,7 +1152,10 @@ export class PageScanner {
                 completeness: {
                     status: getStatus(completenessIssues.length),
                     issues: completenessIssues,
-                    score: Math.max(0, 100 - completenessIssues.length * 20)
+                    score: Math.max(
+                        0,
+                        100 - completenessIssues.reduce((sum, issue) => sum + completenessPenaltyForScore(issue), 0)
+                    )
                 },
                 seo: {
                     status: getStatus(seoIssues.length),
@@ -1135,7 +1165,7 @@ export class PageScanner {
                     metaDescription,
                     metaDescriptionLength: metaDescription.length,
                     imagesWithoutAlt: imagesWithoutAlt.length,
-                    score: Math.max(0, 100 - seoIssues.length * 10)
+                    score: Math.max(0, 100 - seoIssues.reduce((sum, issue) => sum + seoPenaltyForScore(issue), 0))
                 },
                 technical: {
                     status: 'passed',

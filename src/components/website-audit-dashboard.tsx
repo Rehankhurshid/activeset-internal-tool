@@ -95,6 +95,7 @@ interface CompactImageItem {
   inMainContent?: boolean;
   label?: string;
   count?: number;
+  altApplicable?: boolean;
 }
 
 interface MissingAltImageIssue {
@@ -186,6 +187,56 @@ const getImageFingerprint = (rawSrc: string): string => {
     const withoutQuery = withoutHash.split("?")[0] || withoutHash
     return withoutQuery.trim().toLowerCase()
   }
+}
+
+const isIgnoredAltAuditImage = (rawSrc: string, label?: string): boolean => {
+  const src = rawSrc.toLowerCase();
+  const sourceLabel = (label || "").toLowerCase();
+  const combined = `${src} ${sourceLabel}`;
+
+  const ignoredPatterns = [
+    "opengraph",
+    "open graph",
+    "og:image",
+    "og-image",
+    "social-share",
+    "social share",
+    "twitter:image",
+    "twitter image",
+    "/screenshot",
+    "screenshot",
+    "mobile shot",
+    "tablet shot",
+    "desktop shot",
+    "previous",
+  ];
+
+  return ignoredPatterns.some((pattern) => combined.includes(pattern));
+}
+
+const collectNonApplicableImageFingerprints = (
+  audit?: ProjectLink["auditResult"]
+): Set<string> => {
+  const fingerprints = new Set<string>()
+  if (!audit) return fingerprints
+
+  const ogImage = audit.categories?.openGraph?.image
+  const twitterImage = audit.categories?.twitterCards?.image
+  const screenshotImage = audit.screenshotUrl
+  const previousScreenshotImage = audit.previousScreenshotUrl
+
+  const add = (src?: string) => {
+    if (!src) return
+    const fingerprint = getImageFingerprint(src)
+    if (fingerprint) fingerprints.add(fingerprint)
+  }
+
+  add(ogImage)
+  add(twitterImage)
+  add(screenshotImage)
+  add(previousScreenshotImage)
+
+  return fingerprints
 }
 
 const compareMissingAltIssues = (
@@ -1034,9 +1085,31 @@ export function WebsiteAuditDashboard({
       }
     })
 
+    const snapshot = audit.contentSnapshot as
+      | { images?: { src: string; alt?: string }[] }
+      | undefined
+    const nonApplicableImageFingerprints = collectNonApplicableImageFingerprints(audit)
+    const effectiveMissingAltCount = (snapshot?.images || []).filter((image) => {
+      const src = image?.src?.trim()
+      const hasAltText = !!image?.alt?.trim()
+      if (!src || hasAltText) return false
+      if (isIgnoredAltAuditImage(src)) return false
+      const fingerprint = getImageFingerprint(src)
+      return fingerprint ? !nonApplicableImageFingerprints.has(fingerprint) : true
+    }).length
+
     const seoIssues = audit.categories.seo?.issues || []
     seoIssues.slice(0, 6).forEach((issue) => {
-      if (issue) issues.push(`SEO: ${issue}`)
+      if (!issue) return
+
+      if (/image\(s\)\s+missing\s+alt\s+text/i.test(issue)) {
+        if (effectiveMissingAltCount > 0) {
+          issues.push(`SEO: ${effectiveMissingAltCount} image(s) missing alt text`)
+        }
+        return
+      }
+
+      issues.push(`SEO: ${issue}`)
     })
 
     const technicalIssues = audit.categories.technical?.issues || []
@@ -1068,15 +1141,22 @@ export function WebsiteAuditDashboard({
     };
 
     const compactMap = new Map<string, CompactImageItem & { count: number; missingAlt: boolean }>();
+    const nonApplicableImageFingerprints = collectNonApplicableImageFingerprints(raw);
 
     const pushImage = (item: CompactImageItem) => {
       if (!item.src) return;
       const key = item.src;
       const existing = compactMap.get(key);
-      const missingAlt = !item.alt || !item.alt.trim();
+      const fingerprint = getImageFingerprint(item.src);
+      const ignoredForAltAudit = isIgnoredAltAuditImage(item.src, item.label);
+      const altApplicable = typeof item.altApplicable === "boolean"
+        ? item.altApplicable
+        : !(ignoredForAltAudit || (!!fingerprint && nonApplicableImageFingerprints.has(fingerprint)));
+      const missingAlt = altApplicable && (!item.alt || !item.alt.trim());
 
       if (existing) {
         existing.count += 1;
+        existing.altApplicable = existing.altApplicable !== false && altApplicable;
         // Prefer the "missing alt" state if any occurrence is missing alt
         if (missingAlt) {
           existing.alt = '';
@@ -1088,7 +1168,8 @@ export function WebsiteAuditDashboard({
       compactMap.set(key, {
         ...item,
         count: 1,
-        missingAlt
+        missingAlt,
+        altApplicable,
       });
     };
 
@@ -1118,23 +1199,23 @@ export function WebsiteAuditDashboard({
       const tabletScreenshot = raw?.tabletScreenshot;
       const desktopScreenshot = raw?.desktopScreenshot;
 
-      if (ogImage) pushImage({ src: ogImage, label: "OpenGraph" });
-      if (twitterImage) pushImage({ src: twitterImage, label: "Twitter" });
-      if (screenshotImage) pushImage({ src: screenshotImage, label: "Screenshot" });
-      if (previousScreenshotImage) pushImage({ src: previousScreenshotImage, label: "Previous" });
+      if (ogImage) pushImage({ src: ogImage, label: "OpenGraph", altApplicable: false });
+      if (twitterImage) pushImage({ src: twitterImage, label: "Twitter", altApplicable: false });
+      if (screenshotImage) pushImage({ src: screenshotImage, label: "Screenshot", altApplicable: false });
+      if (previousScreenshotImage) pushImage({ src: previousScreenshotImage, label: "Previous", altApplicable: false });
 
       // Base64 screenshots (if present)
       if (mobileScreenshot) {
         const src = mobileScreenshot.startsWith("data:") ? mobileScreenshot : `data:image/png;base64,${mobileScreenshot}`;
-        pushImage({ src, label: "Mobile shot" });
+        pushImage({ src, label: "Mobile shot", altApplicable: false });
       }
       if (tabletScreenshot) {
         const src = tabletScreenshot.startsWith("data:") ? tabletScreenshot : `data:image/png;base64,${tabletScreenshot}`;
-        pushImage({ src, label: "Tablet shot" });
+        pushImage({ src, label: "Tablet shot", altApplicable: false });
       }
       if (desktopScreenshot) {
         const src = desktopScreenshot.startsWith("data:") ? desktopScreenshot : `data:image/png;base64,${desktopScreenshot}`;
-        pushImage({ src, label: "Desktop shot" });
+        pushImage({ src, label: "Desktop shot", altApplicable: false });
       }
     }
 
@@ -1152,6 +1233,7 @@ export function WebsiteAuditDashboard({
         inMainContent: item.inMainContent,
         label: item.label,
         count: item.count,
+        altApplicable: item.altApplicable,
       }));
   }
 
@@ -1282,7 +1364,7 @@ export function WebsiteAuditDashboard({
       images.forEach((image: { src: string; alt?: string; inMainContent?: boolean }) => {
         const imageSrc = image?.src?.trim()
         const hasAltText = !!image?.alt?.trim()
-        if (!imageSrc || hasAltText) return
+        if (!imageSrc || hasAltText || isIgnoredAltAuditImage(imageSrc)) return
         const imageFingerprint = getImageFingerprint(imageSrc)
 
         const key = `${link.id}:${imageSrc}`
@@ -3040,16 +3122,22 @@ export function WebsiteAuditDashboard({
                           <div className="aspect-square relative">
                             <img
                               src={img.src}
-                              alt={img.alt || "Page image"}
+                              alt={img.alt || (img.altApplicable === false ? "Social image preview" : "Page image")}
                               className="h-full w-full object-cover"
                               loading="lazy"
                             />
                           </div>
                           <div className="p-1.5 space-y-1">
                             <div className="flex gap-1 flex-wrap">
-                              <Badge variant={img.alt ? "secondary" : "destructive"} className="text-[10px] px-1.5 py-0 h-4">
-                                {img.alt ? "ALT" : "No ALT"}
-                              </Badge>
+                              {img.altApplicable === false ? (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                  ALT N/A
+                                </Badge>
+                              ) : (
+                                <Badge variant={img.alt ? "secondary" : "destructive"} className="text-[10px] px-1.5 py-0 h-4">
+                                  {img.alt ? "ALT" : "No ALT"}
+                                </Badge>
+                              )}
                               {(img.count || 1) > 1 && (
                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
                                   x{img.count}

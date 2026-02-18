@@ -352,7 +352,7 @@
       // Word count threshold (warn if < 300 words)
       if (wordCount < 300) {
         issues.push({ check: 'Low word count', detail: `${wordCount} words (< 300 threshold)` });
-        score -= 20;
+        score -= 6;
       }
       
       // Heading presence (at least one H1-H3 in main content)
@@ -546,6 +546,7 @@
 
       // 3. SEO & META (global checks, not just main content)
       const seoIssues = [];
+      const isLowImpactSeoIssue = (issue) => /^(Title too short|Title too long|Meta Description too short|Meta Description too long)/i.test(issue);
       if (!doc.title) seoIssues.push('Missing Title tag');
       else if (doc.title.length < 10) seoIssues.push('Title too short (< 10 chars)');
       else if (doc.title.length > 65) seoIssues.push('Title too long (> 65 chars)');
@@ -568,7 +569,8 @@
       if (seoIssues.length > 0) {
         result.categories.seo.issues = seoIssues;
         result.categories.seo.status = 'warning';
-        result.categories.seo.score = Math.max(0, 100 - (seoIssues.length * 15));
+        const seoPenalty = seoIssues.reduce((sum, issue) => sum + (isLowImpactSeoIssue(issue) ? 4 : 15), 0);
+        result.categories.seo.score = Math.max(0, 100 - seoPenalty);
       }
 
       // 4. TECHNICAL HEALTH
