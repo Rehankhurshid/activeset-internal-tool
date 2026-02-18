@@ -1057,17 +1057,20 @@ export class PageScanner {
         const isLowImpactSeoIssue = (issue: string) =>
             /^(Title too short|Title too long|Meta description too short|Meta description too long)/i.test(issue);
 
+        const completenessMajorIssueCount = completenessIssues.filter((issue) => !isLowImpactCompletenessIssue(issue)).length;
+        const seoMajorIssueCount = seoIssues.filter((issue) => !isLowImpactSeoIssue(issue)).length;
+
         const completenessPenaltyForScore = (issue: { check: string; detail: string }) =>
-            isLowImpactCompletenessIssue(issue) ? 6 : 20;
+            isLowImpactCompletenessIssue(issue) ? 0 : 20;
 
         const completenessPenaltyForOverall = (issue: { check: string; detail: string }) =>
-            isLowImpactCompletenessIssue(issue) ? 2 : 10;
+            isLowImpactCompletenessIssue(issue) ? 0 : 10;
 
         const seoPenaltyForScore = (issue: string) =>
-            isLowImpactSeoIssue(issue) ? 3 : 10;
+            isLowImpactSeoIssue(issue) ? 0 : 10;
 
         const seoPenaltyForOverall = (issue: string) =>
-            isLowImpactSeoIssue(issue) ? 1 : 5;
+            isLowImpactSeoIssue(issue) ? 0 : 5;
 
         // Calculate individual category scores
         const schemaScore = schemaResult.hasSchema
@@ -1150,7 +1153,11 @@ export class PageScanner {
                     label: 'Standard'
                 },
                 completeness: {
-                    status: getStatus(completenessIssues.length),
+                    status: completenessMajorIssueCount > 0
+                        ? getStatus(completenessMajorIssueCount)
+                        : completenessIssues.length > 0
+                            ? 'info'
+                            : 'passed',
                     issues: completenessIssues,
                     score: Math.max(
                         0,
@@ -1158,7 +1165,11 @@ export class PageScanner {
                     )
                 },
                 seo: {
-                    status: getStatus(seoIssues.length),
+                    status: seoMajorIssueCount > 0
+                        ? getStatus(seoMajorIssueCount)
+                        : seoIssues.length > 0
+                            ? 'info'
+                            : 'passed',
                     issues: seoIssues,
                     title,
                     titleLength: title.length,

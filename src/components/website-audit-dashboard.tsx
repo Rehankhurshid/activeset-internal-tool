@@ -214,6 +214,12 @@ const isIgnoredAltAuditImage = (rawSrc: string, label?: string): boolean => {
   return ignoredPatterns.some((pattern) => combined.includes(pattern));
 }
 
+const isNiceToHaveSeoIssue = (issue: string): boolean =>
+  /^(Title too short|Title too long|Meta description too short|Meta description too long)/i.test(issue.trim());
+
+const isNiceToHaveCompletenessIssue = (issue?: { check?: string; detail?: string }): boolean =>
+  (issue?.check || "").toLowerCase() === "low word count";
+
 const collectNonApplicableImageFingerprints = (
   audit?: ProjectLink["auditResult"]
 ): Set<string> => {
@@ -638,7 +644,7 @@ export function WebsiteAuditDashboard({
       const findings = [];
       if ((audit?.categories?.placeholders?.issues?.length || 0) > 0) findings.push("Placeholders");
       if ((audit?.categories?.spelling?.issues?.length || 0) > 0) findings.push("Spelling");
-      if ((audit?.categories?.seo?.issues?.length || 0) > 0) findings.push("SEO");
+      if ((audit?.categories?.seo?.issues || []).some((issue) => issue && !isNiceToHaveSeoIssue(issue))) findings.push("SEO");
       if ((audit?.categories?.technical?.issues?.length || 0) > 0) findings.push("Technical");
       if ((audit?.score || 0) < 50) findings.push("Low Score");
 
@@ -1101,6 +1107,7 @@ export function WebsiteAuditDashboard({
     const seoIssues = audit.categories.seo?.issues || []
     seoIssues.slice(0, 6).forEach((issue) => {
       if (!issue) return
+      if (isNiceToHaveSeoIssue(issue)) return
 
       if (/image\(s\)\s+missing\s+alt\s+text/i.test(issue)) {
         if (effectiveMissingAltCount > 0) {
@@ -1119,6 +1126,29 @@ export function WebsiteAuditDashboard({
 
     const completenessIssues = audit.categories.completeness?.issues || []
     completenessIssues.slice(0, 4).forEach((issue) => {
+      if (isNiceToHaveCompletenessIssue(issue)) return
+      if (issue?.detail) issues.push(`Completeness: ${issue.detail}`)
+      else if (issue?.check) issues.push(`Completeness: ${issue.check}`)
+    })
+
+    return Array.from(new Set(issues)).slice(0, 10)
+  }
+
+  const getNiceToHaveIssues = (page: AuditPageRow): string[] => {
+    const audit = page.rawAudit
+    if (!audit?.categories) return []
+
+    const issues: string[] = []
+
+    const seoIssues = audit.categories.seo?.issues || []
+    seoIssues.forEach((issue) => {
+      if (!issue || !isNiceToHaveSeoIssue(issue)) return
+      issues.push(`SEO: ${issue}`)
+    })
+
+    const completenessIssues = audit.categories.completeness?.issues || []
+    completenessIssues.forEach((issue) => {
+      if (!isNiceToHaveCompletenessIssue(issue)) return
       if (issue?.detail) issues.push(`Completeness: ${issue.detail}`)
       else if (issue?.check) issues.push(`Completeness: ${issue.check}`)
     })
@@ -3081,7 +3111,7 @@ export function WebsiteAuditDashboard({
                   <p className="text-xs text-muted-foreground">Main issues</p>
                   {getMainIssues(selectedPage).length === 0 ? (
                     <span className="text-xs text-muted-foreground">
-                      No detailed issue list available for this scan.
+                      No major issues found in this scan.
                     </span>
                   ) : (
                     <ul className="space-y-1.5">
@@ -3093,6 +3123,24 @@ export function WebsiteAuditDashboard({
                     </ul>
                   )}
                 </div>
+
+                {getNiceToHaveIssues(selectedPage).length > 0 && (
+                  <div className="rounded-md border p-3">
+                    <details className="group">
+                      <summary className="cursor-pointer list-none text-xs text-muted-foreground flex items-center justify-between">
+                        <span>Good to have</span>
+                        <span className="text-[10px] text-muted-foreground/80">{getNiceToHaveIssues(selectedPage).length}</span>
+                      </summary>
+                      <ul className="mt-2 space-y-1.5">
+                        {getNiceToHaveIssues(selectedPage).map((issue, idx) => (
+                          <li key={`${issue}-${idx}`} className="text-sm leading-5 text-foreground/80">
+                            • {issue}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  </div>
+                )}
 
                 <div className="rounded-md border p-3 space-y-2">
                   <p className="text-xs text-muted-foreground">Images</p>

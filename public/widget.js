@@ -352,7 +352,6 @@
       // Word count threshold (warn if < 300 words)
       if (wordCount < 300) {
         issues.push({ check: 'Low word count', detail: `${wordCount} words (< 300 threshold)` });
-        score -= 6;
       }
       
       // Heading presence (at least one H1-H3 in main content)
@@ -547,6 +546,7 @@
       // 3. SEO & META (global checks, not just main content)
       const seoIssues = [];
       const isLowImpactSeoIssue = (issue) => /^(Title too short|Title too long|Meta Description too short|Meta Description too long)/i.test(issue);
+      const isLowImpactCompletenessIssue = (issue) => (issue?.check || '').toLowerCase() === 'low word count';
       if (!doc.title) seoIssues.push('Missing Title tag');
       else if (doc.title.length < 10) seoIssues.push('Title too short (< 10 chars)');
       else if (doc.title.length > 65) seoIssues.push('Title too long (> 65 chars)');
@@ -568,9 +568,15 @@
 
       if (seoIssues.length > 0) {
         result.categories.seo.issues = seoIssues;
-        result.categories.seo.status = 'warning';
-        const seoPenalty = seoIssues.reduce((sum, issue) => sum + (isLowImpactSeoIssue(issue) ? 4 : 15), 0);
+        const hasMajorSeoIssue = seoIssues.some(issue => !isLowImpactSeoIssue(issue));
+        result.categories.seo.status = hasMajorSeoIssue ? 'warning' : 'info';
+        const seoPenalty = seoIssues.reduce((sum, issue) => sum + (isLowImpactSeoIssue(issue) ? 0 : 15), 0);
         result.categories.seo.score = Math.max(0, 100 - seoPenalty);
+      }
+
+      if (result.categories.completeness.issues.length > 0) {
+        const hasMajorCompletenessIssue = result.categories.completeness.issues.some(issue => !isLowImpactCompletenessIssue(issue));
+        result.categories.completeness.status = hasMajorCompletenessIssue ? 'warning' : 'info';
       }
 
       // 4. TECHNICAL HEALTH
