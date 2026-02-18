@@ -1108,12 +1108,8 @@ export class PageScanner {
         if (hasPlaceholders) score -= 30; // Major penalty
         score -= completenessOverallPenalty;
         score -= seoOverallPenalty;
-        if (!schemaResult.hasSchema) score -= 5; // Minor penalty for no schema
-        if (schemaResult.issues.length > 0) score -= schemaResult.issues.length * 2;
-        if (openGraphResult.issues.length > 0) score -= openGraphResult.issues.length * 2;
-        if (headingStructureResult.issues.length > 0) score -= headingStructureResult.issues.length * 3;
-        if (accessibilityErrors > 0) score -= accessibilityErrors * 3;
-        if (accessibilityWarnings > 0) score -= accessibilityWarnings * 1;
+        // Secondary QA categories are informational and should not lower the headline quality score.
+        // They remain visible in detailed category sections for review.
         score = Math.max(0, Math.min(100, score));
 
         const canDeploy = !hasPlaceholders;
