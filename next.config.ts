@@ -4,9 +4,17 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['puppeteer'],
   output: 'standalone',
   images: {
-    domains: ['www.google.com'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'www.google.com',
+      },
+    ],
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 60,
+  },
+  turbopack: {
+    root: process.cwd(),
   },
   async headers() {
     return [

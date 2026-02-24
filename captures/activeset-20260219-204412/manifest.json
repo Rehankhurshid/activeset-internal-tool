@@ -1,0 +1,459 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "id": "activeset-20260219-204412",
+    "projectName": "ActiveSet",
+    "projectSlug": "activeset",
+    "startedAt": "2026-02-19T20:44:12.079Z",
+    "finishedAt": "2026-02-19T20:46:14.809Z",
+    "outputDirectory": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412"
+  },
+  "machine": {
+    "platform": "darwin",
+    "release": "25.0.0",
+    "arch": "arm64",
+    "nodeVersion": "v23.11.0",
+    "hostname": "Nayyars-MacBook-Air.local",
+    "cpuCount": 8
+  },
+  "settings": {
+    "concurrency": 3,
+    "timeoutMs": 45000,
+    "retries": 1,
+    "devices": [
+      "desktop",
+      "mobile"
+    ],
+    "format": "png",
+    "warmup": "always"
+  },
+  "summary": {
+    "totalUrls": 14,
+    "successfulUrls": 14,
+    "failedUrls": 0,
+    "partialUrls": 0,
+    "totalDurationMs": 122728
+  },
+  "results": [
+    {
+      "url": "https://example.com/",
+      "index": 0,
+      "slug": "001-example-com",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:44:13.180Z",
+      "finishedAt": "2026-02-19T20:44:19.100Z",
+      "durationMs": 5920,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/001-example-com.png",
+          "durationMs": 3016
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/001-example-com.png",
+          "durationMs": 2793
+        }
+      ]
+    },
+    {
+      "url": "https://example.com/pricing",
+      "index": 1,
+      "slug": "002-example-com-pricing",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:44:13.180Z",
+      "finishedAt": "2026-02-19T20:44:19.226Z",
+      "durationMs": 6046,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/002-example-com-pricing.png",
+          "durationMs": 2952
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/002-example-com-pricing.png",
+          "durationMs": 2987
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/",
+      "index": 2,
+      "slug": "003-www-activeset-co",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:44:13.180Z",
+      "finishedAt": "2026-02-19T20:44:53.440Z",
+      "durationMs": 40260,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/003-www-activeset-co.png",
+          "durationMs": 22413
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/003-www-activeset-co.png",
+          "durationMs": 17703
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/project",
+      "index": 3,
+      "slug": "004-www-activeset-co-project",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:44:19.100Z",
+      "finishedAt": "2026-02-19T20:44:46.674Z",
+      "durationMs": 27574,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/004-www-activeset-co-project.png",
+          "durationMs": 14061
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/004-www-activeset-co-project.png",
+          "durationMs": 13454
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/contact-us",
+      "index": 4,
+      "slug": "005-www-activeset-co-contact-us",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:44:19.226Z",
+      "finishedAt": "2026-02-19T20:44:37.495Z",
+      "durationMs": 18269,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/005-www-activeset-co-contact-us.png",
+          "durationMs": 8873
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/005-www-activeset-co-contact-us.png",
+          "durationMs": 9328
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/agency/website-design-agency",
+      "index": 5,
+      "slug": "006-www-activeset-co-agency-website-design-agency",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:44:37.495Z",
+      "finishedAt": "2026-02-19T20:45:16.041Z",
+      "durationMs": 38546,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/006-www-activeset-co-agency-website-design-agency.png",
+          "durationMs": 19409
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/006-www-activeset-co-agency-website-design-agency.png",
+          "durationMs": 19090
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/agency/webflow-development-agency",
+      "index": 6,
+      "slug": "007-www-activeset-co-agency-webflow-development-agency",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:44:46.675Z",
+      "finishedAt": "2026-02-19T20:45:27.479Z",
+      "durationMs": 40804,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/007-www-activeset-co-agency-webflow-development-agency.png",
+          "durationMs": 19317
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/007-www-activeset-co-agency-webflow-development-agency.png",
+          "durationMs": 21434
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/about-us",
+      "index": 7,
+      "slug": "008-www-activeset-co-about-us",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:44:53.440Z",
+      "finishedAt": "2026-02-19T20:45:09.177Z",
+      "durationMs": 15737,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/008-www-activeset-co-about-us.png",
+          "durationMs": 7500
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/008-www-activeset-co-about-us.png",
+          "durationMs": 8193
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/agency/webflow-maintenance-agency",
+      "index": 8,
+      "slug": "009-www-activeset-co-agency-webflow-maintenance-agency",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:45:09.178Z",
+      "finishedAt": "2026-02-19T20:45:37.273Z",
+      "durationMs": 28095,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/009-www-activeset-co-agency-webflow-maintenance-agency.png",
+          "durationMs": 12829
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/009-www-activeset-co-agency-webflow-maintenance-agency.png",
+          "durationMs": 15230
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/agency/webflow-revamp-agency",
+      "index": 9,
+      "slug": "010-www-activeset-co-agency-webflow-revamp-agency",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:45:16.041Z",
+      "finishedAt": "2026-02-19T20:45:49.000Z",
+      "durationMs": 32959,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/010-www-activeset-co-agency-webflow-revamp-agency.png",
+          "durationMs": 14557
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/010-www-activeset-co-agency-webflow-revamp-agency.png",
+          "durationMs": 18352
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/agency/figma-to-webflow",
+      "index": 10,
+      "slug": "011-www-activeset-co-agency-figma-to-webflow",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:45:27.479Z",
+      "finishedAt": "2026-02-19T20:45:57.710Z",
+      "durationMs": 30231,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/011-www-activeset-co-agency-figma-to-webflow.png",
+          "durationMs": 14046
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/011-www-activeset-co-agency-figma-to-webflow.png",
+          "durationMs": 16094
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/agency/website-migration",
+      "index": 11,
+      "slug": "012-www-activeset-co-agency-website-migration",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:45:37.273Z",
+      "finishedAt": "2026-02-19T20:46:01.566Z",
+      "durationMs": 24293,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/012-www-activeset-co-agency-website-migration.png",
+          "durationMs": 11243
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/012-www-activeset-co-agency-website-migration.png",
+          "durationMs": 12980
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/agency/seo",
+      "index": 12,
+      "slug": "013-www-activeset-co-agency-seo",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:45:49.001Z",
+      "finishedAt": "2026-02-19T20:46:14.691Z",
+      "durationMs": 25690,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/013-www-activeset-co-agency-seo.png",
+          "durationMs": 11536
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/013-www-activeset-co-agency-seo.png",
+          "durationMs": 14108
+        }
+      ]
+    },
+    {
+      "url": "https://www.activeset.co/process-timeline/branding",
+      "index": 13,
+      "slug": "014-www-activeset-co-process-timeline-branding",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:45:57.710Z",
+      "finishedAt": "2026-02-19T20:46:08.766Z",
+      "durationMs": 11056,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/desktop/014-www-activeset-co-process-timeline-branding.png",
+          "durationMs": 5107
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "png",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/activeset-20260219-204412/mobile/014-www-activeset-co-process-timeline-branding.png",
+          "durationMs": 5895
+        }
+      ]
+    }
+  ]
+}

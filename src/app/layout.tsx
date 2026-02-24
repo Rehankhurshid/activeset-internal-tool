@@ -1,19 +1,7 @@
 import type { Metadata } from "next";
-import { Inter, Funnel_Display, Funnel_Sans } from "next/font/google";
-import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
+import { Funnel_Sans } from "next/font/google";
+import { AppProviders } from "@/components/AppProviders";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
-
-const funnelDisplay = Funnel_Display({
-  subsets: ["latin"],
-  variable: "--font-funnel-display",
-  weight: ["300", "400", "500", "600", "700", "800"],
-});
 
 const funnelSans = Funnel_Sans({
   subsets: ["latin"],
@@ -33,18 +21,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="dark">
-      <body
-        className={`${inter.variable} ${funnelDisplay.variable} ${funnelSans.variable} font-sans antialiased bg-background text-foreground`}
-      >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-          <Toaster />
-        </ThemeProvider>
+      <body className={`${funnelSans.variable} font-sans antialiased bg-background text-foreground`}>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

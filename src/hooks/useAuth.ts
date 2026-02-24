@@ -1,6 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import {
+  createElement,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { accessControlService } from '@/services/AccessControlService';
@@ -45,7 +54,20 @@ const createMockUser = (): User => {
   return mockUser;
 };
 
-export const useAuth = () => {
+interface AuthContextValue {
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+  isAdmin: boolean;
+  signInWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+  clearError: () => void;
+  isAuthenticated: boolean;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +98,7 @@ export const useAuth = () => {
     return () => unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     // Skip auth for local development
     if (isLocalDevelopment()) {
       const mockUser = createMockUser();
@@ -115,9 +137,9 @@ export const useAuth = () => {
       setError(errorMessage);
       setLoading(false);
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     // Skip auth for local development
     if (isLocalDevelopment()) {
       setUser(null);
@@ -134,20 +156,34 @@ export const useAuth = () => {
       const errorMessage = error instanceof Error ? error.message : 'Failed to sign out';
       setError(errorMessage);
     }
-  };
+  }, []);
 
-  const clearError = () => {
+  const clearError = useCallback(() => {
     setError(null);
-  };
+  }, []);
 
-  return {
-    user,
-    loading,
-    error,
-    isAdmin,
-    signInWithGoogle,
-    logout,
-    clearError,
-    isAuthenticated: !!user,
-  };
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      loading,
+      error,
+      isAdmin,
+      signInWithGoogle,
+      logout,
+      clearError,
+      isAuthenticated: !!user,
+    }),
+    [clearError, error, isAdmin, loading, logout, signInWithGoogle, user]
+  );
+
+  return createElement(AuthContext.Provider, { value }, children);
+}
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+
+  return context;
 };

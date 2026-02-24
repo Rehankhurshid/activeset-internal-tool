@@ -1,0 +1,21 @@
+appId: co.activeset.screenshot-runner
+productName: ActiveSet Screenshot Runner
+files:
+  - "dist/**/*"
+  - "../scripts/**/*"
+  - "../src/local-capture/**/*"
+  - "../package.json"
+  - "../package-lock.json"
+extraMetadata:
+  main: dist/main.js
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

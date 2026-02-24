@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
-import { useModuleAccess } from '@/hooks/useModuleAccess';
 import {
   Home,
   LogOut,
@@ -22,7 +21,9 @@ import {
   FolderOpen,
   FileText,
   Sparkles,
-  Lock
+  Lock,
+  Loader2,
+  MonitorSmartphone
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,9 @@ interface AppNavigationProps {
   backHref?: string;
   children?: React.ReactNode;
   className?: string;
+  proposalAccess?: boolean;
+  projectLinksAccess?: boolean;
+  accessLoading?: boolean;
 }
 
 export function AppNavigation({
@@ -43,12 +47,13 @@ export function AppNavigation({
   showBackButton = false,
   backHref = '/',
   children,
-  className
+  className,
+  proposalAccess = false,
+  projectLinksAccess = true,
+  accessLoading = false,
 }: AppNavigationProps) {
   const pathname = usePathname();
   const { user, logout, loading } = useAuth();
-  const { hasAccess: hasProposalAccess } = useModuleAccess('proposal');
-  const { hasAccess: hasProjectLinksAccess } = useModuleAccess('project-links');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Don't render navigation if user is not authenticated or still loading
@@ -87,14 +92,23 @@ export function AppNavigation({
                 href="/modules/project-links"
                 icon={<FolderOpen className="h-4 w-4" />}
                 label="Client Projects"
-                hasAccess={hasProjectLinksAccess}
+                hasAccess={projectLinksAccess}
+                loading={accessLoading}
               />
               <NavigationLink
                 href="/modules/proposal"
                 icon={<FileText className="h-4 w-4" />}
                 label="Proposals"
-                hasAccess={hasProposalAccess}
+                hasAccess={proposalAccess}
+                loading={accessLoading}
                 badge={<Sparkles className="h-3 w-3" />}
+              />
+              <NavigationLink
+                href="/modules/screenshot-runner"
+                icon={<MonitorSmartphone className="h-4 w-4" />}
+                label="Screenshot Runner"
+                hasAccess={projectLinksAccess}
+                loading={accessLoading}
               />
             </nav>
           )}
@@ -168,15 +182,25 @@ export function AppNavigation({
                       href="/modules/project-links"
                       icon={<FolderOpen className="h-4 w-4" />}
                       label="Client Projects"
-                      hasAccess={hasProjectLinksAccess}
+                      hasAccess={projectLinksAccess}
+                      loading={accessLoading}
                       onClick={() => setMobileMenuOpen(false)}
                     />
                     <MobileNavLink
                       href="/modules/proposal"
                       icon={<FileText className="h-4 w-4" />}
                       label="Proposals"
-                      hasAccess={hasProposalAccess}
+                      hasAccess={proposalAccess}
+                      loading={accessLoading}
                       badge={<Sparkles className="h-3 w-3" />}
+                      onClick={() => setMobileMenuOpen(false)}
+                    />
+                    <MobileNavLink
+                      href="/modules/screenshot-runner"
+                      icon={<MonitorSmartphone className="h-4 w-4" />}
+                      label="Screenshot Runner"
+                      hasAccess={projectLinksAccess}
+                      loading={accessLoading}
                       onClick={() => setMobileMenuOpen(false)}
                     />
                   </nav>
@@ -211,12 +235,22 @@ interface NavigationLinkProps {
   icon: React.ReactNode;
   label: string;
   hasAccess: boolean;
+  loading?: boolean;
   badge?: React.ReactNode;
 }
 
-function NavigationLink({ href, icon, label, hasAccess, badge }: NavigationLinkProps) {
+function NavigationLink({ href, icon, label, hasAccess, loading = false, badge }: NavigationLinkProps) {
   const pathname = usePathname();
   const isActive = pathname?.startsWith(href);
+
+  if (loading) {
+    return (
+      <Button variant="ghost" size="sm" className="gap-2 opacity-70" disabled>
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="hidden lg:inline">{label}</span>
+      </Button>
+    );
+  }
 
   if (!hasAccess) {
     return (
@@ -257,13 +291,23 @@ interface MobileNavLinkProps {
   icon: React.ReactNode;
   label: string;
   hasAccess: boolean;
+  loading?: boolean;
   badge?: React.ReactNode;
   onClick?: () => void;
 }
 
-function MobileNavLink({ href, icon, label, hasAccess, badge, onClick }: MobileNavLinkProps) {
+function MobileNavLink({ href, icon, label, hasAccess, loading = false, badge, onClick }: MobileNavLinkProps) {
   const pathname = usePathname();
   const isActive = pathname?.startsWith(href);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-3 p-3 rounded-lg opacity-70">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <span className="text-sm font-medium">{label}</span>
+      </div>
+    );
+  }
 
   if (!hasAccess) {
     return (

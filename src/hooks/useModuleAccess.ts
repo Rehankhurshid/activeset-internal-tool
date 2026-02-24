@@ -10,13 +10,62 @@ const isLocalDevelopment = () => {
   return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 };
 
-export const useModuleAccess = (module: RestrictedModule) => {
+const ACCESS_CACHE_TTL = 5 * 60 * 1000;
+const moduleAccessCache = new Map<string, { value: boolean; timestamp: number }>();
+const inFlightChecks = new Map<string, Promise<boolean>>();
+
+const getCacheKey = (email: string, module: RestrictedModule) =>
+  `${email.toLowerCase()}:${module}`;
+
+async function getAccessWithCache(email: string, module: RestrictedModule): Promise<boolean> {
+  const key = getCacheKey(email, module);
+  const now = Date.now();
+  const cached = moduleAccessCache.get(key);
+  if (cached && now - cached.timestamp < ACCESS_CACHE_TTL) {
+    return cached.value;
+  }
+
+  const pending = inFlightChecks.get(key);
+  if (pending) {
+    return pending;
+  }
+
+  const request = accessControlService
+    .hasModuleAccess(email, module)
+    .then((value) => {
+      moduleAccessCache.set(key, { value, timestamp: Date.now() });
+      return value;
+    })
+    .finally(() => {
+      inFlightChecks.delete(key);
+    });
+
+  inFlightChecks.set(key, request);
+  return request;
+}
+
+interface UseModuleAccessOptions {
+  enabled?: boolean;
+}
+
+export const useModuleAccess = (
+  module: RestrictedModule,
+  options: UseModuleAccessOptions = {}
+) => {
+    const { enabled = true } = options;
     const { user, loading: authLoading } = useAuth();
     const [hasAccess, setHasAccess] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let cancelled = false;
+
         const checkAccess = async () => {
+            if (!enabled) {
+                setLoading(false);
+                return;
+            }
+
             if (authLoading) return;
 
             // Project Links is accessible to everyone (if authenticated)
@@ -40,18 +89,28 @@ export const useModuleAccess = (module: RestrictedModule) => {
             }
 
             try {
-                const access = await accessControlService.hasModuleAccess(user.email, module);
-                setHasAccess(access);
+                const access = await getAccessWithCache(user.email, module);
+                if (!cancelled) {
+                    setHasAccess(access);
+                }
             } catch (error) {
                 console.error('Error checking module access:', error);
-                setHasAccess(false);
+                if (!cancelled) {
+                    setHasAccess(false);
+                }
             } finally {
-                setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
         };
 
+        setLoading(true);
         checkAccess();
-    }, [user, authLoading, module]);
+        return () => {
+            cancelled = true;
+        };
+    }, [authLoading, enabled, module, user]);
 
-    return { hasAccess, loading: loading || authLoading };
+    return { hasAccess, loading: enabled ? loading || authLoading : false };
 };

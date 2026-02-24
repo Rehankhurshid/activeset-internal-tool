@@ -1,0 +1,39 @@
+name: Publish @activeset/capture
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "capture-v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install package deps
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+        run: npm ci --ignore-scripts
+        working-directory: packages/activeset-capture
+
+      - name: Build package
+        run: npm run build
+        working-directory: packages/activeset-capture
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        working-directory: packages/activeset-capture
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

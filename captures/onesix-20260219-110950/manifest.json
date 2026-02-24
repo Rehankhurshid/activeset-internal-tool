@@ -1,0 +1,689 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "id": "onesix-20260219-110950",
+    "projectName": "OneSix",
+    "projectSlug": "onesix",
+    "startedAt": "2026-02-19T11:09:50.997Z",
+    "finishedAt": "2026-02-19T11:11:23.176Z",
+    "outputDirectory": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950"
+  },
+  "machine": {
+    "platform": "darwin",
+    "release": "25.0.0",
+    "arch": "arm64",
+    "nodeVersion": "v23.11.0",
+    "hostname": "Nayyars-MacBook-Air.local",
+    "cpuCount": 8
+  },
+  "settings": {
+    "concurrency": 3,
+    "timeoutMs": 45000,
+    "retries": 1,
+    "devices": [
+      "desktop"
+    ],
+    "format": "webp",
+    "warmup": "always"
+  },
+  "summary": {
+    "totalUrls": 31,
+    "successfulUrls": 31,
+    "failedUrls": 0,
+    "partialUrls": 0,
+    "totalDurationMs": 92176
+  },
+  "results": [
+    {
+      "url": "https://www.onesixsolutions.com/",
+      "index": 0,
+      "slug": "001-www-onesixsolutions-com",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:09:51.853Z",
+      "finishedAt": "2026-02-19T11:10:04.968Z",
+      "durationMs": 13115,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/001-www-onesixsolutions-com.webp",
+          "durationMs": 13025
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/contact-us/",
+      "index": 1,
+      "slug": "002-www-onesixsolutions-com-contact-us",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:09:51.853Z",
+      "finishedAt": "2026-02-19T11:10:00.228Z",
+      "durationMs": 8375,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/002-www-onesixsolutions-com-contact-us.webp",
+          "durationMs": 8281
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/about/",
+      "index": 2,
+      "slug": "003-www-onesixsolutions-com-about",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:09:51.853Z",
+      "finishedAt": "2026-02-19T11:10:06.475Z",
+      "durationMs": 14622,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/003-www-onesixsolutions-com-about.webp",
+          "durationMs": 14485
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/careers/",
+      "index": 3,
+      "slug": "004-www-onesixsolutions-com-careers",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:00.229Z",
+      "finishedAt": "2026-02-19T11:10:06.999Z",
+      "durationMs": 6770,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/004-www-onesixsolutions-com-careers.webp",
+          "durationMs": 6695
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/privacy-policy/",
+      "index": 4,
+      "slug": "005-www-onesixsolutions-com-privacy-policy",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:04.968Z",
+      "finishedAt": "2026-02-19T11:10:12.526Z",
+      "durationMs": 7558,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/005-www-onesixsolutions-com-privacy-policy.webp",
+          "durationMs": 7519
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/casestudies/",
+      "index": 5,
+      "slug": "006-www-onesixsolutions-com-casestudies",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:06.475Z",
+      "finishedAt": "2026-02-19T11:10:11.986Z",
+      "durationMs": 5511,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/006-www-onesixsolutions-com-casestudies.webp",
+          "durationMs": 5469
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/insights/",
+      "index": 6,
+      "slug": "007-www-onesixsolutions-com-insights",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:06.999Z",
+      "finishedAt": "2026-02-19T11:10:19.294Z",
+      "durationMs": 12295,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/007-www-onesixsolutions-com-insights.webp",
+          "durationMs": 12201
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/services/",
+      "index": 7,
+      "slug": "008-www-onesixsolutions-com-services",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:11.987Z",
+      "finishedAt": "2026-02-19T11:10:18.026Z",
+      "durationMs": 6039,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/008-www-onesixsolutions-com-services.webp",
+          "durationMs": 5983
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/services/ai-machine-learning",
+      "index": 8,
+      "slug": "009-www-onesixsolutions-com-services-ai-machine-learning",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:12.526Z",
+      "finishedAt": "2026-02-19T11:10:20.571Z",
+      "durationMs": 8045,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/009-www-onesixsolutions-com-services-ai-machine-learning.webp",
+          "durationMs": 8017
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/services/data-ai-strategy",
+      "index": 9,
+      "slug": "010-www-onesixsolutions-com-services-data-ai-strategy",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:18.026Z",
+      "finishedAt": "2026-02-19T11:10:25.800Z",
+      "durationMs": 7774,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/010-www-onesixsolutions-com-services-data-ai-strategy.webp",
+          "durationMs": 7735
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/services/data-analytics",
+      "index": 10,
+      "slug": "011-www-onesixsolutions-com-services-data-analytics",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:19.294Z",
+      "finishedAt": "2026-02-19T11:10:29.215Z",
+      "durationMs": 9921,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/011-www-onesixsolutions-com-services-data-analytics.webp",
+          "durationMs": 9318
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/services/data-app-engineering/",
+      "index": 11,
+      "slug": "012-www-onesixsolutions-com-services-data-app-engineering",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:20.572Z",
+      "finishedAt": "2026-02-19T11:10:29.225Z",
+      "durationMs": 8653,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/012-www-onesixsolutions-com-services-data-app-engineering.webp",
+          "durationMs": 8613
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/services/data-science",
+      "index": 12,
+      "slug": "013-www-onesixsolutions-com-services-data-science",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:25.800Z",
+      "finishedAt": "2026-02-19T11:10:33.693Z",
+      "durationMs": 7893,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/013-www-onesixsolutions-com-services-data-science.webp",
+          "durationMs": 7843
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/solutions/",
+      "index": 13,
+      "slug": "014-www-onesixsolutions-com-solutions",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:29.215Z",
+      "finishedAt": "2026-02-19T11:10:35.486Z",
+      "durationMs": 6271,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/014-www-onesixsolutions-com-solutions.webp",
+          "durationMs": 6203
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/solutions/ai-agents-chatbots/",
+      "index": 14,
+      "slug": "015-www-onesixsolutions-com-solutions-ai-agents-chatbots",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:29.225Z",
+      "finishedAt": "2026-02-19T11:10:36.534Z",
+      "durationMs": 7309,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/015-www-onesixsolutions-com-solutions-ai-agents-chatbots.webp",
+          "durationMs": 7172
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/solutions/ai-driven-marketing/",
+      "index": 15,
+      "slug": "016-www-onesixsolutions-com-solutions-ai-driven-marketing",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:33.693Z",
+      "finishedAt": "2026-02-19T11:10:41.942Z",
+      "durationMs": 8249,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/016-www-onesixsolutions-com-solutions-ai-driven-marketing.webp",
+          "durationMs": 8202
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/solutions/computer-vision/",
+      "index": 16,
+      "slug": "017-www-onesixsolutions-com-solutions-computer-vision",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:35.486Z",
+      "finishedAt": "2026-02-19T11:10:43.529Z",
+      "durationMs": 8043,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/017-www-onesixsolutions-com-solutions-computer-vision.webp",
+          "durationMs": 7994
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/solutions/forecasting",
+      "index": 17,
+      "slug": "018-www-onesixsolutions-com-solutions-forecasting",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:36.534Z",
+      "finishedAt": "2026-02-19T11:10:44.141Z",
+      "durationMs": 7607,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/018-www-onesixsolutions-com-solutions-forecasting.webp",
+          "durationMs": 7544
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/solutions/portfolio-ai-strategy/",
+      "index": 18,
+      "slug": "019-www-onesixsolutions-com-solutions-portfolio-ai-strategy",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:41.942Z",
+      "finishedAt": "2026-02-19T11:10:50.226Z",
+      "durationMs": 8284,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/019-www-onesixsolutions-com-solutions-portfolio-ai-strategy.webp",
+          "durationMs": 8234
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/industries/",
+      "index": 19,
+      "slug": "020-www-onesixsolutions-com-industries",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:43.529Z",
+      "finishedAt": "2026-02-19T11:10:49.398Z",
+      "durationMs": 5869,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/020-www-onesixsolutions-com-industries.webp",
+          "durationMs": 5832
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/industries/financial-services/",
+      "index": 20,
+      "slug": "021-www-onesixsolutions-com-industries-financial-services",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:44.141Z",
+      "finishedAt": "2026-02-19T11:10:51.534Z",
+      "durationMs": 7393,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/021-www-onesixsolutions-com-industries-financial-services.webp",
+          "durationMs": 7330
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/industries/healthcare-life-sciences/",
+      "index": 21,
+      "slug": "022-www-onesixsolutions-com-industries-healthcare-life-sciences",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:49.398Z",
+      "finishedAt": "2026-02-19T11:10:57.298Z",
+      "durationMs": 7900,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/022-www-onesixsolutions-com-industries-healthcare-life-sciences.webp",
+          "durationMs": 7846
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/industries/manufacturing/",
+      "index": 22,
+      "slug": "023-www-onesixsolutions-com-industries-manufacturing",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:50.226Z",
+      "finishedAt": "2026-02-19T11:10:58.931Z",
+      "durationMs": 8705,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/023-www-onesixsolutions-com-industries-manufacturing.webp",
+          "durationMs": 8669
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/industries/technology",
+      "index": 23,
+      "slug": "024-www-onesixsolutions-com-industries-technology",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:51.534Z",
+      "finishedAt": "2026-02-19T11:11:00.250Z",
+      "durationMs": 8716,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/024-www-onesixsolutions-com-industries-technology.webp",
+          "durationMs": 8670
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/industries/travel-hospitality/",
+      "index": 24,
+      "slug": "025-www-onesixsolutions-com-industries-travel-hospitality",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:57.298Z",
+      "finishedAt": "2026-02-19T11:11:05.450Z",
+      "durationMs": 8152,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/025-www-onesixsolutions-com-industries-travel-hospitality.webp",
+          "durationMs": 8092
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/technologies/",
+      "index": 25,
+      "slug": "026-www-onesixsolutions-com-technologies",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:10:58.932Z",
+      "finishedAt": "2026-02-19T11:11:05.444Z",
+      "durationMs": 6512,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/026-www-onesixsolutions-com-technologies.webp",
+          "durationMs": 6013
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/technologies/snowflake/",
+      "index": 26,
+      "slug": "027-www-onesixsolutions-com-technologies-snowflake",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:11:00.250Z",
+      "finishedAt": "2026-02-19T11:11:08.688Z",
+      "durationMs": 8438,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/027-www-onesixsolutions-com-technologies-snowflake.webp",
+          "durationMs": 8383
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/technologies/aws",
+      "index": 27,
+      "slug": "028-www-onesixsolutions-com-technologies-aws",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:11:05.444Z",
+      "finishedAt": "2026-02-19T11:11:13.810Z",
+      "durationMs": 8366,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/028-www-onesixsolutions-com-technologies-aws.webp",
+          "durationMs": 8315
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/technologies/atlan/",
+      "index": 28,
+      "slug": "029-www-onesixsolutions-com-technologies-atlan",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:11:05.450Z",
+      "finishedAt": "2026-02-19T11:11:13.263Z",
+      "durationMs": 7813,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/029-www-onesixsolutions-com-technologies-atlan.webp",
+          "durationMs": 7727
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/technologies/matillion",
+      "index": 29,
+      "slug": "030-www-onesixsolutions-com-technologies-matillion",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:11:08.688Z",
+      "finishedAt": "2026-02-19T11:11:17.948Z",
+      "durationMs": 9260,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/030-www-onesixsolutions-com-technologies-matillion.webp",
+          "durationMs": 9221
+        }
+      ]
+    },
+    {
+      "url": "https://www.onesixsolutions.com/technologies/sigma",
+      "index": 30,
+      "slug": "031-www-onesixsolutions-com-technologies-sigma",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T11:11:13.263Z",
+      "finishedAt": "2026-02-19T11:11:23.054Z",
+      "durationMs": 9791,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/onesix-20260219-110950/desktop/031-www-onesixsolutions-com-technologies-sigma.webp",
+          "durationMs": 9720
+        }
+      ]
+    }
+  ]
+}

@@ -39,11 +39,29 @@ export function ScanActivityIndicator() {
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let abortController: AbortController | null = null;
+
+    const schedule = (delay: number) => {
+      if (!disposed) {
+        timer = setTimeout(poll, delay);
+      }
+    };
 
     const poll = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        schedule(20000);
+        return;
+      }
+
       let hasActiveScans = false;
       try {
-        const response = await fetch('/api/scan-bulk/running-all', { cache: 'no-store' });
+        abortController?.abort();
+        abortController = new AbortController();
+
+        const response = await fetch('/api/scan-bulk/running-all', {
+          cache: 'no-store',
+          signal: abortController.signal,
+        });
         if (!response.ok) {
           throw new Error(`Failed to load running scans: ${response.status}`);
         }
@@ -54,22 +72,37 @@ export function ScanActivityIndicator() {
           setScans(Array.isArray(data.scans) ? data.scans : []);
           setIsLoading(false);
         }
-      } catch {
-        if (!disposed) {
+      } catch (error) {
+        if (!disposed && !(error instanceof DOMException && error.name === 'AbortError')) {
           setIsLoading(false);
         }
       } finally {
-        if (!disposed) {
-          timer = setTimeout(poll, hasActiveScans ? 3000 : 8000);
+        schedule(hasActiveScans ? 3000 : 15000);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
         }
+        poll();
       }
     };
 
     poll();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
 
     return () => {
       disposed = true;
       if (timer) clearTimeout(timer);
+      abortController?.abort();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
     };
   }, []);
 

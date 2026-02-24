@@ -1,0 +1,18 @@
+{
+  "name": "activeset-screenshot-runner-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Electron scaffold for local screenshot runner",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('electron/renderer','dist/renderer',{recursive:true})\"",
+    "start": "npm run build && electron dist/main.js",
+    "dist:mac": "npm run build && electron-builder --config electron-builder.yml --mac",
+    "dist:win": "npm run build && electron-builder --config electron-builder.yml --win"
+  },
+  "devDependencies": {
+    "electron": "^37.6.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.9.2"
+  }
+}

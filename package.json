@@ -7,6 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "capture:local": "tsx scripts/capture-local.ts",
+    "capture:wizard": "tsx scripts/capture-wizard.ts",
+    "capture:pkg:build": "npm --prefix packages/activeset-capture run build",
+    "capture:pkg:pack": "npm --prefix packages/activeset-capture pack",
+    "test:local-capture": "tsx --test src/local-capture/*.test.ts",
     "verify:ui": "npx tsx scripts/verify-ui.ts",
     "verify:ui:staged": "npx tsx scripts/verify-ui.ts"
   },

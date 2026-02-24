@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local Screenshot Runner</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #0b1220;
+        color: #e5e7eb;
+      }
+
+      .app {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 20px;
+        display: grid;
+        gap: 14px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+
+      p {
+        margin: 0;
+        color: #94a3b8;
+      }
+
+      .card {
+        background: #111827;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+      label {
+        font-size: 13px;
+        color: #cbd5e1;
+      }
+
+      input,
+      textarea,
+      select,
+      button {
+        font: inherit;
+      }
+
+      input,
+      textarea,
+      select {
+        width: 100%;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #475569;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+
+      textarea {
+        min-height: 140px;
+        resize: vertical;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        border: 1px solid #475569;
+        border-radius: 8px;
+        padding: 9px 12px;
+        background: #1e293b;
+        color: #e2e8f0;
+        cursor: pointer;
+      }
+
+      button.primary {
+        border-color: #0284c7;
+        background: #0ea5e9;
+        color: #00111f;
+        font-weight: 600;
+      }
+
+      pre {
+        margin: 0;
+        background: #020617;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 10px;
+        height: 260px;
+        overflow: auto;
+        font-family: 'SFMono-Regular', ui-monospace, Menlo, monospace;
+        font-size: 12px;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: #94a3b8;
+      }
+
+      @media (max-width: 800px) {
+        .row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <h1>Local Screenshot Runner</h1>
+        <p>Phase 2 scaffold. Uses the same local CLI runner under this repository.</p>
+      </header>
+
+      <section class="card">
+        <label>
+          Project Name
+          <input id="projectName" value="New Client Project" />
+        </label>
+
+        <label>
+          URLs (newline or comma separated)
+          <textarea id="urls">https://example.com
+https://example.com/pricing</textarea>
+        </label>
+
+        <div class="row">
+          <label>
+            Output Directory
+            <input id="outputDir" value="./captures" />
+          </label>
+
+          <label>
+            Concurrency
+            <input id="concurrency" type="number" min="1" max="10" value="3" />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="chooseDir">Choose Output Folder</button>
+          <button id="runCapture" class="primary">Run Capture</button>
+          <button id="openFolder">Open Output Folder</button>
+        </div>
+
+        <p class="hint">The app creates a temp URL input file and invokes <code>npm run capture:local</code>.</p>
+      </section>
+
+      <section class="card">
+        <label>Run Logs</label>
+        <pre id="logs"></pre>
+      </section>
+    </main>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>

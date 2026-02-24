@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "id": "prompt-test-20260219-203611",
+    "projectName": "Prompt Test",
+    "projectSlug": "prompt-test",
+    "startedAt": "2026-02-19T20:36:11.288Z",
+    "finishedAt": "2026-02-19T20:36:21.495Z",
+    "outputDirectory": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/prompt-test-20260219-203611"
+  },
+  "machine": {
+    "platform": "darwin",
+    "release": "25.0.0",
+    "arch": "arm64",
+    "nodeVersion": "v23.11.0",
+    "hostname": "Nayyars-MacBook-Air.local",
+    "cpuCount": 8
+  },
+  "settings": {
+    "concurrency": 1,
+    "timeoutMs": 45000,
+    "retries": 1,
+    "devices": [
+      "desktop",
+      "mobile"
+    ],
+    "format": "webp",
+    "warmup": "always"
+  },
+  "summary": {
+    "totalUrls": 1,
+    "successfulUrls": 1,
+    "failedUrls": 0,
+    "partialUrls": 0,
+    "totalDurationMs": 10205
+  },
+  "results": [
+    {
+      "url": "https://example.com/",
+      "index": 0,
+      "slug": "001-example-com",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-02-19T20:36:14.498Z",
+      "finishedAt": "2026-02-19T20:36:21.415Z",
+      "durationMs": 6917,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/prompt-test-20260219-203611/desktop/001-example-com.webp",
+          "durationMs": 3554
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/captures/prompt-test-20260219-203611/mobile/001-example-com.webp",
+          "durationMs": 2633
+        }
+      ]
+    }
+  ]
+}

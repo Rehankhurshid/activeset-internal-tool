@@ -7,7 +7,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { FolderOpen, FileText, Sparkles, Lock, ListChecks } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { AppNavigation } from '@/components/navigation/AppNavigation';
 import { cn } from '@/lib/utils';
 
@@ -88,7 +87,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <AppNavigation title="Dashboard" />
+      <AppNavigation
+        title="Dashboard"
+        proposalAccess={hasProposalAccess}
+        projectLinksAccess={hasProjectLinksAccess}
+        accessLoading={proposalAccessLoading || projectLinksAccessLoading}
+      />
 
       <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
         <div className="mb-6 sm:mb-8 lg:mb-12">
