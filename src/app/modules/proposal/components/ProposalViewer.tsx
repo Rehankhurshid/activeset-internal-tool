@@ -1,16 +1,16 @@
 'use client';
 
 import { useRef, useState, useLayoutEffect, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Share2, Mail, X, Copy, ExternalLink, PenLine, MessageSquare, FileDown } from "lucide-react";
 import { Proposal, ProposalSectionId } from "../types/Proposal";
-import SignatureSection from "./SignatureSection";
 import { proposalService } from "../services/ProposalService";
-import { commentService } from "../services/CommentService";
-import CommentSidebar from "./CommentSidebar";
 import { downloadProposalPDF } from "../utils/pdfGenerator";
 
 const DEFAULT_HERO = '/default-hero.png';
+const SignatureSection = dynamic(() => import("./SignatureSection"), { ssr: false });
+const CommentSidebar = dynamic(() => import("./CommentSidebar"));
 
 // Font family constants
 const FONT_TITLE = "'Funnel Display', system-ui, sans-serif";
@@ -96,11 +96,11 @@ const convertBulletsToHtmlLists = (html: string): string => {
 
 interface ProposalViewerProps {
   proposal: Proposal;
-  onBack: () => void;
+  onBack?: () => void;
   isPublic?: boolean;
 }
 
-export default function ProposalViewer({ proposal, onBack, isPublic = false }: ProposalViewerProps) {
+export default function ProposalViewer({ proposal, onBack = () => { }, isPublic = false }: ProposalViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(794);
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
@@ -116,12 +116,33 @@ export default function ProposalViewer({ proposal, onBack, isPublic = false }: P
 
   // Subscribe to comment count
   useEffect(() => {
-    const unsubscribe = commentService.subscribeToComments(proposal.id, (comments) => {
-      const openCount = comments.filter(c => !c.resolved && !c.parentId).length;
-      setCommentCount(openCount);
-    });
-    return () => unsubscribe();
-  }, [proposal.id]);
+    if (isPublic) {
+      setCommentCount(0);
+      return;
+    }
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    const subscribe = async () => {
+      try {
+        const { commentService } = await import("../services/CommentService");
+        if (cancelled) return;
+        unsubscribe = commentService.subscribeToComments(proposal.id, (comments) => {
+          const openCount = comments.filter(c => !c.resolved && !c.parentId).length;
+          setCommentCount(openCount);
+        });
+      } catch (error) {
+        console.error('Failed to subscribe to comments:', error);
+      }
+    };
+
+    subscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [isPublic, proposal.id]);
 
   // Check if proposal is locked
   const isLocked = currentProposal.isLocked || !!currentProposal.data.signatures.client.signedAt;
@@ -353,20 +374,21 @@ ${proposal.agencyName}`;
               <FileDown className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`} />
               {isDownloading ? 'Generating...' : 'Download'}
             </Button>
-            {/* Comments Button */}
-            <Button
-              onClick={() => setShowCommentSidebar(true)}
-              data-html2canvas-ignore
-              className="flex items-center gap-2 bg-[#333] hover:bg-[#444] text-white border-none h-9 px-4 relative"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span className="hidden sm:inline">Comments</span>
-              {commentCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
-                  {commentCount}
-                </span>
-              )}
-            </Button>
+            {!isPublic && (
+              <Button
+                onClick={() => setShowCommentSidebar(true)}
+                data-html2canvas-ignore
+                className="flex items-center gap-2 bg-[#333] hover:bg-[#444] text-white border-none h-9 px-4 relative"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span className="hidden sm:inline">Comments</span>
+                {commentCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {commentCount}
+                  </span>
+                )}
+              </Button>
+            )}
             {isPublic && !currentProposal.data.signatures.client.signedAt && (
               <Button
                 onClick={() => document.getElementById('signature-section')?.scrollIntoView({ behavior: 'smooth' })}
@@ -568,14 +590,16 @@ ${proposal.agencyName}`;
               <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('overview')}`}>
                 <div className="flex items-start justify-between">
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Overview</h2>
-                  <button
-                    onClick={() => openCommentsForSection('overview')}
-                    data-html2canvas-ignore
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                    title="Add comment to Overview"
-                  >
-                    <MessageSquare className="w-5 h-5" />
-                  </button>
+                  {!isPublic && (
+                    <button
+                      onClick={() => openCommentsForSection('overview')}
+                      data-html2canvas-ignore
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                      title="Add comment to Overview"
+                    >
+                      <MessageSquare className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
                 <div>
                   <div
@@ -590,14 +614,16 @@ ${proposal.agencyName}`;
               <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('aboutUs')}`}>
                 <div className="flex items-start justify-between">
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>About Us</h2>
-                  <button
-                    onClick={() => openCommentsForSection('aboutUs')}
-                    data-html2canvas-ignore
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                    title="Add comment to About Us"
-                  >
-                    <MessageSquare className="w-5 h-5" />
-                  </button>
+                  {!isPublic && (
+                    <button
+                      onClick={() => openCommentsForSection('aboutUs')}
+                      data-html2canvas-ignore
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                      title="Add comment to About Us"
+                    >
+                      <MessageSquare className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
                 <div>
                   <div
@@ -612,14 +638,16 @@ ${proposal.agencyName}`;
               <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('pricing')}`}>
                 <div className="flex items-start justify-between">
                   <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Pricing for {proposal.clientName}</h2>
-                  <button
-                    onClick={() => openCommentsForSection('pricing')}
-                    data-html2canvas-ignore
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                    title="Add comment to Pricing"
-                  >
-                    <MessageSquare className="w-5 h-5" />
-                  </button>
+                  {!isPublic && (
+                    <button
+                      onClick={() => openCommentsForSection('pricing')}
+                      data-html2canvas-ignore
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                      title="Add comment to Pricing"
+                    >
+                      <MessageSquare className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
                 <div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -677,14 +705,16 @@ ${proposal.agencyName}`;
                 <div style={{ marginBottom: '40px' }}>
                   <div className="flex items-center justify-between" style={{ marginBottom: '24px', borderBottom: '2px solid #3b82f6', paddingBottom: '8px' }}>
                     <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Project Timeline</h2>
-                    <button
-                      onClick={() => openCommentsForSection('timeline')}
-                      data-html2canvas-ignore
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                      title="Add comment to Timeline"
-                    >
-                      <MessageSquare className="w-5 h-5" />
-                    </button>
+                    {!isPublic && (
+                      <button
+                        onClick={() => openCommentsForSection('timeline')}
+                        data-html2canvas-ignore
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                        title="Add comment to Timeline"
+                      >
+                        <MessageSquare className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* List View */}
@@ -1118,14 +1148,16 @@ ${proposal.agencyName}`;
                 <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('terms')}`}>
                   <div className="flex items-start justify-between">
                     <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Terms</h2>
-                    <button
-                      onClick={() => openCommentsForSection('terms')}
-                      data-html2canvas-ignore
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
-                      title="Add comment to Terms"
-                    >
-                      <MessageSquare className="w-5 h-5" />
-                    </button>
+                    {!isPublic && (
+                      <button
+                        onClick={() => openCommentsForSection('terms')}
+                        data-html2canvas-ignore
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-full hover:bg-blue-50 text-blue-500"
+                        title="Add comment to Terms"
+                      >
+                        <MessageSquare className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
                   <div>
                     <div
@@ -1220,20 +1252,22 @@ ${proposal.agencyName}`;
       )}
 
       {/* Comment Sidebar */}
-      <CommentSidebar
-        proposalId={proposal.id}
-        isOpen={showCommentSidebar}
-        onClose={() => {
-          setShowCommentSidebar(false);
-          setActiveCommentSection(undefined);
-        }}
-        isPublic={isPublic}
-        isLocked={isLocked}
-        currentUserName={currentUserName}
-        currentUserEmail={currentUserEmail}
-        currentUserType={currentUserType}
-        activeSection={activeCommentSection}
-      />
+      {!isPublic && (
+        <CommentSidebar
+          proposalId={proposal.id}
+          isOpen={showCommentSidebar}
+          onClose={() => {
+            setShowCommentSidebar(false);
+            setActiveCommentSection(undefined);
+          }}
+          isPublic={isPublic}
+          isLocked={isLocked}
+          currentUserName={currentUserName}
+          currentUserEmail={currentUserEmail}
+          currentUserType={currentUserType}
+          activeSection={activeCommentSection}
+        />
+      )}
     </div>
 
   );

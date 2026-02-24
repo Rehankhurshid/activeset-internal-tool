@@ -1,69 +1,59 @@
-'use client';
-
-import { useState, useEffect, use } from 'react';
+import { unstable_cache } from 'next/cache';
+import { doc as clientDoc, getDoc as getClientDoc } from 'firebase/firestore';
+import { db as adminDb } from '@/lib/firebase-admin';
+import { db as clientDb } from '@/lib/firebase';
 import { Proposal } from '@/app/modules/proposal/types/Proposal';
-import { proposalService } from '@/app/modules/proposal/services/ProposalService';
 import ProposalViewer from '@/app/modules/proposal/components/ProposalViewer';
-import LoadingScreen from '@/app/modules/proposal/components/LoadingScreen';
-import { Toaster, toast } from 'sonner';
 
 interface PageProps {
-    params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>;
 }
 
-export default function PublicProposalView({ params }: PageProps) {
-    // Unwrap params using React.use()
-    const { id } = use(params);
-
-    const [proposal, setProposal] = useState<Proposal | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        const loadProposal = async () => {
-            try {
-                if (!id) return;
-                const data = await proposalService.getPublicProposal(id);
-                setProposal(data);
-            } catch (err) {
-                console.error('Error loading proposal:', err);
-                setError('Proposal not found or access denied.');
-                toast.error('Failed to load proposal');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        loadProposal();
-    }, [id]);
-
-    if (loading) {
-        return <LoadingScreen message="Loading proposal..." />;
+const getPublicProposalCached = unstable_cache(
+  async (id: string): Promise<Proposal | null> => {
+    try {
+      const adminSnapshot = await adminDb.collection('shared_proposals').doc(id).get();
+      if (adminSnapshot.exists) {
+        return adminSnapshot.data() as Proposal;
+      }
+    } catch (error) {
+      console.error('Server-side admin proposal fetch failed:', error);
     }
 
-    if (error || !proposal) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-                <div className="text-center max-w-md">
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Unavailable</h1>
-                    <p className="text-gray-600">{error || 'This proposal could not be found.'}</p>
-                </div>
-                <Toaster />
-            </div>
-        );
+    try {
+      const clientSnapshot = await getClientDoc(clientDoc(clientDb, 'shared_proposals', id));
+      if (clientSnapshot.exists()) {
+        return clientSnapshot.data() as Proposal;
+      }
+    } catch (error) {
+      console.error('Server-side fallback proposal fetch failed:', error);
     }
 
+    return null;
+  },
+  ['public-proposal-by-id'],
+  { revalidate: 60 }
+);
+
+export default async function PublicProposalView({ params }: PageProps) {
+  const { id } = await params;
+  const proposal = await getPublicProposalCached(id);
+
+  if (!proposal) {
     return (
-        <>
-            <link rel="preconnect" href="https://fonts.googleapis.com" />
-            <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-            <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Funnel+Sans:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet" />
-            <ProposalViewer
-                proposal={proposal}
-                onBack={() => { }} // No back action for public view
-                isPublic={true}
-            />
-            <Toaster />
-        </>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Unavailable</h1>
+          <p className="text-gray-600">This proposal could not be found.</p>
+        </div>
+      </div>
     );
+  }
+
+  return (
+    <ProposalViewer
+      proposal={proposal}
+      isPublic
+    />
+  );
 }
