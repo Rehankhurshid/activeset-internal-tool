@@ -4,6 +4,7 @@ import React from 'react';
 import { WidgetConfig } from '@/types';
 import { QAWidget } from '@/components/qa/QAWidget';
 import { ChecklistWidget } from '@/components/checklist/ChecklistWidget';
+import { ProjectLinksWidget } from '@/components/widget/ProjectLinksWidget';
 import { useAuth } from '@/hooks/useAuth';
 
 interface WidgetEmbeddedProps {
@@ -20,9 +21,15 @@ export function WidgetEmbedded({ config }: WidgetEmbeddedProps) {
     { id: 'checklist' as const, label: 'Checklist' },
   ];
 
-  const tabs = config?.mode === 'checklist'
-    ? allTabs.filter(t => t.id === 'checklist')
+  const tabs = config?.mode
+    ? allTabs.filter((t) => t.id === config.mode)
     : allTabs;
+
+  React.useEffect(() => {
+    if (config?.mode) {
+      setActiveTab(config.mode);
+    }
+  }, [config?.mode]);
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground min-h-[400px]">
@@ -46,6 +53,16 @@ export function WidgetEmbedded({ config }: WidgetEmbeddedProps) {
       <div className="flex-1 overflow-auto bg-gray-50/50 dark:bg-black/20">
         {activeTab === 'qa' ? (
           <QAWidget stagingUrl={config?.stagingUrl} />
+        ) : activeTab === 'links' && config?.projectId ? (
+          <ProjectLinksWidget
+            projectId={config.projectId}
+            isAuthenticated={!!user}
+            onSignIn={signInWithGoogle}
+          />
+        ) : activeTab === 'links' ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">
+            No project ID configured for this embed.
+          </div>
         ) : activeTab === 'checklist' && config?.projectId ? (
           <ChecklistWidget
             projectId={config.projectId}
@@ -58,8 +75,8 @@ export function WidgetEmbedded({ config }: WidgetEmbeddedProps) {
             No project ID configured for this embed.
           </div>
         ) : (
-          <div className="p-8 text-center text-muted-foreground">
-            Project Links Widget (Coming Soon)
+          <div className="p-8 text-center text-muted-foreground text-sm">
+            Unsupported widget mode.
           </div>
         )}
       </div>

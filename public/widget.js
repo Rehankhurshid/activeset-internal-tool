@@ -807,6 +807,7 @@
                 <h3>Content Audit</h3>
                 <div class="panel-tabs">
                     <button class="panel-tab active" data-tab="audit">Audit</button>
+                    <button class="panel-tab" data-tab="links">Project Links</button>
                     <button class="panel-tab" data-tab="qa">Checklist</button>
                 </div>
              </div>
@@ -814,6 +815,17 @@
              <!-- Audit Tab Content -->
              <div id="plw-panel-content" class="panel-content tab-content active" data-tab="audit">
                 <!-- Results go here -->
+             </div>
+
+             <!-- Project Links Tab Content (Iframe) -->
+             <div id="plw-links-content" class="panel-content tab-content" data-tab="links">
+                ${this.config.projectId
+                    ? `<iframe src="${this.config.baseUrl}/embed?projectId=${this.config.projectId || ''}&theme=${this.config.theme}&mode=links" style="width: 100%; height: 100%; border: none; min-height: 400px; display: block;"></iframe>`
+                    : `<div style="padding: 20px; color: #a1a1aa; text-align: center; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                         <div style="margin-bottom: 8px;">No Project ID provided.</div>
+                         <div style="font-size: 11px; opacity: 0.7;">Add <code>data-project-id="..."</code> to your script tag.</div>
+                       </div>`
+                }
              </div>
 
              <!-- QA/Checklist Tab Content (Iframe) -->
@@ -1227,7 +1239,7 @@
       const allLinks = data.links || [];
       const links = allLinks.filter(link => link.source !== 'auto'); // Only manual links
 
-      if (links.length === 0) return;
+      if (links.length === 0 && !this.config.projectId) return;
 
       const positionStyles = {
         "bottom-right": "bottom: 0; right: 24px;",
@@ -1289,8 +1301,14 @@
           <div class="dropdown-widget-content" id="plw-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #000000; min-width: 280px; box-shadow: 0 0 0 1px #333333, 0 4px 6px -1px rgba(0, 0, 0, 0.5); z-index: 10000; border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
              <div class="dropdown-header">
                <span class="header-title">Available Links</span>
+               ${this.config.projectId ? `
+                 <button class="header-manage-btn" id="plw-manage-links-btn" type="button">
+                   Manage
+                 </button>
+               ` : ''}
             </div>
-            ${links
+            ${links.length > 0
+              ? links
               .map(
                 (link) => `
               <div class="dropdown-widget-row">
@@ -1304,7 +1322,9 @@
               </div>
             `
               )
-              .join("")}
+              .join("")
+              : `<div class="dropdown-empty-state">No links yet. Use Manage to add your first link.</div>`
+            }
             </div>
           </div>
         </div>
@@ -1417,6 +1437,9 @@
             padding: 12px 16px 8px;
             background: #000;
             border-bottom: 1px solid #222;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
           }
           
           .header-title {
@@ -1425,6 +1448,32 @@
             letter-spacing: 0.05em; 
             color: #888; 
             font-family: 'Funnel Display', sans-serif;
+          }
+
+          .header-manage-btn {
+            border: 1px solid #2f2f2f;
+            background: #111;
+            color: #b4b4b8;
+            font-size: 10px;
+            line-height: 1;
+            padding: 4px 8px;
+            border-radius: 999px;
+            cursor: pointer;
+            font-family: 'Funnel Sans', sans-serif;
+            transition: all 0.15s ease;
+          }
+
+          .header-manage-btn:hover {
+            color: #ffffff;
+            border-color: #4a4a4f;
+            background: #18181b;
+          }
+
+          .dropdown-empty-state {
+            padding: 14px 16px;
+            color: #888;
+            font-size: 12px;
+            border-bottom: 1px solid #111;
           }
 
           .dropdown-widget-row {
@@ -1549,34 +1598,53 @@
     setupHandlers() {
        const btn = this.container.querySelector('#plw-trigger-btn');
        const checklistBtn = this.container.querySelector('#plw-checklist-btn');
+       const manageLinksBtn = this.container.querySelector('#plw-manage-links-btn');
        const content = this.container.querySelector('#plw-content');
        const chevron = this.container.querySelector('#plw-chevron');
 
-       if (btn && content) {
-         const toggleMenu = (e) => {
-           e.stopPropagation();
-           const isHidden = content.style.display === 'none';
-           content.style.display = isHidden ? 'block' : 'none';
-           if (chevron) chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
-         };
-         btn.addEventListener('click', toggleMenu);
-       }
+       const toggleMenu = (e) => {
+         if (!content) return;
+         e.stopPropagation();
+         const isHidden = content.style.display === 'none';
+         content.style.display = isHidden ? 'block' : 'none';
+         if (chevron) chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+       };
+
+       const openStandalonePanel = (tabId) => {
+         const panel = document.getElementById('plw-standalone-panel');
+         const badge = document.getElementById('plw-audit-badge');
+         if (!panel) return;
+
+         panel.classList.add('open');
+         if (badge) {
+           badge.style.opacity = '0';
+           badge.style.pointerEvents = 'none';
+         }
+
+         const targetTab = panel.querySelector(`.panel-tab[data-tab="${tabId}"]`);
+         if (targetTab) targetTab.click();
+       };
 
        if (checklistBtn) {
          checklistBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            // Open Standalone Panel
-            const panel = document.getElementById('plw-standalone-panel');
-            if (panel) {
-                panel.classList.add('open');
-                // Switch to Checklist tab
-                const checklistTab = panel.querySelector('.panel-tab[data-tab="qa"]');
-                if (checklistTab) checklistTab.click(); 
-            }
+            if (content) content.style.display = 'none';
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+            openStandalonePanel('qa');
+         });
+       }
+
+       if (manageLinksBtn) {
+         manageLinksBtn.addEventListener('click', (e) => {
+           e.stopPropagation();
+           if (content) content.style.display = 'none';
+           if (chevron) chevron.style.transform = 'rotate(0deg)';
+           openStandalonePanel('links');
          });
        }
 
        const closeMenu = (e) => {
+         if (!content) return;
          // Don't close if clicking inside container or if clicking the audit badge/panel
          if (this.container.contains(e.target)) return;
          
@@ -1587,10 +1655,12 @@
          if (auditPanel && auditPanel.contains(e.target)) return;
 
          content.style.display = 'none';
-         chevron.style.transform = 'rotate(0deg)';
+         if (chevron) chevron.style.transform = 'rotate(0deg)';
        };
 
-       btn.addEventListener('click', toggleMenu);
+       if (btn && content) {
+         btn.addEventListener('click', toggleMenu);
+       }
        document.addEventListener('click', closeMenu);
     }
   }
