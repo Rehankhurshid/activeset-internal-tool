@@ -394,6 +394,152 @@
       return { issues, score: Math.max(0, score) };
     }
 
+    static escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    static truncate(value, max = 100) {
+      const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+      if (!text) return '';
+      return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+    }
+
+    static getElementSelector(el) {
+      if (!el || !el.tagName) return 'unknown';
+      if (el.id) return `#${el.id}`;
+
+      const parts = [];
+      let current = el;
+      let depth = 0;
+
+      while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body && depth < 5) {
+        let part = current.tagName.toLowerCase();
+
+        const className = typeof current.className === 'string' ? current.className.trim() : '';
+        if (className) {
+          const classParts = className
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((cls) => cls.replace(/[^a-zA-Z0-9_-]/g, ''))
+            .filter(Boolean);
+          if (classParts.length) {
+            part += `.${classParts.join('.')}`;
+          }
+        }
+
+        if (current.parentElement) {
+          const sameTagSiblings = Array.from(current.parentElement.children).filter(
+            (child) => child.tagName === current.tagName
+          );
+          if (sameTagSiblings.length > 1) {
+            part += `:nth-of-type(${sameTagSiblings.indexOf(current) + 1})`;
+          }
+        }
+
+        parts.unshift(part);
+        if (current.parentElement && current.parentElement.id) {
+          parts.unshift(`#${current.parentElement.id}`);
+          break;
+        }
+        current = current.parentElement;
+        depth++;
+      }
+
+      return parts.join(' > ') || el.tagName.toLowerCase();
+    }
+
+    static getNodeText(el, max = 90) {
+      if (!el) return '';
+      const text = el.innerText || el.textContent || '';
+      return this.truncate(text, max);
+    }
+
+    static buildWebflowMcpPrompt(issueType, pageUrl, items = [], totalCount = items.length) {
+      const maxItems = 15;
+      const sample = items.slice(0, maxItems);
+      const format = (value) => this.truncate(value || '[missing]', 180);
+      let issueName = 'technical issue';
+      let fixSteps = '';
+      let itemLines = [];
+
+      if (issueType === 'empty-links') {
+        issueName = 'empty links (href="#" or missing href)';
+        fixSteps = [
+          '1) Open the page in Webflow Designer and locate each link below.',
+          '2) Replace placeholder href with a real destination (page, section, URL, email, or phone).',
+          '3) If the element should not navigate anywhere, remove link wrapping and keep plain text/div.',
+          '4) Publish and re-run the audit.',
+        ].join('\n');
+        itemLines = sample.map((item, idx) => (
+          `${idx + 1}. selector=${format(item.selector)} | text="${format(item.text || '[no text]')}" | href=${format(item.href)}`
+        ));
+      } else if (issueType === 'unsafe-links') {
+        issueName = 'unsafe links opening in new tab (missing noopener)';
+        fixSteps = [
+          '1) Open the page in Webflow Designer and locate each link below.',
+          '2) Keep target="_blank" only if needed.',
+          '3) Ensure rel includes both noopener and noreferrer (append without removing existing safe tokens).',
+          '4) Publish and re-run the audit.',
+        ].join('\n');
+        itemLines = sample.map((item, idx) => (
+          `${idx + 1}. selector=${format(item.selector)} | href=${format(item.href)} | rel=${format(item.rel)}`
+        ));
+      } else if (issueType === 'http-links') {
+        issueName = 'insecure HTTP links on HTTPS page';
+        fixSteps = [
+          '1) Open the page in Webflow Designer and locate each link below.',
+          '2) Change each URL from http:// to https:// where supported.',
+          '3) If destination does not support HTTPS, route through a secure alternative or remove link.',
+          '4) Publish and re-run the audit.',
+        ].join('\n');
+        itemLines = sample.map((item, idx) => (
+          `${idx + 1}. selector=${format(item.selector)} | href=${format(item.href)}`
+        ));
+      } else if (issueType === 'cls-images') {
+        issueName = 'images missing width/height (CLS risk)';
+        fixSteps = [
+          '1) Open the page in Webflow Designer and locate each image below.',
+          '2) Set explicit width and height attributes, or enforce fixed aspect ratio containers.',
+          '3) Keep responsive sizing via CSS but preserve intrinsic aspect ratio to prevent layout shift.',
+          '4) Publish and re-run the audit.',
+        ].join('\n');
+        itemLines = sample.map((item, idx) => (
+          `${idx + 1}. selector=${format(item.selector)} | src=${format(item.src)} | width=${format(item.widthAttr)} | height=${format(item.heightAttr)}`
+        ));
+      } else if (issueType === 'button-type') {
+        issueName = 'buttons missing type attribute';
+        fixSteps = [
+          '1) Open the page in Webflow Designer and locate each button below.',
+          '2) Set type="button" for non-submit actions, or type="submit" only for form submission buttons.',
+          '3) Publish and re-run the audit.',
+        ].join('\n');
+        itemLines = sample.map((item, idx) => (
+          `${idx + 1}. selector=${format(item.selector)} | text="${format(item.text || '[no text]')}" | type=${format(item.type)}`
+        ));
+      }
+
+      const moreCount = Math.max(0, totalCount - sample.length);
+      const moreLine = moreCount > 0 ? `\nAdditional affected elements not listed here: ${moreCount}` : '';
+      const itemBlock = itemLines.length > 0
+        ? `Affected elements (${sample.length}/${totalCount}):\n${itemLines.join('\n')}`
+        : `Affected elements: ${totalCount}`;
+
+      return [
+        `Fix this Webflow page issue: ${issueName}`,
+        `Page URL: ${pageUrl}`,
+        '',
+        fixSteps,
+        '',
+        itemBlock + moreLine,
+      ].join('\n');
+    }
+
     static getApiBaseUrl() {
         let scriptUrl = document.currentScript ? document.currentScript.src : null;
         if (!scriptUrl) {
@@ -581,39 +727,138 @@
 
       // 4. TECHNICAL HEALTH
       const techIssues = [];
+      const technicalDetailGroups = [];
+      const MAX_TECH_DETAIL_ITEMS = 30;
+      const addDetail = (arr, value) => {
+        if (arr.length < MAX_TECH_DETAIL_ITEMS) arr.push(value);
+      };
       
       // Broken/Unsafe Links
       const links = doc.querySelectorAll('a');
       let emptyLinks = 0;
       let unsafeLinks = 0;
       let httpLinks = 0;
+      const emptyLinkItems = [];
+      const unsafeLinkItems = [];
+      const httpLinkItems = [];
       links.forEach(l => {
-         const href = l.getAttribute('href');
-         if (!href || href === '#') emptyLinks++;
-         if (l.target === '_blank' && (!l.rel || !l.rel.includes('noopener'))) unsafeLinks++;
-         if (href && href.startsWith('http:') && window.location.protocol === 'https:') httpLinks++;
+         const href = (l.getAttribute('href') || '').trim();
+         const selector = this.getElementSelector(l);
+         const text = this.getNodeText(l, 90) || '[no text]';
+
+         if (!href || href === '#') {
+            emptyLinks++;
+            addDetail(emptyLinkItems, {
+              selector,
+              text,
+              href: href || '[missing]'
+            });
+         }
+
+         if (l.target === '_blank' && (!l.rel || !/\bnoopener\b/i.test(l.rel))) {
+            unsafeLinks++;
+            addDetail(unsafeLinkItems, {
+              selector,
+              text,
+              href: href || l.href || '[missing]',
+              rel: l.getAttribute('rel') || '[missing]'
+            });
+         }
+
+         if (href && href.startsWith('http:') && window.location.protocol === 'https:') {
+            httpLinks++;
+            addDetail(httpLinkItems, {
+              selector,
+              text,
+              href
+            });
+         }
       });
-      if (emptyLinks > 0) techIssues.push(`${emptyLinks} empty links (href="#")`);
-      if (unsafeLinks > 0) techIssues.push(`${unsafeLinks} unsafe external links (missing noopener)`);
-      if (httpLinks > 0) techIssues.push(`${httpLinks} insecure HTTP links`);
+      if (emptyLinks > 0) {
+        const summary = `${emptyLinks} empty links (href="#")`;
+        techIssues.push(summary);
+        technicalDetailGroups.push({
+          key: 'empty-links',
+          summary,
+          count: emptyLinks,
+          items: emptyLinkItems
+        });
+      }
+      if (unsafeLinks > 0) {
+        const summary = `${unsafeLinks} unsafe external links (missing noopener)`;
+        techIssues.push(summary);
+        technicalDetailGroups.push({
+          key: 'unsafe-links',
+          summary,
+          count: unsafeLinks,
+          items: unsafeLinkItems
+        });
+      }
+      if (httpLinks > 0) {
+        const summary = `${httpLinks} insecure HTTP links`;
+        techIssues.push(summary);
+        technicalDetailGroups.push({
+          key: 'http-links',
+          summary,
+          count: httpLinks,
+          items: httpLinkItems
+        });
+      }
 
       // CLS Risks
       let clsImages = 0;
+      const clsImageItems = [];
       images.forEach(i => {
-         if (!i.hasAttribute('width') && !i.hasAttribute('height')) clsImages++;
+         if (!i.hasAttribute('width') && !i.hasAttribute('height')) {
+            clsImages++;
+            addDetail(clsImageItems, {
+              selector: this.getElementSelector(i),
+              src: i.currentSrc || i.getAttribute('src') || i.getAttribute('data-src') || '[missing]',
+              alt: this.getNodeText(i, 80) || i.getAttribute('alt') || '[missing]',
+              widthAttr: i.getAttribute('width') || '[missing]',
+              heightAttr: i.getAttribute('height') || '[missing]'
+            });
+         }
       });
-      if (clsImages > 0) techIssues.push(`${clsImages} images missing width/height (CLS Risk)`);
+      if (clsImages > 0) {
+        const summary = `${clsImages} images missing width/height (CLS Risk)`;
+        techIssues.push(summary);
+        technicalDetailGroups.push({
+          key: 'cls-images',
+          summary,
+          count: clsImages,
+          items: clsImageItems
+        });
+      }
 
       // Buttons
       const btns = doc.querySelectorAll('button');
       let noTypeBtns = 0;
+      const noTypeButtonItems = [];
       btns.forEach(b => {
-         if (!b.hasAttribute('type')) noTypeBtns++;
+         if (!b.hasAttribute('type')) {
+           noTypeBtns++;
+           addDetail(noTypeButtonItems, {
+             selector: this.getElementSelector(b),
+             text: this.getNodeText(b, 90) || '[no text]',
+             type: '[missing]'
+           });
+         }
       });
-      if (noTypeBtns > 0) techIssues.push(`${noTypeBtns} buttons missing type attribute`);
+      if (noTypeBtns > 0) {
+        const summary = `${noTypeBtns} buttons missing type attribute`;
+        techIssues.push(summary);
+        technicalDetailGroups.push({
+          key: 'button-type',
+          summary,
+          count: noTypeBtns,
+          items: noTypeButtonItems
+        });
+      }
 
       if (techIssues.length > 0) {
         result.categories.technical.issues = techIssues;
+        result.categories.technical.detailGroups = technicalDetailGroups;
         result.categories.technical.status = 'warning';
         result.categories.technical.score = Math.max(0, 100 - (techIssues.length * 10));
       }
@@ -1027,7 +1272,58 @@
              /* Re-use existing category styles */
              .category-list { border: none; border-radius: 0; }
              .category-row { padding: 16px 20px; }
+             .category-row.toggleable { cursor: pointer; user-select: none; }
+             .category-row.toggleable:hover { background: #1f1f23; }
+             .category-row.toggleable:focus-visible { outline: 1px solid #3f3f46; outline-offset: -1px; }
+             .cat-expander { font-size: 11px; color: #a1a1aa; transition: transform 0.2s ease; margin-left: 4px; }
+             .category-row[aria-expanded="true"] .cat-expander { transform: rotate(180deg); }
              .cat-details { background: #0c0c0c; }
+             .cat-details.collapsed { display: none; }
+             .detail-item code {
+                font-size: 12px;
+                color: #d4d4d8;
+                background: #18181b;
+                border: 1px solid #27272a;
+                border-radius: 4px;
+                padding: 1px 4px;
+             }
+             .tech-issue-group {
+                margin: 6px 0;
+                border: 1px solid #27272a;
+                border-radius: 6px;
+                overflow: hidden;
+                background: #111114;
+             }
+             .tech-issue-group summary {
+                list-style: none;
+                cursor: pointer;
+                padding: 10px 12px;
+                font-size: 13px;
+                font-weight: 500;
+                color: #e4e4e7;
+                line-height: 1.35;
+             }
+             .tech-issue-group summary::-webkit-details-marker { display: none; }
+             .tech-issue-group[open] summary { border-bottom: 1px solid #27272a; background: #17171b; }
+             .tech-issue-content { padding: 8px 12px 12px; }
+             .tech-issue-list .detail-item {
+                font-size: 12px;
+                color: #d4d4d8 !important;
+                word-break: break-word;
+             }
+             .copy-mcp-prompt-btn {
+                margin-top: 10px;
+                border: 1px solid #333;
+                background: #171717;
+                color: #f4f4f5;
+                font-size: 11px;
+                font-family: 'Funnel Sans', sans-serif;
+                padding: 6px 10px;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+             }
+             .copy-mcp-prompt-btn:hover { background: #222; border-color: #4a4a4f; }
              
              /* Colors */
              .stroke-green { stroke: #10b981; }
@@ -1183,17 +1479,22 @@
        `;
        
        // Helper for category row
+       const esc = (value) => ContentQualityAuditor.escapeHtml(value);
+       const rowKey = (name) => `cat-${name.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`;
        const renderRow = (icon, name, statusObj, detailsHtml = '') => {
            let statusColor = statusObj.status === 'passed' ? '#10b981' : statusObj.status === 'warning' ? '#f59e0b' : '#ef4444';
            let statusText = statusObj.status === 'passed' ? '✓ Passed' : 'Issues Found';
+           const hasDetails = Boolean(detailsHtml && detailsHtml.trim());
+           const key = rowKey(name);
            
            return `
-             <div class="category-row">
+             <div class="category-row ${hasDetails ? 'toggleable' : ''}" ${hasDetails ? `role="button" tabindex="0" aria-expanded="false" data-toggle-target="${key}"` : ''}>
                <span class="cat-icon">${icon}</span>
                <span class="cat-name">${name}</span>
                <span class="cat-status" style="color: ${statusColor}">${statusText}</span>
+               ${hasDetails ? `<span class="cat-expander">▾</span>` : ''}
              </div>
-             ${detailsHtml}
+             ${hasDetails ? `<div class="cat-details collapsed" data-details-key="${key}" style="display: none;">${detailsHtml}</div>` : ''}
            `;
        };
        
@@ -1201,7 +1502,7 @@
        const ph = result.categories.placeholders;
        let phDetails = '';
        if (ph.issues.length > 0) {
-           phDetails = `<div class="cat-details">` + ph.issues.map(i => `<div class="detail-item">• ${i.type}</div>`).join('') + `</div>`;
+           phDetails = ph.issues.map(i => `<div class="detail-item">• ${esc(i.type)}</div>`).join('');
        }
        html += renderRow('🔴', 'Placeholders', ph, phDetails);
        
@@ -1209,7 +1510,13 @@
        const sp = result.categories.spelling;
        let spDetails = '';
        if (sp.issues.length > 0) {
-           spDetails = `<div class="cat-details">` + sp.issues.slice(0, 5).map(i => `<div class="detail-item">• "${i.word}"</div>`).join('') + (sp.issues.length > 5 ? `<div class="detail-item">+ ${sp.issues.length-5} more</div>` : '') + `</div>`;
+           spDetails = sp.issues
+             .slice(0, 5)
+             .map(i => `<div class="detail-item">• "${esc(i.word)}"</div>`)
+             .join('');
+           if (sp.issues.length > 5) {
+             spDetails += `<div class="detail-item">+ ${sp.issues.length - 5} more</div>`;
+           }
        }
        html += renderRow('🔤', 'Spelling', sp, spDetails);
        
@@ -1217,7 +1524,7 @@
        const seo = result.categories.seo;
        let seoDetails = '';
        if (seo.issues.length > 0) {
-           seoDetails = `<div class="cat-details">` + seo.issues.map(i => `<div class="detail-item">• ${i}</div>`).join('') + `</div>`;
+           seoDetails = seo.issues.map(i => `<div class="detail-item">• ${esc(i)}</div>`).join('');
        }
        html += renderRow('🔍', 'SEO & Meta', seo, seoDetails);
        
@@ -1225,13 +1532,125 @@
        const tech = result.categories.technical;
        let techDetails = '';
        if (tech.issues.length > 0) {
-           techDetails = `<div class="cat-details">` + tech.issues.map(i => `<div class="detail-item">• ${i}</div>`).join('') + `</div>`;
+           const detailGroups = Array.isArray(tech.detailGroups) ? tech.detailGroups : [];
+           const renderTechnicalItem = (groupKey, item) => {
+             if (groupKey === 'empty-links') {
+               return `<code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}" · href: <code>${esc(item.href || '[missing]')}</code>`;
+             }
+             if (groupKey === 'unsafe-links') {
+               return `<code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code> · rel: <code>${esc(item.rel || '[missing]')}</code>`;
+             }
+             if (groupKey === 'http-links') {
+               return `<code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code>`;
+             }
+             if (groupKey === 'cls-images') {
+               return `<code>${esc(item.selector || 'unknown')}</code> · src: <code>${esc(item.src || '[missing]')}</code> · width: <code>${esc(item.widthAttr || '[missing]')}</code> · height: <code>${esc(item.heightAttr || '[missing]')}</code>`;
+             }
+             if (groupKey === 'button-type') {
+               return `<code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}"`;
+             }
+             return esc(JSON.stringify(item || {}));
+           };
+
+           if (detailGroups.length > 0) {
+             techDetails = detailGroups.map((group, idx) => {
+               const items = Array.isArray(group.items) ? group.items : [];
+               const count = typeof group.count === 'number' ? group.count : items.length;
+               const visible = items.slice(0, 12);
+               const hiddenCount = Math.max(0, count - visible.length);
+               const prompt = ContentQualityAuditor.buildWebflowMcpPrompt(
+                 group.key,
+                 window.location.href,
+                 items,
+                 count
+               );
+               const encodedPrompt = encodeURIComponent(prompt);
+
+               return `
+                 <details class="tech-issue-group">
+                    <summary>${esc(group.summary || `Issue ${idx + 1}`)}</summary>
+                    <div class="tech-issue-content">
+                      <div class="tech-issue-list">
+                        ${visible.length > 0 ? visible.map(item => `<div class="detail-item">• ${renderTechnicalItem(group.key, item)}</div>`).join('') : '<div class="detail-item">No element details captured.</div>'}
+                        ${hiddenCount > 0 ? `<div class="detail-item">+ ${hiddenCount} more affected elements</div>` : ''}
+                      </div>
+                      <button type="button" class="copy-mcp-prompt-btn" data-copy-prompt="${encodedPrompt}">Copy Webflow MCP Prompt</button>
+                    </div>
+                 </details>
+               `;
+             }).join('');
+           } else {
+             techDetails = tech.issues.map(i => `<div class="detail-item">• ${esc(i)}</div>`).join('');
+           }
        }
        html += renderRow('⚙️', 'Technical Health', tech, techDetails);
        
        html += `</div>`; // Close list
        
        content.innerHTML = html;
+
+       // Toggle category detail blocks
+       const toggleRows = content.querySelectorAll('.category-row.toggleable[data-toggle-target]');
+       toggleRows.forEach((row) => {
+         const toggle = () => {
+           const key = row.getAttribute('data-toggle-target');
+           if (!key) return;
+           const details = content.querySelector(`.cat-details[data-details-key="${key}"]`);
+           if (!details) return;
+
+           const isExpanded = row.getAttribute('aria-expanded') === 'true';
+           row.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+           details.style.display = isExpanded ? 'none' : 'block';
+           details.classList.toggle('collapsed', isExpanded);
+         };
+
+         row.addEventListener('click', toggle);
+         row.addEventListener('keydown', (event) => {
+           if (event.key === 'Enter' || event.key === ' ') {
+             event.preventDefault();
+             toggle();
+           }
+         });
+       });
+
+       // Copy MCP prompts from technical issue blocks
+       const copyButtons = content.querySelectorAll('.copy-mcp-prompt-btn[data-copy-prompt]');
+       const copyToClipboard = async (text) => {
+         if (navigator.clipboard && navigator.clipboard.writeText) {
+           await navigator.clipboard.writeText(text);
+           return;
+         }
+         const input = document.createElement('textarea');
+         input.value = text;
+         input.style.position = 'fixed';
+         input.style.opacity = '0';
+         document.body.appendChild(input);
+         input.focus();
+         input.select();
+         document.execCommand('copy');
+         document.body.removeChild(input);
+       };
+
+       copyButtons.forEach((button) => {
+         button.addEventListener('click', async (event) => {
+           event.preventDefault();
+           event.stopPropagation();
+           const encoded = button.getAttribute('data-copy-prompt') || '';
+           const prompt = encoded ? decodeURIComponent(encoded) : '';
+           if (!prompt) return;
+
+           const originalText = button.textContent;
+           try {
+             await copyToClipboard(prompt);
+             button.textContent = 'Copied';
+           } catch (e) {
+             button.textContent = 'Copy Failed';
+           }
+           setTimeout(() => {
+             button.textContent = originalText;
+           }, 1600);
+         });
+       });
     }
 
     renderDropdown(data) {
@@ -1559,6 +1978,20 @@
              border-bottom: none;
           }
 
+          .category-row.toggleable {
+             cursor: pointer;
+             user-select: none;
+          }
+
+          .category-row.toggleable:hover {
+             background: #1f1f23;
+          }
+
+          .category-row.toggleable:focus-visible {
+             outline: 1px solid #3f3f46;
+             outline-offset: -1px;
+          }
+
           .cat-icon {
              font-size: 16px;
              flex-shrink: 0;
@@ -1576,10 +2009,25 @@
              color: #71717a;
           }
 
+          .cat-expander {
+             font-size: 11px;
+             color: #a1a1aa;
+             transition: transform 0.2s ease;
+             margin-left: 4px;
+          }
+
+          .category-row[aria-expanded="true"] .cat-expander {
+             transform: rotate(180deg);
+          }
+
           .cat-details {
              background: #0c0c0c;
              padding: 8px 14px 8px 40px;
              border-bottom: 1px solid #27272a;
+          }
+
+          .cat-details.collapsed {
+             display: none;
           }
 
           .detail-item {
@@ -1587,6 +2035,70 @@
              color: #e4e4e7 !important; /* Lighter gray and enforced */
              padding: 4px 0;
              line-height: 1.4;
+          }
+
+          .detail-item code {
+             font-size: 12px;
+             color: #d4d4d8;
+             background: #18181b;
+             border: 1px solid #27272a;
+             border-radius: 4px;
+             padding: 1px 4px;
+          }
+
+          .tech-issue-group {
+             margin: 6px 0;
+             border: 1px solid #27272a;
+             border-radius: 6px;
+             overflow: hidden;
+             background: #111114;
+          }
+
+          .tech-issue-group summary {
+             list-style: none;
+             cursor: pointer;
+             padding: 10px 12px;
+             font-size: 13px;
+             font-weight: 500;
+             color: #e4e4e7;
+             line-height: 1.35;
+          }
+
+          .tech-issue-group summary::-webkit-details-marker {
+             display: none;
+          }
+
+          .tech-issue-group[open] summary {
+             border-bottom: 1px solid #27272a;
+             background: #17171b;
+          }
+
+          .tech-issue-content {
+             padding: 8px 12px 12px;
+          }
+
+          .tech-issue-list .detail-item {
+             font-size: 12px;
+             color: #d4d4d8 !important;
+             word-break: break-word;
+          }
+
+          .copy-mcp-prompt-btn {
+             margin-top: 10px;
+             border: 1px solid #333;
+             background: #171717;
+             color: #f4f4f5;
+             font-size: 11px;
+             font-family: 'Funnel Sans', sans-serif;
+             padding: 6px 10px;
+             border-radius: 6px;
+             cursor: pointer;
+             transition: all 0.15s ease;
+          }
+
+          .copy-mcp-prompt-btn:hover {
+             background: #222;
+             border-color: #4a4a4f;
           }
         </style>
       `;
