@@ -83,6 +83,54 @@
       { regex: /sample\s+text/gi, name: 'Sample Text' }
     ];
 
+    static issueElementMap = new Map();
+
+    static isWidgetInjectedElement(el) {
+      if (!el || !el.closest) return false;
+      return Boolean(
+        el.closest('#plw-audit-container') ||
+        el.closest('[data-plw-widget-root="true"]')
+      );
+    }
+
+    static resetIssueTracking() {
+      this.issueElementMap = new Map();
+      this.clearIssueHighlights();
+    }
+
+    static trackIssueElement(el) {
+      if (!el || this.isWidgetInjectedElement(el)) return null;
+      const id = `plw-issue-${this.issueElementMap.size + 1}`;
+      this.issueElementMap.set(id, el);
+      return id;
+    }
+
+    static clearIssueHighlights() {
+      document.querySelectorAll('.plw-issue-highlight, .plw-issue-highlight-focus').forEach((node) => {
+        node.classList.remove('plw-issue-highlight', 'plw-issue-highlight-focus');
+      });
+    }
+
+    static highlightIssueElementsByIds(ids = [], options = {}) {
+      const { scroll = true, append = false } = options;
+      if (!append) this.clearIssueHighlights();
+
+      const elements = ids
+        .map((id) => this.issueElementMap.get(id))
+        .filter((el) => el && document.contains(el) && !this.isWidgetInjectedElement(el));
+
+      elements.forEach((el) => el.classList.add('plw-issue-highlight'));
+
+      if (scroll && elements.length > 0) {
+        const focusEl = elements[0];
+        focusEl.classList.add('plw-issue-highlight-focus');
+        focusEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        setTimeout(() => focusEl.classList.remove('plw-issue-highlight-focus'), 2200);
+      }
+
+      return elements.length;
+    }
+
     /**
      * Recursive text extraction that ensures spaces around block/interactive elements.
      * Prevents "CI-readyExecution" type fusion.
@@ -553,6 +601,7 @@
 
     static async audit(options = { spellcheck: true }) {
       const doc = document;
+      this.resetIssueTracking();
       
       // Extract content EXCLUDING nav/footer
       const mainContentText = this.extractMainContent();
@@ -709,7 +758,10 @@
       // Note: Images missing alt now in completeness, but keep global count in SEO
       const images = doc.querySelectorAll('img');
       let missingAlt = 0;
-      images.forEach(img => { if (!img.alt || img.alt.trim() === '') missingAlt++; });
+      images.forEach(img => {
+        if (this.isWidgetInjectedElement(img)) return;
+        if (!img.alt || img.alt.trim() === '') missingAlt++;
+      });
       if (missingAlt > 0) seoIssues.push(`${missingAlt} images missing alt text`);
 
       if (seoIssues.length > 0) {
@@ -742,13 +794,20 @@
       const unsafeLinkItems = [];
       const httpLinkItems = [];
       links.forEach(l => {
+         if (this.isWidgetInjectedElement(l)) return;
          const href = (l.getAttribute('href') || '').trim();
          const selector = this.getElementSelector(l);
          const text = this.getNodeText(l, 90) || '[no text]';
+         let elementId = null;
+         const getElementId = () => {
+           if (!elementId) elementId = this.trackIssueElement(l);
+           return elementId;
+         };
 
          if (!href || href === '#') {
             emptyLinks++;
             addDetail(emptyLinkItems, {
+              elementId: getElementId(),
               selector,
               text,
               href: href || '[missing]'
@@ -758,6 +817,7 @@
          if (l.target === '_blank' && (!l.rel || !/\bnoopener\b/i.test(l.rel))) {
             unsafeLinks++;
             addDetail(unsafeLinkItems, {
+              elementId: getElementId(),
               selector,
               text,
               href: href || l.href || '[missing]',
@@ -768,6 +828,7 @@
          if (href && href.startsWith('http:') && window.location.protocol === 'https:') {
             httpLinks++;
             addDetail(httpLinkItems, {
+              elementId: getElementId(),
               selector,
               text,
               href
@@ -809,9 +870,11 @@
       let clsImages = 0;
       const clsImageItems = [];
       images.forEach(i => {
+         if (this.isWidgetInjectedElement(i)) return;
          if (!i.hasAttribute('width') && !i.hasAttribute('height')) {
             clsImages++;
             addDetail(clsImageItems, {
+              elementId: this.trackIssueElement(i),
               selector: this.getElementSelector(i),
               src: i.currentSrc || i.getAttribute('src') || i.getAttribute('data-src') || '[missing]',
               alt: this.getNodeText(i, 80) || i.getAttribute('alt') || '[missing]',
@@ -836,9 +899,11 @@
       let noTypeBtns = 0;
       const noTypeButtonItems = [];
       btns.forEach(b => {
+         if (this.isWidgetInjectedElement(b)) return;
          if (!b.hasAttribute('type')) {
            noTypeBtns++;
            addDetail(noTypeButtonItems, {
+             elementId: this.trackIssueElement(b),
              selector: this.getElementSelector(b),
              text: this.getNodeText(b, 90) || '[no text]',
              type: '[missing]'
@@ -973,6 +1038,8 @@
         console.error("ProjectLinksWidget: Container not found");
         return;
       }
+
+      this.container.setAttribute('data-plw-widget-root', 'true');
 
       this.init();
     }
@@ -1122,8 +1189,11 @@
              
              .tab-content {
                  display: none;
-                 height: calc(85vh - 110px); /* Adjust based on header */
+                 height: auto;
+                 flex: 1 1 auto;
+                 min-height: 0;
                  flex-direction: column;
+                 overflow: hidden;
              }
              
              .tab-content.active {
@@ -1212,6 +1282,7 @@
                 right: 0; 
                 transform: translate(100%, -50%); /* Hidden by default */
                 width: 400px; /* Slightly wider */
+                height: 85vh;
                 max-height: 85vh;
                 background: #09090b;
                 border: 1px solid #27272a;
@@ -1220,6 +1291,7 @@
                 box-shadow: -10px 0 30px rgba(0,0,0,0.5);
                 display: flex;
                 flex-direction: column;
+                overflow: hidden;
                 z-index: 10001;
                 transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
              }
@@ -1250,7 +1322,9 @@
              .panel-content {
                 padding: 0;
                 overflow-y: auto;
-                /* Height handled by tab-content flex */
+                min-height: 0;
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
              }
              
              .close-standalone-btn {
@@ -1311,8 +1385,21 @@
                 color: #d4d4d8 !important;
                 word-break: break-word;
              }
-             .copy-mcp-prompt-btn {
+             .tech-item-row {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 8px;
+             }
+             .tech-issue-actions {
                 margin-top: 10px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+             }
+             .highlight-group-btn,
+             .issue-highlight-btn,
+             .copy-mcp-prompt-btn {
                 border: 1px solid #333;
                 background: #171717;
                 color: #f4f4f5;
@@ -1322,8 +1409,31 @@
                 border-radius: 6px;
                 cursor: pointer;
                 transition: all 0.15s ease;
+                white-space: nowrap;
              }
+             .highlight-group-btn:hover,
+             .issue-highlight-btn:hover,
              .copy-mcp-prompt-btn:hover { background: #222; border-color: #4a4a4f; }
+             .highlight-group-btn:disabled,
+             .issue-highlight-btn:disabled,
+             .copy-mcp-prompt-btn:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+             }
+             .plw-issue-highlight {
+                outline: 3px solid #f59e0b !important;
+                outline-offset: 2px !important;
+                box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22) !important;
+                transition: outline-color 0.2s ease, box-shadow 0.2s ease;
+             }
+             .plw-issue-highlight-focus {
+                animation: plw-highlight-pulse 1.4s ease;
+             }
+             @keyframes plw-highlight-pulse {
+                0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+                80% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+             }
              
              /* Colors */
              .stroke-green { stroke: #10b981; }
@@ -1348,6 +1458,12 @@
        const badge = document.getElementById('plw-audit-badge');
        const panel = document.getElementById('plw-standalone-panel');
        const closeBtn = document.getElementById('plw-close-standalone');
+       if (!badge || !panel || !closeBtn) return;
+
+       panel.querySelectorAll('.panel-content').forEach((scrollArea) => {
+         scrollArea.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
+         scrollArea.addEventListener('touchmove', (event) => event.stopPropagation(), { passive: true });
+       });
        
        badge.addEventListener('click', () => {
           panel.classList.add('open');
@@ -1534,22 +1650,26 @@
        if (tech.issues.length > 0) {
            const detailGroups = Array.isArray(tech.detailGroups) ? tech.detailGroups : [];
            const renderTechnicalItem = (groupKey, item) => {
+             const highlightButton = item.elementId
+               ? `<button type="button" class="issue-highlight-btn" data-highlight-id="${esc(item.elementId)}">Highlight</button>`
+               : '';
+
              if (groupKey === 'empty-links') {
-               return `<code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}" · href: <code>${esc(item.href || '[missing]')}</code>`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}" · href: <code>${esc(item.href || '[missing]')}</code></span>${highlightButton}</div>`;
              }
              if (groupKey === 'unsafe-links') {
-               return `<code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code> · rel: <code>${esc(item.rel || '[missing]')}</code>`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code> · rel: <code>${esc(item.rel || '[missing]')}</code></span>${highlightButton}</div>`;
              }
              if (groupKey === 'http-links') {
-               return `<code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code>`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code></span>${highlightButton}</div>`;
              }
              if (groupKey === 'cls-images') {
-               return `<code>${esc(item.selector || 'unknown')}</code> · src: <code>${esc(item.src || '[missing]')}</code> · width: <code>${esc(item.widthAttr || '[missing]')}</code> · height: <code>${esc(item.heightAttr || '[missing]')}</code>`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · src: <code>${esc(item.src || '[missing]')}</code> · width: <code>${esc(item.widthAttr || '[missing]')}</code> · height: <code>${esc(item.heightAttr || '[missing]')}</code></span>${highlightButton}</div>`;
              }
              if (groupKey === 'button-type') {
-               return `<code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}"`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}"</span>${highlightButton}</div>`;
              }
-             return esc(JSON.stringify(item || {}));
+             return `<div class="tech-item-row"><span>${esc(JSON.stringify(item || {}))}</span>${highlightButton}</div>`;
            };
 
            if (detailGroups.length > 0) {
@@ -1557,6 +1677,8 @@
                const items = Array.isArray(group.items) ? group.items : [];
                const count = typeof group.count === 'number' ? group.count : items.length;
                const visible = items.slice(0, 12);
+               const highlightIds = items.map((item) => item.elementId).filter(Boolean);
+               const encodedHighlightIds = encodeURIComponent(highlightIds.join(','));
                const hiddenCount = Math.max(0, count - visible.length);
                const prompt = ContentQualityAuditor.buildWebflowMcpPrompt(
                  group.key,
@@ -1574,7 +1696,10 @@
                         ${visible.length > 0 ? visible.map(item => `<div class="detail-item">• ${renderTechnicalItem(group.key, item)}</div>`).join('') : '<div class="detail-item">No element details captured.</div>'}
                         ${hiddenCount > 0 ? `<div class="detail-item">+ ${hiddenCount} more affected elements</div>` : ''}
                       </div>
-                      <button type="button" class="copy-mcp-prompt-btn" data-copy-prompt="${encodedPrompt}">Copy Webflow MCP Prompt</button>
+                      <div class="tech-issue-actions">
+                        <button type="button" class="highlight-group-btn" data-highlight-ids="${encodedHighlightIds}" ${highlightIds.length === 0 ? 'disabled' : ''}>Highlight On Page</button>
+                        <button type="button" class="copy-mcp-prompt-btn" data-copy-prompt="${encodedPrompt}">Copy Webflow MCP Prompt</button>
+                      </div>
                     </div>
                  </details>
                `;
@@ -1615,6 +1740,8 @@
 
        // Copy MCP prompts from technical issue blocks
        const copyButtons = content.querySelectorAll('.copy-mcp-prompt-btn[data-copy-prompt]');
+       const highlightButtons = content.querySelectorAll('.issue-highlight-btn[data-highlight-id]');
+       const highlightGroupButtons = content.querySelectorAll('.highlight-group-btn[data-highlight-ids]');
        const copyToClipboard = async (text) => {
          if (navigator.clipboard && navigator.clipboard.writeText) {
            await navigator.clipboard.writeText(text);
@@ -1630,6 +1757,13 @@
          document.execCommand('copy');
          document.body.removeChild(input);
        };
+       const flashButtonText = (button, nextText) => {
+         const originalText = button.textContent;
+         button.textContent = nextText;
+         setTimeout(() => {
+           button.textContent = originalText;
+         }, 1400);
+       };
 
        copyButtons.forEach((button) => {
          button.addEventListener('click', async (event) => {
@@ -1639,16 +1773,40 @@
            const prompt = encoded ? decodeURIComponent(encoded) : '';
            if (!prompt) return;
 
-           const originalText = button.textContent;
            try {
              await copyToClipboard(prompt);
-             button.textContent = 'Copied';
+             flashButtonText(button, 'Copied');
            } catch (e) {
-             button.textContent = 'Copy Failed';
+             flashButtonText(button, 'Copy Failed');
            }
-           setTimeout(() => {
-             button.textContent = originalText;
-           }, 1600);
+         });
+       });
+
+       highlightButtons.forEach((button) => {
+         button.addEventListener('click', (event) => {
+           event.preventDefault();
+           event.stopPropagation();
+           const id = button.getAttribute('data-highlight-id');
+           if (!id) return;
+
+           const highlighted = ContentQualityAuditor.highlightIssueElementsByIds([id], { scroll: true });
+           flashButtonText(button, highlighted > 0 ? 'Highlighted' : 'No Match');
+         });
+       });
+
+       highlightGroupButtons.forEach((button) => {
+         button.addEventListener('click', (event) => {
+           event.preventDefault();
+           event.stopPropagation();
+           const encodedIds = button.getAttribute('data-highlight-ids') || '';
+           const ids = encodedIds ? decodeURIComponent(encodedIds).split(',').filter(Boolean) : [];
+           if (ids.length === 0) {
+             flashButtonText(button, 'No Match');
+             return;
+           }
+
+           const highlighted = ContentQualityAuditor.highlightIssueElementsByIds(ids, { scroll: true });
+           flashButtonText(button, highlighted > 0 ? `Highlighted ${highlighted}` : 'No Match');
          });
        });
     }
@@ -2083,8 +2241,23 @@
              word-break: break-word;
           }
 
-          .copy-mcp-prompt-btn {
+          .tech-item-row {
+             display: flex;
+             align-items: flex-start;
+             justify-content: space-between;
+             gap: 8px;
+          }
+
+          .tech-issue-actions {
              margin-top: 10px;
+             display: flex;
+             flex-wrap: wrap;
+             gap: 8px;
+          }
+
+          .highlight-group-btn,
+          .issue-highlight-btn,
+          .copy-mcp-prompt-btn {
              border: 1px solid #333;
              background: #171717;
              color: #f4f4f5;
@@ -2094,11 +2267,38 @@
              border-radius: 6px;
              cursor: pointer;
              transition: all 0.15s ease;
+             white-space: nowrap;
           }
 
+          .highlight-group-btn:hover,
+          .issue-highlight-btn:hover,
           .copy-mcp-prompt-btn:hover {
              background: #222;
              border-color: #4a4a4f;
+          }
+
+          .highlight-group-btn:disabled,
+          .issue-highlight-btn:disabled,
+          .copy-mcp-prompt-btn:disabled {
+             opacity: 0.45;
+             cursor: not-allowed;
+          }
+
+          .plw-issue-highlight {
+             outline: 3px solid #f59e0b !important;
+             outline-offset: 2px !important;
+             box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22) !important;
+             transition: outline-color 0.2s ease, box-shadow 0.2s ease;
+          }
+
+          .plw-issue-highlight-focus {
+             animation: plw-highlight-pulse 1.4s ease;
+          }
+
+          @keyframes plw-highlight-pulse {
+             0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+             80% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+             100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
           }
         </style>
       `;
