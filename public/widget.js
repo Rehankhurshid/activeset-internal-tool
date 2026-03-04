@@ -780,9 +780,8 @@
       // 4. TECHNICAL HEALTH
       const techIssues = [];
       const technicalDetailGroups = [];
-      const MAX_TECH_DETAIL_ITEMS = 30;
       const addDetail = (arr, value) => {
-        if (arr.length < MAX_TECH_DETAIL_ITEMS) arr.push(value);
+        arr.push(value);
       };
       
       // Broken/Unsafe Links
@@ -1040,6 +1039,7 @@
       }
 
       this.container.setAttribute('data-plw-widget-root', 'true');
+      this.activeHighlightGroupKey = null;
 
       this.init();
     }
@@ -1189,15 +1189,17 @@
              
              .tab-content {
                  display: none;
-                 height: auto;
+                 height: 100%;
                  flex: 1 1 auto;
                  min-height: 0;
-                 flex-direction: column;
-                 overflow: hidden;
+                 overflow-y: auto;
+                 overflow-x: hidden;
+                 -webkit-overflow-scrolling: touch;
+                 overscroll-behavior: contain;
              }
              
              .tab-content.active {
-                 display: flex;
+                 display: block;
              }
 
              ::highlight(plw-typo) {
@@ -1321,10 +1323,8 @@
              
              .panel-content {
                 padding: 0;
-                overflow-y: auto;
                 min-height: 0;
-                -webkit-overflow-scrolling: touch;
-                overscroll-behavior: contain;
+                overflow: auto;
              }
              
              .close-standalone-btn {
@@ -1398,7 +1398,6 @@
                 gap: 8px;
              }
              .highlight-group-btn,
-             .issue-highlight-btn,
              .copy-mcp-prompt-btn {
                 border: 1px solid #333;
                 background: #171717;
@@ -1412,10 +1411,17 @@
                 white-space: nowrap;
              }
              .highlight-group-btn:hover,
-             .issue-highlight-btn:hover,
              .copy-mcp-prompt-btn:hover { background: #222; border-color: #4a4a4f; }
+             .highlight-group-btn.is-active {
+                background: #f59e0b;
+                border-color: #f59e0b;
+                color: #111827;
+             }
+             .highlight-group-btn.is-active:hover {
+                background: #fbbf24;
+                border-color: #fbbf24;
+             }
              .highlight-group-btn:disabled,
-             .issue-highlight-btn:disabled,
              .copy-mcp-prompt-btn:disabled {
                 opacity: 0.45;
                 cursor: not-allowed;
@@ -1459,11 +1465,6 @@
        const panel = document.getElementById('plw-standalone-panel');
        const closeBtn = document.getElementById('plw-close-standalone');
        if (!badge || !panel || !closeBtn) return;
-
-       panel.querySelectorAll('.panel-content').forEach((scrollArea) => {
-         scrollArea.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
-         scrollArea.addEventListener('touchmove', (event) => event.stopPropagation(), { passive: true });
-       });
        
        badge.addEventListener('click', () => {
           panel.classList.add('open');
@@ -1555,6 +1556,8 @@
        const content = document.getElementById('plw-panel-content');
        
        if(!badgeScore || !content) return;
+       ContentQualityAuditor.clearIssueHighlights();
+       this.activeHighlightGroupKey = null;
        
        // 1. Update Badge
        badgeScore.textContent = result.overallScore;
@@ -1650,26 +1653,22 @@
        if (tech.issues.length > 0) {
            const detailGroups = Array.isArray(tech.detailGroups) ? tech.detailGroups : [];
            const renderTechnicalItem = (groupKey, item) => {
-             const highlightButton = item.elementId
-               ? `<button type="button" class="issue-highlight-btn" data-highlight-id="${esc(item.elementId)}">Highlight</button>`
-               : '';
-
              if (groupKey === 'empty-links') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}" · href: <code>${esc(item.href || '[missing]')}</code></span>${highlightButton}</div>`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}" · href: <code>${esc(item.href || '[missing]')}</code></span></div>`;
              }
              if (groupKey === 'unsafe-links') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code> · rel: <code>${esc(item.rel || '[missing]')}</code></span>${highlightButton}</div>`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code> · rel: <code>${esc(item.rel || '[missing]')}</code></span></div>`;
              }
              if (groupKey === 'http-links') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code></span>${highlightButton}</div>`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code></span></div>`;
              }
              if (groupKey === 'cls-images') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · src: <code>${esc(item.src || '[missing]')}</code> · width: <code>${esc(item.widthAttr || '[missing]')}</code> · height: <code>${esc(item.heightAttr || '[missing]')}</code></span>${highlightButton}</div>`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · src: <code>${esc(item.src || '[missing]')}</code> · width: <code>${esc(item.widthAttr || '[missing]')}</code> · height: <code>${esc(item.heightAttr || '[missing]')}</code></span></div>`;
              }
              if (groupKey === 'button-type') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}"</span>${highlightButton}</div>`;
+               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}"</span></div>`;
              }
-             return `<div class="tech-item-row"><span>${esc(JSON.stringify(item || {}))}</span>${highlightButton}</div>`;
+             return `<div class="tech-item-row"><span>${esc(JSON.stringify(item || {}))}</span></div>`;
            };
 
            if (detailGroups.length > 0) {
@@ -1697,7 +1696,7 @@
                         ${hiddenCount > 0 ? `<div class="detail-item">+ ${hiddenCount} more affected elements</div>` : ''}
                       </div>
                       <div class="tech-issue-actions">
-                        <button type="button" class="highlight-group-btn" data-highlight-ids="${encodedHighlightIds}" ${highlightIds.length === 0 ? 'disabled' : ''}>Highlight On Page</button>
+                        <button type="button" class="highlight-group-btn" data-highlight-group="${esc(group.key || `group-${idx + 1}`)}" data-highlight-ids="${encodedHighlightIds}" aria-pressed="false" ${highlightIds.length === 0 ? 'disabled' : ''}>Highlight</button>
                         <button type="button" class="copy-mcp-prompt-btn" data-copy-prompt="${encodedPrompt}">Copy Webflow MCP Prompt</button>
                       </div>
                     </div>
@@ -1740,7 +1739,6 @@
 
        // Copy MCP prompts from technical issue blocks
        const copyButtons = content.querySelectorAll('.copy-mcp-prompt-btn[data-copy-prompt]');
-       const highlightButtons = content.querySelectorAll('.issue-highlight-btn[data-highlight-id]');
        const highlightGroupButtons = content.querySelectorAll('.highlight-group-btn[data-highlight-ids]');
        const copyToClipboard = async (text) => {
          if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1764,6 +1762,11 @@
            button.textContent = originalText;
          }, 1400);
        };
+       const setGroupHighlightButtonState = (button, isActive, count = 0) => {
+         button.classList.toggle('is-active', isActive);
+         button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+         button.textContent = isActive ? `Highlighted (${count})` : 'Highlight';
+       };
 
        copyButtons.forEach((button) => {
          button.addEventListener('click', async (event) => {
@@ -1782,22 +1785,12 @@
          });
        });
 
-       highlightButtons.forEach((button) => {
-         button.addEventListener('click', (event) => {
-           event.preventDefault();
-           event.stopPropagation();
-           const id = button.getAttribute('data-highlight-id');
-           if (!id) return;
-
-           const highlighted = ContentQualityAuditor.highlightIssueElementsByIds([id], { scroll: true });
-           flashButtonText(button, highlighted > 0 ? 'Highlighted' : 'No Match');
-         });
-       });
-
        highlightGroupButtons.forEach((button) => {
+         setGroupHighlightButtonState(button, false);
          button.addEventListener('click', (event) => {
            event.preventDefault();
            event.stopPropagation();
+           const groupKey = button.getAttribute('data-highlight-group') || '';
            const encodedIds = button.getAttribute('data-highlight-ids') || '';
            const ids = encodedIds ? decodeURIComponent(encodedIds).split(',').filter(Boolean) : [];
            if (ids.length === 0) {
@@ -1805,8 +1798,23 @@
              return;
            }
 
+           const isAlreadyActive = this.activeHighlightGroupKey === groupKey && button.classList.contains('is-active');
+           if (isAlreadyActive) {
+             ContentQualityAuditor.clearIssueHighlights();
+             this.activeHighlightGroupKey = null;
+             highlightGroupButtons.forEach((btn) => setGroupHighlightButtonState(btn, false));
+             return;
+           }
+
+           highlightGroupButtons.forEach((btn) => setGroupHighlightButtonState(btn, false));
            const highlighted = ContentQualityAuditor.highlightIssueElementsByIds(ids, { scroll: true });
-           flashButtonText(button, highlighted > 0 ? `Highlighted ${highlighted}` : 'No Match');
+           if (highlighted > 0) {
+             this.activeHighlightGroupKey = groupKey;
+             setGroupHighlightButtonState(button, true, highlighted);
+           } else {
+             this.activeHighlightGroupKey = null;
+             flashButtonText(button, 'No Match');
+           }
          });
        });
     }
@@ -2256,7 +2264,6 @@
           }
 
           .highlight-group-btn,
-          .issue-highlight-btn,
           .copy-mcp-prompt-btn {
              border: 1px solid #333;
              background: #171717;
@@ -2271,14 +2278,23 @@
           }
 
           .highlight-group-btn:hover,
-          .issue-highlight-btn:hover,
           .copy-mcp-prompt-btn:hover {
              background: #222;
              border-color: #4a4a4f;
           }
 
+          .highlight-group-btn.is-active {
+             background: #f59e0b;
+             border-color: #f59e0b;
+             color: #111827;
+          }
+
+          .highlight-group-btn.is-active:hover {
+             background: #fbbf24;
+             border-color: #fbbf24;
+          }
+
           .highlight-group-btn:disabled,
-          .issue-highlight-btn:disabled,
           .copy-mcp-prompt-btn:disabled {
              opacity: 0.45;
              cursor: not-allowed;
