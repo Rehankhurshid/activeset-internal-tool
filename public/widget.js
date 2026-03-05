@@ -508,6 +508,59 @@
       return this.truncate(text, max);
     }
 
+    static escapeRegExp(value) {
+      return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    static collectTextMatchDetails(pattern, options = {}) {
+      const maxItems = options.maxItems || 80;
+      const label = options.label || '';
+      const flags = pattern.flags ? (pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`) : 'g';
+      const regex = new RegExp(pattern.source, flags);
+      const details = [];
+
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let currentNode = walker.nextNode();
+
+      while (currentNode && details.length < maxItems) {
+        const parent = currentNode.parentElement;
+        if (!parent || this.isWidgetInjectedElement(parent)) {
+          currentNode = walker.nextNode();
+          continue;
+        }
+        if (parent.closest('script,style,noscript,svg,nav,footer')) {
+          currentNode = walker.nextNode();
+          continue;
+        }
+
+        const text = currentNode.nodeValue || '';
+        if (!text.trim()) {
+          currentNode = walker.nextNode();
+          continue;
+        }
+
+        regex.lastIndex = 0;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          const target = parent.closest('a,button,p,li,h1,h2,h3,h4,h5,h6,span,div,section,article') || parent;
+          details.push({
+            elementId: this.trackIssueElement(target),
+            selector: this.getElementSelector(target),
+            label,
+            match: this.truncate(match[0], 80),
+            snippet: this.truncate(text.trim(), 140),
+          });
+
+          if (details.length >= maxItems) break;
+          if (match.index === regex.lastIndex) regex.lastIndex += 1;
+        }
+
+        currentNode = walker.nextNode();
+      }
+
+      return details;
+    }
+
     static buildWebflowMcpPrompt(issueType, pageUrl, items = [], totalCount = items.length) {
       const maxItems = 15;
       const sample = items.slice(0, maxItems);
@@ -663,12 +716,21 @@
       };
 
       // 1. PLACEHOLDER DETECTION (CRITICAL) - uses mainContentText
+      const placeholderDetailItems = [];
       this.PLACEHOLDER_PATTERNS.forEach(pattern => {
         const matches = mainContentText.match(pattern.regex);
         if (matches && matches.length > 0) {
           result.categories.placeholders.issues.push({ type: pattern.name, count: matches.length });
+          const detailItems = this.collectTextMatchDetails(pattern.regex, {
+            maxItems: 120,
+            label: pattern.name,
+          });
+          placeholderDetailItems.push(...detailItems);
         }
       });
+      if (placeholderDetailItems.length > 0) {
+        result.categories.placeholders.detailItems = placeholderDetailItems;
+      }
 
       if (result.categories.placeholders.issues.length > 0) {
         result.categories.placeholders.status = 'failed';
@@ -727,6 +789,18 @@
       const uniqueTypos = [...new Set(typos)].slice(0, 10);
       if (uniqueTypos.length > 0 && uniqueTypos[0] !== 'Check Unavailable' && uniqueTypos[0] !== 'Skipped (Volume Limit)') {
         result.categories.spelling.issues = uniqueTypos.map(w => ({ word: w }));
+        const spellingDetailItems = [];
+        uniqueTypos.forEach((word) => {
+          const typoRegex = new RegExp(`\\b${this.escapeRegExp(word)}\\b`, 'gi');
+          const wordItems = this.collectTextMatchDetails(typoRegex, {
+            maxItems: 80,
+            label: word,
+          });
+          spellingDetailItems.push(...wordItems);
+        });
+        if (spellingDetailItems.length > 0) {
+          result.categories.spelling.detailItems = spellingDetailItems;
+        }
         result.categories.spelling.status = uniqueTypos.length > 3 ? 'warning' : 'info';
         result.categories.spelling.score = Math.max(0, 100 - (uniqueTypos.length * 5));
       } else if (uniqueTypos[0] === 'Skipped (Volume Limit)') {
@@ -740,6 +814,7 @@
 
       // 3. SEO & META (global checks, not just main content)
       const seoIssues = [];
+      const seoDetailItems = [];
       const isLowImpactSeoIssue = (issue) => /^(Title too short|Title too long|Meta Description too short|Meta Description too long)/i.test(issue);
       const isLowImpactCompletenessIssue = (issue) => (issue?.check || '').toLowerCase() === 'low word count';
       if (!doc.title) seoIssues.push('Missing Title tag');
@@ -753,19 +828,43 @@
 
       const h1s = doc.querySelectorAll('h1');
       if (h1s.length === 0) seoIssues.push('Missing H1 heading');
-      else if (h1s.length > 1) seoIssues.push(`Multiple H1 tags (${h1s.length})`);
+      else if (h1s.length > 1) {
+        seoIssues.push(`Multiple H1 tags (${h1s.length})`);
+        Array.from(h1s).forEach((h1) => {
+          if (this.isWidgetInjectedElement(h1)) return;
+          seoDetailItems.push({
+            elementId: this.trackIssueElement(h1),
+            selector: this.getElementSelector(h1),
+            label: 'Multiple H1 tags',
+            match: this.truncate(h1.textContent || '[empty]', 100),
+            snippet: this.truncate(h1.textContent || '[empty]', 140),
+          });
+        });
+      }
       
       // Note: Images missing alt now in completeness, but keep global count in SEO
       const images = doc.querySelectorAll('img');
       let missingAlt = 0;
       images.forEach(img => {
         if (this.isWidgetInjectedElement(img)) return;
-        if (!img.alt || img.alt.trim() === '') missingAlt++;
+        if (!img.alt || img.alt.trim() === '') {
+          missingAlt++;
+          seoDetailItems.push({
+            elementId: this.trackIssueElement(img),
+            selector: this.getElementSelector(img),
+            label: 'Image missing alt text',
+            match: this.truncate(img.currentSrc || img.getAttribute('src') || '[missing src]', 100),
+            snippet: this.truncate(`src: ${img.currentSrc || img.getAttribute('src') || '[missing]'} | alt: [missing]`, 140),
+          });
+        }
       });
       if (missingAlt > 0) seoIssues.push(`${missingAlt} images missing alt text`);
 
       if (seoIssues.length > 0) {
         result.categories.seo.issues = seoIssues;
+        if (seoDetailItems.length > 0) {
+          result.categories.seo.detailItems = seoDetailItems;
+        }
         const hasMajorSeoIssue = seoIssues.some(issue => !isLowImpactSeoIssue(issue));
         result.categories.seo.status = hasMajorSeoIssue ? 'warning' : 'info';
         const seoPenalty = seoIssues.reduce((sum, issue) => sum + (isLowImpactSeoIssue(issue) ? 0 : 15), 0);
@@ -1397,6 +1496,25 @@
                 flex-wrap: wrap;
                 gap: 8px;
              }
+             .category-issue-actions {
+                margin: 0 0 10px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+             }
+             .clickable-issue-item {
+                cursor: pointer;
+                border-radius: 6px;
+                padding: 6px 8px;
+                margin: 0 0 2px -8px;
+                transition: background 0.15s ease;
+             }
+             .clickable-issue-item:hover {
+                background: #15151a;
+             }
+             .clickable-issue-item.is-focused {
+                background: rgba(245, 158, 11, 0.18);
+             }
              .highlight-group-btn,
              .copy-mcp-prompt-btn {
                 border: 1px solid #333;
@@ -1616,11 +1734,42 @@
              ${hasDetails ? `<div class="cat-details collapsed" data-details-key="${key}" style="display: none;">${detailsHtml}</div>` : ''}
            `;
        };
+
+       const renderInteractiveDetails = (groupKey, items, itemRenderer, maxVisible = 12) => {
+         const detailItems = Array.isArray(items) ? items : [];
+         if (detailItems.length === 0) return '';
+
+         const visibleItems = detailItems.slice(0, maxVisible);
+         const hiddenCount = Math.max(0, detailItems.length - visibleItems.length);
+         const groupIds = detailItems.map((item) => item.elementId).filter(Boolean);
+         const encodedGroupIds = encodeURIComponent(groupIds.join(','));
+
+         const actionButton = groupIds.length > 0
+           ? `<div class="category-issue-actions"><button type="button" class="highlight-group-btn" data-highlight-group="${esc(groupKey)}" data-highlight-ids="${encodedGroupIds}" aria-pressed="false">Highlight</button></div>`
+           : '';
+
+         const listItems = visibleItems.map((item) => {
+           const itemIds = item.elementId ? encodeURIComponent(item.elementId) : '';
+           const className = itemIds ? 'detail-item clickable-issue-item' : 'detail-item';
+           const dataAttr = itemIds ? ` data-highlight-ids="${itemIds}"` : '';
+           return `<div class="${className}"${dataAttr}>• ${itemRenderer(item)}</div>`;
+         }).join('');
+
+         const moreLabel = hiddenCount > 0 ? `<div class="detail-item">+ ${hiddenCount} more</div>` : '';
+         return `${actionButton}${listItems}${moreLabel}`;
+       };
        
        // Placeholders
        const ph = result.categories.placeholders;
        let phDetails = '';
-       if (ph.issues.length > 0) {
+       if (Array.isArray(ph.detailItems) && ph.detailItems.length > 0) {
+           phDetails = renderInteractiveDetails(
+             'placeholders',
+             ph.detailItems,
+             (item) => `${esc(item.label || 'Placeholder')} · <code>${esc(item.selector || 'unknown')}</code> · "${esc(item.match || '[match]')}"`,
+             14
+           );
+       } else if (ph.issues.length > 0) {
            phDetails = ph.issues.map(i => `<div class="detail-item">• ${esc(i.type)}</div>`).join('');
        }
        html += renderRow('🔴', 'Placeholders', ph, phDetails);
@@ -1628,7 +1777,14 @@
        // Spelling
        const sp = result.categories.spelling;
        let spDetails = '';
-       if (sp.issues.length > 0) {
+       if (Array.isArray(sp.detailItems) && sp.detailItems.length > 0) {
+           spDetails = renderInteractiveDetails(
+             'spelling',
+             sp.detailItems,
+             (item) => `"${esc(item.label || item.match || '[word]')}" · <code>${esc(item.selector || 'unknown')}</code>`,
+             14
+           );
+       } else if (sp.issues.length > 0) {
            spDetails = sp.issues
              .slice(0, 5)
              .map(i => `<div class="detail-item">• "${esc(i.word)}"</div>`)
@@ -1642,7 +1798,14 @@
        // SEO & Meta
        const seo = result.categories.seo;
        let seoDetails = '';
-       if (seo.issues.length > 0) {
+       if (Array.isArray(seo.detailItems) && seo.detailItems.length > 0) {
+           seoDetails = renderInteractiveDetails(
+             'seo',
+             seo.detailItems,
+             (item) => `${esc(item.label || 'SEO issue')} · <code>${esc(item.selector || 'unknown')}</code>`,
+             14
+           );
+       } else if (seo.issues.length > 0) {
            seoDetails = seo.issues.map(i => `<div class="detail-item">• ${esc(i)}</div>`).join('');
        }
        html += renderRow('🔍', 'SEO & Meta', seo, seoDetails);
@@ -1692,11 +1855,16 @@
                     <summary>${esc(group.summary || `Issue ${idx + 1}`)}</summary>
                     <div class="tech-issue-content">
                       <div class="tech-issue-list">
-                        ${visible.length > 0 ? visible.map(item => `<div class="detail-item">• ${renderTechnicalItem(group.key, item)}</div>`).join('') : '<div class="detail-item">No element details captured.</div>'}
+                        ${visible.length > 0 ? visible.map(item => {
+                          const itemIds = item.elementId ? encodeURIComponent(item.elementId) : '';
+                          const className = itemIds ? 'detail-item clickable-issue-item' : 'detail-item';
+                          const attr = itemIds ? ` data-highlight-ids="${itemIds}"` : '';
+                          return `<div class="${className}"${attr}>• ${renderTechnicalItem(group.key, item)}</div>`;
+                        }).join('') : '<div class="detail-item">No element details captured.</div>'}
                         ${hiddenCount > 0 ? `<div class="detail-item">+ ${hiddenCount} more affected elements</div>` : ''}
                       </div>
                       <div class="tech-issue-actions">
-                        <button type="button" class="highlight-group-btn" data-highlight-group="${esc(group.key || `group-${idx + 1}`)}" data-highlight-ids="${encodedHighlightIds}" aria-pressed="false" ${highlightIds.length === 0 ? 'disabled' : ''}>Highlight</button>
+                        <button type="button" class="highlight-group-btn" data-highlight-group="${esc(`technical-${group.key || `group-${idx + 1}`}`)}" data-highlight-ids="${encodedHighlightIds}" aria-pressed="false" ${highlightIds.length === 0 ? 'disabled' : ''}>Highlight</button>
                         <button type="button" class="copy-mcp-prompt-btn" data-copy-prompt="${encodedPrompt}">Copy Webflow MCP Prompt</button>
                       </div>
                     </div>
@@ -1740,6 +1908,7 @@
        // Copy MCP prompts from technical issue blocks
        const copyButtons = content.querySelectorAll('.copy-mcp-prompt-btn[data-copy-prompt]');
        const highlightGroupButtons = content.querySelectorAll('.highlight-group-btn[data-highlight-ids]');
+       const clickableIssueItems = content.querySelectorAll('.clickable-issue-item[data-highlight-ids]');
        const copyToClipboard = async (text) => {
          if (navigator.clipboard && navigator.clipboard.writeText) {
            await navigator.clipboard.writeText(text);
@@ -1766,6 +1935,10 @@
          button.classList.toggle('is-active', isActive);
          button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
          button.textContent = isActive ? `Highlighted (${count})` : 'Highlight';
+       };
+       const clearGroupHighlightState = () => {
+         highlightGroupButtons.forEach((btn) => setGroupHighlightButtonState(btn, false));
+         this.activeHighlightGroupKey = null;
        };
 
        copyButtons.forEach((button) => {
@@ -1801,12 +1974,11 @@
            const isAlreadyActive = this.activeHighlightGroupKey === groupKey && button.classList.contains('is-active');
            if (isAlreadyActive) {
              ContentQualityAuditor.clearIssueHighlights();
-             this.activeHighlightGroupKey = null;
-             highlightGroupButtons.forEach((btn) => setGroupHighlightButtonState(btn, false));
+             clearGroupHighlightState();
              return;
            }
 
-           highlightGroupButtons.forEach((btn) => setGroupHighlightButtonState(btn, false));
+           clearGroupHighlightState();
            const highlighted = ContentQualityAuditor.highlightIssueElementsByIds(ids, { scroll: true });
            if (highlighted > 0) {
              this.activeHighlightGroupKey = groupKey;
@@ -1814,6 +1986,24 @@
            } else {
              this.activeHighlightGroupKey = null;
              flashButtonText(button, 'No Match');
+           }
+         });
+       });
+
+       clickableIssueItems.forEach((item) => {
+         item.addEventListener('click', (event) => {
+           event.preventDefault();
+           event.stopPropagation();
+           const encodedIds = item.getAttribute('data-highlight-ids') || '';
+           const ids = encodedIds ? decodeURIComponent(encodedIds).split(',').filter(Boolean) : [];
+           if (ids.length === 0) return;
+
+           clearGroupHighlightState();
+           const highlighted = ContentQualityAuditor.highlightIssueElementsByIds(ids, { scroll: true });
+           if (highlighted > 0) {
+             clickableIssueItems.forEach((node) => node.classList.remove('is-focused'));
+             item.classList.add('is-focused');
+             setTimeout(() => item.classList.remove('is-focused'), 1200);
            }
          });
        });
@@ -2261,6 +2451,29 @@
              display: flex;
              flex-wrap: wrap;
              gap: 8px;
+          }
+
+          .category-issue-actions {
+             margin: 0 0 10px;
+             display: flex;
+             flex-wrap: wrap;
+             gap: 8px;
+          }
+
+          .clickable-issue-item {
+             cursor: pointer;
+             border-radius: 6px;
+             padding: 6px 8px;
+             margin: 0 0 2px -8px;
+             transition: background 0.15s ease;
+          }
+
+          .clickable-issue-item:hover {
+             background: #15151a;
+          }
+
+          .clickable-issue-item.is-focused {
+             background: rgba(245, 158, 11, 0.18);
           }
 
           .highlight-group-btn,
