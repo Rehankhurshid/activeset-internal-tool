@@ -1360,20 +1360,46 @@
                 fill: none;
                 stroke-width: 3; /* Thicker stroke */
                 stroke-linecap: round;
-                animation: progress 1s ease-out forwards;
                 transition: stroke 0.3s;
              }
-             
-             @keyframes progress {
-                0% { stroke-dasharray: 0 100; }
-             }
-             
+
              .badge-score {
                 font-family: 'Funnel Display', sans-serif;
                 font-weight: 700;
                 font-size: 16px;
                 color: #fff;
                 z-index: 1;
+             }
+             
+             .badge-score.is-animating {
+                will-change: filter, opacity, transform;
+             }
+
+             .audit-badge.is-loading .circular-chart {
+                animation: plw-badge-rotate 1s linear infinite;
+                transform-origin: 50% 50%;
+             }
+
+             .audit-badge.is-loading .circle {
+                stroke-dasharray: 22, 100 !important;
+                transition: none;
+             }
+
+             .audit-badge.is-loading .badge-score {
+                animation: plw-badge-score-pulse 1s ease-in-out infinite;
+                filter: blur(1.4px);
+                opacity: 0.72;
+             }
+
+             @keyframes plw-badge-rotate {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+             }
+
+             @keyframes plw-badge-score-pulse {
+                0% { opacity: 0.58; filter: blur(2px); }
+                50% { opacity: 0.92; filter: blur(0.6px); }
+                100% { opacity: 0.58; filter: blur(2px); }
              }
              
              /* Panel Styles */
@@ -1615,8 +1641,74 @@
        // Run Initial Audit
        this.runStandaloneAudit();
     }
+
+    setBadgeLoadingState(isLoading) {
+       const badge = document.getElementById('plw-audit-badge');
+       const badgeScore = document.getElementById('plw-badge-score');
+       const scoreCircle = document.getElementById('plw-score-circle');
+       if (!badge || !badgeScore || !scoreCircle) return;
+
+       if (isLoading) {
+          badge.classList.add('is-loading');
+          scoreCircle.classList.remove('stroke-green', 'stroke-yellow', 'stroke-red');
+          scoreCircle.classList.add('stroke-yellow');
+          scoreCircle.setAttribute('stroke-dasharray', '0, 100');
+          badgeScore.textContent = '--';
+          badgeScore.dataset.value = '0';
+          badgeScore.style.filter = '';
+          badgeScore.style.opacity = '';
+       } else {
+          badge.classList.remove('is-loading');
+       }
+    }
+
+    animateBadgeToScore(targetScore) {
+       const badgeScore = document.getElementById('plw-badge-score');
+       const scoreCircle = document.getElementById('plw-score-circle');
+       if (!badgeScore || !scoreCircle) return;
+
+       const clampedTarget = Math.max(0, Math.min(100, Number(targetScore) || 0));
+       const startScore = 0;
+       const duration = 1100;
+       const startTime = performance.now();
+
+       badgeScore.classList.add('is-animating');
+       badgeScore.dataset.value = String(startScore);
+       scoreCircle.setAttribute('stroke-dasharray', '0, 100');
+
+       if (this.badgeAnimationFrame) {
+          cancelAnimationFrame(this.badgeAnimationFrame);
+       }
+
+       const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+       const step = (now) => {
+          const progress = Math.min(1, (now - startTime) / duration);
+          const eased = easeOutCubic(progress);
+          const scoreValue = Math.round(startScore + ((clampedTarget - startScore) * eased));
+          const ringValue = startScore + ((clampedTarget - startScore) * eased);
+
+          badgeScore.textContent = String(scoreValue);
+          badgeScore.dataset.value = String(scoreValue);
+          badgeScore.style.filter = `blur(${(1 - progress) * 6}px)`;
+          badgeScore.style.opacity = `${0.5 + (progress * 0.5)}`;
+          scoreCircle.setAttribute('stroke-dasharray', `${ringValue.toFixed(2)}, 100`);
+
+          if (progress < 1) {
+             this.badgeAnimationFrame = requestAnimationFrame(step);
+             return;
+          }
+
+          badgeScore.style.filter = 'none';
+          badgeScore.style.opacity = '1';
+          badgeScore.classList.remove('is-animating');
+          this.badgeAnimationFrame = null;
+       };
+
+       this.badgeAnimationFrame = requestAnimationFrame(step);
+    }
     
     async runStandaloneAudit() {
+       this.setBadgeLoadingState(true);
        // Small delay to ensure DOM is ready
        setTimeout(async () => {
           try {
@@ -1663,6 +1755,7 @@
 
           } catch (err) {
              console.error("Auto-Audit Failed:", err);
+             this.setBadgeLoadingState(false);
           }
        }, 500);
     }
@@ -1673,12 +1766,10 @@
        const badge = document.getElementById('plw-audit-badge');
        const content = document.getElementById('plw-panel-content');
        
-       if(!badgeScore || !content) return;
+       if(!badgeScore || !scoreCircle || !badge || !content) return;
        ContentQualityAuditor.clearIssueHighlights();
        this.activeHighlightGroupKey = null;
-       
-       // 1. Update Badge
-       badgeScore.textContent = result.overallScore;
+       this.setBadgeLoadingState(false);
        
        // Color Logic
        let colorClass = 'stroke-red';
@@ -1696,12 +1787,9 @@
        // Set Circle Stroke
        scoreCircle.classList.remove('stroke-green', 'stroke-yellow', 'stroke-red');
        scoreCircle.classList.add(colorClass);
-       
-       // Set Dash Array (Progress)
-       // Circumference approx 100 for pathLength=100 logic or simply use percent
-       // The SVG path has length ~100 via logic, let's just set dasharray
-       // result.overallScore, 100
-       scoreCircle.setAttribute('stroke-dasharray', `${result.overallScore}, 100`);
+
+       // Animate number + ring on data load
+       this.animateBadgeToScore(result.overallScore);
        
        // 2. Render Panel Content
        let html = `
