@@ -18,6 +18,7 @@ import { WebflowPagesDashboard } from '@/components/webflow/WebflowPagesDashboar
 import { WebflowConfig } from '@/types/webflow';
 import { toast } from 'sonner';
 import { ChecklistOverview } from '@/components/checklist/ChecklistOverview';
+import { ProjectTextCheckCard } from '@/components/projects/ProjectTextCheckCard';
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -213,6 +214,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         </div>
                     </div>
                 </div>
+
+                <ProjectTextCheckCard links={project.links} />
 
                 {/* Main Content */}
                 <Tabs defaultValue="audit" value={activeTab} onValueChange={setActiveTab} className="w-full">
