@@ -335,6 +335,39 @@ export interface Project {
   publicAuditShareUpdatedAt?: string;
 }
 
+export interface WebsiteTextCheckTarget {
+  id: string;
+  title: string;
+  url: string;
+}
+
+export interface WebsiteTextCheckMatch {
+  id: string;
+  title: string;
+  url: string;
+  occurrences: number;
+  snippets: string[];
+  titleTag?: string;
+}
+
+export interface WebsiteTextCheckError {
+  id: string;
+  title: string;
+  url: string;
+  message: string;
+}
+
+export interface WebsiteTextCheckResponse {
+  query: string;
+  normalizedQuery: string;
+  totalPages: number;
+  scannedPages: number;
+  matchedPages: number;
+  durationMs: number;
+  matches: WebsiteTextCheckMatch[];
+  errors: WebsiteTextCheckError[];
+}
+
 export type CreateProjectInput = Pick<Project, 'name' | 'userId'>;
 export type UpdateProjectInput = Partial<Pick<Project, 'name' | 'status' | 'tags'>>;
 
