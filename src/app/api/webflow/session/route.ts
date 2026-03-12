@@ -9,8 +9,6 @@ import {
     getDocs,
     serverTimestamp,
     Timestamp,
-    query,
-    where,
 } from 'firebase/firestore';
 
 // Types
@@ -27,9 +25,24 @@ interface SessionRequest {
     userName: string;
     projectPath?: string;
     action: 'claim' | 'heartbeat' | 'release';
+    reason?: 'manual' | 'kicked' | 'ownership_lost';
+}
+
+interface SessionOwner {
+    userName: string;
+    projectPath: string;
+}
+
+interface AccountHistory {
+    email: string;
+    lastUsedBy: string;
+    lastProjectPath: string;
+    lastLogoutReason: string;
+    lastLoggedOutAt: Timestamp;
 }
 
 const COLLECTION_NAME = 'webflow_sessions';
+const HISTORY_COLLECTION_NAME = 'webflow_account_history';
 // Stale threshold: 30 minutes (session persists when tab is closed)
 // Only released on explicit logout or claimed by another user
 const STALE_THRESHOLD_MS = 30 * 60 * 1000;
@@ -69,10 +82,49 @@ async function getAllSessions(): Promise<WebflowSession[]> {
     }));
 }
 
+async function getAccountHistoryMap(): Promise<Record<string, AccountHistory>> {
+    const historyRef = collection(db, HISTORY_COLLECTION_NAME);
+    const snapshot = await getDocs(historyRef);
+
+    return snapshot.docs.reduce<Record<string, AccountHistory>>((accumulator, docSnap) => {
+        accumulator[docSnap.id] = {
+            ...(docSnap.data() as AccountHistory),
+            email: docSnap.id,
+        };
+        return accumulator;
+    }, {});
+}
+
+async function writeAccountHistory(
+    email: string,
+    userName: string,
+    projectPath: string,
+    reason: string
+): Promise<void> {
+    const historyRef = doc(db, HISTORY_COLLECTION_NAME, email);
+    await setDoc(historyRef, {
+        lastUsedBy: userName,
+        lastProjectPath: projectPath || 'dashboard',
+        lastLogoutReason: reason,
+        lastLoggedOutAt: serverTimestamp(),
+    }, { merge: true });
+}
+
+function getSessionOwner(session: WebflowSession | undefined): SessionOwner | null {
+    if (!session?.userName) {
+        return null;
+    }
+
+    return {
+        userName: session.userName,
+        projectPath: session.projectPath || 'dashboard',
+    };
+}
+
 export async function POST(request: NextRequest) {
     try {
         const body: SessionRequest = await request.json();
-        const { email, userName, projectPath = '', action } = body;
+        const { email, userName, projectPath = '', action, reason = 'manual' } = body;
 
         if (!email || !userName) {
             return NextResponse.json(
@@ -85,6 +137,9 @@ export async function POST(request: NextRequest) {
         await cleanupStaleSessions();
 
         const sessionRef = doc(db, COLLECTION_NAME, email);
+        let ownershipLost = false;
+        let currentOwner: SessionOwner | null = null;
+        let released = false;
 
         switch (action) {
             case 'claim':
@@ -101,8 +156,9 @@ export async function POST(request: NextRequest) {
                 // Only update if this user owns the session (check first)
                 // This prevents other user's heartbeats from overriding a claim
                 const currentSession = await getDoc(sessionRef);
+                const currentSessionData = currentSession.data() as WebflowSession | undefined;
 
-                if (!currentSession.exists() || currentSession.data()?.userName === userName) {
+                if (!currentSession.exists() || currentSessionData?.userName === userName) {
                     // Update lastActive and project path
                     await setDoc(
                         sessionRef,
@@ -114,15 +170,37 @@ export async function POST(request: NextRequest) {
                         { merge: true }
                     );
                 } else {
-                    // Session was claimed by someone else - this user should release
-                    console.log(`Heartbeat rejected: ${userName} != ${currentSession.data()?.userName}`);
+                    ownershipLost = true;
+                    currentOwner = getSessionOwner(currentSessionData);
+                    console.log(`Heartbeat rejected: ${userName} != ${currentSessionData?.userName}`);
                 }
                 break;
 
-            case 'release':
-                // Delete session on logout
-                await deleteDoc(sessionRef);
+            case 'release': {
+                const currentSession = await getDoc(sessionRef);
+                const currentSessionData = currentSession.data() as WebflowSession | undefined;
+
+                if (!currentSession.exists()) {
+                    released = true;
+                    break;
+                }
+
+                if (currentSessionData?.userName === userName) {
+                    await writeAccountHistory(
+                        email,
+                        userName,
+                        currentSessionData?.projectPath || projectPath || 'dashboard',
+                        reason
+                    );
+                    await deleteDoc(sessionRef);
+                    released = true;
+                } else {
+                    ownershipLost = true;
+                    currentOwner = getSessionOwner(currentSessionData);
+                    console.log(`Release rejected: ${userName} != ${currentSessionData?.userName}`);
+                }
                 break;
+            }
 
             default:
                 return NextResponse.json(
@@ -133,10 +211,15 @@ export async function POST(request: NextRequest) {
 
         // Return all active sessions for popup display
         const sessions = await getAllSessions();
+        const accountHistory = await getAccountHistoryMap();
 
         return NextResponse.json({
             success: true,
             sessions,
+            accountHistory,
+            ownershipLost,
+            currentOwner,
+            released,
         });
     } catch (error) {
         console.error('Webflow session error:', error);
@@ -156,10 +239,12 @@ export async function GET() {
         await cleanupStaleSessions();
 
         const sessions = await getAllSessions();
+        const accountHistory = await getAccountHistoryMap();
 
         return NextResponse.json({
             success: true,
             sessions,
+            accountHistory,
         });
     } catch (error) {
         console.error('Webflow session error:', error);

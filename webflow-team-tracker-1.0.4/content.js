@@ -119,57 +119,28 @@
     container.style.display = 'none';
     container.style.marginTop = '8px';
     container.style.padding = '10px 12px';
-    container.style.borderRadius = '12px';
+    container.style.borderRadius = '8px';
     container.style.fontSize = '12px';
-    container.style.lineHeight = '1.4';
+    container.style.lineHeight = '1.45';
     container.style.fontFamily = 'Inter, system-ui, sans-serif';
-    container.style.border = '1px solid rgba(15, 23, 42, 0.08)';
-    container.style.background = '#ffffff';
-    container.style.color = '#111827';
-    container.style.boxShadow = '0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.04)';
-    container.style.display = 'none';
-
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.alignItems = 'flex-start';
-    row.style.gap = '10px';
-
-    const icon = document.createElement('div');
-    icon.style.width = '18px';
-    icon.style.height = '18px';
-    icon.style.marginTop = '1px';
-    icon.style.flexShrink = '0';
-    icon.style.borderRadius = '999px';
-    icon.style.display = 'flex';
-    icon.style.alignItems = 'center';
-    icon.style.justifyContent = 'center';
-    icon.style.fontSize = '11px';
-    icon.style.fontWeight = '700';
-
-    const copy = document.createElement('div');
-    copy.style.minWidth = '0';
+    container.style.border = '1px solid rgba(255,255,255,0.12)';
+    container.style.background = 'rgba(17, 24, 39, 0.92)';
+    container.style.color = '#e5e7eb';
 
     const title = document.createElement('div');
     title.style.fontWeight = '600';
-    title.style.fontSize = '13px';
-    title.style.letterSpacing = '-0.01em';
     title.style.marginBottom = '2px';
 
     const detail = document.createElement('div');
-    detail.style.fontSize = '12px';
-    detail.style.lineHeight = '1.45';
-    detail.style.color = '#6b7280';
+    detail.style.color = 'rgba(229, 231, 235, 0.82)';
 
-    copy.appendChild(title);
-    copy.appendChild(detail);
-    row.appendChild(icon);
-    row.appendChild(copy);
-    container.appendChild(row);
+    container.appendChild(title);
+    container.appendChild(detail);
 
     const target = emailInput.closest('[data-sc="FormGroup Stack"]') || emailInput.parentElement;
     target?.appendChild(container);
 
-    loginWarningUi = { container, row, icon, title, detail };
+    loginWarningUi = { container, title, detail };
     return loginWarningUi;
   }
 
@@ -184,40 +155,24 @@
 
     const styles = {
       info: {
-        border: '1px solid rgba(59, 130, 246, 0.18)',
-        background: '#f8fbff',
-        title: '#1d4ed8',
-        detail: '#5b6b82',
-        iconBg: '#dbeafe',
-        iconColor: '#2563eb',
-        iconText: 'i',
+        border: '1px solid rgba(96, 165, 250, 0.35)',
+        background: 'rgba(30, 64, 175, 0.18)',
+        title: '#bfdbfe',
       },
       success: {
-        border: '1px solid rgba(34, 197, 94, 0.2)',
-        background: '#f3fbf5',
-        title: '#15803d',
-        detail: '#5f6f63',
-        iconBg: '#dcfce7',
-        iconColor: '#16a34a',
-        iconText: '✓',
+        border: '1px solid rgba(74, 222, 128, 0.35)',
+        background: 'rgba(21, 128, 61, 0.16)',
+        title: '#86efac',
       },
       warning: {
-        border: '1px solid rgba(245, 158, 11, 0.24)',
-        background: '#fff9ef',
-        title: '#b45309',
-        detail: '#7c5a22',
-        iconBg: '#fef3c7',
-        iconColor: '#b45309',
-        iconText: '!',
+        border: '1px solid rgba(251, 191, 36, 0.4)',
+        background: 'rgba(146, 64, 14, 0.18)',
+        title: '#fde68a',
       },
       error: {
-        border: '1px solid rgba(239, 68, 68, 0.22)',
-        background: '#fff5f5',
-        title: '#b91c1c',
-        detail: '#7f1d1d',
-        iconBg: '#fee2e2',
-        iconColor: '#dc2626',
-        iconText: '!',
+        border: '1px solid rgba(248, 113, 113, 0.4)',
+        background: 'rgba(127, 29, 29, 0.2)',
+        title: '#fca5a5',
       }
     };
 
@@ -226,10 +181,6 @@
     ui.container.style.border = currentStyle.border;
     ui.container.style.background = currentStyle.background;
     ui.title.style.color = currentStyle.title;
-    ui.detail.style.color = currentStyle.detail;
-    ui.icon.style.background = currentStyle.iconBg;
-    ui.icon.style.color = currentStyle.iconColor;
-    ui.icon.textContent = currentStyle.iconText;
     ui.title.textContent = titleText;
     ui.detail.textContent = detailText;
   }
