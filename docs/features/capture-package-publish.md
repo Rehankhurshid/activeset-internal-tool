@@ -2,12 +2,12 @@
 
 ## Package Location
 
-- `/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/activeset-capture`
+- `packages/activeset-capture`
 
 ## Local Validation
 
 ```bash
-cd "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget"
+cd /workspace/activeset-internal-tool
 npm --prefix packages/activeset-capture run build
 node packages/activeset-capture/dist/bin/activeset-capture.js --help
 node packages/activeset-capture/dist/bin/capture-local.js --help
