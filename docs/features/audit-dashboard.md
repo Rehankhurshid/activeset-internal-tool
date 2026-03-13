@@ -2,7 +2,7 @@
 
 > **Purpose**: Real-time content quality monitoring for web pages with automatic change detection, spell checking, SEO analysis, and deployment gating.
 
-![Audit Dashboard Screenshot](/Users/nayyarkhurshid/.gemini/antigravity/brain/10d01505-77bd-4988-9a76-aefd7f9bf1e0/uploaded_image_1767397819284.png)
+> Screenshot omitted in repo docs (local image path removed).
 
 ---
 
@@ -96,7 +96,7 @@ When `widget.js` loads on a client's website:
 
 | File | Purpose | Key Functions |
 |------|---------|---------------|
-| [widget.js](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/public/widget.js) | Embedded script for client sites | `ContentQualityAuditor.audit()`, `initContentAudit()` |
+| [widget.js](public/widget.js) | Embedded script for client sites | `ContentQualityAuditor.audit()`, `initContentAudit()` |
 
 <!-- slide -->
 
@@ -104,20 +104,20 @@ When `widget.js` loads on a client's website:
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| [/api/save-audit](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/save-audit/route.ts) | POST | **Main sync endpoint** - saves audit, computes diffs, logs changes |
-| [/api/scan-pages](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-pages/route.ts) | POST | Server-side page scan with field change detection |
-| [/api/scan-bulk](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-bulk/route.ts) | POST | Bulk page scanning for multiple URLs |
-| [/api/scan-bulk/status](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-bulk/status/route.ts) | GET | Poll bulk scan progress |
-| [/api/scan-bulk/running](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-bulk/running/route.ts) | GET | Check for running scans (resume detection) |
-| [/api/scan-bulk/cancel](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-bulk/cancel/route.ts) | POST | Cancel an in-progress bulk scan |
-| [/api/audit](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/audit/route.ts) | POST | AI-powered content analysis via Gemini |
-| [/api/check-text](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/check-text/route.ts) | POST | Spell checking via LanguageTool (with nspell fallback) |
-| [/api/audit-config](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/audit-config/route.ts) | POST | Cost control - disables spellcheck for high-volume folders (>20 pages) |
-| [/api/scan-sitemap](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/scan-sitemap/route.ts) | POST | Auto-discovers pages from sitemap.xml |
-| [/api/capture-screenshot](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/capture-screenshot/route.ts) | POST | Manual on-demand screenshot capture |
-| [/api/compare-screenshots](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/compare-screenshots/route.ts) | POST | Server-side image diff using pixelmatch |
-| [/api/audit-logs/previous](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/audit-logs/previous/route.ts) | GET | Fetches current + previous HTML versions for comparison |
-| [/api/proxy-image](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/proxy-image/route.ts) | GET | Proxies external images to avoid CORS issues |
+| [/api/save-audit](src/app/api/save-audit/route.ts) | POST | **Main sync endpoint** - saves audit, computes diffs, logs changes |
+| [/api/scan-pages](src/app/api/scan-pages/route.ts) | POST | Server-side page scan with field change detection |
+| [/api/scan-bulk](src/app/api/scan-bulk/route.ts) | POST | Bulk page scanning for multiple URLs |
+| [/api/scan-bulk/status](src/app/api/scan-bulk/status/route.ts) | GET | Poll bulk scan progress |
+| [/api/scan-bulk/running](src/app/api/scan-bulk/running/route.ts) | GET | Check for running scans (resume detection) |
+| [/api/scan-bulk/cancel](src/app/api/scan-bulk/cancel/route.ts) | POST | Cancel an in-progress bulk scan |
+| [/api/audit](src/app/api/audit/route.ts) | POST | AI-powered content analysis via Gemini |
+| [/api/check-text](src/app/api/check-text/route.ts) | POST | Spell checking via LanguageTool (with nspell fallback) |
+| [/api/audit-config](src/app/api/audit-config/route.ts) | POST | Cost control - disables spellcheck for high-volume folders (>20 pages) |
+| [/api/scan-sitemap](src/app/api/scan-sitemap/route.ts) | POST | Auto-discovers pages from sitemap.xml |
+| [/api/capture-screenshot](src/app/api/capture-screenshot/route.ts) | POST | Manual on-demand screenshot capture |
+| [/api/compare-screenshots](src/app/api/compare-screenshots/route.ts) | POST | Server-side image diff using pixelmatch |
+| [/api/audit-logs/previous](src/app/api/audit-logs/previous/route.ts) | GET | Fetches current + previous HTML versions for comparison |
+| [/api/proxy-image](src/app/api/proxy-image/route.ts) | GET | Proxies external images to avoid CORS issues |
 
 <!-- slide -->
 
@@ -125,8 +125,8 @@ When `widget.js` loads on a client's website:
 
 | Service | Collection | Purpose |
 |---------|------------|---------|
-| [AuditService.ts](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/services/AuditService.ts) | `audit_logs` | Stores full HTML source + diff patches for historical comparison |
-| [ChangeLogService.ts](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/services/ChangeLogService.ts) | `content_changes` | Stores structured change entries for timeline UI |
+| [AuditService.ts](src/services/AuditService.ts) | `audit_logs` | Stores full HTML source + diff patches for historical comparison |
+| [ChangeLogService.ts](src/services/ChangeLogService.ts) | `content_changes` | Stores structured change entries for timeline UI |
 
 <!-- slide -->
 
@@ -134,15 +134,15 @@ When `widget.js` loads on a client's website:
 
 | Component | Purpose |
 |-----------|---------|
-| [website-audit-dashboard.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/website-audit-dashboard.tsx) | Main dashboard with KPIs, filters, hierarchical page table |
-| [page-details.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/page-details.tsx) | Single page view with scan history, visual QA, diff viewer |
-| [change-log-timeline.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/change-log-timeline.tsx) | Timeline of content changes with collapsible cards |
-| [AuditDetailDialog.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/projects/AuditDetailDialog.tsx) | Modal with tabbed category breakdown |
-| [scan-sitemap-dialog.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/scan-sitemap-dialog.tsx) | Dialog for scanning sitemaps and discovering pages |
-| [social-card-preview.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/social-card-preview.tsx) | Facebook/Twitter/LinkedIn social card mockups |
-| [screenshot-diff.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/screenshot-diff.tsx) | Visual screenshot comparison with diff overlay |
-| [html-preview.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/html-preview.tsx) | Sandboxed iframe HTML previews (current/previous) |
-| [change-diff-viewer.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/change-diff-viewer.tsx) | Field-by-field change display with inline diffs |
+| [website-audit-dashboard.tsx](src/components/website-audit-dashboard.tsx) | Main dashboard with KPIs, filters, hierarchical page table |
+| [page-details.tsx](src/components/page-details.tsx) | Single page view with scan history, visual QA, diff viewer |
+| [change-log-timeline.tsx](src/components/change-log-timeline.tsx) | Timeline of content changes with collapsible cards |
+| [AuditDetailDialog.tsx](src/components/projects/AuditDetailDialog.tsx) | Modal with tabbed category breakdown |
+| [scan-sitemap-dialog.tsx](src/components/scan-sitemap-dialog.tsx) | Dialog for scanning sitemaps and discovering pages |
+| [social-card-preview.tsx](src/components/social-card-preview.tsx) | Facebook/Twitter/LinkedIn social card mockups |
+| [screenshot-diff.tsx](src/components/screenshot-diff.tsx) | Visual screenshot comparison with diff overlay |
+| [html-preview.tsx](src/components/html-preview.tsx) | Sandboxed iframe HTML previews (current/previous) |
+| [change-diff-viewer.tsx](src/components/change-diff-viewer.tsx) | Field-by-field change display with inline diffs |
 
 ### Hierarchical Page Grouping
 
@@ -175,7 +175,7 @@ Each level is collapsible and shows a count badge.
 
 ## Type Definitions
 
-All types are in [types/index.ts](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/types/index.ts):
+All types are in [types/index.ts](src/types/index.ts):
 
 ```typescript
 // Change classification
@@ -615,11 +615,11 @@ The widget:
 
 | Task | Primary Files |
 |------|---------------|
-| Add new audit category | [widget.js](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/public/widget.js#L45-L666) → `ContentQualityAuditor`, [types/index.ts](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/types/index.ts#L38-L72) → `AuditResult.categories` |
-| Add new field to track | [save-audit/route.ts](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/app/api/save-audit/route.ts#L56-L191) → `computeFieldChanges()` |
-| Modify dashboard UI | [website-audit-dashboard.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/website-audit-dashboard.tsx) |
-| Modify page details | [page-details.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/page-details.tsx) |
-| Modify change timeline | [change-log-timeline.tsx](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/src/components/change-log-timeline.tsx) |
+| Add new audit category | [widget.js](public/widget.js#L45-L666) → `ContentQualityAuditor`, [types/index.ts](src/types/index.ts#L38-L72) → `AuditResult.categories` |
+| Add new field to track | [save-audit/route.ts](src/app/api/save-audit/route.ts#L56-L191) → `computeFieldChanges()` |
+| Modify dashboard UI | [website-audit-dashboard.tsx](src/components/website-audit-dashboard.tsx) |
+| Modify page details | [page-details.tsx](src/components/page-details.tsx) |
+| Modify change timeline | [change-log-timeline.tsx](src/components/change-log-timeline.tsx) |
 
 ---
 
@@ -790,6 +790,6 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
 
 ## Related Features
 
-- **Webflow Pages**: [webflow-pages.md](file:///Users/nayyarkhurshid/Desktop/Widget%20Folders/project-links-widget/docs/features/webflow-pages.md) - SEO editing for Webflow-hosted sites
+- **Webflow Pages**: [webflow-pages.md](docs/features/webflow-pages.md) - SEO editing for Webflow-hosted sites
 - **Link Management**: Manual link CRUD with drag-and-drop reordering
 - **Proposal Generator**: AI-powered proposal creation
