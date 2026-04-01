@@ -454,7 +454,7 @@ export function ChecklistOverview({
                                 <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden">
                                     <div
                                         className={cn(
-                                            'h-full rounded-full transition-all duration-700',
+                                            'h-full rounded-full transition-[width] duration-400 ease-out',
                                             progress.percent === 100
                                                 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400'
                                                 : progress.percent > 50

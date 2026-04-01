@@ -72,8 +72,10 @@ export function ScanActivityIndicator() {
           setScans(Array.isArray(data.scans) ? data.scans : []);
           setIsLoading(false);
         }
-      } catch (error) {
-        if (!disposed && !(error instanceof DOMException && error.name === 'AbortError')) {
+      } catch (error: unknown) {
+        const isAbort = error instanceof DOMException && error.name === 'AbortError'
+          || (error instanceof Error && error.name === 'AbortError');
+        if (!disposed && !isAbort) {
           setIsLoading(false);
         }
       } finally {

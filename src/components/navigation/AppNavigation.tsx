@@ -23,7 +23,8 @@ import {
   Sparkles,
   Lock,
   Loader2,
-  MonitorSmartphone
+  MonitorSmartphone,
+  PenLine
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -109,6 +110,14 @@ export function AppNavigation({
                 label="Screenshot Runner"
                 hasAccess={projectLinksAccess}
                 loading={accessLoading}
+              />
+              <NavigationLink
+                href="/modules/seo-engine"
+                icon={<PenLine className="h-4 w-4" />}
+                label="SEO Engine"
+                hasAccess={true}
+                loading={false}
+                badge={<Sparkles className="h-3 w-3" />}
               />
             </nav>
           )}
@@ -201,6 +210,15 @@ export function AppNavigation({
                       label="Screenshot Runner"
                       hasAccess={projectLinksAccess}
                       loading={accessLoading}
+                      onClick={() => setMobileMenuOpen(false)}
+                    />
+                    <MobileNavLink
+                      href="/modules/seo-engine"
+                      icon={<PenLine className="h-4 w-4" />}
+                      label="SEO Engine"
+                      hasAccess={true}
+                      loading={false}
+                      badge={<Sparkles className="h-3 w-3" />}
                       onClick={() => setMobileMenuOpen(false)}
                     />
                   </nav>

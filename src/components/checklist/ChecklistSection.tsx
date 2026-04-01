@@ -146,7 +146,7 @@ export function ChecklistSectionBlock({
                                 <div className="mt-1.5">
                                     <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                                         <div
-                                            className={cn('h-full rounded-full transition-all duration-500', progressColor)}
+                                            className={cn('h-full rounded-full transition-[width] duration-300 ease-out', progressColor)}
                                             style={{ width: `${progress.percent}%` }}
                                         />
                                     </div>

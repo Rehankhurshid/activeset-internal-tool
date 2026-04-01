@@ -97,7 +97,7 @@ function ScoreRing({ score, size = 120, strokeWidth = 10 }: { score: number; siz
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
-          className="transition-all duration-1000 ease-out"
+          className="transition-[stroke-dashoffset] duration-700 ease-out"
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
