@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,8 +27,28 @@ export function SEODashboard() {
   const [selectedTopic, setSelectedTopic] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('how-to');
   const [previewItem, setPreviewItem] = useState<QueueItem | null>(null);
-  const [config, setConfig] = useState<SEOConfig>({ siteId: '', collectionId: '', apiToken: '', claudeKey: '' });
-  const [automation, setAutomation] = useState<AutomationConfig>({ enabled: false, time: '09:00', perDay: 1, autoPublish: false });
+  const [config, setConfig] = useState<SEOConfig>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('seo-engine-config');
+      if (saved) return JSON.parse(saved);
+    }
+    return { siteId: '', collectionId: '', apiToken: '', claudeKey: '' };
+  });
+  const [automation, setAutomation] = useState<AutomationConfig>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('seo-engine-automation');
+      if (saved) return JSON.parse(saved);
+    }
+    return { enabled: false, time: '09:00', perDay: 1, autoPublish: false };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('seo-engine-config', JSON.stringify(config));
+  }, [config]);
+
+  useEffect(() => {
+    localStorage.setItem('seo-engine-automation', JSON.stringify(automation));
+  }, [automation]);
   const [publishingId, setPublishingId] = useState<number | null>(null);
 
   // Flatten keywords
