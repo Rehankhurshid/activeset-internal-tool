@@ -125,7 +125,7 @@ export function ChecklistWidget({
                                 <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
                                     <div
                                         className={cn(
-                                            'h-full rounded-full transition-all duration-500',
+                                            'h-full rounded-full transition-[width] duration-300 ease-out',
                                             percent === 100
                                                 ? 'bg-emerald-500'
                                                 : percent > 50

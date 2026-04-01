@@ -75,7 +75,7 @@ export function ChecklistProgressBadge({ projectId, className }: ChecklistProgre
                         fill="none"
                         strokeWidth="2.5"
                         strokeLinecap="round"
-                        className={cn('transition-all duration-500', ringColor)}
+                        className={cn('transition-[stroke-dashoffset] duration-300 ease-out', ringColor)}
                         strokeDasharray={circumference}
                         strokeDashoffset={strokeDashoffset}
                     />

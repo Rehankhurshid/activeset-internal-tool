@@ -6,7 +6,7 @@ import { LoginForm } from '@/components/auth/LoginForm';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { FolderOpen, FileText, Sparkles, Lock, ListChecks } from 'lucide-react';
+import { FolderOpen, FileText, Sparkles, Lock, ListChecks, PenLine } from 'lucide-react';
 import { AppNavigation } from '@/components/navigation/AppNavigation';
 import { cn } from '@/lib/utils';
 
@@ -68,10 +68,10 @@ export default function Home() {
 
     return (
       <Link href={href} className="block group h-full">
-        <Card className="h-full transition-all hover:border-primary hover:shadow-lg hover:shadow-primary/5 group-hover:scale-[1.02] duration-200">
+        <Card className="h-full transition-shadow duration-200 ease-out hover:border-primary hover:shadow-lg hover:shadow-primary/5 group-hover:scale-[1.02] group-active:scale-[0.98]">
           <CardHeader>
             <div className={cn(
-              "mb-4 w-12 h-12 rounded-lg flex items-center justify-center transition-all group-hover:scale-110",
+              "mb-4 w-12 h-12 rounded-lg flex items-center justify-center transition-transform duration-200 ease-out group-hover:scale-110",
               iconBg
             )}>
               {icon}
@@ -146,6 +146,21 @@ export default function Home() {
               <div className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
                 <Sparkles className="h-3 w-3" />
                 <span>New</span>
+              </div>
+            )}
+
+            {/* SEO Engine Module */}
+            {renderModuleCard(
+              "/modules/seo-engine",
+              <PenLine className="h-6 w-6 text-teal-500" />,
+              "bg-teal-500/10 dark:bg-teal-500/20",
+              "SEO Engine",
+              "AI-powered blog generation with Claude API and Webflow CMS publishing.",
+              true,
+              false,
+              <div className="flex items-center gap-1.5 text-xs text-teal-500 font-medium">
+                <Sparkles className="h-3 w-3" />
+                <span>AI Powered</span>
               </div>
             )}
           </div>
