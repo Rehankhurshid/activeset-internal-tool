@@ -1,62 +1,98 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getScanProgress } from '@/lib/scan-progress-store';
+import { waitUntil } from '@vercel/functions';
+import { getRequestBaseUrl, triggerScanJobProcessing } from '@/lib/scan-job-dispatch';
+import { calculateScanPercentage, getScanJob, shouldKickScanJob } from '@/services/ScanJobService';
+import {
+  ensureScanNotificationQueued,
+  getScanNotificationJob,
+  processQueuedScanNotification,
+} from '@/services/ScanNotificationQueueService';
 
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
 };
 
 export async function OPTIONS() {
-    return NextResponse.json({}, { headers: corsHeaders });
+  return NextResponse.json({}, { headers: corsHeaders });
 }
 
-/**
- * GET /api/scan-bulk/status?scanId=xxx
- * Returns the current progress of a bulk scan operation
- */
 export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const scanId = searchParams.get('scanId');
+  const { searchParams } = new URL(request.url);
+  const scanId = searchParams.get('scanId');
 
-    if (!scanId) {
-        return NextResponse.json(
-            { error: 'Missing scanId parameter' },
-            { status: 400, headers: corsHeaders }
+  if (!scanId) {
+    return NextResponse.json(
+      { error: 'Missing scanId parameter' },
+      { status: 400, headers: corsHeaders }
+    );
+  }
+
+  const job = await getScanJob(scanId);
+  if (!job) {
+    return NextResponse.json(
+      {
+        error: 'Scan not found',
+        message: 'The scan ID does not exist.',
+      },
+      { status: 404, headers: corsHeaders }
+    );
+  }
+
+  if (shouldKickScanJob(job)) {
+    const baseUrl = getRequestBaseUrl(request.headers.get('host'));
+    waitUntil(
+      triggerScanJobProcessing(baseUrl, scanId).catch((error) => {
+        console.error(`[scan-bulk/status] Failed to kick scan ${scanId}:`, error);
+      })
+    );
+  }
+
+  let notification = await getScanNotificationJob(scanId);
+  if (job.status === 'completed') {
+    try {
+      await ensureScanNotificationQueued({
+        scanId: job.scanId,
+        projectId: job.projectId,
+        projectName: job.projectName,
+        scannedPages: Math.max(0, job.current - job.summary.failed),
+        totalPages: job.total,
+        summary: job.summary,
+      });
+      notification = await getScanNotificationJob(scanId);
+
+      if (!notification || notification.status !== 'sent') {
+        waitUntil(
+          processQueuedScanNotification(scanId).catch((error) => {
+            console.error(`[scan-bulk/status] Notification dispatch failed for ${scanId}:`, error);
+          })
         );
+        notification = await getScanNotificationJob(scanId);
+      }
+    } catch (error) {
+      console.error(`[scan-bulk/status] Notification queue failed for ${scanId}:`, error);
     }
+  }
 
-    const progress = getScanProgress(scanId);
-
-    if (!progress) {
-        return NextResponse.json(
-            { 
-                error: 'Scan not found',
-                message: 'The scan may have expired or never existed. Scans are cleaned up 10 minutes after completion.'
-            },
-            { status: 404, headers: corsHeaders }
-        );
-    }
-
-    // Calculate percentage
-    const percentage = progress.total > 0 
-        ? Math.round((progress.current / progress.total) * 100) 
-        : 0;
-
-    return NextResponse.json({
-        scanId: progress.scanId,
-        projectId: progress.projectId,
-        status: progress.status,
-        current: progress.current,
-        total: progress.total,
-        percentage,
-        currentUrl: progress.currentUrl,
-        startedAt: progress.startedAt,
-        scanCollections: progress.scanCollections,
-        targetLinkIds: progress.targetLinkIds,
-        completedLinkIds: progress.completedLinkIds,
-        completedAt: progress.completedAt,
-        error: progress.error,
-        summary: progress.summary
-    }, { headers: corsHeaders });
+  return NextResponse.json({
+    scanId: job.scanId,
+    projectId: job.projectId,
+    status: job.status,
+    current: job.current,
+    total: job.total,
+    percentage: calculateScanPercentage(job),
+    currentUrl: job.currentUrl,
+    startedAt: job.startedAt,
+    scanCollections: job.scanCollections,
+    targetLinkIds: job.targetLinkIds,
+    completedLinkIds: job.completedLinkIds,
+    completedAt: job.completedAt,
+    error: job.error,
+    summary: job.summary,
+    notificationStatus: notification?.status,
+    notificationAttempts: notification?.attempts,
+    notificationError: notification?.error,
+    notificationSentAt: notification?.sentAt,
+  }, { headers: corsHeaders });
 }

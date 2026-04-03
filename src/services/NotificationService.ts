@@ -412,6 +412,11 @@ interface ScanCompletionContext {
   summary: { noChange: number; techChange: number; contentChanged: number; failed: number };
 }
 
+interface ScanCompletionDeliveryResult {
+  slack: 'sent' | 'skipped' | 'failed';
+  email: 'sent' | 'skipped' | 'failed';
+}
+
 /**
  * Send a per-project notification when a scan completes.
  * Includes health summary with issue counts.
@@ -419,24 +424,37 @@ interface ScanCompletionContext {
 export async function sendScanCompletionNotification(
   ctx: ScanCompletionContext,
   healthSummary: ProjectHealthSummary | null
-): Promise<void> {
-  const results = await Promise.allSettled([
+): Promise<ScanCompletionDeliveryResult> {
+  const [slackResult, emailResult] = await Promise.allSettled([
     sendScanCompletionSlack(ctx, healthSummary),
     sendScanCompletionEmail(ctx, healthSummary),
   ]);
 
-  for (const result of results) {
-    if (result.status === 'rejected') {
-      console.error('[notifications] Scan completion notification failed:', result.reason);
-    }
+  const deliveryResult: ScanCompletionDeliveryResult = {
+    slack: slackResult.status === 'fulfilled' ? slackResult.value : 'failed',
+    email: emailResult.status === 'fulfilled' ? emailResult.value : 'failed',
+  };
+
+  if (slackResult.status === 'rejected') {
+    console.error('[notifications] Scan completion Slack failed:', slackResult.reason);
   }
+
+  if (emailResult.status === 'rejected') {
+    console.error('[notifications] Scan completion email failed:', emailResult.reason);
+  }
+
+  if (deliveryResult.slack === 'failed' && deliveryResult.email === 'failed') {
+    throw new Error('All scan completion notification channels failed');
+  }
+
+  return deliveryResult;
 }
 
 async function sendScanCompletionSlack(
   ctx: ScanCompletionContext,
   health: ProjectHealthSummary | null
-): Promise<void> {
-  if (!SLACK_WEBHOOK_URL) return;
+): Promise<'sent' | 'skipped'> {
+  if (!SLACK_WEBHOOK_URL) return 'skipped';
 
   const { summary } = ctx;
   const scoreEmoji = health
@@ -512,20 +530,25 @@ async function sendScanCompletionSlack(
     ],
   });
 
-  await fetch(SLACK_WEBHOOK_URL, {
+  const response = await fetch(SLACK_WEBHOOK_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ blocks }),
   });
 
+  if (!response.ok) {
+    throw new Error(`Slack webhook failed: ${response.status} ${response.statusText}`);
+  }
+
   console.log(`[notifications] Scan completion Slack sent for ${ctx.projectName}`);
+  return 'sent';
 }
 
 async function sendScanCompletionEmail(
   ctx: ScanCompletionContext,
   health: ProjectHealthSummary | null
-): Promise<void> {
-  if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !NOTIFY_EMAIL) return;
+): Promise<'sent' | 'skipped'> {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !NOTIFY_EMAIL) return 'skipped';
 
   const { summary } = ctx;
   const scoreColor = health
@@ -587,4 +610,5 @@ async function sendScanCompletionEmail(
   });
 
   console.log(`[notifications] Scan completion email sent for ${ctx.projectName}`);
+  return 'sent';
 }

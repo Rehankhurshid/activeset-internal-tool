@@ -1,0 +1,318 @@
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  runTransaction,
+  setDoc,
+  where,
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { COLLECTIONS } from '@/lib/constants';
+import { projectsService } from '@/services/database';
+import { generateHealthReport } from '@/services/HealthReportGenerator';
+import { sendScanCompletionNotification } from '@/services/NotificationService';
+
+export interface ScanNotificationSummary {
+  noChange: number;
+  techChange: number;
+  contentChanged: number;
+  failed: number;
+}
+
+export interface ScanNotificationJob {
+  scanId: string;
+  projectId: string;
+  projectName: string;
+  scannedPages: number;
+  totalPages: number;
+  summary: ScanNotificationSummary;
+  status: 'pending' | 'processing' | 'sent' | 'failed';
+  attempts: number;
+  createdAt: string;
+  updatedAt: string;
+  sentAt?: string;
+  lastAttemptAt?: string;
+  processingStartedAt?: string;
+  error?: string;
+}
+
+interface QueueScanNotificationInput {
+  scanId: string;
+  projectId: string;
+  projectName?: string;
+  scannedPages: number;
+  totalPages: number;
+  summary?: Partial<ScanNotificationSummary>;
+}
+
+interface ProcessScanNotificationResult {
+  scanId: string;
+  status: 'sent' | 'failed' | 'skipped';
+  error?: string;
+}
+
+const SCAN_NOTIFICATIONS_COLLECTION = COLLECTIONS.SCAN_NOTIFICATIONS;
+const PROCESSING_LOCK_MS = 2 * 60 * 1000;
+const DEFAULT_BATCH_SIZE = 10;
+
+function getCollectionRef() {
+  return collection(db, SCAN_NOTIFICATIONS_COLLECTION);
+}
+
+function getDocRef(scanId: string) {
+  return doc(db, SCAN_NOTIFICATIONS_COLLECTION, scanId);
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function normalizeSummary(summary?: Partial<ScanNotificationSummary>): ScanNotificationSummary {
+  return {
+    noChange: summary?.noChange ?? 0,
+    techChange: summary?.techChange ?? 0,
+    contentChanged: summary?.contentChanged ?? 0,
+    failed: summary?.failed ?? 0,
+  };
+}
+
+function docToJob(
+  scanId: string,
+  data: Record<string, unknown> | undefined
+): ScanNotificationJob | null {
+  if (!data) return null;
+
+  return {
+    scanId,
+    projectId: typeof data.projectId === 'string' ? data.projectId : '',
+    projectName: typeof data.projectName === 'string' ? data.projectName : '',
+    scannedPages: typeof data.scannedPages === 'number' ? data.scannedPages : 0,
+    totalPages: typeof data.totalPages === 'number' ? data.totalPages : 0,
+    summary: normalizeSummary(data.summary as Partial<ScanNotificationSummary> | undefined),
+    status: (typeof data.status === 'string' ? data.status : 'pending') as ScanNotificationJob['status'],
+    attempts: typeof data.attempts === 'number' ? data.attempts : 0,
+    createdAt: typeof data.createdAt === 'string' ? data.createdAt : nowIso(),
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : nowIso(),
+    sentAt: typeof data.sentAt === 'string' ? data.sentAt : undefined,
+    lastAttemptAt: typeof data.lastAttemptAt === 'string' ? data.lastAttemptAt : undefined,
+    processingStartedAt: typeof data.processingStartedAt === 'string' ? data.processingStartedAt : undefined,
+    error: typeof data.error === 'string' ? data.error : undefined,
+  };
+}
+
+function isProcessingLockExpired(job: ScanNotificationJob): boolean {
+  if (job.status !== 'processing' || !job.processingStartedAt) return false;
+
+  const startedAt = new Date(job.processingStartedAt).getTime();
+  if (!Number.isFinite(startedAt)) return true;
+
+  return Date.now() - startedAt > PROCESSING_LOCK_MS;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
+function getBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_BASE_URL || 'https://app.activeset.co';
+}
+
+async function resolveProjectName(projectId: string, fallback?: string): Promise<string> {
+  if (fallback?.trim()) return fallback;
+
+  const project = await projectsService.getProject(projectId);
+  return project?.name || projectId;
+}
+
+export async function getScanNotificationJob(scanId: string): Promise<ScanNotificationJob | null> {
+  const snapshot = await getDoc(getDocRef(scanId));
+  if (!snapshot.exists()) return null;
+  return docToJob(snapshot.id, snapshot.data());
+}
+
+export async function ensureScanNotificationQueued(
+  input: QueueScanNotificationInput
+): Promise<ScanNotificationJob> {
+  const ref = getDocRef(input.scanId);
+  const existing = await getScanNotificationJob(input.scanId);
+  if (existing) return existing;
+
+  const projectName = await resolveProjectName(input.projectId, input.projectName);
+
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (snapshot.exists()) {
+      const existing = docToJob(snapshot.id, snapshot.data());
+      if (existing) return existing;
+    }
+
+    const createdAt = nowIso();
+    const queuedJob: ScanNotificationJob = {
+      scanId: input.scanId,
+      projectId: input.projectId,
+      projectName,
+      scannedPages: input.scannedPages,
+      totalPages: input.totalPages,
+      summary: normalizeSummary(input.summary),
+      status: 'pending',
+      attempts: 0,
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    transaction.set(ref, queuedJob);
+    return queuedJob;
+  });
+}
+
+async function claimQueuedScanNotification(scanId: string): Promise<ScanNotificationJob | null> {
+  const ref = getDocRef(scanId);
+
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists()) return null;
+
+    const job = docToJob(snapshot.id, snapshot.data());
+    if (!job) return null;
+
+    if (job.status === 'sent') return null;
+    if (job.status === 'processing' && !isProcessingLockExpired(job)) return null;
+
+    const updatedAt = nowIso();
+    const claimedJob: ScanNotificationJob = {
+      ...job,
+      status: 'processing',
+      attempts: job.attempts + 1,
+      lastAttemptAt: updatedAt,
+      processingStartedAt: updatedAt,
+      updatedAt,
+      error: undefined,
+    };
+
+    transaction.set(ref, {
+      ...claimedJob,
+      error: null,
+    });
+
+    return claimedJob;
+  });
+}
+
+async function markQueuedNotificationSent(scanId: string): Promise<void> {
+  const updatedAt = nowIso();
+  await setDoc(
+    getDocRef(scanId),
+    {
+      status: 'sent',
+      updatedAt,
+      sentAt: updatedAt,
+      processingStartedAt: null,
+      error: null,
+    },
+    { merge: true }
+  );
+}
+
+async function markQueuedNotificationFailed(scanId: string, error: string): Promise<void> {
+  await setDoc(
+    getDocRef(scanId),
+    {
+      status: 'failed',
+      updatedAt: nowIso(),
+      processingStartedAt: null,
+      error,
+    },
+    { merge: true }
+  );
+}
+
+async function listProcessableScanNotifications(
+  batchSize: number = DEFAULT_BATCH_SIZE
+): Promise<ScanNotificationJob[]> {
+  const queries = await Promise.all([
+    getDocs(query(getCollectionRef(), where('status', '==', 'pending'), limit(batchSize))),
+    getDocs(query(getCollectionRef(), where('status', '==', 'failed'), limit(batchSize))),
+    getDocs(query(getCollectionRef(), where('status', '==', 'processing'), limit(batchSize))),
+  ]);
+
+  const jobs = queries
+    .flatMap((snapshot) => snapshot.docs.map((docSnap) => docToJob(docSnap.id, docSnap.data())))
+    .filter((job): job is ScanNotificationJob => Boolean(job))
+    .filter((job) => job.status !== 'processing' || isProcessingLockExpired(job))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  const uniqueJobs = new Map<string, ScanNotificationJob>();
+  for (const job of jobs) {
+    if (!uniqueJobs.has(job.scanId)) {
+      uniqueJobs.set(job.scanId, job);
+    }
+  }
+
+  return Array.from(uniqueJobs.values()).slice(0, batchSize);
+}
+
+export async function processQueuedScanNotification(
+  scanId: string
+): Promise<ProcessScanNotificationResult> {
+  const claimedJob = await claimQueuedScanNotification(scanId);
+  if (!claimedJob) {
+    return { scanId, status: 'skipped' };
+  }
+
+  try {
+    const project = await projectsService.getProject(claimedJob.projectId);
+    if (!project) {
+      throw new Error(`Project not found for notification: ${claimedJob.projectId}`);
+    }
+
+    const report = generateHealthReport([project]);
+    const projectHealth = report.projects[0] || null;
+
+    await sendScanCompletionNotification(
+      {
+        projectId: claimedJob.projectId,
+        projectName: project.name || claimedJob.projectName,
+        baseUrl: getBaseUrl(),
+        scannedPages: claimedJob.scannedPages,
+        totalPages: claimedJob.totalPages,
+        summary: claimedJob.summary,
+      },
+      projectHealth
+    );
+
+    await markQueuedNotificationSent(scanId);
+    return { scanId, status: 'sent' };
+  } catch (error) {
+    const message = getErrorMessage(error);
+    await markQueuedNotificationFailed(scanId, message);
+    return { scanId, status: 'failed', error: message };
+  }
+}
+
+export async function processPendingScanNotifications(
+  batchSize: number = DEFAULT_BATCH_SIZE
+): Promise<{
+  processed: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  results: ProcessScanNotificationResult[];
+}> {
+  const jobs = await listProcessableScanNotifications(batchSize);
+  const results: ProcessScanNotificationResult[] = [];
+
+  for (const job of jobs) {
+    results.push(await processQueuedScanNotification(job.scanId));
+  }
+
+  return {
+    processed: results.length,
+    sent: results.filter((result) => result.status === 'sent').length,
+    failed: results.filter((result) => result.status === 'failed').length,
+    skipped: results.filter((result) => result.status === 'skipped').length,
+    results,
+  };
+}

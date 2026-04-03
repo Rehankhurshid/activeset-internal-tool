@@ -1,0 +1,40 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { processPendingScanNotifications } from '@/services/ScanNotificationQueueService';
+
+/**
+ * Drain queued scan completion notifications.
+ *
+ * Intended for a lightweight scheduled cron as a fallback in case the
+ * completion-status polling path never gets a chance to process the queue.
+ */
+export async function GET(request: NextRequest) {
+    const cronSecret = request.headers.get('x-cron-secret');
+    const expectedSecret = process.env.CRON_SECRET;
+
+    if (expectedSecret && cronSecret !== expectedSecret) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const batchSize = Math.max(1, Math.min(
+        Number.parseInt(request.nextUrl.searchParams.get('limit') || '10', 10) || 10,
+        25
+    ));
+
+    try {
+        const result = await processPendingScanNotifications(batchSize);
+        return NextResponse.json({
+            success: true,
+            timestamp: new Date().toISOString(),
+            ...result,
+        });
+    } catch (error) {
+        console.error('[scan-notifications-cron] Failed to process queued notifications:', error);
+        return NextResponse.json(
+            {
+                error: 'Failed to process queued notifications',
+                details: error instanceof Error ? error.message : 'Unknown error',
+            },
+            { status: 500 }
+        );
+    }
+}
