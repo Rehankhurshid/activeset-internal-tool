@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
+import { isCronAuthorized } from '@/lib/cron-auth';
 import { getRequestBaseUrl, triggerScanJobProcessing } from '@/lib/scan-job-dispatch';
 import { processPendingScanNotifications } from '@/services/ScanNotificationQueueService';
 import { getRunnableScanJobs } from '@/services/ScanJobService';
 
 export async function GET(request: NextRequest) {
-  const cronSecret = request.headers.get('x-cron-secret');
-  const expectedSecret = process.env.CRON_SECRET;
-
-  if (expectedSecret && cronSecret !== expectedSecret) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

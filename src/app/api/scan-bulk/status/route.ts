@@ -63,11 +63,13 @@ export async function GET(request: NextRequest) {
       notification = await getScanNotificationJob(scanId);
 
       if (!notification || notification.status !== 'sent') {
-        waitUntil(
-          processQueuedScanNotification(scanId).catch((error) => {
-            console.error(`[scan-bulk/status] Notification dispatch failed for ${scanId}:`, error);
-          })
-        );
+        const dispatchResult = await processQueuedScanNotification(scanId);
+        if (dispatchResult.status === 'failed') {
+          console.error(
+            `[scan-bulk/status] Notification dispatch failed for ${scanId}:`,
+            dispatchResult.error
+          );
+        }
         notification = await getScanNotificationJob(scanId);
       }
     } catch (error) {

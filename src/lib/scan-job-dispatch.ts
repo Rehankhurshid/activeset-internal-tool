@@ -1,13 +1,9 @@
+import { getCronSecretHeaders } from '@/lib/cron-auth';
+
 export function getRequestBaseUrl(hostHeader?: string | null): string {
   const host = hostHeader || 'localhost:3000';
   const protocol = host.includes('localhost') ? 'http' : 'https';
   return `${protocol}://${host}`;
-}
-
-function getCronSecretHeader(): Record<string, string> {
-  return process.env.CRON_SECRET
-    ? { 'x-cron-secret': process.env.CRON_SECRET }
-    : {};
 }
 
 export async function triggerScanJobProcessing(baseUrl: string, scanId: string): Promise<void> {
@@ -15,7 +11,7 @@ export async function triggerScanJobProcessing(baseUrl: string, scanId: string):
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getCronSecretHeader(),
+      ...getCronSecretHeaders(),
     },
     body: JSON.stringify({ scanId }),
   });

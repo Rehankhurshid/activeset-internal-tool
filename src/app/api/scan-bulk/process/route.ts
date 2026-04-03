@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
+import { isCronAuthorized } from '@/lib/cron-auth';
 import { getRequestBaseUrl, triggerScanJobProcessing } from '@/lib/scan-job-dispatch';
 import { processScanJobBatch } from '@/services/ScanJobService';
 
 export const maxDuration = 300;
-
-function isAuthorized(request: NextRequest): boolean {
-  const expectedSecret = process.env.CRON_SECRET;
-  if (!expectedSecret) return true;
-  return request.headers.get('x-cron-secret') === expectedSecret;
-}
 
 /**
  * Process one durable scan batch. Each invocation handles a small number of pages
  * then re-queues itself if more work remains.
  */
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

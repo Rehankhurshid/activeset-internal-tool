@@ -116,6 +116,25 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unknown error';
 }
 
+function removeUndefined<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => removeUndefined(item)) as unknown as T;
+  }
+  if (typeof obj === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      if (value !== undefined) {
+        result[key] = removeUndefined(value);
+      }
+    }
+    return result as T;
+  }
+  return obj;
+}
+
 function getBaseUrl(): string {
   return process.env.NEXT_PUBLIC_BASE_URL || 'https://app.activeset.co';
 }
@@ -192,10 +211,10 @@ async function claimQueuedScanNotification(scanId: string): Promise<ScanNotifica
       error: undefined,
     };
 
-    transaction.set(ref, {
+    transaction.set(ref, removeUndefined({
       ...claimedJob,
       error: null,
-    });
+    }));
 
     return claimedJob;
   });
