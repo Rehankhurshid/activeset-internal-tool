@@ -4,6 +4,7 @@ export const COLLECTIONS = {
   PROJECT_CHECKLISTS: 'project_checklists',
   SOP_TEMPLATES: 'sop_templates',
   SITE_ALERTS: 'site_alerts',
+  HEALTH_REPORTS: 'health_reports',
 } as const;
 
 // UI constants

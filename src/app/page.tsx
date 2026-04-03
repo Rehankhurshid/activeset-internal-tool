@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { FolderOpen, FileText, Sparkles, Lock, ListChecks, PenLine } from 'lucide-react';
 import { AppNavigation } from '@/components/navigation/AppNavigation';
 import { DashboardAlertPanel } from '@/components/alerts/DashboardAlertPanel';
+import { DailyHealthPanel } from '@/components/alerts/DailyHealthPanel';
 import { cn } from '@/lib/utils';
 
 
@@ -109,6 +110,7 @@ export default function Home() {
 
         <div className="max-w-6xl mx-auto">
           <DashboardAlertPanel className="mb-6" />
+          <DailyHealthPanel className="mb-6" />
 
           <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
             {/* Client Projects Module */}

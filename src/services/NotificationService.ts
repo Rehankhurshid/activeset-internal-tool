@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { CreateSiteAlertInput, ALERT_TYPE_LABELS } from '@/types/alerts';
+import { DailyHealthReport } from '@/types/health-report';
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
@@ -202,6 +203,200 @@ export async function sendAlertNotifications(
   for (const result of results) {
     if (result.status === 'rejected') {
       console.error('[notifications] Channel failed:', result.reason);
+    }
+  }
+}
+
+// ─── Daily Health Report Notifications ───
+
+function issueRow(label: string, count: number, icon: string): string {
+  if (count === 0) return '';
+  return `<tr><td style="padding:6px 12px;font-size:13px;color:#64748b;">${icon} ${label}</td><td style="padding:6px 12px;font-size:13px;font-weight:600;color:#1e293b;text-align:right;">${count}</td></tr>`;
+}
+
+async function sendHealthReportEmail(report: DailyHealthReport, baseUrl: string): Promise<void> {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !NOTIFY_EMAIL) return;
+
+  const scoreColor = report.avgScore >= 80 ? '#22c55e' : report.avgScore >= 60 ? '#f59e0b' : '#ef4444';
+
+  const issueRows = [
+    issueRow('Missing ALT Text', report.issueBreakdown.missingAltText, '🖼️'),
+    issueRow('Missing Meta Description', report.issueBreakdown.missingMetaDescription, '📝'),
+    issueRow('Missing Title', report.issueBreakdown.missingTitle, '🏷️'),
+    issueRow('Missing H1', report.issueBreakdown.missingH1, '📌'),
+    issueRow('Broken Links', report.issueBreakdown.brokenLinks, '🔗'),
+    issueRow('Spelling Errors', report.issueBreakdown.spellingErrors, '✏️'),
+    issueRow('Missing Open Graph', report.issueBreakdown.missingOpenGraph, '📊'),
+    issueRow('Missing Schema', report.issueBreakdown.missingSchema, '🔧'),
+    issueRow('Accessibility Errors', report.issueBreakdown.accessibilityErrors, '♿'),
+    issueRow('Low Score Pages (<60)', report.issueBreakdown.lowScorePages, '⚠️'),
+  ].filter(Boolean).join('');
+
+  const projectRows = report.projects
+    .sort((a, b) => a.avgScore - b.avgScore)
+    .map(p => {
+      const pColor = p.avgScore >= 80 ? '#22c55e' : p.avgScore >= 60 ? '#f59e0b' : '#ef4444';
+      const totalIssues = Object.values(p.issues).reduce((a, b) => a + b, 0);
+      const topIssues = p.topIssuePages.slice(0, 2).map(pg =>
+        `<div style="font-size:11px;color:#94a3b8;margin-top:2px;">• ${pg.title || pg.url} (${pg.score}) — ${pg.issues.slice(0, 2).join(', ')}</div>`
+      ).join('');
+      return `
+        <div style="background:white;border:1px solid #e2e8f0;border-left:4px solid ${pColor};border-radius:8px;padding:14px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong style="font-size:14px;color:#1e293b;">${p.projectName}</strong>
+              <span style="font-size:12px;color:#94a3b8;margin-left:8px;">${p.totalPages} pages</span>
+            </div>
+            <div style="font-size:18px;font-weight:700;color:${pColor};">${p.avgScore}</div>
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-top:6px;">${totalIssues} issues found</div>
+          ${topIssues}
+        </div>`;
+    }).join('');
+
+  const emailHtml = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+      <div style="background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:20px;">Daily Site Health Report</h1>
+        <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px;">${report.date} · ${report.projectCount} projects · ${report.totalPages} pages</p>
+      </div>
+      <div style="background:#f8fafc;padding:24px;border:1px solid #e2e8f0;border-top:none;">
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-size:48px;font-weight:800;color:${scoreColor};">${report.avgScore}</div>
+          <div style="font-size:13px;color:#64748b;">Average Health Score</div>
+          <div style="font-size:13px;color:#94a3b8;margin-top:4px;">${report.totalIssues} total issues across all sites</div>
+        </div>
+        ${issueRows ? `
+        <div style="margin-bottom:20px;">
+          <h3 style="font-size:14px;margin:0 0 8px;color:#1e293b;">Issue Breakdown</h3>
+          <table style="width:100%;border-collapse:collapse;background:white;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+            ${issueRows}
+          </table>
+        </div>` : ''}
+        <div>
+          <h3 style="font-size:14px;margin:0 0 8px;color:#1e293b;">Projects</h3>
+          ${projectRows}
+        </div>
+        <div style="text-align:center;margin-top:20px;">
+          <a href="${baseUrl}" style="display:inline-block;background:#3b82f6;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">View Dashboard</a>
+        </div>
+      </div>
+      <div style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">
+        <p>Automated daily report from ActiveSet Site Monitor</p>
+      </div>
+    </div>`;
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+  });
+
+  await transporter.sendMail({
+    from: `"ActiveSet Reports" <${GMAIL_USER}>`,
+    to: NOTIFY_EMAIL,
+    subject: `Daily Health Report — Score: ${report.avgScore} | ${report.totalIssues} issues across ${report.projectCount} sites`,
+    html: emailHtml,
+  });
+
+  console.log(`[notifications] Health report email sent`);
+}
+
+async function sendHealthReportSlack(report: DailyHealthReport, baseUrl: string): Promise<void> {
+  if (!SLACK_WEBHOOK_URL) return;
+
+  const scoreEmoji = report.avgScore >= 80 ? '🟢' : report.avgScore >= 60 ? '🟡' : '🔴';
+
+  const issueLines: string[] = [];
+  const bd = report.issueBreakdown;
+  if (bd.missingAltText > 0) issueLines.push(`🖼️ Missing ALT Text: *${bd.missingAltText}*`);
+  if (bd.missingMetaDescription > 0) issueLines.push(`📝 Missing Meta Description: *${bd.missingMetaDescription}*`);
+  if (bd.missingTitle > 0) issueLines.push(`🏷️ Missing Title: *${bd.missingTitle}*`);
+  if (bd.missingH1 > 0) issueLines.push(`📌 Missing H1: *${bd.missingH1}*`);
+  if (bd.brokenLinks > 0) issueLines.push(`🔗 Broken Links: *${bd.brokenLinks}*`);
+  if (bd.spellingErrors > 0) issueLines.push(`✏️ Spelling Errors: *${bd.spellingErrors}*`);
+  if (bd.missingOpenGraph > 0) issueLines.push(`📊 Missing Open Graph: *${bd.missingOpenGraph}*`);
+  if (bd.accessibilityErrors > 0) issueLines.push(`♿ Accessibility Errors: *${bd.accessibilityErrors}*`);
+  if (bd.lowScorePages > 0) issueLines.push(`⚠️ Low Score Pages: *${bd.lowScorePages}*`);
+
+  const projectLines = report.projects
+    .sort((a, b) => a.avgScore - b.avgScore)
+    .slice(0, 8)
+    .map(p => {
+      const e = p.avgScore >= 80 ? '🟢' : p.avgScore >= 60 ? '🟡' : '🔴';
+      const totalIssues = Object.values(p.issues).reduce((a, b) => a + b, 0);
+      return `${e} *${p.projectName}* — Score: ${p.avgScore} | ${p.totalPages} pages | ${totalIssues} issues`;
+    });
+
+  const blocks: Record<string, unknown>[] = [
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: `📋 Daily Site Health Report — ${report.date}`, emoji: true },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${scoreEmoji} *Average Score: ${report.avgScore}* | ${report.projectCount} projects | ${report.totalPages} pages | *${report.totalIssues} issues*`,
+      },
+    },
+    { type: 'divider' },
+  ];
+
+  if (issueLines.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*Issue Breakdown*\n${issueLines.join('\n')}` },
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  if (projectLines.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*Projects*\n${projectLines.join('\n')}` },
+    });
+  }
+
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'View Dashboard', emoji: true },
+        url: baseUrl,
+        style: 'primary',
+      },
+    ],
+  });
+
+  const response = await fetch(SLACK_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blocks }),
+  });
+
+  if (!response.ok) {
+    console.error(`[notifications] Health report Slack failed: ${response.status}`);
+  } else {
+    console.log(`[notifications] Health report Slack sent`);
+  }
+}
+
+/**
+ * Send daily health report via all channels.
+ */
+export async function sendHealthReportNotifications(
+  report: DailyHealthReport,
+  baseUrl: string
+): Promise<void> {
+  const results = await Promise.allSettled([
+    sendHealthReportEmail(report, baseUrl),
+    sendHealthReportSlack(report, baseUrl),
+  ]);
+
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.error('[notifications] Health report channel failed:', result.reason);
     }
   }
 }

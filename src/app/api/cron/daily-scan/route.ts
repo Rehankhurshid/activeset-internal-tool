@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
 import { detectAnomalies } from '@/services/AnomalyDetector';
 import { alertService } from '@/services/AlertService';
-import { sendAlertNotifications } from '@/services/NotificationService';
+import { healthReportService } from '@/services/HealthReportService';
+import { generateHealthReport } from '@/services/HealthReportGenerator';
+import { sendAlertNotifications, sendHealthReportNotifications } from '@/services/NotificationService';
 import { ProjectLink } from '@/types';
 
 const SCAN_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes per project
@@ -143,6 +145,26 @@ export async function GET(request: NextRequest) {
 
         const totalAnomalies = results.reduce((sum, r) => sum + (r.anomalies || 0), 0);
         console.log(`[daily-scan] Completed. ${results.length} projects scanned, ${totalAnomalies} anomalies detected.`);
+
+        // Generate daily health report across ALL current projects (not just ones with sitemaps)
+        try {
+            const currentProjects = allProjects.filter(p => (p.status || 'current') === 'current');
+            // Re-fetch projects to get updated audit data
+            const freshProjects = await Promise.all(
+                currentProjects
+                    .filter(p => p.links?.some(l => l.source === 'auto'))
+                    .map(p => projectsService.getProject(p.id))
+            );
+            const validProjects = freshProjects.filter(Boolean) as typeof currentProjects;
+
+            const report = generateHealthReport(validProjects);
+            const reportId = await healthReportService.createReport(report);
+            console.log(`[daily-scan] Health report created: ${reportId} (${report.totalIssues} issues across ${report.projectCount} projects)`);
+
+            await sendHealthReportNotifications({ ...report, id: reportId }, baseUrl);
+        } catch (error) {
+            console.error('[daily-scan] Health report generation failed:', error);
+        }
 
         return NextResponse.json({
             success: true,
