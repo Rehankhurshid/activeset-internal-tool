@@ -60,6 +60,8 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const status: ProjectStatus = project.status || 'current';
     const tags: ProjectTag[] = project.tags || [];
     const isCurrent = status === 'current';
+    const hasScanning = !!project.sitemapUrl || project.links?.some(l => l.source === 'auto');
+    const hasWebflow = !!project.webflowConfig;
 
     const handleDelete = async () => {
         setIsDeleting(true);
@@ -188,7 +190,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
 
                                 <ChecklistProgressBadge projectId={project.id} className="ml-0.5" />
 
-                                {project.sitemapUrl && (
+                                {hasScanning && (
                                     <Badge
                                         variant="outline"
                                         className="text-[10px] px-1.5 py-0 h-[18px] font-medium border border-emerald-500/30 bg-emerald-500/5 text-emerald-400"
@@ -199,7 +201,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                     </Badge>
                                 )}
 
-                                {project.webflowConfig && (
+                                {hasWebflow && (
                                     <Badge
                                         variant="outline"
                                         className="text-[10px] px-1.5 py-0 h-[18px] font-medium border border-indigo-500/30 bg-indigo-500/5 text-indigo-400"
