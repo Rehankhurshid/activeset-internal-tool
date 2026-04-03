@@ -18,6 +18,7 @@ import {
     Tag,
     Check,
     Globe,
+    Radar,
 } from 'lucide-react';
 import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS } from '@/types';
 import { projectsService } from '@/services/database';
@@ -186,6 +187,17 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 </span>
 
                                 <ChecklistProgressBadge projectId={project.id} className="ml-0.5" />
+
+                                {project.sitemapUrl && (
+                                    <Badge
+                                        variant="outline"
+                                        className="text-[10px] px-1.5 py-0 h-[18px] font-medium border border-emerald-500/30 bg-emerald-500/5 text-emerald-400"
+                                        title="Daily scan active"
+                                    >
+                                        <Radar className="w-2.5 h-2.5 mr-0.5" />
+                                        Scan
+                                    </Badge>
+                                )}
 
                                 {project.webflowConfig && (
                                     <Badge
