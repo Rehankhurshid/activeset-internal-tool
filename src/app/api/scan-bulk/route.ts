@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { projectsService } from '@/services/database';
 import { pageScanner } from '@/services/PageScanner';
 import { getScreenshotService } from '@/services/ScreenshotService';
@@ -166,14 +167,16 @@ export async function POST(request: NextRequest) {
 
         console.log(`[scan-bulk] Created scan ${scanId} for ${totalPages} pages`);
 
-        // Start the scan in the background (don't await)
-        runBulkScan(scanId, projectId, project.links, linksToScan, scanCollections).catch(error => {
+        // Run scan in background using waitUntil to guarantee Vercel keeps
+        // the function alive until the scan AND notification complete
+        const scanPromise = runBulkScan(scanId, projectId, project.links, linksToScan, scanCollections).catch(error => {
             console.error(`[scan-bulk] Background scan ${scanId} failed:`, error);
             updateScanProgress(scanId, {
                 status: 'failed',
                 error: error instanceof Error ? error.message : 'Unknown error'
             });
         });
+        waitUntil(scanPromise);
 
         // Return immediately with scanId
         return NextResponse.json(
