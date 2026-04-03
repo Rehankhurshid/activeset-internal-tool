@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { projectsService } from '@/services/database';
 import { pageScanner } from '@/services/PageScanner';
 import { getScreenshotService } from '@/services/ScreenshotService';
@@ -16,8 +16,6 @@ import {
     markScanCancelled
 } from '@/lib/scan-progress-store';
 import { AuditResult, ChangeLogEntry, ChangeStatus, FieldChange, ProjectLink } from '@/types';
-import { generateHealthReport } from '@/services/HealthReportGenerator';
-import { sendScanCompletionNotification } from '@/services/NotificationService';
 
 /**
  * Recursively remove undefined values from an object (Firestore doesn't accept undefined)
@@ -166,17 +164,14 @@ export async function POST(request: NextRequest) {
 
         console.log(`[scan-bulk] Created scan ${scanId} for ${totalPages} pages`);
 
-        // Use Next.js after() to run the scan after the response is sent.
-        // This tells Vercel to keep the function alive until the scan completes.
-        after(
-            runBulkScan(scanId, projectId, project.links, linksToScan, scanCollections).catch(error => {
-                console.error(`[scan-bulk] Background scan ${scanId} failed:`, error);
-                updateScanProgress(scanId, {
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                });
-            })
-        );
+        // Start the scan in the background (don't await)
+        runBulkScan(scanId, projectId, project.links, linksToScan, scanCollections).catch(error => {
+            console.error(`[scan-bulk] Background scan ${scanId} failed:`, error);
+            updateScanProgress(scanId, {
+                status: 'failed',
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        });
 
         // Return immediately with scanId
         return NextResponse.json(
@@ -402,30 +397,8 @@ async function runBulkScan(
 
     console.log(`[scan-bulk] Completed scan ${scanId}. Scanned: ${results.filter(r => r.success).length}, Failed: ${summary.failed}`);
 
-    // Send scan completion notification directly (inline, not via separate endpoint)
-    try {
-        const updatedProject = await projectsService.getProject(projectId);
-        if (updatedProject) {
-            const report = generateHealthReport([updatedProject]);
-            const projectHealth = report.projects[0] || null;
-            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.activeset.co';
-
-            await sendScanCompletionNotification(
-                {
-                    projectId,
-                    projectName: updatedProject.name,
-                    baseUrl,
-                    scannedPages: results.filter(r => r.success).length,
-                    totalPages: linksToScan.length,
-                    summary,
-                },
-                projectHealth
-            );
-            console.log(`[scan-bulk] Notification sent for ${updatedProject.name}`);
-        }
-    } catch (error) {
-        console.error(`[scan-bulk] Failed to send notification:`, error);
-    }
+    // Notification is triggered by the frontend when it detects scan completion
+    // via /api/scan-bulk/notify — this is more reliable on serverless
 }
 
 /**

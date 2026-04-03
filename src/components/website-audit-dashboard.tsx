@@ -424,6 +424,17 @@ export function WebsiteAuditDashboard({
         
         if (data.status === 'completed') {
           console.log('[BulkScan] Completed:', data.summary)
+          // Send scan completion notification
+          fetch('/api/scan-bulk/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: data.projectId,
+              scannedPages: data.current,
+              totalPages: data.total,
+              summary: data.summary,
+            }),
+          }).catch(err => console.error('[BulkScan] Notify failed:', err))
           // Refresh the page to show updated results
           window.location.reload()
         } else if (data.status === 'cancelled') {
