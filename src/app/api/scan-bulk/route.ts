@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { projectsService } from '@/services/database';
 import { pageScanner } from '@/services/PageScanner';
 import { getScreenshotService } from '@/services/ScreenshotService';
@@ -64,6 +64,9 @@ async function writeSequentially<T>(
         }
     }
 }
+
+// Allow long-running scans (up to 5 minutes)
+export const maxDuration = 300;
 
 export async function OPTIONS() {
     return NextResponse.json({}, { headers: corsHeaders });
@@ -163,15 +166,17 @@ export async function POST(request: NextRequest) {
 
         console.log(`[scan-bulk] Created scan ${scanId} for ${totalPages} pages`);
 
-        // Start the scan in the background (don't await)
-        // This allows us to return immediately with the scanId
-        runBulkScan(scanId, projectId, project.links, linksToScan, scanCollections).catch(error => {
-            console.error(`[scan-bulk] Background scan ${scanId} failed:`, error);
-            updateScanProgress(scanId, {
-                status: 'failed',
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-        });
+        // Use Next.js after() to run the scan after the response is sent.
+        // This tells Vercel to keep the function alive until the scan completes.
+        after(
+            runBulkScan(scanId, projectId, project.links, linksToScan, scanCollections).catch(error => {
+                console.error(`[scan-bulk] Background scan ${scanId} failed:`, error);
+                updateScanProgress(scanId, {
+                    status: 'failed',
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+            })
+        );
 
         // Return immediately with scanId
         return NextResponse.json(
