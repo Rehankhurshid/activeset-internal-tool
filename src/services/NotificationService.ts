@@ -6,11 +6,66 @@ const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL;
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
+const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
+const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID;
 
 interface NotificationContext {
   projectId: string;
   projectName: string;
   baseUrl: string;
+}
+
+interface SlackPayload {
+  text: string;
+  blocks?: Record<string, unknown>[];
+}
+
+async function postSlackMessage(payload: SlackPayload): Promise<'sent' | 'skipped'> {
+  if (SLACK_WEBHOOK_URL) {
+    const response = await fetch(SLACK_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: payload.text,
+        blocks: payload.blocks,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Slack webhook failed: ${response.status} ${response.statusText}`);
+    }
+
+    return 'sent';
+  }
+
+  if (SLACK_BOT_TOKEN && SLACK_CHANNEL_ID) {
+    const response = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({
+        channel: SLACK_CHANNEL_ID,
+        text: payload.text,
+        blocks: payload.blocks,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Slack API failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json() as { ok?: boolean; error?: string };
+    if (!data.ok) {
+      throw new Error(`Slack API rejected message: ${data.error || 'unknown_error'}`);
+    }
+
+    return 'sent';
+  }
+
+  console.log('[notifications] Slack not configured, skipping');
+  return 'skipped';
 }
 
 /**
@@ -104,14 +159,15 @@ async function sendSlackNotification(
   alerts: CreateSiteAlertInput[],
   ctx: NotificationContext
 ): Promise<void> {
-  if (!SLACK_WEBHOOK_URL) {
-    console.log('[notifications] Slack webhook not configured, skipping');
+  const summaryText = `${alerts.length} site alert(s) detected for ${ctx.projectName}`;
+  const projectUrl = `${ctx.baseUrl}/modules/project-links/${ctx.projectId}`;
+  if (!SLACK_WEBHOOK_URL && !(SLACK_BOT_TOKEN && SLACK_CHANNEL_ID)) {
+    console.log('[notifications] Slack not configured, skipping');
     return;
   }
 
   const criticalAlerts = alerts.filter((a) => a.severity === 'critical');
   const warningAlerts = alerts.filter((a) => a.severity === 'warning');
-  const projectUrl = `${ctx.baseUrl}/modules/project-links/${ctx.projectId}`;
 
   const blocks: Record<string, unknown>[] = [
     {
@@ -173,17 +229,8 @@ async function sendSlackNotification(
     ],
   });
 
-  const response = await fetch(SLACK_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ blocks }),
-  });
-
-  if (!response.ok) {
-    console.error(`[notifications] Slack webhook failed: ${response.status} ${response.statusText}`);
-  } else {
-    console.log(`[notifications] Slack notification sent for ${ctx.projectName}`);
-  }
+  await postSlackMessage({ text: summaryText, blocks });
+  console.log(`[notifications] Slack notification sent for ${ctx.projectName}`);
 }
 
 /**
@@ -302,7 +349,7 @@ async function sendHealthReportEmail(report: DailyHealthReport, baseUrl: string)
 }
 
 async function sendHealthReportSlack(report: DailyHealthReport, baseUrl: string): Promise<void> {
-  if (!SLACK_WEBHOOK_URL) return;
+  if (!SLACK_WEBHOOK_URL && !(SLACK_BOT_TOKEN && SLACK_CHANNEL_ID)) return;
 
   const scoreEmoji = report.avgScore >= 80 ? '🟢' : report.avgScore >= 60 ? '🟡' : '🔴';
 
@@ -369,17 +416,11 @@ async function sendHealthReportSlack(report: DailyHealthReport, baseUrl: string)
     ],
   });
 
-  const response = await fetch(SLACK_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ blocks }),
+  await postSlackMessage({
+    text: `Daily site health report for ${report.projectCount} project(s)`,
+    blocks,
   });
-
-  if (!response.ok) {
-    console.error(`[notifications] Health report Slack failed: ${response.status}`);
-  } else {
-    console.log(`[notifications] Health report Slack sent`);
-  }
+  console.log(`[notifications] Health report Slack sent`);
 }
 
 /**
@@ -454,7 +495,7 @@ async function sendScanCompletionSlack(
   ctx: ScanCompletionContext,
   health: ProjectHealthSummary | null
 ): Promise<'sent' | 'skipped'> {
-  if (!SLACK_WEBHOOK_URL) return 'skipped';
+  if (!SLACK_WEBHOOK_URL && !(SLACK_BOT_TOKEN && SLACK_CHANNEL_ID)) return 'skipped';
 
   const { summary } = ctx;
   const scoreEmoji = health
@@ -530,15 +571,10 @@ async function sendScanCompletionSlack(
     ],
   });
 
-  const response = await fetch(SLACK_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ blocks }),
+  await postSlackMessage({
+    text: `Scan complete for ${ctx.projectName}: ${ctx.scannedPages}/${ctx.totalPages} pages scanned`,
+    blocks,
   });
-
-  if (!response.ok) {
-    throw new Error(`Slack webhook failed: ${response.status} ${response.statusText}`);
-  }
 
   console.log(`[notifications] Scan completion Slack sent for ${ctx.projectName}`);
   return 'sent';
