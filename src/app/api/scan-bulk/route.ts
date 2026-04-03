@@ -396,10 +396,10 @@ async function runBulkScan(
 
     console.log(`[scan-bulk] Completed scan ${scanId}. Scanned: ${results.filter(r => r.success).length}, Failed: ${summary.failed}`);
 
-    // Fire notification via separate API call (more reliable on serverless)
+    // Send scan completion notification
     try {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.activeset.co';
-        fetch(`${baseUrl}/api/scan-bulk/notify`, {
+        const notifyRes = await fetch(`${baseUrl}/api/scan-bulk/notify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -408,9 +408,10 @@ async function runBulkScan(
                 totalPages: linksToScan.length,
                 summary,
             }),
-        }).catch(err => console.error('[scan-bulk] Notify call failed:', err));
+        });
+        console.log(`[scan-bulk] Notify response: ${notifyRes.status}`);
     } catch (error) {
-        console.error(`[scan-bulk] Failed to trigger notification:`, error);
+        console.error(`[scan-bulk] Failed to send notification:`, error);
     }
 }
 
