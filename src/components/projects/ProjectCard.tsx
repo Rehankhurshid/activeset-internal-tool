@@ -17,6 +17,7 @@ import {
     Archive,
     Tag,
     Check,
+    Globe,
 } from 'lucide-react';
 import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS } from '@/types';
 import { projectsService } from '@/services/database';
@@ -185,6 +186,17 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 </span>
 
                                 <ChecklistProgressBadge projectId={project.id} className="ml-0.5" />
+
+                                {project.webflowConfig && (
+                                    <Badge
+                                        variant="outline"
+                                        className="text-[10px] px-1.5 py-0 h-[18px] font-medium border border-indigo-500/30 bg-indigo-500/5 text-indigo-400"
+                                        title="Webflow connected"
+                                    >
+                                        <Globe className="w-2.5 h-2.5 mr-0.5" />
+                                        WF
+                                    </Badge>
+                                )}
                             </div>
                         </div>
                     </div>

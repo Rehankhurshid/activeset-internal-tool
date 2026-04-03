@@ -35,7 +35,7 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('current');
   const [activeTags, setActiveTags] = useState<ProjectTag[]>([]);
   const { isLoading: isCreatingProject, execute: executeCreateProject } = useAsyncOperation();
 

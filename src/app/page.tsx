@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { FolderOpen, FileText, Sparkles, Lock, ListChecks, PenLine } from 'lucide-react';
 import { AppNavigation } from '@/components/navigation/AppNavigation';
+import { DashboardAlertPanel } from '@/components/alerts/DashboardAlertPanel';
 import { cn } from '@/lib/utils';
 
 
@@ -107,6 +108,8 @@ export default function Home() {
 
 
         <div className="max-w-6xl mx-auto">
+          <DashboardAlertPanel className="mb-6" />
+
           <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
             {/* Client Projects Module */}
             {renderModuleCard(

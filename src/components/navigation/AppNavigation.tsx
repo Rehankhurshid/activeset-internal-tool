@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ScanActivityIndicator } from '@/components/navigation/ScanActivityIndicator';
+import { AlertIndicator } from '@/components/navigation/AlertIndicator';
 
 interface AppNavigationProps {
   title?: string;
@@ -125,6 +126,7 @@ export function AppNavigation({
 
         {/* Right Section */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <AlertIndicator />
           <ScanActivityIndicator />
 
           {/* User Info - Desktop */}
