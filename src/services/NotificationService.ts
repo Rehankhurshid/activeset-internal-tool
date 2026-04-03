@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { CreateSiteAlertInput, ALERT_TYPE_LABELS } from '@/types/alerts';
-import { DailyHealthReport } from '@/types/health-report';
+import { DailyHealthReport, ProjectHealthSummary } from '@/types/health-report';
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
@@ -399,4 +399,192 @@ export async function sendHealthReportNotifications(
       console.error('[notifications] Health report channel failed:', result.reason);
     }
   }
+}
+
+// ─── Per-Project Scan Completion Notification ───
+
+interface ScanCompletionContext {
+  projectId: string;
+  projectName: string;
+  baseUrl: string;
+  scannedPages: number;
+  totalPages: number;
+  summary: { noChange: number; techChange: number; contentChanged: number; failed: number };
+}
+
+/**
+ * Send a per-project notification when a scan completes.
+ * Includes health summary with issue counts.
+ */
+export async function sendScanCompletionNotification(
+  ctx: ScanCompletionContext,
+  healthSummary: ProjectHealthSummary | null
+): Promise<void> {
+  const results = await Promise.allSettled([
+    sendScanCompletionSlack(ctx, healthSummary),
+    sendScanCompletionEmail(ctx, healthSummary),
+  ]);
+
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.error('[notifications] Scan completion notification failed:', result.reason);
+    }
+  }
+}
+
+async function sendScanCompletionSlack(
+  ctx: ScanCompletionContext,
+  health: ProjectHealthSummary | null
+): Promise<void> {
+  if (!SLACK_WEBHOOK_URL) return;
+
+  const { summary } = ctx;
+  const scoreEmoji = health
+    ? health.avgScore >= 80 ? '🟢' : health.avgScore >= 60 ? '🟡' : '🔴'
+    : '⚪';
+
+  const changesSummary = [
+    summary.contentChanged > 0 ? `${summary.contentChanged} content changed` : null,
+    summary.techChange > 0 ? `${summary.techChange} tech-only` : null,
+    summary.noChange > 0 ? `${summary.noChange} unchanged` : null,
+    summary.failed > 0 ? `${summary.failed} failed` : null,
+  ].filter(Boolean).join(' · ');
+
+  const blocks: Record<string, unknown>[] = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `✅ Scan Complete: ${ctx.projectName}`,
+        emoji: true,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${scoreEmoji} *Score: ${health?.avgScore ?? '—'}* | ${ctx.scannedPages}/${ctx.totalPages} pages scanned\n${changesSummary}`,
+      },
+    },
+  ];
+
+  if (health) {
+    const issueLines: string[] = [];
+    const i = health.issues;
+    if (i.missingAltText > 0) issueLines.push(`🖼️ Missing ALT: *${i.missingAltText}*`);
+    if (i.missingMetaDescription > 0) issueLines.push(`📝 Missing Meta Desc: *${i.missingMetaDescription}*`);
+    if (i.missingTitle > 0) issueLines.push(`🏷️ Missing Title: *${i.missingTitle}*`);
+    if (i.missingH1 > 0) issueLines.push(`📌 Missing H1: *${i.missingH1}*`);
+    if (i.brokenLinks > 0) issueLines.push(`🔗 Broken Links: *${i.brokenLinks}*`);
+    if (i.spellingErrors > 0) issueLines.push(`✏️ Spelling: *${i.spellingErrors}*`);
+    if (i.accessibilityErrors > 0) issueLines.push(`♿ Accessibility: *${i.accessibilityErrors}*`);
+    if (i.lowScorePages > 0) issueLines.push(`⚠️ Low Score Pages: *${i.lowScorePages}*`);
+
+    if (issueLines.length > 0) {
+      blocks.push({ type: 'divider' });
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: issueLines.join('\n') },
+      });
+    }
+
+    if (health.topIssuePages.length > 0) {
+      const worstPages = health.topIssuePages.slice(0, 3).map(
+        p => `• *${p.title || p.url}* (${p.score}) — ${p.issues.slice(0, 2).join(', ')}`
+      ).join('\n');
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `*Worst pages:*\n${worstPages}` }],
+      });
+    }
+  }
+
+  const projectUrl = `${ctx.baseUrl}/modules/project-links/${ctx.projectId}`;
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'View Project', emoji: true },
+        url: projectUrl,
+        style: 'primary',
+      },
+    ],
+  });
+
+  await fetch(SLACK_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blocks }),
+  });
+
+  console.log(`[notifications] Scan completion Slack sent for ${ctx.projectName}`);
+}
+
+async function sendScanCompletionEmail(
+  ctx: ScanCompletionContext,
+  health: ProjectHealthSummary | null
+): Promise<void> {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !NOTIFY_EMAIL) return;
+
+  const { summary } = ctx;
+  const scoreColor = health
+    ? health.avgScore >= 80 ? '#22c55e' : health.avgScore >= 60 ? '#f59e0b' : '#ef4444'
+    : '#94a3b8';
+
+  const totalIssues = health ? Object.values(health.issues).reduce((a, b) => a + b, 0) : 0;
+
+  const issueRows = health ? [
+    issueRow('Missing ALT Text', health.issues.missingAltText, '🖼️'),
+    issueRow('Missing Meta Description', health.issues.missingMetaDescription, '📝'),
+    issueRow('Missing Title', health.issues.missingTitle, '🏷️'),
+    issueRow('Missing H1', health.issues.missingH1, '📌'),
+    issueRow('Broken Links', health.issues.brokenLinks, '🔗'),
+    issueRow('Spelling Errors', health.issues.spellingErrors, '✏️'),
+    issueRow('Accessibility', health.issues.accessibilityErrors, '♿'),
+    issueRow('Low Score Pages', health.issues.lowScorePages, '⚠️'),
+  ].filter(Boolean).join('') : '';
+
+  const projectUrl = `${ctx.baseUrl}/modules/project-links/${ctx.projectId}`;
+
+  const emailHtml = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+      <div style="background:linear-gradient(135deg,${scoreColor} 0%,${scoreColor}dd 100%);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:20px;">Scan Complete: ${ctx.projectName}</h1>
+        <p style="color:rgba(255,255,255,0.9);margin:8px 0 0;font-size:14px;">
+          ${ctx.scannedPages}/${ctx.totalPages} pages · Score: ${health?.avgScore ?? '—'}
+        </p>
+      </div>
+      <div style="background:#f8fafc;padding:24px;border:1px solid #e2e8f0;border-top:none;">
+        <div style="display:flex;justify-content:space-around;text-align:center;margin-bottom:16px;">
+          <div><div style="font-size:20px;font-weight:700;color:#22c55e;">${summary.noChange}</div><div style="font-size:11px;color:#64748b;">Unchanged</div></div>
+          <div><div style="font-size:20px;font-weight:700;color:#3b82f6;">${summary.techChange}</div><div style="font-size:11px;color:#64748b;">Tech Only</div></div>
+          <div><div style="font-size:20px;font-weight:700;color:#f59e0b;">${summary.contentChanged}</div><div style="font-size:11px;color:#64748b;">Content Changed</div></div>
+          <div><div style="font-size:20px;font-weight:700;color:#ef4444;">${summary.failed}</div><div style="font-size:11px;color:#64748b;">Failed</div></div>
+        </div>
+        ${totalIssues > 0 ? `
+        <h3 style="font-size:14px;margin:16px 0 8px;color:#1e293b;">${totalIssues} Issues Found</h3>
+        <table style="width:100%;border-collapse:collapse;background:white;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+          ${issueRows}
+        </table>` : '<p style="text-align:center;color:#22c55e;font-weight:600;">No issues found!</p>'}
+        <div style="text-align:center;margin-top:20px;">
+          <a href="${projectUrl}" style="display:inline-block;background:#3b82f6;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">View Project</a>
+        </div>
+      </div>
+      <div style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">Automated scan report from ActiveSet</div>
+    </div>`;
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+  });
+
+  await transporter.sendMail({
+    from: `"ActiveSet Scans" <${GMAIL_USER}>`,
+    to: NOTIFY_EMAIL,
+    subject: `Scan Complete: ${ctx.projectName} — Score: ${health?.avgScore ?? '—'} | ${totalIssues} issues`,
+    html: emailHtml,
+  });
+
+  console.log(`[notifications] Scan completion email sent for ${ctx.projectName}`);
 }

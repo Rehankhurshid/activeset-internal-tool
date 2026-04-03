@@ -16,6 +16,8 @@ import {
     markScanCancelled
 } from '@/lib/scan-progress-store';
 import { AuditResult, ChangeLogEntry, ChangeStatus, FieldChange, ProjectLink } from '@/types';
+import { generateHealthReport } from '@/services/HealthReportGenerator';
+import { sendScanCompletionNotification } from '@/services/NotificationService';
 
 /**
  * Recursively remove undefined values from an object (Firestore doesn't accept undefined)
@@ -394,6 +396,30 @@ async function runBulkScan(
     });
 
     console.log(`[scan-bulk] Completed scan ${scanId}. Scanned: ${results.filter(r => r.success).length}, Failed: ${summary.failed}`);
+
+    // Send per-project scan completion notification
+    try {
+        const updatedProject = await projectsService.getProject(projectId);
+        if (updatedProject) {
+            const report = generateHealthReport([updatedProject]);
+            const projectHealth = report.projects[0] || null;
+            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.activeset.co';
+
+            await sendScanCompletionNotification(
+                {
+                    projectId,
+                    projectName: updatedProject.name,
+                    baseUrl,
+                    scannedPages: results.filter(r => r.success).length,
+                    totalPages: linksToScan.length,
+                    summary,
+                },
+                projectHealth
+            );
+        }
+    } catch (error) {
+        console.error(`[scan-bulk] Failed to send completion notification:`, error);
+    }
 }
 
 /**
