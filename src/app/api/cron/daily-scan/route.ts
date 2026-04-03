@@ -24,9 +24,11 @@ export async function GET(request: NextRequest) {
 
     try {
         const allProjects = await projectsService.getAllProjects();
-        const projectsWithSitemap = allProjects.filter(p => p.sitemapUrl);
+        const projectsWithSitemap = allProjects.filter(
+            p => p.sitemapUrl && (p.status || 'current') === 'current'
+        );
 
-        console.log(`[daily-scan] Found ${projectsWithSitemap.length} projects with sitemaps`);
+        console.log(`[daily-scan] Found ${projectsWithSitemap.length} current projects with sitemaps`);
 
         const results = [];
         const baseUrl = getBaseUrl(request);
