@@ -16,8 +16,7 @@ import {
     markScanCancelled
 } from '@/lib/scan-progress-store';
 import { AuditResult, ChangeLogEntry, ChangeStatus, FieldChange, ProjectLink } from '@/types';
-import { generateHealthReport } from '@/services/HealthReportGenerator';
-import { sendScanCompletionNotification } from '@/services/NotificationService';
+// Notification handled via /api/scan-bulk/notify endpoint
 
 /**
  * Recursively remove undefined values from an object (Firestore doesn't accept undefined)
@@ -397,28 +396,21 @@ async function runBulkScan(
 
     console.log(`[scan-bulk] Completed scan ${scanId}. Scanned: ${results.filter(r => r.success).length}, Failed: ${summary.failed}`);
 
-    // Send per-project scan completion notification
+    // Fire notification via separate API call (more reliable on serverless)
     try {
-        const updatedProject = await projectsService.getProject(projectId);
-        if (updatedProject) {
-            const report = generateHealthReport([updatedProject]);
-            const projectHealth = report.projects[0] || null;
-            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.activeset.co';
-
-            await sendScanCompletionNotification(
-                {
-                    projectId,
-                    projectName: updatedProject.name,
-                    baseUrl,
-                    scannedPages: results.filter(r => r.success).length,
-                    totalPages: linksToScan.length,
-                    summary,
-                },
-                projectHealth
-            );
-        }
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.activeset.co';
+        fetch(`${baseUrl}/api/scan-bulk/notify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectId,
+                scannedPages: results.filter(r => r.success).length,
+                totalPages: linksToScan.length,
+                summary,
+            }),
+        }).catch(err => console.error('[scan-bulk] Notify call failed:', err));
     } catch (error) {
-        console.error(`[scan-bulk] Failed to send completion notification:`, error);
+        console.error(`[scan-bulk] Failed to trigger notification:`, error);
     }
 }
 
