@@ -1,13 +1,40 @@
 import nodemailer from 'nodemailer';
+import { readFirstEnv } from '@/lib/runtime-env';
 import { CreateSiteAlertInput, ALERT_TYPE_LABELS } from '@/types/alerts';
 import { DailyHealthReport, ProjectHealthSummary } from '@/types/health-report';
 
-const GMAIL_USER = process.env.GMAIL_USER;
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
-const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL;
-const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
-const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
-const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID;
+interface EmailConfig {
+  gmailUser?: string;
+  gmailAppPassword?: string;
+  notifyEmail?: string;
+}
+
+interface SlackConfig {
+  webhookUrl?: string;
+  botToken?: string;
+  channelId?: string;
+}
+
+function getEmailConfig(): EmailConfig {
+  return {
+    gmailUser: readFirstEnv(['GMAIL_USER']),
+    gmailAppPassword: readFirstEnv(['GMAIL_APP_PASSWORD']),
+    notifyEmail: readFirstEnv(['NOTIFY_EMAIL']),
+  };
+}
+
+function getSlackConfig(): SlackConfig {
+  return {
+    webhookUrl: readFirstEnv([
+      'SLACK_WEBHOOK_URL',
+      'SLACK_WEBHOOK',
+      'NOTIFICATION_SLACK_WEBHOOK_URL',
+      'NEXT_PUBLIC_SLACK_WEBHOOK_URL',
+    ]),
+    botToken: readFirstEnv(['SLACK_BOT_TOKEN']),
+    channelId: readFirstEnv(['SLACK_CHANNEL_ID']),
+  };
+}
 
 interface NotificationContext {
   projectId: string;
@@ -21,8 +48,10 @@ interface SlackPayload {
 }
 
 async function postSlackMessage(payload: SlackPayload): Promise<'sent' | 'skipped'> {
-  if (SLACK_WEBHOOK_URL) {
-    const response = await fetch(SLACK_WEBHOOK_URL, {
+  const slack = getSlackConfig();
+
+  if (slack.webhookUrl) {
+    const response = await fetch(slack.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -38,15 +67,15 @@ async function postSlackMessage(payload: SlackPayload): Promise<'sent' | 'skippe
     return 'sent';
   }
 
-  if (SLACK_BOT_TOKEN && SLACK_CHANNEL_ID) {
+  if (slack.botToken && slack.channelId) {
     const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+        Authorization: `Bearer ${slack.botToken}`,
       },
       body: JSON.stringify({
-        channel: SLACK_CHANNEL_ID,
+        channel: slack.channelId,
         text: payload.text,
         blocks: payload.blocks,
       }),
@@ -75,7 +104,8 @@ async function sendEmailDigest(
   alerts: CreateSiteAlertInput[],
   ctx: NotificationContext
 ): Promise<void> {
-  if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !NOTIFY_EMAIL) {
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword || !email.notifyEmail) {
     console.log('[notifications] Email not configured, skipping');
     return;
   }
@@ -139,12 +169,12 @@ async function sendEmailDigest(
 
   const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
   });
 
   await transporter.sendMail({
-    from: `"ActiveSet Alerts" <${GMAIL_USER}>`,
-    to: NOTIFY_EMAIL,
+    from: `"ActiveSet Alerts" <${email.gmailUser}>`,
+    to: email.notifyEmail,
     subject: `[${severityLabel}] Site Alert: ${ctx.projectName} — ${alerts.length} issue(s) detected`,
     html: emailHtml,
   });
@@ -159,9 +189,10 @@ async function sendSlackNotification(
   alerts: CreateSiteAlertInput[],
   ctx: NotificationContext
 ): Promise<void> {
+  const slack = getSlackConfig();
   const summaryText = `${alerts.length} site alert(s) detected for ${ctx.projectName}`;
   const projectUrl = `${ctx.baseUrl}/modules/project-links/${ctx.projectId}`;
-  if (!SLACK_WEBHOOK_URL && !(SLACK_BOT_TOKEN && SLACK_CHANNEL_ID)) {
+  if (!slack.webhookUrl && !(slack.botToken && slack.channelId)) {
     console.log('[notifications] Slack not configured, skipping');
     return;
   }
@@ -262,7 +293,8 @@ function issueRow(label: string, count: number, icon: string): string {
 }
 
 async function sendHealthReportEmail(report: DailyHealthReport, baseUrl: string): Promise<void> {
-  if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !NOTIFY_EMAIL) return;
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword || !email.notifyEmail) return;
 
   const scoreColor = report.avgScore >= 80 ? '#22c55e' : report.avgScore >= 60 ? '#f59e0b' : '#ef4444';
 
@@ -335,12 +367,12 @@ async function sendHealthReportEmail(report: DailyHealthReport, baseUrl: string)
 
   const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
   });
 
   await transporter.sendMail({
-    from: `"ActiveSet Reports" <${GMAIL_USER}>`,
-    to: NOTIFY_EMAIL,
+    from: `"ActiveSet Reports" <${email.gmailUser}>`,
+    to: email.notifyEmail,
     subject: `Daily Health Report — Score: ${report.avgScore} | ${report.totalIssues} issues across ${report.projectCount} sites`,
     html: emailHtml,
   });
@@ -349,7 +381,8 @@ async function sendHealthReportEmail(report: DailyHealthReport, baseUrl: string)
 }
 
 async function sendHealthReportSlack(report: DailyHealthReport, baseUrl: string): Promise<void> {
-  if (!SLACK_WEBHOOK_URL && !(SLACK_BOT_TOKEN && SLACK_CHANNEL_ID)) return;
+  const slack = getSlackConfig();
+  if (!slack.webhookUrl && !(slack.botToken && slack.channelId)) return;
 
   const scoreEmoji = report.avgScore >= 80 ? '🟢' : report.avgScore >= 60 ? '🟡' : '🔴';
 
@@ -495,7 +528,8 @@ async function sendScanCompletionSlack(
   ctx: ScanCompletionContext,
   health: ProjectHealthSummary | null
 ): Promise<'sent' | 'skipped'> {
-  if (!SLACK_WEBHOOK_URL && !(SLACK_BOT_TOKEN && SLACK_CHANNEL_ID)) return 'skipped';
+  const slack = getSlackConfig();
+  if (!slack.webhookUrl && !(slack.botToken && slack.channelId)) return 'skipped';
 
   const { summary } = ctx;
   const scoreEmoji = health
@@ -584,7 +618,8 @@ async function sendScanCompletionEmail(
   ctx: ScanCompletionContext,
   health: ProjectHealthSummary | null
 ): Promise<'sent' | 'skipped'> {
-  if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !NOTIFY_EMAIL) return 'skipped';
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword || !email.notifyEmail) return 'skipped';
 
   const { summary } = ctx;
   const scoreColor = health
@@ -635,12 +670,12 @@ async function sendScanCompletionEmail(
 
   const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
   });
 
   await transporter.sendMail({
-    from: `"ActiveSet Scans" <${GMAIL_USER}>`,
-    to: NOTIFY_EMAIL,
+    from: `"ActiveSet Scans" <${email.gmailUser}>`,
+    to: email.notifyEmail,
     subject: `Scan Complete: ${ctx.projectName} — Score: ${health?.avgScore ?? '—'} | ${totalIssues} issues`,
     html: emailHtml,
   });

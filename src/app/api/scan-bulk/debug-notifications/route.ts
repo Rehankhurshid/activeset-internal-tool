@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLLECTIONS } from '@/lib/constants';
+import { readFirstEnv } from '@/lib/runtime-env';
 import { getAllActiveScanJobs } from '@/services/ScanJobService';
 
 /**
@@ -9,6 +10,15 @@ import { getAllActiveScanJobs } from '@/services/ScanJobService';
  */
 export async function GET() {
   try {
+    const slackWebhook = readFirstEnv([
+      'SLACK_WEBHOOK_URL',
+      'SLACK_WEBHOOK',
+      'NOTIFICATION_SLACK_WEBHOOK_URL',
+      'NEXT_PUBLIC_SLACK_WEBHOOK_URL',
+    ]);
+    const slackBotToken = readFirstEnv(['SLACK_BOT_TOKEN']);
+    const slackChannelId = readFirstEnv(['SLACK_CHANNEL_ID']);
+
     // Get recent scan notifications
     const notificationsSnapshot = await getDocs(
       query(collection(db, COLLECTIONS.SCAN_NOTIFICATIONS), limit(20))
@@ -50,11 +60,11 @@ export async function GET() {
       })),
       recentCompleted,
       env: {
-        hasSlackWebhook: !!process.env.SLACK_WEBHOOK_URL,
-        slackWebhookPreview: process.env.SLACK_WEBHOOK_URL ? process.env.SLACK_WEBHOOK_URL.substring(0, 30) + '...' : 'NOT SET',
-        hasSlackBot: !!process.env.SLACK_BOT_TOKEN,
-        hasSlackChannel: !!process.env.SLACK_CHANNEL_ID,
-        hasGmail: !!process.env.GMAIL_USER,
+        hasSlackWebhook: !!slackWebhook,
+        slackWebhookPreview: slackWebhook ? `${slackWebhook.substring(0, 30)}...` : 'NOT SET',
+        hasSlackBot: !!slackBotToken,
+        hasSlackChannel: !!slackChannelId,
+        hasGmail: !!readFirstEnv(['GMAIL_USER']),
         allSlackEnvKeys: Object.keys(process.env).filter(k => k.toLowerCase().includes('slack')),
       },
     });
