@@ -8,20 +8,22 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  setDoc,
+  writeBatch,
   onSnapshot,
   query,
   where,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Project, ProjectLink, ProjectStatus, ProjectTag, CreateProjectLinkInput, UpdateProjectLinkInput } from '@/types';
+import { Project, ProjectLink, ProjectStatus, ProjectTag, CreateProjectLinkInput, UpdateProjectLinkInput, AuditResult } from '@/types';
 import { WebflowConfig } from '@/types/webflow';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
-import { compactAuditResult, AuditCompactLevel } from '@/lib/scan-utils';
+import { compactAuditResult } from '@/lib/scan-utils';
 
 const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
-const PROJECT_LINKS_SOFT_LIMIT_BYTES = 900_000;
+const LINK_AUDITS_SUBCOLLECTION = 'link_audits';
 
 const generateLinkId = (): string => `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 const generatePublicShareToken = (): string => {
@@ -47,46 +49,73 @@ function stripUndefined<T>(obj: T): T {
   return obj;
 }
 
-function estimateSerializedSize(value: unknown): number {
-  return new TextEncoder().encode(JSON.stringify(stripUndefined(value))).length;
+// --- Audit Result Subcollection Helpers ---
+// Audit results are stored in a subcollection projects/{id}/link_audits/{linkId}
+// to avoid hitting Firestore's 1MB document size limit.
+
+function linkAuditsCollection(projectId: string) {
+  return collection(db, PROJECTS_COLLECTION, projectId, LINK_AUDITS_SUBCOLLECTION);
 }
 
-function sanitizeProjectLinkForStorage(
-  link: ProjectLink,
-  level: AuditCompactLevel
-): ProjectLink {
-  if (!link.auditResult) return link;
-
-  return {
-    ...link,
-    auditResult: compactAuditResult(link.auditResult, level),
-  };
+function linkAuditDoc(projectId: string, linkId: string) {
+  return doc(db, PROJECTS_COLLECTION, projectId, LINK_AUDITS_SUBCOLLECTION, linkId);
 }
 
-function sanitizeProjectLinksForStorage(links: ProjectLink[]): ProjectLink[] {
-  const levels: AuditCompactLevel[] = ['standard', 'aggressive', 'minimal'];
+/** Save audit results for multiple links to the subcollection. */
+async function saveLinkAudits(projectId: string, links: ProjectLink[]): Promise<void> {
+  const linksWithAudit = links.filter(l => l.auditResult);
+  if (linksWithAudit.length === 0) return;
 
-  let sanitizedLinks = links;
+  // Batch writes (max 500 per batch)
+  const BATCH_SIZE = 450;
+  for (let i = 0; i < linksWithAudit.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db);
+    const chunk = linksWithAudit.slice(i, i + BATCH_SIZE);
 
-  for (const level of levels) {
-    sanitizedLinks = links.map((link) => sanitizeProjectLinkForStorage(link, level));
-    const serializedSize = estimateSerializedSize({ links: sanitizedLinks });
-
-    if (serializedSize <= PROJECT_LINKS_SOFT_LIMIT_BYTES) {
-      if (level !== 'standard') {
-        console.warn(
-          `[projectsService] Reduced links payload using ${level} compaction (${serializedSize} bytes)`
-        );
-      }
-      return sanitizedLinks;
+    for (const link of chunk) {
+      const compacted = compactAuditResult(link.auditResult!, 'standard');
+      batch.set(linkAuditDoc(projectId, link.id), stripUndefined(compacted));
     }
-  }
 
-  const finalSize = estimateSerializedSize({ links: sanitizedLinks });
-  console.warn(
-    `[projectsService] Links payload remains large after minimal compaction (${finalSize} bytes)`
-  );
-  return sanitizedLinks;
+    await batch.commit();
+  }
+}
+
+/** Load all audit results from subcollection and merge into links. */
+async function mergeAuditResults(projectId: string, links: ProjectLink[]): Promise<ProjectLink[]> {
+  if (!links || links.length === 0) return links;
+
+  try {
+    const snapshot = await getDocs(linkAuditsCollection(projectId));
+    if (snapshot.empty) return links;
+
+    const auditMap = new Map<string, AuditResult>();
+    snapshot.docs.forEach(d => {
+      auditMap.set(d.id, d.data() as AuditResult);
+    });
+
+    return links.map(link => {
+      const subcollectionAudit = auditMap.get(link.id);
+      if (subcollectionAudit) {
+        return { ...link, auditResult: subcollectionAudit };
+      }
+      // Keep inline auditResult if subcollection doesn't have it yet (backward compat)
+      return link;
+    });
+  } catch (error) {
+    console.error(`[projectsService] Failed to load link audits for ${projectId}:`, error);
+    return links; // Fall back to inline data
+  }
+}
+
+/** Strip auditResult from links before saving to project document. */
+function stripAuditResultsFromLinks(links: ProjectLink[]): ProjectLink[] {
+  return links.map(link => {
+    if (!link.auditResult) return link;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { auditResult, ...rest } = link;
+    return rest;
+  });
 }
 
 // Create default links for new projects (ensure each link has a unique id)
@@ -139,12 +168,21 @@ export const projectsService = {
   async getAllProjects(): Promise<Project[]> {
     try {
       const querySnapshot = await getDocs(collection(db, PROJECTS_COLLECTION));
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt.toDate(),
-        updatedAt: doc.data().updatedAt.toDate(),
+      const projects = querySnapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        createdAt: d.data().createdAt.toDate(),
+        updatedAt: d.data().updatedAt.toDate(),
       })) as Project[];
+
+      // Merge audit results from subcollections
+      await Promise.all(
+        projects.map(async (project) => {
+          project.links = await mergeAuditResults(project.id, project.links);
+        })
+      );
+
+      return projects;
     } catch (error) {
       logError(error, 'getAllProjects');
       throw new DatabaseError('Failed to fetch all projects');
@@ -153,20 +191,25 @@ export const projectsService = {
 
   async getUserProjects(userId: string): Promise<Project[]> {
     try {
-      // Temporarily remove orderBy to avoid index requirement
       const q = query(
         collection(db, PROJECTS_COLLECTION),
         where('userId', '==', userId)
       );
       const querySnapshot = await getDocs(q);
-      const projects = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt.toDate(),
-        updatedAt: doc.data().updatedAt.toDate(),
+      const projects = querySnapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        createdAt: d.data().createdAt.toDate(),
+        updatedAt: d.data().updatedAt.toDate(),
       })) as Project[];
 
-      // Sort in client-side for now
+      // Merge audit results from subcollections
+      await Promise.all(
+        projects.map(async (project) => {
+          project.links = await mergeAuditResults(project.id, project.links);
+        })
+      );
+
       return projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     } catch (error) {
       logError(error, 'getUserProjects');
@@ -180,12 +223,15 @@ export const projectsService = {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      return {
+      const project = {
         id: docSnap.id,
         ...data,
         createdAt: data.createdAt.toDate(),
         updatedAt: data.updatedAt.toDate(),
       } as Project;
+      // Merge audit results from subcollection
+      project.links = await mergeAuditResults(projectId, project.links);
+      return project;
     }
     return null;
   },
@@ -248,12 +294,16 @@ export const projectsService = {
     await deleteDoc(projectRef);
   },
 
-  // Update project links (for reordering and editing)
+  // Update project links — audit results go to subcollection, link metadata to project doc
   async updateProjectLinks(projectId: string, links: ProjectLink[]): Promise<void> {
+    // Save audit results to subcollection
+    await saveLinkAudits(projectId, links);
+
+    // Strip audit results from project document to stay under 1MB
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
-    const sanitizedLinks = sanitizeProjectLinksForStorage(links);
+    const strippedLinks = stripAuditResultsFromLinks(links);
     await updateDoc(projectRef, {
-      links: stripUndefined(sanitizedLinks),
+      links: stripUndefined(strippedLinks),
       updatedAt: Timestamp.now(),
     });
   },
@@ -353,60 +403,72 @@ export const projectsService = {
 
   // Real-time subscription to user projects
   subscribeToUserProjects(userId: string, callback: (projects: Project[]) => void): () => void {
-    // Temporarily remove orderBy to avoid index requirement
     const q = query(
       collection(db, PROJECTS_COLLECTION),
       where('userId', '==', userId)
     );
 
-    return onSnapshot(q, (snapshot) => {
-      const projects = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt.toDate(),
-        updatedAt: doc.data().updatedAt.toDate(),
+    return onSnapshot(q, async (snapshot) => {
+      const projects = snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        createdAt: d.data().createdAt.toDate(),
+        updatedAt: d.data().updatedAt.toDate(),
       })) as Project[];
 
-      // Sort in client-side for now
+      await Promise.all(
+        projects.map(async (project) => {
+          project.links = await mergeAuditResults(project.id, project.links);
+        })
+      );
+
       const sortedProjects = projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
       callback(sortedProjects);
     });
   },
 
-  // Real-time subscription to all projects (for project-links module - everyone can see all)
+  // Real-time subscription to all projects (merges audit data from subcollections)
   subscribeToAllProjects(callback: (projects: Project[]) => void): () => void {
     const q = query(collection(db, PROJECTS_COLLECTION));
 
-    return onSnapshot(q, (snapshot) => {
-      const projects = snapshot.docs.map(doc => {
-        const data = doc.data();
+    return onSnapshot(q, async (snapshot) => {
+      const projects = snapshot.docs.map(d => {
+        const data = d.data();
         return {
-          id: doc.id,
+          id: d.id,
           ...data,
           createdAt: data.createdAt.toDate(),
           updatedAt: data.updatedAt.toDate(),
         } as Project;
       });
 
-      // Sort in client-side
+      // Merge audit results from subcollections
+      await Promise.all(
+        projects.map(async (project) => {
+          project.links = await mergeAuditResults(project.id, project.links);
+        })
+      );
+
       const sortedProjects = projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
       callback(sortedProjects);
     });
   },
 
-  // Real-time subscription to a single project
+  // Real-time subscription to a single project (merges audit data from subcollection)
   subscribeToProject(projectId: string, callback: (project: Project | null) => void): () => void {
     const docRef = doc(db, PROJECTS_COLLECTION, projectId);
 
-    return onSnapshot(docRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
+    return onSnapshot(docRef, async (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
         const project: Project = {
-          id: doc.id,
+          id: docSnap.id,
           ...data,
           createdAt: data.createdAt.toDate(),
           updatedAt: data.updatedAt.toDate(),
         } as Project;
+        // Merge audit results from subcollection
+        project.links = await mergeAuditResults(projectId, project.links);
         callback(project);
       } else {
         callback(null);

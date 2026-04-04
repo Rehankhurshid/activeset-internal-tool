@@ -1,7 +1,7 @@
 import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot, AuditResult, SectionInfo, ContentBlock, BlockChange, TextElement, TextChange } from '@/types';
 import { createTwoFilesPatch } from 'diff';
 
-export type AuditCompactLevel = 'standard' | 'aggressive' | 'minimal';
+export type AuditCompactLevel = 'standard' | 'aggressive' | 'minimal' | 'scores_only';
 
 const AUDIT_COMPACT_LIMITS: Record<
     AuditCompactLevel,
@@ -93,6 +93,28 @@ const AUDIT_COMPACT_LIMITS: Record<
         diffSummary: 160,
         longText: 100,
         urlText: 180,
+    },
+    scores_only: {
+        snapshotImages: 0,
+        snapshotHeadings: 0,
+        snapshotTitle: 80,
+        snapshotDescription: 100,
+        imageAlt: 0,
+        placeholderIssues: 0,
+        spellingIssues: 0,
+        completenessIssues: 0,
+        seoIssues: 0,
+        technicalIssues: 0,
+        schemaTypes: 0,
+        schemaIssues: 0,
+        brokenLinks: 0,
+        headingStructureHeadings: 0,
+        accessibilityIssues: 0,
+        ariaLandmarks: 0,
+        fieldChanges: 0,
+        diffSummary: 0,
+        longText: 60,
+        urlText: 100,
     },
 };
 
