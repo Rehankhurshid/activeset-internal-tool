@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
     ));
 
     try {
+        console.log(`[scan-notifications-cron] Starting notification drain (batchSize=${batchSize})`);
         const result = await processPendingScanNotifications(batchSize);
+        console.log(`[scan-notifications-cron] Done: sent=${result.sent}, failed=${result.failed}, skipped=${result.skipped}`);
         return NextResponse.json({
             success: true,
             timestamp: new Date().toISOString(),

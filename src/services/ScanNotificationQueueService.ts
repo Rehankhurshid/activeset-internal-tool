@@ -155,9 +155,13 @@ export async function getScanNotificationJob(scanId: string): Promise<ScanNotifi
 export async function ensureScanNotificationQueued(
   input: QueueScanNotificationInput
 ): Promise<ScanNotificationJob> {
+  console.log(`[scan-notify] Queueing notification for ${input.scanId} (project: ${input.projectName})`);
   const ref = getDocRef(input.scanId);
   const existing = await getScanNotificationJob(input.scanId);
-  if (existing) return existing;
+  if (existing) {
+    console.log(`[scan-notify] Notification already exists for ${input.scanId} (status: ${existing.status})`);
+    return existing;
+  }
 
   const projectName = await resolveProjectName(input.projectId, input.projectName);
 
@@ -270,16 +274,23 @@ async function listProcessableScanNotifications(
     }
   }
 
-  return Array.from(uniqueJobs.values()).slice(0, batchSize);
+  const result = Array.from(uniqueJobs.values()).slice(0, batchSize);
+  console.log(`[scan-notify] Found ${result.length} processable notifications (pending/failed/expired)`);
+  return result;
 }
 
 export async function processQueuedScanNotification(
   scanId: string
 ): Promise<ProcessScanNotificationResult> {
+  console.log(`[scan-notify] Processing notification for ${scanId}`);
+
   const claimedJob = await claimQueuedScanNotification(scanId);
   if (!claimedJob) {
+    console.log(`[scan-notify] Skipped ${scanId} — could not claim (already sent or missing)`);
     return { scanId, status: 'skipped' };
   }
+
+  console.log(`[scan-notify] Claimed ${scanId} for project ${claimedJob.projectName} (attempt ${claimedJob.attempts})`);
 
   try {
     const project = await projectsService.getProject(claimedJob.projectId);
@@ -289,6 +300,8 @@ export async function processQueuedScanNotification(
 
     const report = generateHealthReport([project]);
     const projectHealth = report.projects[0] || null;
+
+    console.log(`[scan-notify] Sending Slack/Email for ${scanId} (project: ${project.name})`);
 
     await sendScanCompletionNotification(
       {
@@ -302,10 +315,12 @@ export async function processQueuedScanNotification(
       projectHealth
     );
 
+    console.log(`[scan-notify] Successfully sent notification for ${scanId}`);
     await markQueuedNotificationSent(scanId);
     return { scanId, status: 'sent' };
   } catch (error) {
     const message = getErrorMessage(error);
+    console.error(`[scan-notify] Failed to send notification for ${scanId}:`, message);
     await markQueuedNotificationFailed(scanId, message);
     return { scanId, status: 'failed', error: message };
   }
