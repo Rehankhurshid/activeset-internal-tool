@@ -51,6 +51,15 @@ export default function ProjectDetailPage({ params }: PageProps) {
         return () => unsubscribe();
     }, [user, id]);
 
+    const hasWebflowSync = Boolean(project?.webflowConfig?.siteId && project?.webflowConfig?.apiToken);
+    const canSyncProject = Boolean(project?.sitemapUrl || hasWebflowSync);
+    const syncButtonLabel = project?.sitemapUrl ? 'Sync Sitemap' : hasWebflowSync ? 'Sync Webflow' : 'Sync';
+    const syncButtonTitle = project?.sitemapUrl
+        ? `Sync using ${project.sitemapUrl}`
+        : hasWebflowSync
+            ? 'Sync published pages from the configured Webflow site'
+            : 'Run Scan Sitemap first or configure Webflow';
+
     const handleUpdateProjectName = async (newName: string) => {
         if (!project) return;
         await projectLinksRepository.updateProjectName(project.id, newName);
@@ -79,8 +88,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
     };
 
     const handleManualSitemapSync = async () => {
-        if (!project?.sitemapUrl) {
-            toast.error('No sitemap URL saved yet. Run Scan Sitemap first.');
+        if (!project) return;
+
+        if (!project.sitemapUrl && !hasWebflowSync) {
+            toast.error('No sitemap URL saved yet, and Webflow is not configured.');
             return;
         }
 
@@ -92,17 +103,31 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 body: JSON.stringify({
                     projectId: project.id,
                     sitemapUrl: project.sitemapUrl,
+                    useWebflowFallback: hasWebflowSync,
                 }),
             });
 
-            const data = await response.json();
+            const data = await response.json() as {
+                error?: string;
+                totalFound?: number;
+                count?: number;
+                removed?: number;
+                source?: 'sitemap' | 'webflow';
+                usedWebflowFallback?: boolean;
+            };
 
             if (!response.ok) {
                 throw new Error(data?.error || 'Failed to sync sitemap');
             }
 
+            const sourceLabel = data.source === 'webflow'
+                ? data.usedWebflowFallback
+                    ? 'Webflow fallback'
+                    : 'Webflow'
+                : 'Sitemap';
+
             toast.success(
-                `Sync completed: ${data?.totalFound ?? 0} pages checked, ${data?.count ?? 0} new, ${data?.removed ?? 0} removed`
+                `${sourceLabel} sync completed: ${data?.totalFound ?? 0} pages checked, ${data?.count ?? 0} new, ${data?.removed ?? 0} removed`
             );
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to sync sitemap';
@@ -243,11 +268,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                     variant="outline"
                                     className="gap-2"
                                     onClick={handleManualSitemapSync}
-                                    disabled={isSyncingSitemap || !project.sitemapUrl}
-                                    title={project.sitemapUrl ? `Sync using ${project.sitemapUrl}` : 'Run Scan Sitemap first to save a sitemap URL'}
+                                    disabled={isSyncingSitemap || !canSyncProject}
+                                    title={syncButtonTitle}
                                 >
                                     <RefreshCw className={`h-4 w-4 ${isSyncingSitemap ? 'animate-spin' : ''}`} />
-                                    Sync
+                                    {syncButtonLabel}
                                 </Button>
                                 <ScanSitemapDialog
                                     projectId={project.id}
