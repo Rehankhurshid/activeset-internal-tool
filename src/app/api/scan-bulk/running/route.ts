@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
     currentUrl: scan.currentUrl,
     startedAt: scan.startedAt,
     scanCollections: scan.scanCollections,
+    captureScreenshots: scan.captureScreenshots,
     targetLinkIds: scan.targetLinkIds,
     completedLinkIds: scan.completedLinkIds,
   }));

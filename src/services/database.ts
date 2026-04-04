@@ -296,8 +296,19 @@ export const projectsService = {
 
   // Update project links — audit results go to subcollection, link metadata to project doc
   async updateProjectLinks(projectId: string, links: ProjectLink[]): Promise<void> {
-    // Save audit results to subcollection
-    await saveLinkAudits(projectId, links);
+    // Save audit results to subcollection (non-blocking — don't fail the whole save if this errors)
+    try {
+      await saveLinkAudits(projectId, links);
+    } catch (error) {
+      console.error(`[projectsService] Failed to save audit subcollection for ${projectId}, falling back to inline:`, error);
+      // Fall back to saving with inline audit results (old behavior)
+      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+      await updateDoc(projectRef, {
+        links: stripUndefined(links),
+        updatedAt: Timestamp.now(),
+      });
+      return;
+    }
 
     // Strip audit results from project document to stay under 1MB
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);

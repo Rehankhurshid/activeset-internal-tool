@@ -25,6 +25,7 @@ interface RunningScanItem {
   currentUrl: string;
   startedAt: string;
   scanCollections: boolean;
+  captureScreenshots: boolean;
 }
 
 interface RunningScansResponse {

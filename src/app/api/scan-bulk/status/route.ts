@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
     currentUrl: job.currentUrl,
     startedAt: job.startedAt,
     scanCollections: job.scanCollections,
+    captureScreenshots: job.captureScreenshots,
     targetLinkIds: job.targetLinkIds,
     completedLinkIds: job.completedLinkIds,
     completedAt: job.completedAt,

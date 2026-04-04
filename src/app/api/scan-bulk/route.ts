@@ -26,7 +26,7 @@ export async function OPTIONS() {
 export async function POST(request: NextRequest) {
   try {
     const { projectId, options = {} } = await request.json();
-    const { scanCollections = false, linkIds } = options;
+    const { scanCollections = false, captureScreenshots = true, linkIds } = options;
 
     if (!projectId) {
       return NextResponse.json(
@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
           currentUrl: activeJob.currentUrl,
           startedAt: activeJob.startedAt,
           scanCollections: activeJob.scanCollections,
+          captureScreenshots: activeJob.captureScreenshots,
           targetLinkIds: activeJob.targetLinkIds,
           completedLinkIds: activeJob.completedLinkIds,
         },
@@ -97,6 +98,7 @@ export async function POST(request: NextRequest) {
       project,
       linksToScan,
       scanCollections,
+      captureScreenshots,
     });
 
     const baseUrl = getRequestBaseUrl(request.headers.get('host'));
@@ -110,6 +112,7 @@ export async function POST(request: NextRequest) {
       {
         scanId: job.scanId,
         totalPages: job.total,
+        captureScreenshots: job.captureScreenshots,
         message: 'Scan started. Poll /api/scan-bulk/status for progress.',
       },
       { headers: corsHeaders }

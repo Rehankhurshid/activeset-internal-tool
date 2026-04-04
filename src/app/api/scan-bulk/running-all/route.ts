@@ -27,6 +27,7 @@ export async function GET() {
         currentUrl: scan.currentUrl,
         startedAt: scan.startedAt,
         scanCollections: scan.scanCollections,
+        captureScreenshots: scan.captureScreenshots,
       })),
       hasRunningScans: scans.length > 0,
     },

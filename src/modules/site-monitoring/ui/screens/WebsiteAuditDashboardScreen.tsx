@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -85,6 +86,7 @@ interface BulkScanProgressState {
   scanId: string;
   startedAt: string;
   scanCollections: boolean;
+  captureScreenshots: boolean;
   targetLinkIds: string[];
   completedLinkIds: string[];
 }
@@ -382,9 +384,11 @@ export function WebsiteAuditDashboard({
     scanId: '',
     startedAt: '',
     scanCollections: false,
+    captureScreenshots: true,
     targetLinkIds: [],
     completedLinkIds: []
   })
+  const [bulkScanCaptureScreenshots, setBulkScanCaptureScreenshots] = useState(true)
   const [showCollectionDialog, setShowCollectionDialog] = useState(false)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -408,6 +412,7 @@ export function WebsiteAuditDashboard({
         scanId: data.scanId,
         startedAt: data.startedAt || prev.startedAt,
         scanCollections: data.scanCollections ?? prev.scanCollections,
+        captureScreenshots: data.captureScreenshots ?? prev.captureScreenshots,
         targetLinkIds: Array.isArray(data.targetLinkIds) ? data.targetLinkIds : prev.targetLinkIds,
         completedLinkIds: Array.isArray(data.completedLinkIds) ? data.completedLinkIds : prev.completedLinkIds
       }))
@@ -469,6 +474,7 @@ export function WebsiteAuditDashboard({
           scanId: '',
           startedAt: '',
           scanCollections: false,
+          captureScreenshots: true,
           targetLinkIds: [],
           completedLinkIds: []
         })
@@ -529,6 +535,7 @@ export function WebsiteAuditDashboard({
             currentUrl: activeScan.currentUrl || '',
             startedAt: activeScan.startedAt || new Date().toISOString(),
             scanCollections: !!activeScan.scanCollections,
+            captureScreenshots: activeScan.captureScreenshots !== false,
             targetLinkIds: Array.isArray(activeScan.targetLinkIds) ? activeScan.targetLinkIds : [],
             completedLinkIds: Array.isArray(activeScan.completedLinkIds) ? activeScan.completedLinkIds : []
           })
@@ -1285,6 +1292,7 @@ export function WebsiteAuditDashboard({
       scanId: '',
       startedAt: scanStartTime,
       scanCollections: includeCollections,
+      captureScreenshots: bulkScanCaptureScreenshots,
       targetLinkIds: [],
       completedLinkIds: []
     })
@@ -1296,7 +1304,10 @@ export function WebsiteAuditDashboard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId,
-          options: { scanCollections: includeCollections }
+          options: {
+            scanCollections: includeCollections,
+            captureScreenshots: bulkScanCaptureScreenshots
+          }
         })
       })
 
@@ -1315,6 +1326,7 @@ export function WebsiteAuditDashboard({
             currentUrl: result.currentUrl || prev.currentUrl,
             startedAt: result.startedAt || prev.startedAt,
             scanCollections: result.scanCollections ?? prev.scanCollections,
+            captureScreenshots: result.captureScreenshots ?? prev.captureScreenshots,
             targetLinkIds: Array.isArray(result.targetLinkIds) ? result.targetLinkIds : prev.targetLinkIds,
             completedLinkIds: Array.isArray(result.completedLinkIds) ? result.completedLinkIds : prev.completedLinkIds
           }))
@@ -1344,7 +1356,8 @@ export function WebsiteAuditDashboard({
         ...prev, 
         scanId,
         total: totalPages,
-        scanCollections: includeCollections
+        scanCollections: includeCollections,
+        captureScreenshots: result.captureScreenshots ?? bulkScanCaptureScreenshots
       }))
 
       pollScanProgress(scanId)
@@ -1821,16 +1834,31 @@ export function WebsiteAuditDashboard({
                 Collection pages (CMS items) can be resource-intensive.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setShowCollectionDialog(false)}>
-                Cancel
-              </Button>
-              <Button variant="secondary" onClick={() => handleBulkScan(false)}>
-                Static only ({staticPages})
-              </Button>
-              <Button onClick={() => handleBulkScan(true)}>
-                Scan all ({staticPages + collectionPages})
-              </Button>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium">Capture screenshots</div>
+                  <div className="text-xs text-muted-foreground">
+                    Turn this off for faster bulk scans when screenshot diffs are not needed.
+                  </div>
+                </div>
+                <Switch
+                  checked={bulkScanCaptureScreenshots}
+                  onCheckedChange={setBulkScanCaptureScreenshots}
+                  aria-label="Capture screenshots during bulk scan"
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setShowCollectionDialog(false)}>
+                  Cancel
+                </Button>
+                <Button variant="secondary" onClick={() => handleBulkScan(false)}>
+                  Static only ({staticPages})
+                </Button>
+                <Button onClick={() => handleBulkScan(true)}>
+                  Scan all ({staticPages + collectionPages})
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -2047,6 +2075,22 @@ export function WebsiteAuditDashboard({
                     </Tooltip>
                   )}
 
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 h-8">
+                    <label
+                      htmlFor="bulk-scan-screenshots"
+                      className="text-[11px] font-medium text-muted-foreground whitespace-nowrap"
+                    >
+                      Screenshots
+                    </label>
+                    <Switch
+                      id="bulk-scan-screenshots"
+                      checked={bulkScanCaptureScreenshots}
+                      onCheckedChange={setBulkScanCaptureScreenshots}
+                      disabled={isBulkScanning}
+                      aria-label="Capture screenshots during bulk scan"
+                    />
+                  </div>
+
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -2164,6 +2208,9 @@ export function WebsiteAuditDashboard({
                     </p>
                     <Badge variant="secondary" className="text-[10px]">
                       {bulkScanProgress.scanCollections ? 'All pages' : 'Static only'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      {bulkScanProgress.captureScreenshots ? 'Screenshots on' : 'Screenshots off'}
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
