@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isCronAuthorized } from '@/lib/cron-auth';
 import { projectsService } from '@/services/database';
 import { detectAnomalies } from '@/services/AnomalyDetector';
 import { alertService } from '@/services/AlertService';
@@ -15,10 +16,7 @@ const POLL_INTERVAL_MS = 5000; // 5 seconds
  * then run anomaly detection and send alerts.
  */
 export async function GET(request: NextRequest) {
-    const cronSecret = request.headers.get('x-cron-secret');
-    const expectedSecret = process.env.CRON_SECRET;
-
-    if (expectedSecret && cronSecret !== expectedSecret) {
+    if (!isCronAuthorized(request)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
