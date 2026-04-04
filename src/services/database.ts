@@ -18,8 +18,10 @@ import { Project, ProjectLink, ProjectStatus, ProjectTag, CreateProjectLinkInput
 import { WebflowConfig } from '@/types/webflow';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
+import { compactAuditResult, AuditCompactLevel } from '@/lib/scan-utils';
 
 const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
+const PROJECT_LINKS_SOFT_LIMIT_BYTES = 900_000;
 
 const generateLinkId = (): string => `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 const generatePublicShareToken = (): string => {
@@ -43,6 +45,48 @@ function stripUndefined<T>(obj: T): T {
     ) as T;
   }
   return obj;
+}
+
+function estimateSerializedSize(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(stripUndefined(value))).length;
+}
+
+function sanitizeProjectLinkForStorage(
+  link: ProjectLink,
+  level: AuditCompactLevel
+): ProjectLink {
+  if (!link.auditResult) return link;
+
+  return {
+    ...link,
+    auditResult: compactAuditResult(link.auditResult, level),
+  };
+}
+
+function sanitizeProjectLinksForStorage(links: ProjectLink[]): ProjectLink[] {
+  const levels: AuditCompactLevel[] = ['standard', 'aggressive', 'minimal'];
+
+  let sanitizedLinks = links;
+
+  for (const level of levels) {
+    sanitizedLinks = links.map((link) => sanitizeProjectLinkForStorage(link, level));
+    const serializedSize = estimateSerializedSize({ links: sanitizedLinks });
+
+    if (serializedSize <= PROJECT_LINKS_SOFT_LIMIT_BYTES) {
+      if (level !== 'standard') {
+        console.warn(
+          `[projectsService] Reduced links payload using ${level} compaction (${serializedSize} bytes)`
+        );
+      }
+      return sanitizedLinks;
+    }
+  }
+
+  const finalSize = estimateSerializedSize({ links: sanitizedLinks });
+  console.warn(
+    `[projectsService] Links payload remains large after minimal compaction (${finalSize} bytes)`
+  );
+  return sanitizedLinks;
 }
 
 // Create default links for new projects (ensure each link has a unique id)
@@ -207,8 +251,9 @@ export const projectsService = {
   // Update project links (for reordering and editing)
   async updateProjectLinks(projectId: string, links: ProjectLink[]): Promise<void> {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    const sanitizedLinks = sanitizeProjectLinksForStorage(links);
     await updateDoc(projectRef, {
-      links: stripUndefined(links),
+      links: stripUndefined(sanitizedLinks),
       updatedAt: Timestamp.now(),
     });
   },

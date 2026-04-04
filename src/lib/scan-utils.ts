@@ -1,12 +1,112 @@
 import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot, AuditResult, SectionInfo, ContentBlock, BlockChange, TextElement, TextChange } from '@/types';
 import { createTwoFilesPatch } from 'diff';
 
+export type AuditCompactLevel = 'standard' | 'aggressive' | 'minimal';
+
+const AUDIT_COMPACT_LIMITS: Record<
+    AuditCompactLevel,
+    {
+        snapshotImages: number;
+        snapshotHeadings: number;
+        snapshotTitle: number;
+        snapshotDescription: number;
+        imageAlt: number;
+        placeholderIssues: number;
+        spellingIssues: number;
+        completenessIssues: number;
+        seoIssues: number;
+        technicalIssues: number;
+        schemaTypes: number;
+        schemaIssues: number;
+        brokenLinks: number;
+        headingStructureHeadings: number;
+        accessibilityIssues: number;
+        ariaLandmarks: number;
+        fieldChanges: number;
+        diffSummary: number;
+        longText: number;
+        urlText: number;
+    }
+> = {
+    standard: {
+        snapshotImages: 8,
+        snapshotHeadings: 8,
+        snapshotTitle: 180,
+        snapshotDescription: 220,
+        imageAlt: 120,
+        placeholderIssues: 8,
+        spellingIssues: 10,
+        completenessIssues: 8,
+        seoIssues: 8,
+        technicalIssues: 8,
+        schemaTypes: 8,
+        schemaIssues: 8,
+        brokenLinks: 8,
+        headingStructureHeadings: 16,
+        accessibilityIssues: 12,
+        ariaLandmarks: 8,
+        fieldChanges: 8,
+        diffSummary: 320,
+        longText: 180,
+        urlText: 280,
+    },
+    aggressive: {
+        snapshotImages: 4,
+        snapshotHeadings: 6,
+        snapshotTitle: 140,
+        snapshotDescription: 180,
+        imageAlt: 90,
+        placeholderIssues: 5,
+        spellingIssues: 6,
+        completenessIssues: 5,
+        seoIssues: 5,
+        technicalIssues: 5,
+        schemaTypes: 5,
+        schemaIssues: 5,
+        brokenLinks: 5,
+        headingStructureHeadings: 10,
+        accessibilityIssues: 8,
+        ariaLandmarks: 6,
+        fieldChanges: 5,
+        diffSummary: 220,
+        longText: 140,
+        urlText: 220,
+    },
+    minimal: {
+        snapshotImages: 2,
+        snapshotHeadings: 4,
+        snapshotTitle: 120,
+        snapshotDescription: 140,
+        imageAlt: 70,
+        placeholderIssues: 3,
+        spellingIssues: 4,
+        completenessIssues: 4,
+        seoIssues: 4,
+        technicalIssues: 4,
+        schemaTypes: 3,
+        schemaIssues: 3,
+        brokenLinks: 3,
+        headingStructureHeadings: 6,
+        accessibilityIssues: 5,
+        ariaLandmarks: 4,
+        fieldChanges: 4,
+        diffSummary: 160,
+        longText: 100,
+        urlText: 180,
+    },
+};
+
 /**
  * Create a compact version of auditResult for storing in project document.
  * Strips large fields to stay under Firestore's 1MB document limit.
  * Full data is preserved in audit_logs collection.
  */
-export function compactAuditResult(result: AuditResult): AuditResult {
+export function compactAuditResult(
+    result: AuditResult,
+    level: AuditCompactLevel = 'standard'
+): AuditResult {
+    const limits = AUDIT_COMPACT_LIMITS[level];
+
     // Deep clone to avoid mutating original
     const compact: AuditResult = JSON.parse(JSON.stringify(result));
 
@@ -20,49 +120,199 @@ export function compactAuditResult(result: AuditResult): AuditResult {
         const imagesMissingAlt = allImages.filter(img => !img.alt || !img.alt.trim());
         const imagesWithAlt = allImages.filter(img => img.alt && img.alt.trim());
         const compactImages = [...imagesMissingAlt, ...imagesWithAlt]
-            .slice(0, 12)
+            .slice(0, limits.snapshotImages)
             .map(img => ({
-                src: img.src,
-                alt: (img.alt || '').substring(0, 160),
+                src: truncateString(img.src, limits.urlText),
+                alt: truncateString(img.alt || '', limits.imageAlt),
                 inMainContent: !!img.inMainContent,
             }));
 
         compact.contentSnapshot = {
-            title: snapshot.title?.substring(0, 200) || '',
-            h1: snapshot.h1?.substring(0, 200) || '',
-            metaDescription: snapshot.metaDescription?.substring(0, 300) || '',
+            title: truncateString(snapshot.title, limits.snapshotTitle),
+            h1: truncateString(snapshot.h1, limits.snapshotTitle),
+            metaDescription: truncateString(snapshot.metaDescription, limits.snapshotDescription),
             wordCount: snapshot.wordCount || 0,
-            headings: (snapshot.headings || []).slice(0, 10), // Max 10 headings
+            headings: (snapshot.headings || [])
+                .slice(0, limits.snapshotHeadings)
+                .map(heading => truncateString(heading, limits.longText)),
             // Keep only a compact image set; exclude other large arrays/fields.
             images: compactImages,
             // EXCLUDE large fields: bodyText, bodyTextPreview, links, sections
         } as ContentSnapshot;
     }
 
+    if (compact.summary) {
+        compact.summary = truncateString(compact.summary, limits.diffSummary);
+    }
+
+    if (compact.categories?.placeholders?.issues) {
+        compact.categories.placeholders.issues = compact.categories.placeholders.issues
+            .slice(0, limits.placeholderIssues)
+            .map(issue => ({
+                type: truncateString(issue.type, limits.longText),
+                count: issue.count,
+            }));
+    }
+
+    if (compact.categories?.spelling?.issues) {
+        compact.categories.spelling.issues = compact.categories.spelling.issues
+            .slice(0, limits.spellingIssues)
+            .map(issue => ({
+                word: truncateString(issue.word, limits.longText),
+                suggestion: issue.suggestion ? truncateString(issue.suggestion, limits.longText) : undefined,
+            }));
+    }
+
+    if (compact.categories?.completeness?.issues) {
+        compact.categories.completeness.issues = compact.categories.completeness.issues
+            .slice(0, limits.completenessIssues)
+            .map(issue => ({
+                check: truncateString(issue.check, limits.longText),
+                detail: truncateString(issue.detail, limits.longText),
+            }));
+    }
+
+    if (compact.categories?.seo) {
+        compact.categories.seo.issues = (compact.categories.seo.issues || [])
+            .slice(0, limits.seoIssues)
+            .map(issue => truncateString(issue, limits.longText));
+        compact.categories.seo.title = compact.categories.seo.title
+            ? truncateString(compact.categories.seo.title, limits.snapshotTitle)
+            : undefined;
+        compact.categories.seo.metaDescription = compact.categories.seo.metaDescription
+            ? truncateString(compact.categories.seo.metaDescription, limits.snapshotDescription)
+            : undefined;
+    }
+
+    if (compact.categories?.technical?.issues) {
+        compact.categories.technical.issues = compact.categories.technical.issues
+            .slice(0, limits.technicalIssues)
+            .map(issue => truncateString(issue, limits.longText));
+    }
+
     // Strip rawSchemas from schema category (can be very large)
     if (compact.categories?.schema) {
         compact.categories.schema = {
             ...compact.categories.schema,
+            schemaTypes: compact.categories.schema.schemaTypes
+                .slice(0, limits.schemaTypes)
+                .map(type => truncateString(type, limits.longText)),
+            issues: compact.categories.schema.issues
+                .slice(0, limits.schemaIssues)
+                .map(issue => ({
+                    type: truncateString(issue.type, limits.longText),
+                    message: truncateString(issue.message, limits.longText),
+                })),
             rawSchemas: [], // Remove full schemas, keep metadata
         };
     }
 
     // Limit headingStructure headings
     if (compact.categories?.headingStructure?.headings) {
-        compact.categories.headingStructure.headings = 
-            compact.categories.headingStructure.headings.slice(0, 20);
+        compact.categories.headingStructure.headings =
+            compact.categories.headingStructure.headings
+                .slice(0, limits.headingStructureHeadings)
+                .map(heading => ({
+                    level: heading.level,
+                    text: truncateString(heading.text, limits.longText),
+                }));
+    }
+
+    if (compact.categories?.headingStructure?.issues) {
+        compact.categories.headingStructure.issues = compact.categories.headingStructure.issues
+            .slice(0, limits.technicalIssues)
+            .map(issue => truncateString(issue, limits.longText));
     }
 
     // Limit brokenLinks array
     if (compact.categories?.links?.brokenLinks) {
-        compact.categories.links.brokenLinks = 
-            compact.categories.links.brokenLinks.slice(0, 10);
+        compact.categories.links.brokenLinks =
+            compact.categories.links.brokenLinks
+                .slice(0, limits.brokenLinks)
+                .map(link => ({
+                    href: truncateString(link.href, limits.urlText),
+                    status: link.status,
+                    text: truncateString(link.text, limits.longText),
+                    error: link.error ? truncateString(link.error, limits.longText) : undefined,
+                }));
+    }
+
+    if (compact.categories?.openGraph) {
+        compact.categories.openGraph.issues = compact.categories.openGraph.issues
+            .slice(0, limits.seoIssues)
+            .map(issue => truncateString(issue, limits.longText));
+        compact.categories.openGraph.title = compact.categories.openGraph.title
+            ? truncateString(compact.categories.openGraph.title, limits.snapshotTitle)
+            : undefined;
+        compact.categories.openGraph.description = compact.categories.openGraph.description
+            ? truncateString(compact.categories.openGraph.description, limits.snapshotDescription)
+            : undefined;
+        compact.categories.openGraph.image = compact.categories.openGraph.image
+            ? truncateString(compact.categories.openGraph.image, limits.urlText)
+            : undefined;
+        compact.categories.openGraph.url = compact.categories.openGraph.url
+            ? truncateString(compact.categories.openGraph.url, limits.urlText)
+            : undefined;
+        compact.categories.openGraph.type = compact.categories.openGraph.type
+            ? truncateString(compact.categories.openGraph.type, limits.longText)
+            : undefined;
+    }
+
+    if (compact.categories?.twitterCards) {
+        compact.categories.twitterCards.issues = compact.categories.twitterCards.issues
+            .slice(0, limits.seoIssues)
+            .map(issue => truncateString(issue, limits.longText));
+        compact.categories.twitterCards.card = compact.categories.twitterCards.card
+            ? truncateString(compact.categories.twitterCards.card, limits.longText)
+            : undefined;
+        compact.categories.twitterCards.title = compact.categories.twitterCards.title
+            ? truncateString(compact.categories.twitterCards.title, limits.snapshotTitle)
+            : undefined;
+        compact.categories.twitterCards.description = compact.categories.twitterCards.description
+            ? truncateString(compact.categories.twitterCards.description, limits.snapshotDescription)
+            : undefined;
+        compact.categories.twitterCards.image = compact.categories.twitterCards.image
+            ? truncateString(compact.categories.twitterCards.image, limits.urlText)
+            : undefined;
+    }
+
+    if (compact.categories?.metaTags) {
+        compact.categories.metaTags.issues = compact.categories.metaTags.issues
+            .slice(0, limits.technicalIssues)
+            .map(issue => truncateString(issue, limits.longText));
+        compact.categories.metaTags.canonicalUrl = compact.categories.metaTags.canonicalUrl
+            ? truncateString(compact.categories.metaTags.canonicalUrl, limits.urlText)
+            : undefined;
+        compact.categories.metaTags.viewport = compact.categories.metaTags.viewport
+            ? truncateString(compact.categories.metaTags.viewport, limits.longText)
+            : undefined;
+        compact.categories.metaTags.language = compact.categories.metaTags.language
+            ? truncateString(compact.categories.metaTags.language, limits.longText)
+            : undefined;
+        compact.categories.metaTags.robots = compact.categories.metaTags.robots
+            ? truncateString(compact.categories.metaTags.robots, limits.longText)
+            : undefined;
+        compact.categories.metaTags.favicon = compact.categories.metaTags.favicon
+            ? truncateString(compact.categories.metaTags.favicon, limits.urlText)
+            : undefined;
     }
 
     // Limit accessibility issues
     if (compact.categories?.accessibility?.issues) {
-        compact.categories.accessibility.issues = 
-            compact.categories.accessibility.issues.slice(0, 20);
+        compact.categories.accessibility.issues =
+            compact.categories.accessibility.issues
+                .slice(0, limits.accessibilityIssues)
+                .map(issue => ({
+                    ...issue,
+                    element: issue.element ? truncateString(issue.element, limits.longText) : undefined,
+                    message: truncateString(issue.message, limits.longText),
+                }));
+    }
+
+    if (compact.categories?.accessibility?.ariaLandmarks) {
+        compact.categories.accessibility.ariaLandmarks = compact.categories.accessibility.ariaLandmarks
+            .slice(0, limits.ariaLandmarks)
+            .map(landmark => truncateString(landmark, limits.longText));
     }
 
     // Remove screenshots from project doc (kept in audit_logs)
@@ -74,17 +324,17 @@ export function compactAuditResult(result: AuditResult): AuditResult {
 
     // Limit fieldChanges to avoid large diffs
     if (compact.fieldChanges) {
-        compact.fieldChanges = compact.fieldChanges.slice(0, 10).map(change => ({
+        compact.fieldChanges = compact.fieldChanges.slice(0, limits.fieldChanges).map(change => ({
             ...change,
             // Truncate large values in field changes
-            oldValue: truncateFieldValue(change.oldValue) as FieldChange['oldValue'],
-            newValue: truncateFieldValue(change.newValue) as FieldChange['newValue'],
+            oldValue: truncateFieldValue(change.oldValue, level) as FieldChange['oldValue'],
+            newValue: truncateFieldValue(change.newValue, level) as FieldChange['newValue'],
         }));
     }
 
     // Truncate diffSummary and diffPatch
-    if (compact.diffSummary && compact.diffSummary.length > 500) {
-        compact.diffSummary = compact.diffSummary.substring(0, 500) + '...';
+    if (compact.diffSummary) {
+        compact.diffSummary = truncateString(compact.diffSummary, limits.diffSummary);
     }
     delete compact.diffPatch; // Remove full diff patch
 
@@ -94,22 +344,29 @@ export function compactAuditResult(result: AuditResult): AuditResult {
 /**
  * Truncate field values to prevent large data in compact result
  */
-function truncateFieldValue(value: unknown): unknown {
+function truncateFieldValue(value: unknown, level: AuditCompactLevel = 'standard'): unknown {
+    const limits = AUDIT_COMPACT_LIMITS[level];
+
     if (value === null || value === undefined) return value;
     
     if (typeof value === 'string') {
-        return value.length > 200 ? value.substring(0, 200) + '...' : value;
+        return truncateString(value, limits.longText);
     }
     
     if (Array.isArray(value)) {
         // For arrays (images, links), just keep count
-        if (value.length > 5) {
+        if (value.length > 3) {
             return value.slice(0, 3); // Keep first 3 items
         }
         return value;
     }
     
     return value;
+}
+
+function truncateString(value: string | undefined, maxLength: number): string {
+    if (!value) return '';
+    return value.length > maxLength ? `${value.substring(0, maxLength)}...` : value;
 }
 
 // Compute change status by comparing hashes

@@ -39,9 +39,3 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   seo_regression: 'SEO Regression',
   word_count_drop: 'Word Count Drop',
 };
-
-export const ALERT_SEVERITY_COLORS: Record<AlertSeverity, { bg: string; text: string; border: string }> = {
-  critical: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30' },
-  warning: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/30' },
-  info: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' },
-};

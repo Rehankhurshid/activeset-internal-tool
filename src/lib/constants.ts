@@ -50,12 +50,3 @@ export const ERROR_MESSAGES = {
   UNAUTHORIZED: 'You are not authorized to perform this action',
 } as const;
 
-// Success messages
-export const SUCCESS_MESSAGES = {
-  PROJECT_CREATED: 'Project created successfully',
-  PROJECT_UPDATED: 'Project updated successfully',
-  PROJECT_DELETED: 'Project deleted successfully',
-  LINK_ADDED: 'Link added successfully',
-  LINK_UPDATED: 'Link updated successfully',
-  LINK_DELETED: 'Link deleted successfully',
-} as const;

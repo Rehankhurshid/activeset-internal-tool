@@ -10,3 +10,4 @@ This folder contains deep-dive documentation for major internal tool features.
 - [project-links.md](./project-links.md) — project links dashboard and data model.
 - [capture-package-publish.md](./capture-package-publish.md) — publishing workflow for the `activeset-capture` package.
 - [webflow-tracker-extension.md](./webflow-tracker-extension.md) — Chrome extension for Webflow account/session tracking.
+- [site-monitoring.md](./site-monitoring.md) — automated scanning, anomaly detection, alerts, and daily health reports.
