@@ -1,13 +1,11 @@
 'use client';
 
-import { useAuth } from '@/hooks/useAuth';
-import { useModuleAccess } from '@/hooks/useModuleAccess';
-import { LoginForm } from '@/components/auth/LoginForm';
+import { LoginForm, useAuth, useModuleAccess } from '@/modules/auth-access';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { FolderOpen, FileText, Sparkles, Lock, ListChecks, PenLine } from 'lucide-react';
-import { AppNavigation } from '@/components/navigation/AppNavigation';
+import { AppNavigation } from '@/shared/ui';
 import { DashboardAlertPanel } from '@/components/alerts/DashboardAlertPanel';
 import { DailyHealthPanel } from '@/components/alerts/DailyHealthPanel';
 import { cn } from '@/lib/utils';

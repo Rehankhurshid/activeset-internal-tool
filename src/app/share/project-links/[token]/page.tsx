@@ -1,9 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { WebsiteAuditDashboard } from '@/components/website-audit-dashboard';
-import { db } from '@/lib/firebase-admin';
-import { FolderPageTypes, ProjectLink } from '@/types';
+import { WebsiteAuditDashboardScreen, type FolderPageTypes, type ProjectLink } from '@/modules/site-monitoring';
+import { db } from '@/platform/firebase/admin';
 import { Globe } from 'lucide-react';
 import Link from 'next/link';
 
@@ -115,7 +114,7 @@ export default async function SharedProjectAuditPage({ params }: PageProps) {
           </div>
         </div>
 
-        <WebsiteAuditDashboard
+        <WebsiteAuditDashboardScreen
           links={sharedLinks}
           projectId={project.id}
           folderPageTypes={project.folderPageTypes}

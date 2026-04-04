@@ -1,5 +1,5 @@
-import { PageDetails } from "@/components/page-details"
+import { PageAuditDetailsScreen } from "@/modules/site-monitoring"
 
 export default function PageDetailsPage() {
-  return <PageDetails />
+  return <PageAuditDetailsScreen />
 }
