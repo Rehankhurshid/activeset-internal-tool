@@ -50,31 +50,30 @@ export async function GET(request: NextRequest) {
   }
 
   let notification = await getScanNotificationJob(scanId);
-  if (job.status === 'completed') {
-    try {
-      await ensureScanNotificationQueued({
-        scanId: job.scanId,
-        projectId: job.projectId,
-        projectName: job.projectName,
-        scannedPages: Math.max(0, job.current - job.summary.failed),
-        totalPages: job.total,
-        summary: job.summary,
-      });
-      notification = await getScanNotificationJob(scanId);
+  if (job.status === 'completed' && (!notification || notification.status !== 'sent')) {
+    // Queue and process notification in the background so the response isn't delayed
+    // and Vercel keeps the function alive even if the frontend reloads
+    waitUntil((async () => {
+      try {
+        console.log(`[scan-bulk/status] Queueing notification for ${scanId}`);
+        await ensureScanNotificationQueued({
+          scanId: job.scanId,
+          projectId: job.projectId,
+          projectName: job.projectName,
+          scannedPages: Math.max(0, job.current - job.summary.failed),
+          totalPages: job.total,
+          summary: job.summary,
+        });
 
-      if (!notification || notification.status !== 'sent') {
         const dispatchResult = await processQueuedScanNotification(scanId);
+        console.log(`[scan-bulk/status] Notification result for ${scanId}: ${dispatchResult.status}`);
         if (dispatchResult.status === 'failed') {
-          console.error(
-            `[scan-bulk/status] Notification dispatch failed for ${scanId}:`,
-            dispatchResult.error
-          );
+          console.error(`[scan-bulk/status] Notification failed for ${scanId}:`, dispatchResult.error);
         }
-        notification = await getScanNotificationJob(scanId);
+      } catch (error) {
+        console.error(`[scan-bulk/status] Notification queue failed for ${scanId}:`, error);
       }
-    } catch (error) {
-      console.error(`[scan-bulk/status] Notification queue failed for ${scanId}:`, error);
-    }
+    })());
   }
 
   return NextResponse.json({
