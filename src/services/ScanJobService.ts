@@ -615,7 +615,10 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
 
     const finalJob = await releaseScanJobAfterBatch(scanId, summary);
 
+    console.log(`[scan-jobs] Batch done for ${scanId}, finalJob status: ${finalJob?.status || 'unknown'}`);
+
     if (finalJob?.status === 'completed') {
+      console.log(`[scan-jobs] Scan ${scanId} completed — queueing notification`);
       await ensureScanNotificationQueued({
         scanId: finalJob.scanId,
         projectId: finalJob.projectId,

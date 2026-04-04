@@ -31,9 +31,12 @@ export async function POST(request: NextRequest) {
         await triggerScanJobProcessing(baseUrl, scanId);
       } else if (result.status === 'completed') {
         // Process notification immediately after scan completes
-        await processQueuedScanNotification(scanId).catch((error) => {
+        console.log(`[scan-bulk/process] Scan ${scanId} completed — processing notification`);
+        const notifyResult = await processQueuedScanNotification(scanId).catch((error) => {
           console.error(`[scan-bulk/process] Notification failed for ${scanId}:`, error);
+          return { scanId, status: 'failed' as const, error: String(error) };
         });
+        console.log(`[scan-bulk/process] Notification result for ${scanId}:`, JSON.stringify(notifyResult));
       }
     })().catch((error) => {
       console.error(`[scan-bulk/process] Background batch failed for ${scanId}:`, error);
