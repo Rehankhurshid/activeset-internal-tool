@@ -238,8 +238,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     </div>
                 </div>
 
-                <ProjectTextCheckCard links={project.links} />
-
                 {/* Main Content */}
                 <Tabs defaultValue="audit" value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
@@ -281,8 +279,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         )}
                     </div>
 
-                    <TabsContent value="audit" className="mt-4 sm:mt-6">
-                            <WebsiteAuditDashboardScreen
+                    <TabsContent value="audit" className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
+                        <ProjectTextCheckCard links={project.links} />
+                        <WebsiteAuditDashboardScreen
                             links={project.links.filter(l => l.source === 'auto')}
                             projectId={project.id}
                             folderPageTypes={project.folderPageTypes}
