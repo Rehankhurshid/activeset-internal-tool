@@ -3,6 +3,7 @@ import { waitUntil } from '@vercel/functions';
 import { isCronAuthorized } from '@/lib/cron-auth';
 import { getRequestBaseUrl, triggerScanJobProcessing } from '@/lib/scan-job-dispatch';
 import { processScanJobBatch } from '@/services/ScanJobService';
+import { processQueuedScanNotification } from '@/services/ScanNotificationQueueService';
 
 export const maxDuration = 300;
 
@@ -28,6 +29,11 @@ export async function POST(request: NextRequest) {
 
       if (result.status === 'running') {
         await triggerScanJobProcessing(baseUrl, scanId);
+      } else if (result.status === 'completed') {
+        // Process notification immediately after scan completes
+        await processQueuedScanNotification(scanId).catch((error) => {
+          console.error(`[scan-bulk/process] Notification failed for ${scanId}:`, error);
+        });
       }
     })().catch((error) => {
       console.error(`[scan-bulk/process] Background batch failed for ${scanId}:`, error);
