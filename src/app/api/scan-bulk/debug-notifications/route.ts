@@ -51,9 +51,11 @@ export async function GET() {
       recentCompleted,
       env: {
         hasSlackWebhook: !!process.env.SLACK_WEBHOOK_URL,
+        slackWebhookPreview: process.env.SLACK_WEBHOOK_URL ? process.env.SLACK_WEBHOOK_URL.substring(0, 30) + '...' : 'NOT SET',
         hasSlackBot: !!process.env.SLACK_BOT_TOKEN,
         hasSlackChannel: !!process.env.SLACK_CHANNEL_ID,
         hasGmail: !!process.env.GMAIL_USER,
+        allSlackEnvKeys: Object.keys(process.env).filter(k => k.toLowerCase().includes('slack')),
       },
     });
   } catch (error) {
