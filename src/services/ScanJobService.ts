@@ -47,6 +47,7 @@ export interface ScanJob {
   startedAt: string;
   updatedAt: string;
   scanCollections: boolean;
+  captureScreenshots: boolean;
   targetLinkIds: string[];
   completedLinkIds: string[];
   summary: ScanJobSummary;
@@ -65,6 +66,7 @@ interface CreateScanJobInput {
   project: Project;
   linksToScan: ProjectLink[];
   scanCollections: boolean;
+  captureScreenshots: boolean;
 }
 
 interface ProcessScanJobBatchResult {
@@ -77,7 +79,8 @@ interface ProcessScanJobBatchResult {
 
 const SCAN_JOBS_COLLECTION = COLLECTIONS.SCAN_JOBS;
 const ACTIVE_SCAN_JOB_STATUSES: ScanJobStatus[] = ['queued', 'running'];
-const PAGES_PER_BATCH = 2;
+const PAGES_PER_BATCH = 10;
+const PARALLEL_CONCURRENCY = 5;
 const PROCESSING_LOCK_MS = 4 * 60 * 1000;
 
 function getCollectionRef() {
@@ -127,6 +130,7 @@ function docToJob(
     startedAt: typeof data.startedAt === 'string' ? data.startedAt : nowIso(),
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : nowIso(),
     scanCollections: Boolean(data.scanCollections),
+    captureScreenshots: data.captureScreenshots !== false,
     targetLinkIds: Array.isArray(data.targetLinkIds)
       ? data.targetLinkIds.filter((value): value is string => typeof value === 'string')
       : [],
@@ -238,11 +242,13 @@ async function heartbeatScanJob(scanId: string, currentUrl: string): Promise<voi
   });
 }
 
-async function recordCompletedLink(
+async function recordCompletedLinks(
   scanId: string,
-  linkId: string,
+  linkIds: string[],
   summary: ScanJobSummary
 ): Promise<ScanJob | null> {
+  if (linkIds.length === 0) return getScanJob(scanId);
+
   const ref = getDocRef(scanId);
 
   return runTransaction(db, async (transaction) => {
@@ -252,9 +258,13 @@ async function recordCompletedLink(
     const job = docToJob(snapshot.id, snapshot.data());
     if (!job) return null;
 
-    const completedLinkIds = job.completedLinkIds.includes(linkId)
-      ? job.completedLinkIds
-      : [...job.completedLinkIds, linkId];
+    const completedLinkIds = [...job.completedLinkIds];
+    for (const linkId of linkIds) {
+      if (!completedLinkIds.includes(linkId)) {
+        completedLinkIds.push(linkId);
+      }
+    }
+
     const current = Math.min(completedLinkIds.length, job.total);
     const updatedAt = nowIso();
 
@@ -377,6 +387,7 @@ export async function createScanJob(input: CreateScanJobInput): Promise<ScanJob>
     startedAt,
     updatedAt: startedAt,
     scanCollections: input.scanCollections,
+    captureScreenshots: input.captureScreenshots,
     targetLinkIds: input.linksToScan.map((link) => link.id),
     completedLinkIds: [],
     summary: defaultSummary(),
@@ -474,6 +485,8 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
 
     let projectLinks = [...project.links];
     let summary = normalizeSummary(claimedJob.summary);
+    let shouldPersistProjectLinks = false;
+    const completedBatchLinkIds: string[] = [];
     const remainingTargetIds = claimedJob.targetLinkIds
       .filter((linkId) => !claimedJob.completedLinkIds.includes(linkId))
       .slice(0, PAGES_PER_BATCH);
@@ -499,45 +512,40 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
       };
     }
 
-    for (const linkId of remainingTargetIds) {
-      const latestJob = await getScanJob(scanId);
-      if (!latestJob) {
-        throw new Error(`Scan job disappeared: ${scanId}`);
-      }
-      if (latestJob.status === 'cancelled' || latestJob.cancelRequested) {
-        const cancelledJob = await releaseScanJobAfterBatch(scanId, summary);
-        return {
-          scanId,
-          status: cancelledJob?.status || 'cancelled',
-          current: cancelledJob?.current || latestJob.current,
-          total: cancelledJob?.total || latestJob.total,
-        };
-      }
+    // Check for cancellation once at batch start
+    await heartbeatScanJob(scanId, '');
 
+    // Process pages in parallel with concurrency limit
+    const processPage = async (linkId: string) => {
       const linkIndex = projectLinks.findIndex((link) => link.id === linkId);
       const link = linkIndex >= 0 ? projectLinks[linkIndex] : null;
 
-      await heartbeatScanJob(scanId, link?.url || '');
-
       if (!link) {
-        summary = { ...summary, failed: summary.failed + 1 };
-        await recordCompletedLink(scanId, linkId, summary);
-        continue;
+        return { linkId, status: 'SCAN_FAILED' as ChangeStatus };
       }
 
       try {
-        const { changeStatus, updatedLink, pendingWrite } = await scanSinglePage(project.id, link);
+        const { changeStatus, updatedLink, pendingWrite } = await scanSinglePage(
+          project.id,
+          link,
+          claimedJob.captureScreenshots
+        );
         projectLinks[linkIndex] = updatedLink;
+        shouldPersistProjectLinks = true;
 
-        await projectsService.updateProjectLinks(project.id, projectLinks);
+        // Save audit log and changelog in parallel
+        const writePromises: Promise<unknown>[] = [];
         if (pendingWrite.auditLog) {
-          await AuditService.saveAuditLog(pendingWrite.auditLog);
+          writePromises.push(AuditService.saveAuditLog(pendingWrite.auditLog));
         }
         if (pendingWrite.changeLogEntry) {
-          await changeLogService.saveEntry(pendingWrite.changeLogEntry);
+          writePromises.push(changeLogService.saveEntry(pendingWrite.changeLogEntry));
+        }
+        if (writePromises.length > 0) {
+          await Promise.all(writePromises);
         }
 
-        summary = updateSummaryForChange(summary, changeStatus);
+        return { linkId, status: changeStatus };
       } catch (error) {
         console.error(`[scan-jobs] Failed to scan ${link.url}:`, error);
 
@@ -555,14 +563,54 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
             ...projectLinks[linkIndex],
             auditResult: compactAuditResult(failedAudit),
           };
-
-          await projectsService.updateProjectLinks(project.id, projectLinks);
+          shouldPersistProjectLinks = true;
         }
 
-        summary = { ...summary, failed: summary.failed + 1 };
-      } finally {
-        await recordCompletedLink(scanId, linkId, summary);
+        return { linkId, status: 'SCAN_FAILED' as ChangeStatus };
       }
+    };
+
+    // Run in parallel chunks of PARALLEL_CONCURRENCY
+    for (let i = 0; i < remainingTargetIds.length; i += PARALLEL_CONCURRENCY) {
+      // Check cancellation between chunks
+      if (i > 0) {
+        const latestJob = await getScanJob(scanId);
+        if (!latestJob || latestJob.status === 'cancelled' || latestJob.cancelRequested) {
+          if (shouldPersistProjectLinks) {
+            await projectsService.updateProjectLinks(project.id, projectLinks);
+          }
+          if (completedBatchLinkIds.length > 0) {
+            await recordCompletedLinks(scanId, completedBatchLinkIds, summary);
+          }
+          const cancelledJob = await releaseScanJobAfterBatch(scanId, summary);
+          return {
+            scanId,
+            status: cancelledJob?.status || 'cancelled',
+            current: cancelledJob?.current || 0,
+            total: cancelledJob?.total || claimedJob.total,
+          };
+        }
+        await heartbeatScanJob(scanId, `batch chunk ${i}/${remainingTargetIds.length}`);
+      }
+
+      const chunk = remainingTargetIds.slice(i, i + PARALLEL_CONCURRENCY);
+      const results = await Promise.allSettled(chunk.map(processPage));
+
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          completedBatchLinkIds.push(result.value.linkId);
+          summary = updateSummaryForChange(summary, result.value.status);
+        } else {
+          summary = { ...summary, failed: summary.failed + 1 };
+        }
+      }
+    }
+
+    if (shouldPersistProjectLinks) {
+      await projectsService.updateProjectLinks(project.id, projectLinks);
+    }
+    if (completedBatchLinkIds.length > 0) {
+      await recordCompletedLinks(scanId, completedBatchLinkIds, summary);
     }
 
     const finalJob = await releaseScanJobAfterBatch(scanId, summary);
@@ -601,11 +649,18 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
 
 async function scanSinglePage(
   projectId: string,
-  link: ProjectLink
+  link: ProjectLink,
+  captureScreenshots: boolean
 ): Promise<{ score: number; changeStatus: ChangeStatus; updatedLink: ProjectLink; pendingWrite: PendingWrite }> {
-  const scanResult = await pageScanner.scan(link.url);
-
   const prevResult = link.auditResult;
+
+  // Prefetch changelog history and audit log in parallel with page scan
+  const [scanResult, latestChangeLog, prevAuditLog] = await Promise.all([
+    pageScanner.scan(link.url),
+    changeLogService.getLatestEntry(link.id),
+    prevResult ? AuditService.getLatestAuditLog(projectId, link.id) : Promise.resolve(null),
+  ]);
+
   const changeStatus = computeChangeStatus(
     scanResult.fullHash,
     scanResult.contentHash,
@@ -619,11 +674,10 @@ async function scanSinglePage(
 
   if (changeStatus === 'CONTENT_CHANGED' || changeStatus === 'TECH_CHANGE_ONLY') {
     try {
-      const prevLog = await AuditService.getLatestAuditLog(projectId, link.id);
-      if (changeStatus === 'CONTENT_CHANGED' && prevLog?.htmlSource) {
-        diffPatch = generateDiffPatch(prevLog.htmlSource, scanResult.htmlSource || '') || undefined;
+      if (changeStatus === 'CONTENT_CHANGED' && prevAuditLog?.htmlSource) {
+        diffPatch = generateDiffPatch(prevAuditLog.htmlSource, scanResult.htmlSource || '') || undefined;
 
-        const bodyDiff = computeBodyTextDiff(prevLog.htmlSource, scanResult.htmlSource);
+        const bodyDiff = computeBodyTextDiff(prevAuditLog.htmlSource, scanResult.htmlSource);
         const prevSnapshot = prevResult?.contentSnapshot;
         if (prevSnapshot) {
           fieldChanges = computeFieldChanges(scanResult.contentSnapshot, prevSnapshot);
@@ -648,7 +702,9 @@ async function scanSinglePage(
   const lastRunTimestamp = nowIso();
   const isFirstScan = !prevResult;
   const hasNoScreenshot = !prevResult?.screenshotUrl && !prevResult?.screenshot;
-  const shouldCaptureScreenshot = isFirstScan || hasNoScreenshot || changeStatus === 'CONTENT_CHANGED';
+  const shouldCaptureScreenshot =
+    captureScreenshots && (isFirstScan || hasNoScreenshot || changeStatus === 'CONTENT_CHANGED');
+  const storedScreenshotUrl = prevResult?.screenshotUrl || prevResult?.screenshot;
 
   let screenshotUrl: string | undefined;
   let previousScreenshotUrl: string | undefined;
@@ -668,32 +724,15 @@ async function scanSinglePage(
         lastRunTimestamp
       );
 
-      if (!isFirstScan) {
-        try {
-          const prevLog = await AuditService.getLatestAuditLog(projectId, link.id);
-          if (prevLog?.screenshotUrl) {
-            previousScreenshotUrl = prevLog.screenshotUrl;
-          } else if (prevLog?.screenshot) {
-            previousScreenshotUrl = prevLog.screenshot;
-          }
-        } catch {
-          // Ignore.
-        }
+      if (!isFirstScan && storedScreenshotUrl) {
+        previousScreenshotUrl = storedScreenshotUrl;
       }
     } catch (error) {
       console.warn(`[scan-jobs] Screenshot capture/upload failed for ${link.url}:`, error);
     }
   } else {
-    try {
-      const prevLog = await AuditService.getLatestAuditLog(projectId, link.id);
-      if (prevLog?.screenshotUrl) {
-        screenshotUrl = prevLog.screenshotUrl;
-      } else if (prevLog?.screenshot) {
-        screenshotUrl = prevLog.screenshot;
-      }
-    } catch {
-      // Ignore.
-    }
+    screenshotUrl = storedScreenshotUrl;
+    previousScreenshotUrl = prevResult?.previousScreenshotUrl;
   }
 
   const auditResult = removeUndefined({
@@ -737,8 +776,7 @@ async function scanSinglePage(
     pendingWrite.auditLog = auditLogData;
   }
 
-  const latestLog = await changeLogService.getLatestEntry(link.id);
-  const hasHistory = !!latestLog;
+  const hasHistory = !!latestChangeLog;
 
   if ((changeStatus !== 'NO_CHANGE' && changeStatus !== 'SCAN_FAILED') || !hasHistory) {
     const entryType: 'FIRST_SCAN' | 'CONTENT_CHANGED' | 'TECH_CHANGE_ONLY' = !hasHistory

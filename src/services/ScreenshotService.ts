@@ -60,7 +60,7 @@ export class ScreenshotService {
         const {
             width = 1280,
             height = 800,
-            scrollDelay = 200,
+            scrollDelay = 100,
             fullPage = false
         } = options;
 
@@ -73,22 +73,16 @@ export class ScreenshotService {
 
             // Navigate to the page
             await page.goto(url, {
-                waitUntil: 'networkidle2',
-                timeout: 30000
+                waitUntil: 'domcontentloaded',
+                timeout: 15000
             });
 
-            // Wait for page to be fully loaded
-            await page.waitForFunction(() => document.readyState === 'complete', { timeout: 10000 });
-
-            // Scroll through the page to trigger lazy loading and animations
+            // Scroll through the page to trigger lazy loading
             await this.scrollPage(page, scrollDelay);
 
-            // Wait a bit more for animations to settle
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // Scroll back to top for the main screenshot
+            // Scroll back to top for the screenshot
             await page.evaluate(() => window.scrollTo(0, 0));
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 200));
 
             // Capture full page screenshot (captures entire scrollable page, not just viewport)
             const screenshotBuffer = await page.screenshot({
@@ -191,7 +185,7 @@ export class ScreenshotService {
         await page.evaluate(async (scrollDelay) => {
             const scrollHeight = document.body.scrollHeight;
             const viewportHeight = window.innerHeight;
-            const scrollStep = viewportHeight * 0.8;
+            const scrollStep = viewportHeight * 1.5;
 
             // Scroll down in steps
             for (let scrollPos = 0; scrollPos < scrollHeight; scrollPos += scrollStep) {
