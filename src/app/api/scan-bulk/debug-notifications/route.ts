@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { collection, getDocs, limit, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLLECTIONS } from '@/lib/constants';
 import { getAllActiveScanJobs } from '@/services/ScanJobService';
@@ -21,6 +21,23 @@ export async function GET() {
     // Get active scan jobs
     const activeJobs = await getAllActiveScanJobs();
 
+    // Get recently completed scan jobs
+    const completedSnapshot = await getDocs(
+      query(collection(db, COLLECTIONS.SCAN_JOBS), where('status', '==', 'completed'), limit(10))
+    );
+    const recentCompleted = completedSnapshot.docs.map((doc) => {
+      const d = doc.data();
+      return {
+        scanId: doc.id,
+        projectName: d.projectName,
+        status: d.status,
+        current: d.current,
+        total: d.total,
+        completedAt: d.completedAt,
+        startedAt: d.startedAt,
+      };
+    });
+
     return NextResponse.json({
       notifications,
       activeJobs: activeJobs.map((j) => ({
@@ -31,6 +48,7 @@ export async function GET() {
         total: j.total,
         completedAt: j.completedAt,
       })),
+      recentCompleted,
       env: {
         hasSlackWebhook: !!process.env.SLACK_WEBHOOK_URL,
         hasSlackBot: !!process.env.SLACK_BOT_TOKEN,
