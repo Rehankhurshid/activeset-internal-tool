@@ -280,7 +280,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     </div>
 
                     <TabsContent value="audit" className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
-                        <ProjectTextCheckCard links={project.links} />
+                        <ProjectTextCheckCard links={project.links.filter(l => l.source === 'auto')} />
                         <WebsiteAuditDashboardScreen
                             links={project.links.filter(l => l.source === 'auto')}
                             projectId={project.id}
