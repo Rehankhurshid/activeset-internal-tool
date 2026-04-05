@@ -130,6 +130,18 @@ export interface PageScanResult {
  * Fetches page HTML and extracts content without browser plugin artifacts.
  */
 export class PageScanner {
+    private normalizeImageSource(src: string, baseUrl: string): string {
+        const normalized = src.trim();
+        if (!normalized) return normalized;
+
+        try {
+            const url = new URL(normalized, baseUrl);
+            url.hash = '';
+            return url.toString();
+        } catch {
+            return normalized;
+        }
+    }
     /**
      * Scan fonts to verify WOFF2 usage
      */
@@ -1043,9 +1055,15 @@ export class PageScanner {
             seoIssues.push(`Meta description too long (${metaDescription.length} chars, recommended: 50-160)`);
         }
 
-        const imagesWithoutAlt = images.filter(img => !img.alt);
-        if (imagesWithoutAlt.length > 0) {
-            seoIssues.push(`${imagesWithoutAlt.length} image(s) missing alt text`);
+        const uniqueMissingAlt = new Set(
+            images
+                .filter((img) => !img.alt)
+                .map((img) => this.normalizeImageSource(img.src, url))
+                .filter(Boolean)
+        );
+
+        if (uniqueMissingAlt.size > 0) {
+            seoIssues.push(`${uniqueMissingAlt.size} unique image(s) missing alt text`);
         }
 
         // Link stats for the links category
@@ -1172,7 +1190,7 @@ export class PageScanner {
                     titleLength: title.length,
                     metaDescription,
                     metaDescriptionLength: metaDescription.length,
-                    imagesWithoutAlt: imagesWithoutAlt.length,
+                    imagesWithoutAlt: uniqueMissingAlt.size,
                     score: Math.max(0, 100 - seoIssues.reduce((sum, issue) => sum + seoPenaltyForScore(issue), 0))
                 },
                 technical: {
