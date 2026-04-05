@@ -37,6 +37,8 @@ import {
   Code,
   Database,
   EyeOff,
+  Rocket,
+  ArchiveRestore,
 } from 'lucide-react';
 import {
   Table,
@@ -83,7 +85,20 @@ export function WebflowPagesDashboard({
   onSaveConfig,
   onRemoveConfig,
 }: WebflowPagesDashboardProps) {
-  const { pages, loading, error, siteHealth, locales, fetchPages, updatePageSEO, bulkUpdatePagesSEO, generatePageSEO } =
+  const {
+    pages,
+    loading,
+    error,
+    siteHealth,
+    locales,
+    fetchPages,
+    updatePageSEO,
+    updatePageState,
+    publishSite,
+    unpublishSite,
+    bulkUpdatePagesSEO,
+    generatePageSEO,
+  } =
     useWebflowPages(webflowConfig);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,6 +112,9 @@ export function WebflowPagesDashboard({
   // Locale state
   const [selectedLocaleId, setSelectedLocaleId] = useState<string | null>(null);
   const [copyingPageId, setCopyingPageId] = useState<string | null>(null);
+  const [publishingSite, setPublishingSite] = useState(false);
+  const [unpublishingSite, setUnpublishingSite] = useState(false);
+  const [updatingPageStateId, setUpdatingPageStateId] = useState<string | null>(null);
 
   // Fetch pages when config is available
   useEffect(() => {
@@ -183,6 +201,64 @@ export function WebflowPagesDashboard({
 
   const handleSaveSEO = async (pageId: string, updates: UpdateWebflowPageSEO) => {
     return await updatePageSEO(pageId, updates);
+  };
+
+  const handlePublishSite = async () => {
+    setPublishingSite(true);
+    try {
+      const success = await publishSite({ publishToWebflowSubdomain: true });
+      if (success) {
+        toast.success('Site publish triggered');
+        await fetchPages(selectedLocaleId || undefined);
+      } else {
+        toast.error('Failed to publish site');
+      }
+    } finally {
+      setPublishingSite(false);
+    }
+  };
+
+  const handleUnpublishSite = async () => {
+    setUnpublishingSite(true);
+    try {
+      const success = await unpublishSite({ publishToWebflowSubdomain: false, customDomains: [] });
+      if (success) {
+        toast.success('Site unpublish request sent');
+        await fetchPages(selectedLocaleId || undefined);
+      } else {
+        toast.error('Failed to unpublish site');
+      }
+    } finally {
+      setUnpublishingSite(false);
+    }
+  };
+
+  const handleToggleDraft = async (page: WebflowPageWithQC) => {
+    setUpdatingPageStateId(page.id);
+    try {
+      const success = await updatePageState(page.id, { draft: !page.draft, archived: false });
+      if (success) {
+        toast.success(page.draft ? 'Page marked as published' : 'Page moved to draft');
+      } else {
+        toast.error('Failed to update page draft state');
+      }
+    } finally {
+      setUpdatingPageStateId(null);
+    }
+  };
+
+  const handleToggleArchive = async (page: WebflowPageWithQC) => {
+    setUpdatingPageStateId(page.id);
+    try {
+      const success = await updatePageState(page.id, { archived: !page.archived });
+      if (success) {
+        toast.success(page.archived ? 'Page restored from archive' : 'Page archived');
+      } else {
+        toast.error('Failed to update page archive state');
+      }
+    } finally {
+      setUpdatingPageStateId(null);
+    }
   };
 
   // No config state
@@ -356,6 +432,24 @@ export function WebflowPagesDashboard({
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleUnpublishSite}
+                disabled={loading || unpublishingSite || publishingSite}
+              >
+                <EyeOff className="h-4 w-4 mr-2" />
+                Unpublish Site
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handlePublishSite}
+                disabled={loading || publishingSite || unpublishingSite}
+              >
+                <Rocket className="h-4 w-4 mr-2" />
+                Publish Site
+              </Button>
               <Button
                 variant="default"
                 size="sm"
@@ -532,7 +626,17 @@ export function WebflowPagesDashboard({
                               </TableCell>
                             </TableRow>
                             {staticPagesDisplay.map(page => (
-                              <PageRow key={page.id} page={page} webflowConfig={webflowConfig} handleEditPage={handleEditPage} handleCopyDOM={handleCopyDOM} copyingPageId={copyingPageId} />
+                              <PageRow
+                                key={page.id}
+                                page={page}
+                                webflowConfig={webflowConfig}
+                                handleEditPage={handleEditPage}
+                                handleCopyDOM={handleCopyDOM}
+                                copyingPageId={copyingPageId}
+                                updatingPageStateId={updatingPageStateId}
+                                handleToggleDraft={handleToggleDraft}
+                                handleToggleArchive={handleToggleArchive}
+                              />
                             ))}
                           </>
                         )}
@@ -544,14 +648,34 @@ export function WebflowPagesDashboard({
                               </TableCell>
                             </TableRow>
                             {cmsPagesDisplay.map(page => (
-                              <PageRow key={page.id} page={page} webflowConfig={webflowConfig} handleEditPage={handleEditPage} handleCopyDOM={handleCopyDOM} copyingPageId={copyingPageId} />
+                              <PageRow
+                                key={page.id}
+                                page={page}
+                                webflowConfig={webflowConfig}
+                                handleEditPage={handleEditPage}
+                                handleCopyDOM={handleCopyDOM}
+                                copyingPageId={copyingPageId}
+                                updatingPageStateId={updatingPageStateId}
+                                handleToggleDraft={handleToggleDraft}
+                                handleToggleArchive={handleToggleArchive}
+                              />
                             ))}
                           </>
                         )}
                       </>
                     ) : (
                       filteredPages.map((page) => (
-                        <PageRow key={page.id} page={page} webflowConfig={webflowConfig} handleEditPage={handleEditPage} handleCopyDOM={handleCopyDOM} copyingPageId={copyingPageId} />
+                        <PageRow
+                          key={page.id}
+                          page={page}
+                          webflowConfig={webflowConfig}
+                          handleEditPage={handleEditPage}
+                          handleCopyDOM={handleCopyDOM}
+                          copyingPageId={copyingPageId}
+                          updatingPageStateId={updatingPageStateId}
+                          handleToggleDraft={handleToggleDraft}
+                          handleToggleArchive={handleToggleArchive}
+                        />
                       ))
                     )}
                   </TableBody>
@@ -603,13 +727,19 @@ function PageRow({
   webflowConfig,
   handleEditPage,
   handleCopyDOM,
-  copyingPageId
+  copyingPageId,
+  updatingPageStateId,
+  handleToggleDraft,
+  handleToggleArchive,
 }: {
   page: WebflowPageWithQC;
   webflowConfig: WebflowConfig;
   handleEditPage: (page: WebflowPageWithQC) => void;
   handleCopyDOM: (pageId: string) => void;
   copyingPageId: string | null;
+  updatingPageStateId: string | null;
+  handleToggleDraft: (page: WebflowPageWithQC) => Promise<void>;
+  handleToggleArchive: (page: WebflowPageWithQC) => Promise<void>;
 }) {
   return (
     <TableRow className="group">
@@ -810,6 +940,38 @@ function PageRow({
       </TableCell>
       <TableCell className="text-right align-top py-3">
         <div className="flex items-center justify-end gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => handleToggleDraft(page)}
+                disabled={updatingPageStateId === page.id}
+              >
+                <Rocket className={`h-4 w-4 ${updatingPageStateId === page.id ? 'animate-pulse' : ''}`} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {page.draft ? 'Publish page' : 'Move page to draft'}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => handleToggleArchive(page)}
+                disabled={updatingPageStateId === page.id}
+              >
+                <ArchiveRestore className={`h-4 w-4 ${updatingPageStateId === page.id ? 'animate-pulse' : ''}`} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {page.archived ? 'Unarchive page' : 'Archive page'}
+            </TooltipContent>
+          </Tooltip>
           {!page.draft && (
             <>
               <Tooltip>

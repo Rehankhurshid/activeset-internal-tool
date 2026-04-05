@@ -23,6 +23,9 @@ interface UseWebflowPagesReturn {
   fetchPages: (localeId?: string) => Promise<void>;
   fetchSiteDetails: () => Promise<void>;
   updatePageSEO: (pageId: string, updates: UpdateWebflowPageSEO) => Promise<boolean>;
+  updatePageState: (pageId: string, updates: Pick<UpdateWebflowPageSEO, 'draft' | 'archived' | 'localeId'>) => Promise<boolean>;
+  publishSite: (options?: { customDomains?: string[]; publishToWebflowSubdomain?: boolean }) => Promise<boolean>;
+  unpublishSite: (options?: { customDomains?: string[]; publishToWebflowSubdomain?: boolean }) => Promise<boolean>;
   bulkUpdatePagesSEO: (
     updates: { pageId: string; updates: UpdateWebflowPageSEO }[]
   ) => Promise<{ success: number; failed: number }>;
@@ -192,6 +195,86 @@ export function useWebflowPages(
     [webflowConfig]
   );
 
+  const updatePageState = useCallback(
+    async (
+      pageId: string,
+      updates: Pick<UpdateWebflowPageSEO, 'draft' | 'archived' | 'localeId'>
+    ): Promise<boolean> => {
+      return updatePageSEO(pageId, updates);
+    },
+    [updatePageSEO]
+  );
+
+  const publishSite = useCallback(
+    async (options?: { customDomains?: string[]; publishToWebflowSubdomain?: boolean }): Promise<boolean> => {
+      if (!webflowConfig?.siteId || !webflowConfig?.apiToken) {
+        setError('Webflow configuration is missing');
+        return false;
+      }
+
+      try {
+        const response = await fetch(`/api/webflow/sites/${encodeURIComponent(webflowConfig.siteId)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-webflow-token': webflowConfig.apiToken,
+          },
+          body: JSON.stringify({
+            action: 'publish',
+            customDomains: options?.customDomains,
+            publishToWebflowSubdomain: options?.publishToWebflowSubdomain,
+          }),
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'Failed to publish site');
+        }
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to publish site';
+        setError(message);
+        return false;
+      }
+    },
+    [webflowConfig]
+  );
+
+  const unpublishSite = useCallback(
+    async (options?: { customDomains?: string[]; publishToWebflowSubdomain?: boolean }): Promise<boolean> => {
+      if (!webflowConfig?.siteId || !webflowConfig?.apiToken) {
+        setError('Webflow configuration is missing');
+        return false;
+      }
+
+      try {
+        const response = await fetch(`/api/webflow/sites/${encodeURIComponent(webflowConfig.siteId)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-webflow-token': webflowConfig.apiToken,
+          },
+          body: JSON.stringify({
+            action: 'unpublish',
+            customDomains: options?.customDomains,
+            publishToWebflowSubdomain: options?.publishToWebflowSubdomain,
+          }),
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'Failed to update site publish state');
+        }
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to update site publish state';
+        setError(message);
+        return false;
+      }
+    },
+    [webflowConfig]
+  );
+
   const bulkUpdatePagesSEO = useCallback(
     async (
       updates: { pageId: string; updates: UpdateWebflowPageSEO }[]
@@ -322,6 +405,9 @@ export function useWebflowPages(
     fetchPages,
     fetchSiteDetails,
     updatePageSEO,
+    updatePageState,
+    publishSite,
+    unpublishSite,
     bulkUpdatePagesSEO,
     generatePageSEO,
     refetch,

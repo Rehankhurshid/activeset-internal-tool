@@ -98,6 +98,8 @@ export interface UpdateWebflowPageSEO {
   slug?: string;
   seo?: WebflowSEO;
   openGraph?: WebflowOpenGraph;
+  draft?: boolean;
+  archived?: boolean;
 }
 
 export interface AISEOGeneratedData {

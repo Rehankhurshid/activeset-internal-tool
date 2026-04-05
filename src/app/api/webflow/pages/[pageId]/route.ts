@@ -77,7 +77,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { title, slug, seo, openGraph, localeId } = body;
+    const { title, slug, seo, openGraph, localeId, draft, archived } = body;
 
     // Build the update payload with only provided fields
     const updatePayload: Record<string, unknown> = {};
@@ -86,6 +86,8 @@ export async function PUT(
     if (slug !== undefined) updatePayload.slug = slug;
     if (seo !== undefined) updatePayload.seo = seo;
     if (openGraph !== undefined) updatePayload.openGraph = openGraph;
+    if (typeof draft === 'boolean') updatePayload.draft = draft;
+    if (typeof archived === 'boolean') updatePayload.archived = archived;
 
     const url = new URL(`${WEBFLOW_API_BASE}/pages/${pageId}`);
     if (localeId) {
