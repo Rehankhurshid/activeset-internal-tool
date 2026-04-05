@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pageScanner } from '@/services/PageScanner';
 import { projectsService } from '@/services/database';
+import { resolveScanTargetUrl } from '@/lib/scan-target-url';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,7 +45,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await pageScanner.scanImagesOnly(url);
+    const requestedUrl = typeof url === 'string' && url.trim() ? url.trim() : link.url;
+    const targetUrl = resolveScanTargetUrl(requestedUrl, project.links);
+    const result = await pageScanner.scanImagesOnly(targetUrl);
 
     await projectsService.saveImageAltResults(projectId, linkId, {
       totalImages: result.totalImages,
@@ -55,6 +58,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      scannedUrl: targetUrl,
       totalImages: result.totalImages,
       uniqueMissingAltCount: result.uniqueMissingAltCount,
       checkedAt: result.checkedAt,

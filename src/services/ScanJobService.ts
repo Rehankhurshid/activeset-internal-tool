@@ -25,6 +25,7 @@ import {
   computeFieldChanges,
   generateDiffPatch,
 } from '@/lib/scan-utils';
+import { resolveScanTargetUrl } from '@/lib/scan-target-url';
 import { ensureScanNotificationQueued } from '@/services/ScanNotificationQueueService';
 import { AuditResult, ChangeLogEntry, ChangeStatus, FieldChange, Project, ProjectLink } from '@/types';
 
@@ -529,7 +530,8 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
         const { changeStatus, updatedLink, pendingWrite } = await scanSinglePage(
           project.id,
           link,
-          claimedJob.captureScreenshots
+          claimedJob.captureScreenshots,
+          projectLinks
         );
         projectLinks[linkIndex] = updatedLink;
         shouldPersistProjectLinks = true;
@@ -654,13 +656,15 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
 async function scanSinglePage(
   projectId: string,
   link: ProjectLink,
-  captureScreenshots: boolean
+  captureScreenshots: boolean,
+  projectLinks: ProjectLink[]
 ): Promise<{ score: number; changeStatus: ChangeStatus; updatedLink: ProjectLink; pendingWrite: PendingWrite }> {
   const prevResult = link.auditResult;
+  const targetUrl = resolveScanTargetUrl(link.url, projectLinks);
 
   // Prefetch changelog history and audit log in parallel with page scan
   const [scanResult, latestChangeLog, prevAuditLog] = await Promise.all([
-    pageScanner.scan(link.url),
+    pageScanner.scan(targetUrl),
     changeLogService.getLatestEntry(link.id),
     prevResult ? AuditService.getLatestAuditLog(projectId, link.id) : Promise.resolve(null),
   ]);
@@ -669,7 +673,7 @@ async function scanSinglePage(
   try {
     const linkCheckSummary = await checkBrokenLinks(
       scanResult.contentSnapshot.links || [],
-      link.url
+      targetUrl
     );
     const brokenCount = linkCheckSummary.brokenLinks.length;
 
@@ -682,7 +686,7 @@ async function scanSinglePage(
       checkedAt: linkCheckSummary.checkedAt,
     };
   } catch (error) {
-    console.warn(`[scan-jobs] Link checking failed for ${link.url}:`, error);
+    console.warn(`[scan-jobs] Link checking failed for ${targetUrl}:`, error);
   }
 
   const changeStatus = computeChangeStatus(
@@ -736,7 +740,7 @@ async function scanSinglePage(
   if (shouldCaptureScreenshot) {
     try {
       const screenshotService = getScreenshotService();
-      const screenshotResult = await screenshotService.captureScreenshot(link.url, {
+      const screenshotResult = await screenshotService.captureScreenshot(targetUrl, {
         width: 1280,
         height: 800,
       });

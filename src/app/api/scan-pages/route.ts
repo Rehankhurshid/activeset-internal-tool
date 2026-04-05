@@ -7,6 +7,7 @@ import { changeLogService } from '@/services/ChangeLogService';
 import { uploadScreenshot } from '@/services/ScreenshotStorageService';
 import { checkBrokenLinks } from '@/services/LinkCheckerService';
 import { computeChangeStatus, computeFieldChanges, generateDiffPatch, computeBodyTextDiff, compactAuditResult } from '@/lib/scan-utils';
+import { resolveScanTargetUrl } from '@/lib/scan-target-url';
 import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot } from '@/types';
 
 const corsHeaders = {
@@ -73,15 +74,16 @@ export async function POST(request: NextRequest) {
 
         const existingLink = project.links[linkIndex];
         const prevResult = existingLink.auditResult;
+        const targetUrl = resolveScanTargetUrl(url, project.links);
 
         // Perform scan
-        const scanResult = await pageScanner.scan(url);
+        const scanResult = await pageScanner.scan(targetUrl);
 
         let linksCategory = scanResult.categories.links;
         try {
             const linkCheckSummary = await checkBrokenLinks(
                 scanResult.contentSnapshot.links || [],
-                url
+                targetUrl
             );
             const brokenCount = linkCheckSummary.brokenLinks.length;
             linksCategory = {
@@ -93,7 +95,7 @@ export async function POST(request: NextRequest) {
                 checkedAt: linkCheckSummary.checkedAt,
             };
         } catch (linkCheckError) {
-            console.warn(`[scan-pages] Link checking failed for ${url}:`, linkCheckError);
+            console.warn(`[scan-pages] Link checking failed for ${targetUrl}:`, linkCheckError);
         }
 
         // Scan Result validation
@@ -109,7 +111,7 @@ export async function POST(request: NextRequest) {
             prevResult?.contentHash
         );
 
-        console.log(`[scan-pages] URL: ${url}`);
+        console.log(`[scan-pages] URL: ${targetUrl}`);
         console.log(`[scan-pages] New Hash: ${scanResult.fullHash.substring(0, 10)} (Content: ${scanResult.contentHash.substring(0, 10)})`);
         console.log(`[scan-pages] Prev Hash: ${prevResult?.fullHash?.substring(0, 10)} (Content: ${prevResult?.contentHash?.substring(0, 10)})`);
         console.log(`[scan-pages] Result: ${changeStatus}`);
@@ -177,7 +179,7 @@ export async function POST(request: NextRequest) {
             console.log(`[scan-pages] Capturing screenshot: ${reason}`);
             try {
                 const screenshotService = getScreenshotService();
-                const screenshotResult = await screenshotService.captureScreenshot(url, {
+                const screenshotResult = await screenshotService.captureScreenshot(targetUrl, {
                     width: 1280,
                     height: 800
                 });
