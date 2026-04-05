@@ -142,6 +142,76 @@ export class PageScanner {
             return normalized;
         }
     }
+
+    private extractImagesWithAltInfo(
+        $: CheerioRoot,
+        // Cheerio typings differ between versions; the selector result is enough for .find() usage here.
+        mainContent: any,
+        pageUrl: string
+    ): { images: ImageInfo[]; uniqueMissingAltCount: number } {
+        const images: ImageInfo[] = [];
+
+        $('img').each((_, el) => {
+            const $el = $(el);
+            const src = $el.attr('src') || '';
+            const alt = $el.attr('alt') || '';
+            if (!src) return;
+
+            // Check if image is within main content
+            const inMainContent = mainContent.find('img').filter((_: number, img: unknown) => $(img as any).attr('src') === src).length > 0;
+            images.push({ src, alt, inMainContent });
+        });
+
+        const uniqueMissingAlt = new Set(
+            images
+                .filter((img) => !img.alt)
+                .map((img) => this.normalizeImageSource(img.src, pageUrl))
+                .filter(Boolean)
+        );
+
+        return {
+            images,
+            uniqueMissingAltCount: uniqueMissingAlt.size,
+        };
+    }
+
+    async scanImagesOnly(url: string): Promise<{
+        images: ImageInfo[];
+        totalImages: number;
+        uniqueMissingAltCount: number;
+        checkedAt: string;
+    }> {
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'ActiveSet-Audit-Bot/1.0 (+https://activeset.co)',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
+        }
+
+        const htmlSource = await response.text();
+        const $ = cheerio.load(htmlSource);
+
+        // Keep only DOM needed for image extraction.
+        $('script, style, noscript').remove();
+
+        let mainContent = $('main');
+        if (mainContent.length === 0) mainContent = $('article');
+        if (mainContent.length === 0) mainContent = $('body');
+
+        const { images, uniqueMissingAltCount } = this.extractImagesWithAltInfo($, mainContent, url);
+
+        return {
+            images,
+            totalImages: images.length,
+            uniqueMissingAltCount,
+            checkedAt: new Date().toISOString(),
+        };
+    }
     /**
      * Scan fonts to verify WOFF2 usage
      */
@@ -821,17 +891,7 @@ export class PageScanner {
         const bodyTextHash = createHash('sha256').update(bodyText).digest('hex');
 
         // Extract images
-        const images: ImageInfo[] = [];
-        $('img').each((_, el) => {
-            const $el = $(el);
-            const src = $el.attr('src') || '';
-            const alt = $el.attr('alt') || '';
-            if (src) {
-                // Check if image is within main content
-                const inMainContent = mainContent.find('img').filter((_, img) => $(img).attr('src') === src).length > 0;
-                images.push({ src, alt, inMainContent });
-            }
-        });
+        const { images, uniqueMissingAltCount } = this.extractImagesWithAltInfo($, mainContent, url);
 
         // Extract links
         const links: LinkInfo[] = [];
@@ -1055,15 +1115,8 @@ export class PageScanner {
             seoIssues.push(`Meta description too long (${metaDescription.length} chars, recommended: 50-160)`);
         }
 
-        const uniqueMissingAlt = new Set(
-            images
-                .filter((img) => !img.alt)
-                .map((img) => this.normalizeImageSource(img.src, url))
-                .filter(Boolean)
-        );
-
-        if (uniqueMissingAlt.size > 0) {
-            seoIssues.push(`${uniqueMissingAlt.size} unique image(s) missing alt text`);
+        if (uniqueMissingAltCount > 0) {
+            seoIssues.push(`${uniqueMissingAltCount} unique image(s) missing alt text`);
         }
 
         // Link stats for the links category
@@ -1190,7 +1243,7 @@ export class PageScanner {
                     titleLength: title.length,
                     metaDescription,
                     metaDescriptionLength: metaDescription.length,
-                    imagesWithoutAlt: uniqueMissingAlt.size,
+                    imagesWithoutAlt: uniqueMissingAltCount,
                     score: Math.max(0, 100 - seoIssues.reduce((sum, issue) => sum + seoPenaltyForScore(issue), 0))
                 },
                 technical: {

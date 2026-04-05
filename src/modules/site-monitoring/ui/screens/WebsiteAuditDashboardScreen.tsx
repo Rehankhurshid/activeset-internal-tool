@@ -299,6 +299,13 @@ export function WebsiteAuditDashboard({
     total: 0,
     currentUrl: "",
   })
+  const [isScanningAllImages, setIsScanningAllImages] = useState(false)
+  const [imageScanProgress, setImageScanProgress] = useState({
+    current: 0,
+    total: 0,
+    currentUrl: "",
+  })
+  const [scanningImagePageIds, setScanningImagePageIds] = useState<Set<string>>(new Set())
   const [missingAltSearch, setMissingAltSearch] = useState("")
   const [missingAltAreaFilter, setMissingAltAreaFilter] = useState<MissingAltAreaFilter>("all")
   const [missingAltRepeatFilter, setMissingAltRepeatFilter] = useState<MissingAltRepeatFilter>("all")
@@ -1791,6 +1798,90 @@ export function WebsiteAuditDashboard({
     }
   }, [isReadOnly, isCheckingAllBrokenLinks, links, projectId])
 
+  const runImageScanForLink = useCallback(async (link: ProjectLink): Promise<void> => {
+    if (!link?.id || !link?.url) return
+
+    const response = await fetch('/api/scan-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId,
+        linkId: link.id,
+        url: link.url,
+      }),
+    })
+
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}))
+      throw new Error(result?.error || `Failed image scan for ${link.url}`)
+    }
+  }, [projectId])
+
+  const handleScanImagesForPage = useCallback(async (pageId: string) => {
+    if (isReadOnly || isScanningAllImages) return
+    const link = links.find((item) => item.id === pageId)
+    if (!link?.url) return
+
+    setScanningImagePageIds((prev) => new Set(prev).add(pageId))
+    try {
+      await runImageScanForLink(link)
+    } catch (error) {
+      console.error('[ImageScan] Failed page image scan:', error)
+    } finally {
+      setScanningImagePageIds((prev) => {
+        const next = new Set(prev)
+        next.delete(pageId)
+        return next
+      })
+    }
+  }, [isReadOnly, isScanningAllImages, links, runImageScanForLink])
+
+  const handleScanAllImagesAcrossSite = useCallback(async () => {
+    if (isReadOnly || isScanningAllImages) return
+
+    const pagesToScan = links.filter((link) => !!link.url)
+    if (pagesToScan.length === 0) return
+
+    setIsScanningAllImages(true)
+    setImageScanProgress({
+      current: 0,
+      total: pagesToScan.length,
+      currentUrl: "",
+    })
+
+    try {
+      for (let i = 0; i < pagesToScan.length; i += 1) {
+        const page = pagesToScan[i]
+
+        setImageScanProgress({
+          current: i + 1,
+          total: pagesToScan.length,
+          currentUrl: page.url,
+        })
+
+        setScanningImagePageIds((prev) => new Set(prev).add(page.id))
+        try {
+          await runImageScanForLink(page)
+        } catch (error) {
+          console.error(`[ImageScan] Failed image scan for ${page.url}:`, error)
+        } finally {
+          setScanningImagePageIds((prev) => {
+            const next = new Set(prev)
+            next.delete(page.id)
+            return next
+          })
+        }
+      }
+    } finally {
+      setIsScanningAllImages(false)
+      setImageScanProgress((prev) => ({
+        ...prev,
+        current: prev.total,
+        currentUrl: "",
+      }))
+    }
+  }, [isReadOnly, isScanningAllImages, links, runImageScanForLink])
+
   const hasMissingAltFilters =
     !!missingAltSearch.trim() ||
     missingAltAreaFilter !== "all" ||
@@ -2537,10 +2628,60 @@ export function WebsiteAuditDashboard({
                   <Badge variant="secondary" className="h-7 px-2.5 font-normal">
                     Repeated Pages {repeatedMissingAltPagesCount}
                   </Badge>
+                  {!isReadOnly && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      onClick={handleScanAllImagesAcrossSite}
+                      disabled={isScanningAllImages || links.length === 0}
+                    >
+                      {isScanningAllImages ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                          Scanning images...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-1.5" />
+                          Scan All Images
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-4">
+              {!isReadOnly && isScanningAllImages && (
+                <div className="space-y-2 rounded-md border p-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">
+                      Scanning images {imageScanProgress.current} of {imageScanProgress.total} pages
+                    </span>
+                    <span className="text-muted-foreground">
+                      {imageScanProgress.total > 0
+                        ? Math.round((imageScanProgress.current / imageScanProgress.total) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <Progress
+                    value={
+                      imageScanProgress.total > 0
+                        ? (imageScanProgress.current / imageScanProgress.total) * 100
+                        : 0
+                    }
+                    className="h-2"
+                  />
+                  {imageScanProgress.currentUrl && (
+                    <div className="text-xs text-muted-foreground truncate" title={imageScanProgress.currentUrl}>
+                      Current: {imageScanProgress.currentUrl}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                   <div className="relative w-full lg:max-w-sm">
@@ -2756,6 +2897,28 @@ export function WebsiteAuditDashboard({
                               <Badge variant="outline" className="text-xs">
                                 {group.lastScanRelative}
                               </Badge>
+                              {!isReadOnly && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    handleScanImagesForPage(group.pageId)
+                                  }}
+                                  disabled={isScanningAllImages || scanningImagePageIds.has(group.pageId)}
+                                >
+                                  {scanningImagePageIds.has(group.pageId) ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                      Scanning...
+                                    </>
+                                  ) : (
+                                    'Scan Images'
+                                  )}
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </button>

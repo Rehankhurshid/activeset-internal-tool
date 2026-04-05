@@ -403,6 +403,54 @@ export const projectsService = {
     }
   },
 
+  // Persist image ALT scan results into the link's auditResult
+  async saveImageAltResults(
+    projectId: string,
+    linkId: string,
+    results: {
+      totalImages: number;
+      uniqueMissingAltCount: number;
+      images: { src: string; alt?: string; inMainContent?: boolean }[];
+      checkedAt: string;
+    }
+  ): Promise<void> {
+    try {
+      const project = await this.getProject(projectId);
+      if (!project) throw new DatabaseError('Project not found');
+
+      const link = project.links.find(l => l.id === linkId);
+      if (!link) throw new DatabaseError('Link not found');
+
+      const currentAudit = link.auditResult || {} as Record<string, unknown>;
+      const currentCategories = (currentAudit as { categories?: Record<string, unknown> }).categories || {};
+      const currentSeo = (currentCategories as { seo?: Record<string, unknown> }).seo || {};
+      const currentSnapshot = (currentAudit as { contentSnapshot?: Record<string, unknown> }).contentSnapshot || {};
+
+      await this.updateLink(projectId, linkId, {
+        auditResult: ({
+          ...currentAudit,
+          lastRun: results.checkedAt,
+          categories: {
+            ...currentCategories,
+            seo: {
+              ...currentSeo,
+              imagesWithoutAlt: results.uniqueMissingAltCount,
+              imageScanCheckedAt: results.checkedAt,
+            },
+          },
+          contentSnapshot: {
+            ...currentSnapshot,
+            images: results.images,
+          },
+        } as unknown as ProjectLink['auditResult']),
+      });
+    } catch (error) {
+      logError(error, 'saveImageAltResults');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to save image ALT results');
+    }
+  },
+
   // Delete a link
   async deleteLink(projectId: string, linkId: string): Promise<void> {
     const project = await this.getProject(projectId);
