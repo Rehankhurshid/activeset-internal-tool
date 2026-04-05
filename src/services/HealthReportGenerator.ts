@@ -1,6 +1,19 @@
 import { Project, ProjectLink } from '@/types';
 import { ProjectHealthSummary, CreateDailyHealthReportInput } from '@/types/health-report';
 
+function normalizeImageSrc(src: string, pageUrl: string): string {
+  const value = (src || '').trim();
+  if (!value) return '';
+
+  try {
+    const parsed = new URL(value, pageUrl);
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return value;
+  }
+}
+
 /**
  * Analyze a single project's auto links and produce a health summary.
  */
@@ -23,6 +36,7 @@ function analyzeProject(project: Project): ProjectHealthSummary | null {
 
   let totalScore = 0;
   const topIssuePages: ProjectHealthSummary['topIssuePages'] = [];
+  const uniqueMissingAltImages = new Set<string>();
 
   for (const link of autoLinks) {
     const audit = link.auditResult!;
@@ -38,8 +52,19 @@ function analyzeProject(project: Project): ProjectHealthSummary | null {
     // ALT text
     const altMissing = cat.seo?.imagesWithoutAlt || 0;
     if (altMissing > 0) {
-      issues.missingAltText += altMissing;
       pageIssues.push(`${altMissing} images missing ALT`);
+    }
+
+    const pageImages = (audit.contentSnapshot as { images?: { src: string; alt?: string }[] } | undefined)?.images || [];
+    for (const image of pageImages) {
+      const src = image?.src || '';
+      const hasAlt = !!image?.alt?.trim();
+      if (!src || hasAlt) continue;
+
+      const normalized = normalizeImageSrc(src, link.url);
+      if (normalized) {
+        uniqueMissingAltImages.add(normalized);
+      }
     }
 
     // Accessibility reporting is intentionally hidden for now.
@@ -100,6 +125,9 @@ function analyzeProject(project: Project): ProjectHealthSummary | null {
 
   // Sort top issue pages by score ascending (worst first), take top 5
   topIssuePages.sort((a, b) => a.score - b.score);
+
+  // ALT reporting is image-based (unique assets), not repeated occurrences across pages.
+  issues.missingAltText = uniqueMissingAltImages.size;
 
   return {
     projectId: project.id,

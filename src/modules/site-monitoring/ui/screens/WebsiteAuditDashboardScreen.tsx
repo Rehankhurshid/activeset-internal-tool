@@ -1102,7 +1102,19 @@ export function WebsiteAuditDashboard({
       | { images?: { src: string; alt?: string }[] }
       | undefined
     const nonApplicableImageFingerprints = collectNonApplicableImageFingerprints(audit)
-    const effectiveMissingAltCount = (snapshot?.images || []).filter((image) => {
+    const effectiveMissingAltFingerprintSet = new Set(
+      (snapshot?.images || []).flatMap((image) => {
+        const src = image?.src?.trim()
+        const hasAltText = !!image?.alt?.trim()
+        if (!src || hasAltText) return []
+        if (isIgnoredAltAuditImage(src)) return []
+        const fingerprint = getImageFingerprint(src)
+        if (!fingerprint) return []
+        if (nonApplicableImageFingerprints.has(fingerprint)) return []
+        return [fingerprint]
+      })
+    )
+    const effectiveMissingAltCount = effectiveMissingAltFingerprintSet.size || (snapshot?.images || []).filter((image) => {
       const src = image?.src?.trim()
       const hasAltText = !!image?.alt?.trim()
       if (!src || hasAltText) return false
