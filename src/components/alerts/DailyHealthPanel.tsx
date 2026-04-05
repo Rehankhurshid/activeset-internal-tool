@@ -57,6 +57,16 @@ export function DailyHealthPanel({ className }: DailyHealthPanelProps) {
   if (isLoading || !report) return null;
 
   const bd = report.issueBreakdown;
+  const visibleTotalIssues =
+    bd.missingAltText +
+    bd.missingMetaDescription +
+    bd.missingTitle +
+    bd.missingH1 +
+    bd.brokenLinks +
+    bd.spellingErrors +
+    bd.missingOpenGraph +
+    bd.missingSchema +
+    bd.lowScorePages;
 
   const issues: IssueItem[] = [
     { label: 'Missing ALT', count: bd.missingAltText, icon: <Image className="h-3.5 w-3.5" />, color: 'text-rose-400' },
@@ -95,7 +105,7 @@ export function DailyHealthPanel({ className }: DailyHealthPanelProps) {
             <ScoreRing score={report.avgScore} />
             <div>
               <p className="text-sm font-medium">
-                {report.totalIssues} issues found
+                {visibleTotalIssues} issues found
               </p>
               <p className="text-xs text-muted-foreground">
                 Avg score across all sites
@@ -122,7 +132,16 @@ export function DailyHealthPanel({ className }: DailyHealthPanelProps) {
               .sort((a, b) => a.avgScore - b.avgScore)
               .slice(0, 5)
               .map((p) => {
-                const totalIssues = Object.values(p.issues).reduce((a, b) => a + b, 0);
+                const totalIssues =
+                  p.issues.missingAltText +
+                  p.issues.missingMetaDescription +
+                  p.issues.missingTitle +
+                  p.issues.missingH1 +
+                  p.issues.brokenLinks +
+                  p.issues.spellingErrors +
+                  p.issues.missingOpenGraph +
+                  p.issues.missingSchema +
+                  p.issues.lowScorePages;
                 const scoreColor = p.avgScore >= 80 ? 'text-emerald-500' : p.avgScore >= 60 ? 'text-amber-500' : 'text-red-500';
 
                 return (
