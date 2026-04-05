@@ -66,6 +66,7 @@ export interface PageScanResult {
             internalLinks: number;
             externalLinks: number;
             brokenLinks: { href: string; status: number; text: string; error?: string }[];
+            checkedAt?: string;
             score: number;
         };
         openGraph: {

@@ -5,6 +5,7 @@ import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
 import { uploadScreenshot } from '@/services/ScreenshotStorageService';
+import { checkBrokenLinks } from '@/services/LinkCheckerService';
 import { computeChangeStatus, computeFieldChanges, generateDiffPatch, computeBodyTextDiff, compactAuditResult } from '@/lib/scan-utils';
 import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot } from '@/types';
 
@@ -75,6 +76,25 @@ export async function POST(request: NextRequest) {
 
         // Perform scan
         const scanResult = await pageScanner.scan(url);
+
+        let linksCategory = scanResult.categories.links;
+        try {
+            const linkCheckSummary = await checkBrokenLinks(
+                scanResult.contentSnapshot.links || [],
+                url
+            );
+            const brokenCount = linkCheckSummary.brokenLinks.length;
+            linksCategory = {
+                ...linksCategory,
+                totalLinks: linkCheckSummary.totalLinks,
+                brokenLinks: linkCheckSummary.brokenLinks,
+                status: brokenCount > 0 ? 'failed' : 'passed',
+                score: brokenCount === 0 ? 100 : Math.max(0, 100 - brokenCount * 20),
+                checkedAt: linkCheckSummary.checkedAt,
+            };
+        } catch (linkCheckError) {
+            console.warn(`[scan-pages] Link checking failed for ${url}:`, linkCheckError);
+        }
 
         // Scan Result validation
         if (!scanResult || !scanResult.contentSnapshot) {
@@ -207,7 +227,10 @@ export async function POST(request: NextRequest) {
             changeStatus,
             lastRun: lastRunTimestamp,
             contentSnapshot: scanResult.contentSnapshot,
-            categories: scanResult.categories,
+            categories: {
+                ...scanResult.categories,
+                links: linksCategory,
+            },
             screenshotUrl, // URL to screenshot in Firebase Storage
             previousScreenshotUrl, // URL to previous screenshot for comparison UI
             screenshotCapturedAt: screenshotUrl ? lastRunTimestamp : undefined,

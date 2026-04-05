@@ -17,6 +17,7 @@ import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditLogEntry, AuditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
 import { uploadScreenshot } from '@/services/ScreenshotStorageService';
+import { checkBrokenLinks } from '@/services/LinkCheckerService';
 import {
   compactAuditResult,
   computeBodyTextDiff,
@@ -664,6 +665,26 @@ async function scanSinglePage(
     prevResult ? AuditService.getLatestAuditLog(projectId, link.id) : Promise.resolve(null),
   ]);
 
+  let linksCategory = scanResult.categories.links;
+  try {
+    const linkCheckSummary = await checkBrokenLinks(
+      scanResult.contentSnapshot.links || [],
+      link.url
+    );
+    const brokenCount = linkCheckSummary.brokenLinks.length;
+
+    linksCategory = {
+      ...linksCategory,
+      totalLinks: linkCheckSummary.totalLinks,
+      brokenLinks: linkCheckSummary.brokenLinks,
+      status: brokenCount > 0 ? 'failed' : 'passed',
+      score: brokenCount === 0 ? 100 : Math.max(0, 100 - brokenCount * 20),
+      checkedAt: linkCheckSummary.checkedAt,
+    };
+  } catch (error) {
+    console.warn(`[scan-jobs] Link checking failed for ${link.url}:`, error);
+  }
+
   const changeStatus = computeChangeStatus(
     scanResult.fullHash,
     scanResult.contentHash,
@@ -747,7 +768,10 @@ async function scanSinglePage(
     changeStatus,
     lastRun: lastRunTimestamp,
     contentSnapshot: scanResult.contentSnapshot,
-    categories: scanResult.categories,
+    categories: {
+      ...scanResult.categories,
+      links: linksCategory,
+    },
     screenshotUrl,
     previousScreenshotUrl,
     screenshotCapturedAt: screenshotUrl ? lastRunTimestamp : undefined,
