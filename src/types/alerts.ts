@@ -6,7 +6,8 @@ export type AlertType =
   | 'mass_changes'
   | 'scan_failed'
   | 'seo_regression'
-  | 'word_count_drop';
+  | 'word_count_drop'
+  | 'collection_meta_conflict';
 
 export interface AffectedPage {
   url: string;
@@ -38,4 +39,5 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   scan_failed: 'Scan Failed',
   seo_regression: 'SEO Regression',
   word_count_drop: 'Word Count Drop',
+  collection_meta_conflict: 'Collection Metadata Conflict',
 };

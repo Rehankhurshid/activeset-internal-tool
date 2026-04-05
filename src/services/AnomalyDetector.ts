@@ -15,6 +15,24 @@ interface AnomalyContext {
   previousLinks: ProjectLink[];
 }
 
+function normalizeMetaValue(value?: string): string {
+  return (value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+function getCollectionGroupKey(url: string): string {
+  try {
+    const pathname = new URL(url).pathname.replace(/\/+$/, '') || '/';
+    const segments = pathname.split('/').filter(Boolean);
+    if (segments.length === 0) return '/*';
+    return `/${segments[0]}/*`;
+  } catch {
+    return '/*';
+  }
+}
+
 function createAlert(
   ctx: AnomalyContext,
   type: AlertType,
@@ -289,6 +307,114 @@ function detectWordCountDrops(ctx: AnomalyContext): CreateSiteAlertInput[] {
 }
 
 /**
+ * Detect collection-level metadata conflicts:
+ * - missing/empty title or meta description
+ * - duplicate title or meta description in the same collection route group (e.g. /events/*)
+ */
+function detectCollectionMetadataConflicts(ctx: AnomalyContext): CreateSiteAlertInput[] {
+  const collectionLinks = ctx.currentLinks.filter(
+    (link) => link.source === 'auto' && link.pageType === 'collection' && link.auditResult?.contentSnapshot
+  );
+  if (collectionLinks.length < 2) return [];
+
+  const groups = new Map<string, ProjectLink[]>();
+  for (const link of collectionLinks) {
+    const groupKey = getCollectionGroupKey(link.url);
+    const group = groups.get(groupKey) || [];
+    group.push(link);
+    groups.set(groupKey, group);
+  }
+
+  const alerts: CreateSiteAlertInput[] = [];
+
+  for (const [groupKey, links] of groups.entries()) {
+    if (links.length < 2) continue;
+
+    const affected = new Map<string, AffectedPage>();
+    const titleMap = new Map<string, ProjectLink[]>();
+    const descMap = new Map<string, ProjectLink[]>();
+
+    for (const link of links) {
+      const snapshot = link.auditResult?.contentSnapshot;
+      if (!snapshot) continue;
+
+      const title = snapshot.title?.trim() || '';
+      const description = snapshot.metaDescription?.trim() || '';
+
+      if (!title) {
+        affected.set(link.id, {
+          url: link.url,
+          title: link.title,
+          detail: 'Missing meta title',
+        });
+      }
+
+      if (!description) {
+        const existing = affected.get(link.id);
+        affected.set(link.id, {
+          url: link.url,
+          title: link.title,
+          detail: existing?.detail ? `${existing.detail}; Missing meta description` : 'Missing meta description',
+        });
+      }
+
+      const normalizedTitle = normalizeMetaValue(title);
+      if (normalizedTitle) {
+        const sameTitle = titleMap.get(normalizedTitle) || [];
+        sameTitle.push(link);
+        titleMap.set(normalizedTitle, sameTitle);
+      }
+
+      const normalizedDesc = normalizeMetaValue(description);
+      if (normalizedDesc) {
+        const sameDesc = descMap.get(normalizedDesc) || [];
+        sameDesc.push(link);
+        descMap.set(normalizedDesc, sameDesc);
+      }
+    }
+
+    for (const sameTitleLinks of titleMap.values()) {
+      if (sameTitleLinks.length < 2) continue;
+      for (const link of sameTitleLinks) {
+        const existing = affected.get(link.id);
+        affected.set(link.id, {
+          url: link.url,
+          title: link.title,
+          detail: existing?.detail ? `${existing.detail}; Duplicate meta title in ${groupKey}` : `Duplicate meta title in ${groupKey}`,
+        });
+      }
+    }
+
+    for (const sameDescLinks of descMap.values()) {
+      if (sameDescLinks.length < 2) continue;
+      for (const link of sameDescLinks) {
+        const existing = affected.get(link.id);
+        affected.set(link.id, {
+          url: link.url,
+          title: link.title,
+          detail: existing?.detail ? `${existing.detail}; Duplicate meta description in ${groupKey}` : `Duplicate meta description in ${groupKey}`,
+        });
+      }
+    }
+
+    if (affected.size > 0) {
+      alerts.push(
+        createAlert(
+          ctx,
+          'collection_meta_conflict',
+          'critical',
+          `High Alert: Collection metadata conflict in ${groupKey}`,
+          `Collection pages under ${groupKey} have duplicate or missing meta titles/descriptions. This can damage SEO quality across CMS entries.`,
+          Array.from(affected.values())
+        )
+      );
+    }
+  }
+
+  return alerts;
+}
+
+/**
  * Main entry point: run all anomaly detectors and return combined alerts.
  */
 export function detectAnomalies(
@@ -306,6 +432,7 @@ export function detectAnomalies(
     ...detectScanFailures(ctx),
     ...detectSEORegressions(ctx),
     ...detectWordCountDrops(ctx),
+    ...detectCollectionMetadataConflicts(ctx),
   ];
 
   return allAlerts;

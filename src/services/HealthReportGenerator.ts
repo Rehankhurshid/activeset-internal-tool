@@ -42,18 +42,7 @@ function analyzeProject(project: Project): ProjectHealthSummary | null {
       pageIssues.push(`${altMissing} images missing ALT`);
     }
 
-    // Accessibility ALT issues
-    const a11yAltIssues = cat.accessibility?.issues?.filter(i => i.type === 'alt-text')?.length || 0;
-    if (a11yAltIssues > 0) {
-      issues.accessibilityErrors += a11yAltIssues;
-    }
-
-    // Other accessibility issues
-    const otherA11y = cat.accessibility?.issues?.filter(i => i.type !== 'alt-text')?.length || 0;
-    if (otherA11y > 0) {
-      issues.accessibilityErrors += otherA11y;
-      pageIssues.push(`${otherA11y + a11yAltIssues} accessibility issues`);
-    }
+    // Accessibility reporting is intentionally hidden for now.
 
     // Meta description
     if (!audit.contentSnapshot?.metaDescription && cat.seo?.status !== 'passed') {

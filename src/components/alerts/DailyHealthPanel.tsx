@@ -10,7 +10,6 @@ import {
   Type,
   Share2,
   Code,
-  Accessibility,
   AlertTriangle,
   Activity,
   Clock,
@@ -68,7 +67,6 @@ export function DailyHealthPanel({ className }: DailyHealthPanelProps) {
     { label: 'Spelling', count: bd.spellingErrors, icon: <Type className="h-3.5 w-3.5" />, color: 'text-blue-400' },
     { label: 'Missing OG', count: bd.missingOpenGraph, icon: <Share2 className="h-3.5 w-3.5" />, color: 'text-purple-400' },
     { label: 'Missing Schema', count: bd.missingSchema, icon: <Code className="h-3.5 w-3.5" />, color: 'text-cyan-400' },
-    { label: 'Accessibility', count: bd.accessibilityErrors, icon: <Accessibility className="h-3.5 w-3.5" />, color: 'text-pink-400' },
     { label: 'Low Score', count: bd.lowScorePages, icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-400' },
   ].filter(i => i.count > 0);
 

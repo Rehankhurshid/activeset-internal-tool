@@ -33,7 +33,6 @@ import {
   AlignLeft,
   Check,
   X,
-  Accessibility,
   ChevronDown,
   ChevronUp,
   ArrowLeft,
@@ -353,7 +352,6 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
     placeholders: placeholders.length,
     headings: audit?.categories?.headingStructure?.issues?.length || 0,
     schema: audit?.categories?.schema?.issues?.length || 0,
-    accessibility: audit?.categories?.accessibility?.issues?.length || 0,
   }), [audit, brokenLinks, spellingErrors, placeholders]);
 
   if (loading) {
@@ -498,7 +496,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                 <StatPill
                   icon={AlertTriangle}
                   label="Issues"
-                  value={issueCounts.spelling + issueCounts.placeholders + issueCounts.headings + issueCounts.schema + issueCounts.accessibility}
+                  value={issueCounts.spelling + issueCounts.placeholders + issueCounts.headings + issueCounts.schema}
                   sub={`${issueCounts.placeholders > 0 ? issueCounts.placeholders + ' critical' : 'No critical'}`}
                 />
                 <StatPill
@@ -948,72 +946,6 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                         </a>
                       </Button>
                     </div>
-                  )}
-                </PanelCard>
-
-                {/* Accessibility Panel */}
-                <PanelCard
-                  icon={Accessibility}
-                  title="Accessibility"
-                  health={
-                    !audit?.categories?.accessibility ? 'neutral' :
-                      audit.categories.accessibility.score >= 80 ? 'good' :
-                        audit.categories.accessibility.score >= 50 ? 'warning' : 'error'
-                  }
-                  badge={
-                    audit?.categories?.accessibility ? (
-                      <Badge variant={audit.categories.accessibility.score >= 80 ? 'secondary' : 'destructive'} className="text-[10px] font-mono">
-                        {audit.categories.accessibility.score}/100
-                      </Badge>
-                    ) : (
-                      <span className="text-[10px] text-neutral-400">Not checked</span>
-                    )
-                  }
-                >
-                  {audit?.categories?.accessibility ? (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { label: 'Skip Link', ok: audit.categories.accessibility.hasSkipLink },
-                          { label: 'Main Landmark', ok: audit.categories.accessibility.ariaLandmarks.includes('main') },
-                          { label: 'Form Labels', ok: audit.categories.accessibility.formInputsWithoutLabels === 0 },
-                          { label: 'Link Text', ok: audit.categories.accessibility.linksWithGenericText === 0 },
-                        ].map((item, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-xs py-1">
-                            <StatusIndicator ok={item.ok} />
-                            <span className="text-neutral-700 dark:text-neutral-300">{item.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                      {audit.categories.accessibility.ariaLandmarks.length > 0 && (
-                        <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                          <span className="text-[10px] text-neutral-400 uppercase tracking-wider">ARIA Landmarks</span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {audit.categories.accessibility.ariaLandmarks.map((l, idx) => (
-                              <Badge key={idx} variant="secondary" className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800">{l}</Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {audit.categories.accessibility.issues?.length > 0 && (
-                        <div className="space-y-1 pt-2 border-t border-neutral-100 dark:border-neutral-800 max-h-32 overflow-y-auto">
-                          {audit.categories.accessibility.issues.map((issue, idx) => (
-                            <div key={idx} className={`flex items-start gap-2 text-xs ${issue.severity === 'error' ? 'text-red-600' : 'text-amber-600'}`}>
-                              {issue.severity === 'error' ? <XCircle className="h-3 w-3 mt-0.5 shrink-0" /> : <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />}
-                              <span>{issue.message}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {audit.categories.accessibility.issues?.length === 0 && (
-                        <div className="flex items-center gap-2 text-xs text-green-600 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          No accessibility issues
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-neutral-500">Accessibility checks available after next scan</p>
                   )}
                 </PanelCard>
 

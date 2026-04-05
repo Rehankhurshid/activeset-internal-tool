@@ -307,7 +307,6 @@ async function sendHealthReportEmail(report: DailyHealthReport, baseUrl: string)
     issueRow('Spelling Errors', report.issueBreakdown.spellingErrors, '✏️'),
     issueRow('Missing Open Graph', report.issueBreakdown.missingOpenGraph, '📊'),
     issueRow('Missing Schema', report.issueBreakdown.missingSchema, '🔧'),
-    issueRow('Accessibility Errors', report.issueBreakdown.accessibilityErrors, '♿'),
     issueRow('Low Score Pages (<60)', report.issueBreakdown.lowScorePages, '⚠️'),
   ].filter(Boolean).join('');
 
@@ -395,7 +394,6 @@ async function sendHealthReportSlack(report: DailyHealthReport, baseUrl: string)
   if (bd.brokenLinks > 0) issueLines.push(`🔗 Broken Links: *${bd.brokenLinks}*`);
   if (bd.spellingErrors > 0) issueLines.push(`✏️ Spelling Errors: *${bd.spellingErrors}*`);
   if (bd.missingOpenGraph > 0) issueLines.push(`📊 Missing Open Graph: *${bd.missingOpenGraph}*`);
-  if (bd.accessibilityErrors > 0) issueLines.push(`♿ Accessibility Errors: *${bd.accessibilityErrors}*`);
   if (bd.lowScorePages > 0) issueLines.push(`⚠️ Low Score Pages: *${bd.lowScorePages}*`);
 
   const projectLines = report.projects
@@ -570,7 +568,6 @@ async function sendScanCompletionSlack(
     if (i.missingH1 > 0) issueLines.push(`📌 Missing H1: *${i.missingH1}*`);
     if (i.brokenLinks > 0) issueLines.push(`🔗 Broken Links: *${i.brokenLinks}*`);
     if (i.spellingErrors > 0) issueLines.push(`✏️ Spelling: *${i.spellingErrors}*`);
-    if (i.accessibilityErrors > 0) issueLines.push(`♿ Accessibility: *${i.accessibilityErrors}*`);
     if (i.lowScorePages > 0) issueLines.push(`⚠️ Low Score Pages: *${i.lowScorePages}*`);
 
     if (issueLines.length > 0) {
@@ -635,7 +632,6 @@ async function sendScanCompletionEmail(
     issueRow('Missing H1', health.issues.missingH1, '📌'),
     issueRow('Broken Links', health.issues.brokenLinks, '🔗'),
     issueRow('Spelling Errors', health.issues.spellingErrors, '✏️'),
-    issueRow('Accessibility', health.issues.accessibilityErrors, '♿'),
     issueRow('Low Score Pages', health.issues.lowScorePages, '⚠️'),
   ].filter(Boolean).join('') : '';
 
