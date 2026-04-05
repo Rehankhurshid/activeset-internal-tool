@@ -27,6 +27,11 @@ interface WebflowSyncData {
     baseUrl?: string;
 }
 
+interface DomainMapping {
+    liveHost: string;
+    stagingHost: string;
+}
+
 function normalizeBaseUrl(value: string): string {
     const trimmed = value.trim();
     if (!trimmed) return trimmed;
@@ -35,6 +40,58 @@ function normalizeBaseUrl(value: string): string {
             ? trimmed
             : `https://${trimmed}`;
     return withProtocol.replace(/\/$/, '');
+}
+
+function toHost(value?: string): string | null {
+    if (!value) return null;
+    try {
+        return new URL(normalizeBaseUrl(value)).host.toLowerCase();
+    } catch {
+        return null;
+    }
+}
+
+function resolveLinkByTitle(links: ProjectLink[], pattern: RegExp): ProjectLink | undefined {
+    return links.find((link) => pattern.test(link.title) && !!link.url?.trim());
+}
+
+function resolveDomainMapping(project: Awaited<ReturnType<typeof projectsService.getProject>>, sitemapUrl?: string): DomainMapping | null {
+    if (!project) return null;
+
+    const stagingLink = resolveLinkByTitle(project.links, /\bstag(?:e|ing|nging)\b/i);
+    if (!stagingLink?.url) return null;
+
+    const stagingHost = toHost(stagingLink.url);
+    if (!stagingHost) return null;
+
+    const liveHostFromSitemap = toHost(sitemapUrl);
+    const liveLink = resolveLinkByTitle(project.links, /\blive\b/i);
+    const liveHostFromLink = toHost(liveLink?.url);
+    const liveHost = liveHostFromSitemap || liveHostFromLink;
+
+    if (!liveHost || liveHost === stagingHost) return null;
+
+    return { liveHost, stagingHost };
+}
+
+function remapUrlHost(url: string, mapping: DomainMapping): string {
+    try {
+        const parsed = new URL(url);
+        if (parsed.host.toLowerCase() !== mapping.liveHost) {
+            return url;
+        }
+        parsed.host = mapping.stagingHost;
+        return parsed.toString();
+    } catch {
+        return url;
+    }
+}
+
+function remapSitemapEntriesToStaging(entries: SitemapEntry[], mapping: DomainMapping): SitemapEntry[] {
+    return entries.map((entry) => ({
+        ...entry,
+        url: remapUrlHost(entry.url, mapping),
+    }));
 }
 
 /**
@@ -483,6 +540,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const domainMapping = resolveDomainMapping(project, normalizedSitemapUrl);
+        if (domainMapping) {
+            console.log(
+                `[scan-sitemap] Rewriting URLs from ${domainMapping.liveHost} to ${domainMapping.stagingHost}`
+            );
+            sitemapEntries = remapSitemapEntriesToStaging(sitemapEntries, domainMapping);
+        }
+
         if (sitemapEntries.length === 0) {
             return NextResponse.json({ count: 0, message: `No URLs found from ${source}` });
         }
@@ -662,7 +727,8 @@ export async function POST(request: NextRequest) {
             totalFound: sitemapEntries.length,
             localesDetected: [...new Set(sitemapEntries.map(e => e.locale).filter(Boolean))],
             source,
-            usedWebflowFallback
+            usedWebflowFallback,
+            remappedToStaging: Boolean(domainMapping)
         });
 
     } catch (error) {

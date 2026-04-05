@@ -129,16 +129,23 @@ const getDefaultLinks = (): ProjectLink[] => [
   },
   {
     id: generateLinkId(),
-    title: 'Live Website URL',
+    title: 'Staging Website URL',
     url: '',
     order: 1,
     isDefault: true,
   },
   {
     id: generateLinkId(),
-    title: 'Feedback URL',
+    title: 'Live Website URL',
     url: '',
     order: 2,
+    isDefault: true,
+  },
+  {
+    id: generateLinkId(),
+    title: 'Feedback URL',
+    url: '',
+    order: 3,
     isDefault: true,
   },
 ];
