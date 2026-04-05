@@ -241,38 +241,13 @@ export function useWebflowPages(
   );
 
   const unpublishSite = useCallback(
-    async (options?: { customDomains?: string[]; publishToWebflowSubdomain?: boolean }): Promise<boolean> => {
-      if (!webflowConfig?.siteId || !webflowConfig?.apiToken) {
-        setError('Webflow configuration is missing');
-        return false;
-      }
-
-      try {
-        const response = await fetch(`/api/webflow/sites/${encodeURIComponent(webflowConfig.siteId)}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-webflow-token': webflowConfig.apiToken,
-          },
-          body: JSON.stringify({
-            action: 'unpublish',
-            customDomains: options?.customDomains,
-            publishToWebflowSubdomain: options?.publishToWebflowSubdomain,
-          }),
-        });
-
-        const result = await response.json();
-        if (!response.ok || !result.success) {
-          throw new Error(result.error || 'Failed to update site publish state');
-        }
-        return true;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to update site publish state';
-        setError(message);
-        return false;
-      }
+    async (_options?: { customDomains?: string[]; publishToWebflowSubdomain?: boolean }): Promise<boolean> => {
+      setError(
+        'Site-wide unpublish is not available in Webflow Data API. Use page draft/archive controls to unpublish content.'
+      );
+      return false;
     },
-    [webflowConfig]
+    []
   );
 
   const bulkUpdatePagesSEO = useCallback(

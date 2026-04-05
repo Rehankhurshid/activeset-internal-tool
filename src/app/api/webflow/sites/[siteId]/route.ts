@@ -91,27 +91,53 @@ export async function POST(
     try {
         const body = await request.json();
         const action = typeof body?.action === 'string' ? body.action : 'publish';
-        const customDomains = Array.isArray(body?.customDomains)
+        const customDomainsInput = Array.isArray(body?.customDomains)
             ? body.customDomains.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
             : undefined;
+
+        if (action === 'unpublish') {
+            return NextResponse.json(
+                {
+                    error:
+                        'Webflow Data API does not expose a dedicated site-wide unpublish endpoint. Use page draft/archive controls for content-level unpublishing.',
+                },
+                { status: 400 }
+            );
+        }
 
         let publishToWebflowSubdomain =
             typeof body?.publishToWebflowSubdomain === 'boolean'
                 ? body.publishToWebflowSubdomain
                 : true;
 
-        if (action === 'unpublish' && typeof body?.publishToWebflowSubdomain !== 'boolean') {
-            publishToWebflowSubdomain = false;
+        let customDomains = customDomainsInput;
+        if (customDomains === undefined) {
+            const domainsResponse = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/custom_domains`, {
+                headers: {
+                    Authorization: `Bearer ${apiToken}`,
+                    accept: 'application/json',
+                },
+            });
+
+            if (domainsResponse.ok) {
+                const domainsData = await domainsResponse.json();
+                const ids = Array.isArray(domainsData?.customDomains)
+                    ? domainsData.customDomains
+                          .map((domain: { id?: unknown }) => (typeof domain?.id === 'string' ? domain.id : null))
+                          .filter((id: string | null): id is string => !!id)
+                    : [];
+                if (ids.length > 0) {
+                    customDomains = ids;
+                }
+            }
         }
 
         const payload: Record<string, unknown> = {
             publishToWebflowSubdomain,
         };
 
-        if (customDomains !== undefined) {
+        if (customDomains !== undefined && customDomains.length > 0) {
             payload.customDomains = customDomains;
-        } else if (action === 'unpublish') {
-            payload.customDomains = [];
         }
 
         const response = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/publish`, {

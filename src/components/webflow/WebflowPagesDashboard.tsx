@@ -226,7 +226,7 @@ export function WebflowPagesDashboard({
         toast.success('Site unpublish request sent');
         await fetchPages(selectedLocaleId || undefined);
       } else {
-        toast.error('Failed to unpublish site');
+        toast.info('Site-wide unpublish is not supported by Webflow API. Use draft/archive for pages.');
       }
     } finally {
       setUnpublishingSite(false);
@@ -439,7 +439,7 @@ export function WebflowPagesDashboard({
                 disabled={loading || unpublishingSite || publishingSite}
               >
                 <EyeOff className="h-4 w-4 mr-2" />
-                Unpublish Site
+                Unpublish Site (N/A)
               </Button>
               <Button
                 variant="default"
