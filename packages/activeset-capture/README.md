@@ -7,23 +7,42 @@ Local-first responsive screenshot capture for ad-hoc URLs.
 - Scroll warmup enabled by default to trigger lazy/animated content
 - Output is local files only
 
-## Install
+## Quick Start
 
 ```bash
 npx @activeset/capture
 ```
 
-Or global:
+That opens the interactive wizard.
+
+## One-Shot Run
+
+Use `run` when you already have a URL file or want to skip the wizard:
+
+```bash
+npx @activeset/capture run --project "My Project" --file ./urls.txt
+```
+
+You can also pass URLs directly:
+
+```bash
+npx @activeset/capture run --project "My Project" --urls "https://a.com,https://b.com"
+```
+
+## Global Install
 
 ```bash
 npm i -g @activeset/capture
 activeset-capture
 ```
 
-## Interactive Wizard
+Available commands after a global install:
 
 ```bash
 activeset-capture
+activeset-capture wizard
+activeset-capture run --project "My Project" --file ./urls.txt
+activeset-capture-local --project "My Project" --file ./urls.txt
 ```
 
 Controls:

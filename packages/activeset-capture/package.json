@@ -5,7 +5,9 @@
   "license": "MIT",
   "type": "commonjs",
   "bin": {
-    "activeset-capture": "dist/bin/activeset-capture.js"
+    "activeset-capture": "dist/bin/activeset-capture.js",
+    "activeset-capture-local": "dist/bin/capture-local.js",
+    "activeset-capture-wizard": "dist/bin/capture-wizard.js"
   },
   "files": [
     "dist",

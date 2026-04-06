@@ -1,3 +1,62 @@
 #!/usr/bin/env node
 
-import './capture-wizard';
+import { runCaptureLocalCli } from './capture-local';
+import { runCaptureWizardCli } from './capture-wizard';
+
+function printHelp(): void {
+  console.log(`
+@activeset/capture
+
+Usage:
+  activeset-capture                Open the interactive wizard
+  activeset-capture wizard         Open the interactive wizard
+  activeset-capture run [options]  Run capture directly without the wizard
+
+Examples:
+  npx @activeset/capture
+  npx @activeset/capture run --project "My Project" --file ./urls.txt
+  activeset-capture run --project "My Project" --urls "https://a.com,https://b.com"
+
+Tip:
+  Passing flags directly also works:
+  activeset-capture --project "My Project" --file ./urls.txt
+`);
+}
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  const [mode, ...rest] = argv;
+
+  if (!mode) {
+    await runCaptureWizardCli([]);
+    return;
+  }
+
+  if (mode === '--help' || mode === '-h' || mode === 'help') {
+    printHelp();
+    return;
+  }
+
+  if (mode === 'wizard') {
+    await runCaptureWizardCli(rest);
+    return;
+  }
+
+  if (mode === 'run' || mode === 'capture' || mode === 'local') {
+    await runCaptureLocalCli(rest);
+    return;
+  }
+
+  if (mode.startsWith('--')) {
+    await runCaptureLocalCli(argv);
+    return;
+  }
+
+  throw new Error(`Unknown subcommand: ${mode}`);
+}
+
+main().catch((error) => {
+  console.error(`\nError: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  console.error('Use --help to see available modes.');
+  process.exit(1);
+});

@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.runCaptureLocalCli = runCaptureLocalCli;
 const os = __importStar(require("node:os"));
 const promises_1 = require("node:readline/promises");
 const engine_1 = require("../core/engine");
@@ -43,9 +44,11 @@ function printHelp() {
 Local-first responsive screenshot capture
 
 Usage:
+  activeset-capture run --project "My Project" [--urls "https://a.com,https://b.com"] [options]
+  activeset-capture run --project "My Project" --file ./urls.txt [options]
   activeset-capture-local --project "My Project" [--urls "https://a.com,https://b.com"] [options]
   activeset-capture-local --project "My Project" --file ./urls.txt [options]
-  cat urls.txt | activeset-capture-local --project "My Project" [options]
+  cat urls.txt | activeset-capture run --project "My Project" [options]
 
 Required:
   --project <name>         Manual project/run name
@@ -256,8 +259,8 @@ function printRunSummary(manifestPath, runDirectory, errorsPath) {
         console.log(`Errors:   ${errorsPath}`);
     }
 }
-async function main() {
-    const parsedArgs = parseArgs(process.argv.slice(2));
+async function runCaptureLocalCli(argv = process.argv.slice(2)) {
+    const parsedArgs = parseArgs(argv);
     if (parsedArgs.help) {
         printHelp();
         return;
@@ -305,9 +308,11 @@ async function main() {
         process.exitCode = 1;
     }
 }
-main().catch((error) => {
-    console.error(`\nError: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    console.error('Use --help to see usage examples.');
-    process.exit(1);
-});
+if (require.main === module) {
+    runCaptureLocalCli().catch((error) => {
+        console.error(`\nError: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error('Use --help to see usage examples.');
+        process.exit(1);
+    });
+}
 //# sourceMappingURL=capture-local.js.map

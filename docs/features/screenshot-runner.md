@@ -4,10 +4,18 @@ The Screenshot Runner helps you capture full-page screenshots for URLs that are 
 
 ## Public Install (Hosted)
 
-For users without repo access, install from npm:
+For users without repo access, the easiest path is:
 
 ```bash
 npx @activeset/capture
+```
+
+That opens the wizard immediately.
+
+If the web app already prepared a command block for you, skip the wizard:
+
+```bash
+npx @activeset/capture run --project "New Client Project" --file ./new-client-project-urls.txt
 ```
 
 Or install globally:
@@ -24,6 +32,7 @@ activeset-capture
 ```bash
 bash ./install-local-capture.sh
 activeset-capture
+activeset-capture run --project "New Client Project" --file ./new-client-project-urls.txt
 ```
 
 ### Windows PowerShell
@@ -31,9 +40,10 @@ activeset-capture
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install-local-capture.ps1
 activeset-capture
+activeset-capture run --project "New Client Project" --file ".\\new-client-project-urls.txt"
 ```
 
-The `activeset-capture` command opens an interactive wizard and handholds all required inputs.
+The `activeset-capture` command opens an interactive wizard. The `run` mode skips the wizard when the web app has already prepared the URL file and flags for you.
 
 ## What It Does
 
@@ -45,13 +55,7 @@ The `activeset-capture` command opens an interactive wizard and handholds all re
 ## CLI Command
 
 ```bash
-npm run capture:local -- --project "New Client Project" --file ./new-client-project-urls.txt --out ./captures --devices desktop,mobile --warmup always
-```
-
-PowerShell:
-
-```powershell
-npm run capture:local -- --project "New Client Project" --file ".\\new-client-project-urls.txt" --out "./captures" --devices desktop,mobile --warmup always
+npx @activeset/capture run --project "New Client Project" --file ./new-client-project-urls.txt --out ./captures --devices desktop,mobile --warmup always
 ```
 
 ## Input Methods
@@ -61,8 +65,8 @@ Use exactly one input source:
 - `--urls "https://a.com,https://b.com"`
 - `--file ./urls.txt`
 - `stdin` piping:
-  - macOS/Linux: `pbpaste | npm run capture:local -- --project "Run Name"`
-  - PowerShell: `Get-Clipboard | npm run capture:local -- --project "Run Name"`
+  - macOS/Linux: `pbpaste | npx @activeset/capture run --project "Run Name"`
+  - PowerShell: `Get-Clipboard | npx @activeset/capture run --project "Run Name"`
 
 ## Output Structure
 

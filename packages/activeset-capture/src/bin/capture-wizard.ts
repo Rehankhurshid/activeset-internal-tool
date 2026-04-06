@@ -217,8 +217,8 @@ async function collectUrlsFromFile(): Promise<string[]> {
   return parseUrlsText(fileText);
 }
 
-async function runWizard(): Promise<void> {
-  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+export async function runCaptureWizardCli(argv = process.argv.slice(2)): Promise<void> {
+  if (argv.includes('--help') || argv.includes('-h')) {
     printHelp();
     return;
   }
@@ -338,7 +338,9 @@ async function runWizard(): Promise<void> {
   }
 }
 
-runWizard().catch((error) => {
-  output.write(`\n${chalk.red('Wizard failed:')} ${error instanceof Error ? error.message : 'Unknown error'}\n`);
-  process.exit(1);
-});
+if (require.main === module) {
+  runCaptureWizardCli().catch((error) => {
+    output.write(`\n${chalk.red('Wizard failed:')} ${error instanceof Error ? error.message : 'Unknown error'}\n`);
+    process.exit(1);
+  });
+}

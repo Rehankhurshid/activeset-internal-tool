@@ -25,9 +25,11 @@ function printHelp(): void {
 Local-first responsive screenshot capture
 
 Usage:
+  activeset-capture run --project "My Project" [--urls "https://a.com,https://b.com"] [options]
+  activeset-capture run --project "My Project" --file ./urls.txt [options]
   activeset-capture-local --project "My Project" [--urls "https://a.com,https://b.com"] [options]
   activeset-capture-local --project "My Project" --file ./urls.txt [options]
-  cat urls.txt | activeset-capture-local --project "My Project" [options]
+  cat urls.txt | activeset-capture run --project "My Project" [options]
 
 Required:
   --project <name>         Manual project/run name
@@ -285,8 +287,8 @@ function printRunSummary(manifestPath: string, runDirectory: string, errorsPath?
   }
 }
 
-async function main(): Promise<void> {
-  const parsedArgs = parseArgs(process.argv.slice(2));
+export async function runCaptureLocalCli(argv = process.argv.slice(2)): Promise<void> {
+  const parsedArgs = parseArgs(argv);
 
   if (parsedArgs.help) {
     printHelp();
@@ -349,8 +351,10 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  console.error(`\nError: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  console.error('Use --help to see usage examples.');
-  process.exit(1);
-});
+if (require.main === module) {
+  runCaptureLocalCli().catch((error) => {
+    console.error(`\nError: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('Use --help to see usage examples.');
+    process.exit(1);
+  });
+}

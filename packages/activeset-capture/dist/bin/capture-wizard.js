@@ -37,6 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.runCaptureWizardCli = runCaptureWizardCli;
 const fs = __importStar(require("node:fs/promises"));
 const chalk_1 = __importDefault(require("chalk"));
 const node_process_1 = require("node:process");
@@ -222,8 +223,8 @@ async function collectUrlsFromFile() {
     const fileText = await fs.readFile(filePath.trim(), 'utf8');
     return (0, io_1.parseUrlsText)(fileText);
 }
-async function runWizard() {
-    if (process.argv.includes('--help') || process.argv.includes('-h')) {
+async function runCaptureWizardCli(argv = process.argv.slice(2)) {
+    if (argv.includes('--help') || argv.includes('-h')) {
         printHelp();
         return;
     }
@@ -310,8 +311,10 @@ async function runWizard() {
         node_process_1.stdout.write(`${chalk_1.default.yellow('Errors:')}   ${captureOutput.errorsPath}\n`);
     }
 }
-runWizard().catch((error) => {
-    node_process_1.stdout.write(`\n${chalk_1.default.red('Wizard failed:')} ${error instanceof Error ? error.message : 'Unknown error'}\n`);
-    process.exit(1);
-});
+if (require.main === module) {
+    runCaptureWizardCli().catch((error) => {
+        node_process_1.stdout.write(`\n${chalk_1.default.red('Wizard failed:')} ${error instanceof Error ? error.message : 'Unknown error'}\n`);
+        process.exit(1);
+    });
+}
 //# sourceMappingURL=capture-wizard.js.map
