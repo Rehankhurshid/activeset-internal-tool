@@ -70,8 +70,35 @@ export async function warmupPageByScrolling(
     previousHeight = result.finalHeight;
   }
 
-  await page.evaluate('window.scrollTo(0, 0)');
+  // Scroll back to top and let the page settle
+  await page.evaluate('window.scrollTo({ top: 0, behavior: "instant" })');
   await sleep(settleMs);
+
+  // Wait for any animations/transitions triggered by scroll-to-top to finish
+  try {
+    await page.evaluate(async () => {
+      // Wait for pending CSS animations/transitions to complete
+      const pending = document.getAnimations?.()?.filter((a) => a.playState === 'running') || [];
+      if (pending.length > 0) {
+        await Promise.allSettled(pending.map((a) => a.finished));
+      }
+      // Final image check after scroll (lazy images may have loaded)
+      const images = Array.from(document.querySelectorAll('img'));
+      await Promise.allSettled(
+        images.map((img) =>
+          img.complete
+            ? Promise.resolve()
+            : new Promise((resolve) => {
+                img.addEventListener('load', resolve, { once: true });
+                img.addEventListener('error', resolve, { once: true });
+                setTimeout(resolve, 3_000);
+              })
+        )
+      );
+    });
+  } catch {
+    // Continue if animation wait fails
+  }
 
   return {
     passes,

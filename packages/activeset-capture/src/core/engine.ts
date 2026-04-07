@@ -202,21 +202,41 @@ async function captureDeviceOnPage(
     await configurePageForDevice(page, preset);
 
     await page.goto(url, {
-      waitUntil: 'domcontentloaded',
+      waitUntil: 'networkidle2',
       timeout: settings.timeoutMs,
     });
 
-    // Brief wait for critical resources after DOM is ready
+    // Wait for page to be fully loaded (fonts, images, stylesheets)
     try {
       await page.waitForFunction(() => document.readyState === 'complete', {
-        timeout: Math.min(settings.timeoutMs, 8_000),
+        timeout: Math.min(settings.timeoutMs, 15_000),
       });
     } catch {
-      // Continue — domcontentloaded is sufficient for most pages.
+      // Continue — networkidle2 is sufficient for most pages.
+    }
+
+    // Wait for all images to finish loading (including lazy-loaded ones in viewport)
+    try {
+      await page.evaluate(async () => {
+        const images = Array.from(document.querySelectorAll('img'));
+        await Promise.allSettled(
+          images.map((img) =>
+            img.complete
+              ? Promise.resolve()
+              : new Promise((resolve) => {
+                  img.addEventListener('load', resolve, { once: true });
+                  img.addEventListener('error', resolve, { once: true });
+                  setTimeout(resolve, 5_000);
+                })
+          )
+        );
+      });
+    } catch {
+      // Continue if image wait fails
     }
 
     if (settings.warmup === 'always') {
-      await warmupPageByScrolling(page);
+      await warmupPageByScrolling(page, { delayMs: 300, settleMs: 1000 });
     }
 
     const outputPath = buildScreenshotPath(directories, url, index, device, settings.format);
