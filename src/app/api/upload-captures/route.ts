@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import app from '@/lib/firebase';
+import * as admin from 'firebase-admin';
 import { db } from '@/lib/firebase-admin';
-
-const storage = getStorage(app);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,6 +12,13 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
+function getBucket() {
+  const bucketName =
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+    process.env.FIREBASE_STORAGE_BUCKET;
+  return admin.storage().bucket(bucketName);
+}
+
 interface UploadedScreenshot {
   device: string;
   fileName: string;
@@ -24,8 +28,8 @@ interface UploadedScreenshot {
 
 /**
  * Accept multipart upload from the CLI capture tool.
- * Stores screenshots in Firebase Storage, creates a Firestore doc,
- * and returns a shareable link.
+ * Stores screenshots in Firebase Storage via admin SDK (bypasses security rules),
+ * creates a Firestore doc, and returns a shareable link.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -42,6 +46,7 @@ export async function POST(request: NextRequest) {
 
     const manifest = JSON.parse(manifestRaw);
     const runId = manifest.run?.id || `run-${Date.now()}`;
+    const bucket = getBucket();
 
     // Upload each screenshot file to Firebase Storage
     const screenshots = formData.getAll('screenshots') as File[];
@@ -49,7 +54,6 @@ export async function POST(request: NextRequest) {
 
     for (const file of screenshots) {
       const buffer = Buffer.from(await file.arrayBuffer());
-      const uint8Array = new Uint8Array(buffer);
 
       // filename comes as "device/filename.webp" from the CLI
       const nameParts = (file.name || 'unknown.webp').split('/');
@@ -57,14 +61,17 @@ export async function POST(request: NextRequest) {
       const fileName = nameParts.length > 1 ? nameParts[1] : nameParts[0];
 
       const storagePath = `captures/${runId}/${device}/${fileName}`;
-      const storageRef = ref(storage, storagePath);
-
       const contentType = file.type || (fileName.endsWith('.png') ? 'image/png' : 'image/webp');
-      await uploadBytes(storageRef, uint8Array, { contentType });
-      const downloadUrl = await getDownloadURL(storageRef);
+
+      const fileRef = bucket.file(storagePath);
+      await fileRef.save(buffer, {
+        metadata: { contentType },
+        public: true,
+      });
+
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
 
       // Try to find the original URL from manifest results
-      const slugBase = fileName.replace(/\.\w+$/, '');
       const matchingResult = manifest.results?.find(
         (r: { slug?: string }) => r.slug && fileName.startsWith(r.slug)
       );
@@ -72,7 +79,7 @@ export async function POST(request: NextRequest) {
       uploaded.push({
         device,
         fileName,
-        url: downloadUrl,
+        url: publicUrl,
         originalUrl: matchingResult?.url || '',
       });
     }
