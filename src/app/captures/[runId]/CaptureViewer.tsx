@@ -1,12 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
   ExternalLink,
+  FolderOpen,
+  Globe,
+  Grid2x2,
+  Grid3x3,
   Monitor,
+  Rows3,
   Smartphone,
   X,
   ZoomIn,
@@ -14,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 interface Screenshot {
@@ -40,6 +47,141 @@ interface CaptureRunData {
     format?: string;
   };
 }
+
+/* ------------------------------------------------------------------ */
+/*  Smart grouping                                                     */
+/* ------------------------------------------------------------------ */
+
+// Common language codes (ISO 639-1) used as URL path prefixes
+const LANG_CODES = new Set([
+  'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ru', 'ja', 'ko', 'zh',
+  'ar', 'hi', 'tr', 'pl', 'sv', 'da', 'no', 'fi', 'cs', 'hu', 'ro',
+  'bg', 'hr', 'sk', 'sl', 'uk', 'he', 'th', 'vi', 'id', 'ms', 'tl',
+  'en-us', 'en-gb', 'en-au', 'es-mx', 'es-ar', 'pt-br', 'zh-cn', 'zh-tw',
+  'fr-ca', 'fr-fr', 'de-de', 'de-at', 'de-ch',
+]);
+
+interface ScreenshotGroup {
+  key: string;
+  label: string;
+  type: 'language' | 'section' | 'root';
+  screenshots: Screenshot[];
+  flatIndex: number; // starting index in the flat filtered list
+}
+
+function getPathname(s: Screenshot): string {
+  if (!s.originalUrl) return '/';
+  try {
+    return new URL(s.originalUrl).pathname || '/';
+  } catch {
+    return '/';
+  }
+}
+
+function detectGroups(screenshots: Screenshot[]): ScreenshotGroup[] {
+  // Analyze all paths to find grouping patterns
+  const pathMap = new Map<string, Screenshot[]>();
+
+  for (const s of screenshots) {
+    const pathname = getPathname(s);
+    const segments = pathname.split('/').filter(Boolean);
+
+    // Check if first segment is a language code
+    const firstSeg = segments[0]?.toLowerCase();
+    if (firstSeg && LANG_CODES.has(firstSeg)) {
+      const langKey = `lang:${firstSeg}`;
+      const existing = pathMap.get(langKey) || [];
+      existing.push(s);
+      pathMap.set(langKey, existing);
+      continue;
+    }
+
+    // Group by first path segment (section)
+    if (segments.length > 1) {
+      const sectionKey = `section:${segments[0]}`;
+      const existing = pathMap.get(sectionKey) || [];
+      existing.push(s);
+      pathMap.set(sectionKey, existing);
+      continue;
+    }
+
+    // Root-level pages
+    const rootKey = 'root';
+    const existing = pathMap.get(rootKey) || [];
+    existing.push(s);
+    pathMap.set(rootKey, existing);
+  }
+
+  // Only use grouping if there are multiple groups (otherwise it's noise)
+  if (pathMap.size <= 1) {
+    return [{
+      key: 'all',
+      label: 'All Pages',
+      type: 'root',
+      screenshots,
+      flatIndex: 0,
+    }];
+  }
+
+  const groups: ScreenshotGroup[] = [];
+  let flatIndex = 0;
+
+  // Sort: languages first, then sections, then root
+  const sortedKeys = [...pathMap.keys()].sort((a, b) => {
+    const order = (k: string) => k === 'root' ? 2 : k.startsWith('lang:') ? 0 : 1;
+    return order(a) - order(b);
+  });
+
+  for (const key of sortedKeys) {
+    const items = pathMap.get(key)!;
+
+    let label: string;
+    let type: 'language' | 'section' | 'root';
+
+    if (key.startsWith('lang:')) {
+      const code = key.replace('lang:', '');
+      label = getLangLabel(code);
+      type = 'language';
+    } else if (key.startsWith('section:')) {
+      label = '/' + key.replace('section:', '');
+      type = 'section';
+    } else {
+      label = 'Home & Top-level';
+      type = 'root';
+    }
+
+    groups.push({ key, label, type, screenshots: items, flatIndex });
+    flatIndex += items.length;
+  }
+
+  return groups;
+}
+
+function getLangLabel(code: string): string {
+  const labels: Record<string, string> = {
+    en: 'English', es: 'Spanish', fr: 'French', de: 'German',
+    it: 'Italian', pt: 'Portuguese', nl: 'Dutch', ru: 'Russian',
+    ja: 'Japanese', ko: 'Korean', zh: 'Chinese', ar: 'Arabic',
+    hi: 'Hindi', tr: 'Turkish', pl: 'Polish', sv: 'Swedish',
+    'pt-br': 'Portuguese (BR)', 'zh-cn': 'Chinese (Simplified)',
+    'zh-tw': 'Chinese (Traditional)', 'es-mx': 'Spanish (MX)',
+    'fr-ca': 'French (CA)', 'en-us': 'English (US)', 'en-gb': 'English (UK)',
+  };
+  return labels[code] || code.toUpperCase();
+}
+
+/* ------------------------------------------------------------------ */
+/*  Preview size                                                       */
+/* ------------------------------------------------------------------ */
+
+type PreviewSize = 'compact' | 'medium' | 'large' | 'full';
+
+const PREVIEW_SIZES: { key: PreviewSize; label: string; icon: typeof Grid3x3; cols: string; height: string }[] = [
+  { key: 'compact', label: 'Compact', icon: Grid3x3, cols: 'sm:grid-cols-3 lg:grid-cols-4', height: 'h-36' },
+  { key: 'medium', label: 'Medium', icon: Grid2x2, cols: 'sm:grid-cols-2 lg:grid-cols-3', height: 'h-48' },
+  { key: 'large', label: 'Large', icon: Grid2x2, cols: 'sm:grid-cols-2', height: 'h-64' },
+  { key: 'full', label: 'Full width', icon: Rows3, cols: 'grid-cols-1', height: 'h-80' },
+];
 
 /* ------------------------------------------------------------------ */
 /*  Lightbox                                                           */
@@ -90,7 +232,6 @@ function Lightbox({
     return () => window.removeEventListener('keydown', onKey);
   }, [index, hasPrev, hasNext, onClose, goTo, resetView]);
 
-  // Prevent body scroll while lightbox is open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => {
@@ -207,7 +348,6 @@ function Lightbox({
         onWheel={handleWheel}
         style={{ cursor: zoom > 1 ? (dragging ? 'grabbing' : 'grab') : 'default' }}
       >
-        {/* Navigation arrows */}
         {hasPrev && (
           <button
             onClick={() => goTo(index - 1)}
@@ -225,7 +365,6 @@ function Lightbox({
           </button>
         )}
 
-        {/* The image */}
         <img
           src={current.url}
           alt={current.fileName}
@@ -265,20 +404,140 @@ function Lightbox({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Screenshot card                                                    */
+/* ------------------------------------------------------------------ */
+
+function ScreenshotCard({
+  screenshot,
+  height,
+  onClick,
+}: {
+  screenshot: Screenshot;
+  height: string;
+  onClick: () => void;
+}) {
+  const pathname = getPathname(screenshot);
+
+  return (
+    <Card
+      className="group cursor-pointer overflow-hidden transition-shadow hover:shadow-lg"
+      onClick={onClick}
+    >
+      <div className={cn('relative overflow-hidden bg-muted', height)}>
+        <img
+          src={screenshot.url}
+          alt={screenshot.fileName}
+          className="w-full object-cover object-top"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20">
+          <ZoomIn className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
+      </div>
+      <CardContent className="p-3">
+        <div className="flex items-center gap-2">
+          {screenshot.device === 'mobile' ? (
+            <Smartphone className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+          ) : (
+            <Monitor className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+          )}
+          <span className="truncate text-xs text-muted-foreground">
+            {pathname}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Group section                                                      */
+/* ------------------------------------------------------------------ */
+
+function GroupSection({
+  group,
+  previewSize,
+  allFiltered,
+  onOpenLightbox,
+  defaultOpen,
+}: {
+  group: ScreenshotGroup;
+  previewSize: typeof PREVIEW_SIZES[number];
+  allFiltered: Screenshot[];
+  onOpenLightbox: (flatIndex: number) => void;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  const icon = group.type === 'language' ? (
+    <Globe className="h-4 w-4 text-muted-foreground" />
+  ) : (
+    <FolderOpen className="h-4 w-4 text-muted-foreground" />
+  );
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="mb-3 flex w-full items-center gap-2 text-left"
+      >
+        {icon}
+        <span className="text-sm font-medium">{group.label}</span>
+        <Badge variant="secondary" className="text-xs font-normal">
+          {group.screenshots.length}
+        </Badge>
+        <ChevronDown
+          className={cn(
+            'ml-auto h-4 w-4 text-muted-foreground transition-transform',
+            open && 'rotate-180'
+          )}
+        />
+      </button>
+      {open && (
+        <div className={cn('grid gap-4', previewSize.cols)}>
+          {group.screenshots.map((screenshot, i) => (
+            <ScreenshotCard
+              key={`${screenshot.device}-${screenshot.fileName}`}
+              screenshot={screenshot}
+              height={previewSize.height}
+              onClick={() => {
+                // Find the flat index of this screenshot in the full filtered list
+                const flatIdx = allFiltered.indexOf(screenshot);
+                onOpenLightbox(flatIdx >= 0 ? flatIdx : group.flatIndex + i);
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main viewer                                                        */
 /* ------------------------------------------------------------------ */
 
 export default function CaptureViewer({ data }: { data: CaptureRunData }) {
   const [filter, setFilter] = useState<'all' | 'desktop' | 'mobile'>('all');
+  const [previewSizeKey, setPreviewSizeKey] = useState<PreviewSize>('medium');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  const filtered =
-    filter === 'all'
-      ? data.screenshots
-      : data.screenshots.filter((s) => s.device === filter);
+  const filtered = useMemo(
+    () =>
+      filter === 'all'
+        ? data.screenshots
+        : data.screenshots.filter((s) => s.device === filter),
+    [data.screenshots, filter]
+  );
+
+  const groups = useMemo(() => detectGroups(filtered), [filtered]);
+  const hasMultipleGroups = groups.length > 1 || groups[0]?.key !== 'all';
 
   const hasDesktop = data.screenshots.some((s) => s.device === 'desktop');
   const hasMobile = data.screenshots.some((s) => s.device === 'mobile');
+
+  const previewSize = PREVIEW_SIZES.find((p) => p.key === previewSizeKey) || PREVIEW_SIZES[1];
 
   const createdDate = new Date(data.createdAt).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -305,79 +564,98 @@ export default function CaptureViewer({ data }: { data: CaptureRunData }) {
                 <span>{(data.summary.totalDurationMs / 1000).toFixed(1)}s</span>
               </>
             )}
+            {hasMultipleGroups && (
+              <>
+                <span>&middot;</span>
+                <span>{groups.length} groups</span>
+              </>
+            )}
           </div>
         </div>
       </header>
 
       <main className="container mx-auto max-w-6xl px-4 py-6">
-        {/* Device filter */}
-        {hasDesktop && hasMobile && (
-          <div className="mb-6 flex gap-2">
-            <Button
-              size="sm"
-              variant={filter === 'all' ? 'default' : 'outline'}
-              onClick={() => setFilter('all')}
-            >
-              All
-            </Button>
-            <Button
-              size="sm"
-              variant={filter === 'desktop' ? 'default' : 'outline'}
-              onClick={() => setFilter('desktop')}
-            >
-              <Monitor className="mr-1.5 h-3.5 w-3.5" />
-              Desktop
-            </Button>
-            <Button
-              size="sm"
-              variant={filter === 'mobile' ? 'default' : 'outline'}
-              onClick={() => setFilter('mobile')}
-            >
-              <Smartphone className="mr-1.5 h-3.5 w-3.5" />
-              Mobile
-            </Button>
+        {/* Toolbar: device filter + preview size */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-2">
+            {hasDesktop && hasMobile && (
+              <>
+                <Button
+                  size="sm"
+                  variant={filter === 'all' ? 'default' : 'outline'}
+                  onClick={() => setFilter('all')}
+                >
+                  All
+                </Button>
+                <Button
+                  size="sm"
+                  variant={filter === 'desktop' ? 'default' : 'outline'}
+                  onClick={() => setFilter('desktop')}
+                >
+                  <Monitor className="mr-1.5 h-3.5 w-3.5" />
+                  Desktop
+                </Button>
+                <Button
+                  size="sm"
+                  variant={filter === 'mobile' ? 'default' : 'outline'}
+                  onClick={() => setFilter('mobile')}
+                >
+                  <Smartphone className="mr-1.5 h-3.5 w-3.5" />
+                  Mobile
+                </Button>
+              </>
+            )}
+          </div>
+
+          {/* Preview size selector */}
+          <div className="flex items-center gap-1 rounded-lg border p-1">
+            {PREVIEW_SIZES.map((size) => {
+              const Icon = size.icon;
+              return (
+                <button
+                  key={size.key}
+                  onClick={() => setPreviewSizeKey(size.key)}
+                  title={size.label}
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded transition-colors',
+                    previewSizeKey === size.key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Content: grouped or flat */}
+        {hasMultipleGroups ? (
+          <div className="space-y-8">
+            {groups.map((group, gi) => (
+              <GroupSection
+                key={group.key}
+                group={group}
+                previewSize={previewSize}
+                allFiltered={filtered}
+                onOpenLightbox={setLightboxIndex}
+                defaultOpen={gi < 3}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className={cn('grid gap-4', previewSize.cols)}>
+            {filtered.map((screenshot, i) => (
+              <ScreenshotCard
+                key={`${screenshot.device}-${screenshot.fileName}`}
+                screenshot={screenshot}
+                height={previewSize.height}
+                onClick={() => setLightboxIndex(i)}
+              />
+            ))}
           </div>
         )}
-
-        {/* Screenshot grid */}
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((screenshot, i) => (
-            <Card
-              key={`${screenshot.device}-${screenshot.fileName}`}
-              className="cursor-pointer overflow-hidden transition-shadow hover:shadow-lg"
-              onClick={() => setLightboxIndex(i)}
-            >
-              <div className="relative h-48 overflow-hidden bg-muted">
-                <img
-                  src={screenshot.url}
-                  alt={screenshot.fileName}
-                  className="w-full object-cover object-top"
-                  loading="lazy"
-                />
-              </div>
-              <CardContent className="p-3">
-                <div className="flex items-center gap-2">
-                  {screenshot.device === 'mobile' ? (
-                    <Smartphone className="h-3.5 w-3.5 text-muted-foreground" />
-                  ) : (
-                    <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
-                  <span className="truncate text-xs text-muted-foreground">
-                    {screenshot.originalUrl
-                      ? (() => {
-                          try {
-                            return new URL(screenshot.originalUrl).pathname || '/';
-                          } catch {
-                            return screenshot.fileName;
-                          }
-                        })()
-                      : screenshot.fileName}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
 
         {filtered.length === 0 && (
           <p className="py-12 text-center text-sm text-muted-foreground">
