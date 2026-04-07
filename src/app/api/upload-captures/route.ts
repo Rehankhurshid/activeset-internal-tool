@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+// Import db first — this triggers firebase-admin initialization as a side effect.
 import { db } from '@/lib/firebase-admin';
+import * as admin from 'firebase-admin';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,6 +17,9 @@ function getBucket() {
   const bucketName =
     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
     process.env.FIREBASE_STORAGE_BUCKET;
+  if (!admin.apps.length) {
+    throw new Error('Firebase admin is not initialized. Check server credentials.');
+  }
   return admin.storage().bucket(bucketName);
 }
 

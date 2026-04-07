@@ -20,7 +20,7 @@ import {
   Menu,
   FolderOpen,
   FileText,
-  Sparkles,
+
   Lock,
   Loader2,
   MonitorSmartphone,
@@ -103,7 +103,6 @@ export function AppNavigation({
                 label="Proposals"
                 hasAccess={proposalAccess}
                 loading={accessLoading}
-                badge={<Sparkles className="h-3 w-3" />}
               />
               <NavigationLink
                 href="/modules/screenshot-runner"
@@ -118,7 +117,6 @@ export function AppNavigation({
                 label="SEO Engine"
                 hasAccess={true}
                 loading={false}
-                badge={<Sparkles className="h-3 w-3" />}
               />
             </nav>
           )}
@@ -203,7 +201,6 @@ export function AppNavigation({
                       label="Proposals"
                       hasAccess={proposalAccess}
                       loading={accessLoading}
-                      badge={<Sparkles className="h-3 w-3" />}
                       onClick={() => setMobileMenuOpen(false)}
                     />
                     <MobileNavLink
@@ -220,7 +217,6 @@ export function AppNavigation({
                       label="SEO Engine"
                       hasAccess={true}
                       loading={false}
-                      badge={<Sparkles className="h-3 w-3" />}
                       onClick={() => setMobileMenuOpen(false)}
                     />
                   </nav>
