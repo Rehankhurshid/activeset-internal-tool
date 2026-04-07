@@ -16,12 +16,13 @@ Usage:
 
 Examples:
   npx @activeset/capture
+  npx @activeset/capture --sitemap https://example.com/sitemap.xml --project "my-site"
   npx @activeset/capture run --project "My Project" --file ./urls.txt
   npx @activeset/capture upload ./captures/my-run --to https://app.activeset.co
 
 Tip:
   Passing flags directly also works:
-  activeset-capture --project "My Project" --file ./urls.txt
+  activeset-capture --project "My Project" --sitemap https://example.com/sitemap.xml
 `);
 }
 

@@ -319,7 +319,9 @@ function EmptyState({
   const [copied, setCopied] = useState(false);
 
   const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const captureCommand = `npx @activeset/capture --project "${slug}" --file urls.txt`;
+  const captureCommand = sitemapUrl
+    ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${slug}"`
+    : `npx @activeset/capture --project "${slug}" --file urls.txt`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(captureCommand);

@@ -14,6 +14,7 @@ interface ParsedArgs {
   projectName?: string;
   urlsValue?: string;
   filePath?: string;
+  sitemapUrl?: string;
   outputDir?: string;
   concurrency?: number;
   timeoutMs?: number;
@@ -30,15 +31,17 @@ function printHelp(): void {
 Local-first responsive screenshot capture
 
 Usage:
+  activeset-capture run --project "My Project" --sitemap https://example.com/sitemap.xml
   activeset-capture run --project "My Project" [--urls "https://a.com,https://b.com"] [options]
   activeset-capture run --project "My Project" --file ./urls.txt [options]
   cat urls.txt | activeset-capture run --project "My Project" [options]
 
 Required:
   --project <name>         Manual project/run name
-  One input source: --urls, --file, or stdin
+  One input source: --sitemap, --urls, --file, or stdin
 
 Options:
+  --sitemap <url>          Fetch URLs from a sitemap.xml (supports index + hreflang)
   --out <dir>              Base output directory (default: ./captures)
   --concurrency <n>        Parallel URL workers (default: 3)
   --timeout-ms <n>         Per navigation timeout in ms (default: 45000)
@@ -139,6 +142,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       case 'file':
         parsed.filePath = value;
         break;
+      case 'sitemap':
+        parsed.sitemapUrl = value;
+        break;
       case 'out':
         parsed.outputDir = value;
         break;
@@ -215,7 +221,7 @@ async function collectUrlsFromPrompt(rl: ReturnType<typeof createInterface>): Pr
 async function maybePromptForMissingArgs(initialArgs: ParsedArgs): Promise<ParsedArgs> {
   const missingProject = !initialArgs.projectName || !initialArgs.projectName.trim();
   const missingInputSource =
-    !initialArgs.urlsValue && !initialArgs.filePath && Boolean(process.stdin.isTTY);
+    !initialArgs.urlsValue && !initialArgs.filePath && !initialArgs.sitemapUrl && Boolean(process.stdin.isTTY);
 
   if (!process.stdin.isTTY || (!missingProject && !missingInputSource)) {
     return initialArgs;
@@ -269,11 +275,194 @@ function normalizeFilePathInput(filePath: string): string {
   return normalized;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Sitemap fetching & parsing                                         */
+/* ------------------------------------------------------------------ */
+
+interface SitemapResult {
+  urls: string[];
+  languages: Map<string, number>;
+  isSitemapIndex: boolean;
+  childSitemaps: number;
+}
+
+async function fetchSitemapXml(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'ActiveSet-Capture/1.0' },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch sitemap (${res.status}): ${url}`);
+  }
+  return res.text();
+}
+
+function extractTagValues(xml: string, tag: string): string[] {
+  const regex = new RegExp(`<${tag}[^>]*>([^<]+)</${tag}>`, 'gi');
+  const values: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(xml)) !== null) {
+    values.push(match[1].trim());
+  }
+  return values;
+}
+
+function extractHreflangLangs(xml: string): string[] {
+  const regex = /hreflang=["']([^"']+)["']/gi;
+  const langs: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(xml)) !== null) {
+    langs.push(match[1].toLowerCase());
+  }
+  return langs;
+}
+
+function detectLanguageFromUrl(url: string): string | null {
+  try {
+    const pathname = new URL(url).pathname;
+    const first = pathname.split('/').filter(Boolean)[0]?.toLowerCase();
+    if (first && /^[a-z]{2}(-[a-z]{2,4})?$/.test(first)) {
+      return first;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function parseSitemap(url: string, depth = 0): Promise<SitemapResult> {
+  if (depth > 3) {
+    return { urls: [], languages: new Map(), isSitemapIndex: false, childSitemaps: 0 };
+  }
+
+  const xml = await fetchSitemapXml(url);
+  const isSitemapIndex = xml.includes('<sitemapindex');
+
+  const result: SitemapResult = {
+    urls: [],
+    languages: new Map(),
+    isSitemapIndex,
+    childSitemaps: 0,
+  };
+
+  if (isSitemapIndex) {
+    // Sitemap index — fetch each child sitemap
+    const childUrls = extractTagValues(xml, 'loc');
+    result.childSitemaps = childUrls.length;
+
+    console.log(`  Found sitemap index with ${childUrls.length} child sitemaps`);
+
+    for (const childUrl of childUrls) {
+      process.stdout.write(`  Fetching ${childUrl}...\r`);
+      const child = await parseSitemap(childUrl, depth + 1);
+      result.urls.push(...child.urls);
+      for (const [lang, count] of child.languages) {
+        result.languages.set(lang, (result.languages.get(lang) || 0) + count);
+      }
+    }
+  } else {
+    // Regular sitemap — extract URLs
+    const locs = extractTagValues(xml, 'loc');
+    const httpUrls = locs.filter((u) => u.startsWith('http'));
+    result.urls = httpUrls;
+
+    // Detect languages from hreflang attributes
+    const hreflangs = extractHreflangLangs(xml);
+    for (const lang of hreflangs) {
+      if (lang !== 'x-default') {
+        result.languages.set(lang, (result.languages.get(lang) || 0) + 1);
+      }
+    }
+
+    // Also detect languages from URL path prefixes
+    if (result.languages.size === 0) {
+      for (const u of httpUrls) {
+        const lang = detectLanguageFromUrl(u);
+        if (lang) {
+          result.languages.set(lang, (result.languages.get(lang) || 0) + 1);
+        }
+      }
+    }
+  }
+
+  // Deduplicate URLs
+  result.urls = [...new Set(result.urls)];
+
+  return result;
+}
+
+function formatLangLabel(code: string): string {
+  const labels: Record<string, string> = {
+    en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian',
+    pt: 'Portuguese', nl: 'Dutch', ja: 'Japanese', ko: 'Korean', zh: 'Chinese',
+    ar: 'Arabic', ru: 'Russian', hi: 'Hindi', tr: 'Turkish', sv: 'Swedish',
+    da: 'Danish', no: 'Norwegian', fi: 'Finnish', pl: 'Polish',
+    'pt-br': 'Portuguese (BR)', 'zh-cn': 'Chinese (CN)', 'zh-tw': 'Chinese (TW)',
+    'en-us': 'English (US)', 'en-gb': 'English (UK)', 'es-mx': 'Spanish (MX)',
+    'fr-ca': 'French (CA)',
+  };
+  return labels[code] || code.toUpperCase();
+}
+
+async function resolveSitemapUrls(sitemapUrl: string): Promise<string[]> {
+  console.log(`\nFetching sitemap: ${sitemapUrl}`);
+
+  const result = await parseSitemap(sitemapUrl);
+
+  if (result.urls.length === 0) {
+    throw new Error('No URLs found in sitemap.');
+  }
+
+  // Collect domains
+  const domains = new Set<string>();
+  for (const u of result.urls) {
+    try { domains.add(new URL(u).hostname); } catch { /* ignore */ }
+  }
+
+  // Print summary
+  console.log('');
+  console.log('  ┌─────────────────────────────────────────');
+  console.log(`  │  URLs found:    ${result.urls.length}`);
+  if (result.isSitemapIndex) {
+    console.log(`  │  Sub-sitemaps:  ${result.childSitemaps}`);
+  }
+  if (domains.size > 0) {
+    console.log(`  │  Domains:       ${[...domains].join(', ')}`);
+  }
+  if (result.languages.size > 0) {
+    const langSummary = [...result.languages.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([code, count]) => `${formatLangLabel(code)} (${count})`)
+      .join(', ');
+    console.log(`  │  Languages:     ${langSummary}`);
+  }
+  console.log('  └─────────────────────────────────────────');
+  console.log('');
+
+  // Ask for confirmation
+  if (process.stdin.isTTY) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      const answer = await rl.question(`  Proceed with ${result.urls.length} URLs? [Y/n] `);
+      if (answer.trim().toLowerCase() === 'n') {
+        console.log('  Cancelled.');
+        process.exit(0);
+      }
+    } finally {
+      rl.close();
+    }
+  }
+
+  return result.urls;
+}
+
 async function resolveInputUrls(args: ParsedArgs): Promise<string[]> {
-  const sourcesUsed = [args.urlsValue ? 1 : 0, args.filePath ? 1 : 0].reduce((acc, value) => acc + value, 0);
+  const sourcesUsed = [args.urlsValue ? 1 : 0, args.filePath ? 1 : 0, args.sitemapUrl ? 1 : 0].reduce((acc, value) => acc + value, 0);
 
   if (sourcesUsed > 1) {
-    throw new Error('Use only one input source: either --urls OR --file OR stdin.');
+    throw new Error('Use only one input source: either --sitemap, --urls, --file, or stdin.');
+  }
+
+  // Handle sitemap
+  if (args.sitemapUrl) {
+    return resolveSitemapUrls(args.sitemapUrl);
   }
 
   let rawText = '';
