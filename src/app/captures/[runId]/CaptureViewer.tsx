@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -230,25 +230,19 @@ function Lightbox({
 }) {
   const [index, setIndex] = useState(initialIndex);
   const [zoom, setZoom] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const current = screenshots[index];
   const hasPrev = index > 0;
   const hasNext = index < screenshots.length - 1;
 
-  const resetView = useCallback(() => {
-    setZoom(1);
-    setPosition({ x: 0, y: 0 });
-  }, []);
-
   const goTo = useCallback(
     (i: number) => {
       setIndex(i);
-      resetView();
+      setZoom(1);
+      scrollRef.current?.scrollTo({ top: 0 });
     },
-    [resetView]
+    []
   );
 
   useEffect(() => {
@@ -258,32 +252,16 @@ function Lightbox({
       if (e.key === 'ArrowRight' && hasNext) goTo(index + 1);
       if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(z + 0.5, 5));
       if (e.key === '-') setZoom((z) => Math.max(z - 0.5, 0.5));
-      if (e.key === '0') resetView();
+      if (e.key === '0') setZoom(1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [index, hasPrev, hasNext, onClose, goTo, resetView]);
+  }, [index, hasPrev, hasNext, onClose, goTo]);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (zoom <= 1) return;
-    setDragging(true);
-    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-  };
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragging) return;
-    setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
-  };
-  const handleMouseUp = () => setDragging(false);
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.25 : 0.25;
-    setZoom((z) => Math.min(Math.max(z + delta, 0.5), 5));
-  };
 
   const pageLabel = current.originalUrl
     ? (() => { try { return new URL(current.originalUrl).pathname || '/'; } catch { return current.fileName; } })()
@@ -319,27 +297,24 @@ function Lightbox({
         </div>
       </div>
 
-      <div
-        className="relative flex flex-1 items-center justify-center overflow-hidden"
-        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onWheel={handleWheel}
-        style={{ cursor: zoom > 1 ? (dragging ? 'grabbing' : 'grab') : 'default' }}
-      >
+      <div className="relative flex flex-1 overflow-hidden">
         {hasPrev && (
-          <button onClick={() => goTo(index - 1)} className="absolute left-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white/80 transition-colors hover:bg-black/70 hover:text-white sm:left-4">
+          <button onClick={() => goTo(index - 1)} className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/80 transition-colors hover:bg-black/70 hover:text-white sm:left-4">
             <ChevronLeft className="h-5 w-5" />
           </button>
         )}
         {hasNext && (
-          <button onClick={() => goTo(index + 1)} className="absolute right-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white/80 transition-colors hover:bg-black/70 hover:text-white sm:right-4">
+          <button onClick={() => goTo(index + 1)} className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/80 transition-colors hover:bg-black/70 hover:text-white sm:right-4">
             <ChevronRight className="h-5 w-5" />
           </button>
         )}
-        <img
-          src={current.url} alt={current.fileName} draggable={false}
-          className="max-h-full max-w-full select-none transition-transform duration-150"
-          style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})` }}
-        />
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+          <img
+            src={current.url} alt={current.fileName} draggable={false}
+            className="w-full select-none"
+            style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
+          />
+        </div>
       </div>
 
       {screenshots.length > 1 && (

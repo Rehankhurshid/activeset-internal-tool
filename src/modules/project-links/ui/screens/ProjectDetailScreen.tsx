@@ -12,8 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Code, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2 } from 'lucide-react';
+import { Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2 } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
+import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { AppNavigation } from '@/shared/ui';
 import { toast } from 'sonner';
@@ -252,6 +253,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                 <span className="hidden sm:inline">Webflow Pages</span>
                                 <span className="sm:hidden">Webflow</span>
                             </TabsTrigger>
+                            <TabsTrigger value="images" className="gap-2 flex-1 sm:flex-none">
+                                <ImageIcon className="h-4 w-4" />
+                                <span className="hidden sm:inline">Image Library</span>
+                                <span className="sm:hidden">Images</span>
+                            </TabsTrigger>
                             <TabsTrigger value="checklist" className="gap-2 flex-1 sm:flex-none">
                                 <ListChecks className="h-4 w-4" />
                                 <span className="hidden sm:inline">Checklist</span>
@@ -297,6 +303,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             onSaveConfig={handleSaveWebflowConfig}
                             onRemoveConfig={handleRemoveWebflowConfig}
                         />
+                    </TabsContent>
+
+                    <TabsContent value="images" className="mt-4 sm:mt-6">
+                        <ImageLibrary links={project.links.filter(l => l.source === 'auto')} />
                     </TabsContent>
 
                     <TabsContent value="checklist" className="mt-4 sm:mt-6">
