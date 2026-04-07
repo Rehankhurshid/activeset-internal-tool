@@ -306,7 +306,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     </TabsContent>
 
                     <TabsContent value="images" className="mt-4 sm:mt-6">
-                        <ImageLibrary links={project.links.filter(l => l.source === 'auto')} projectName={project.name} />
+                        <ImageLibrary
+                            links={project.links.filter(l => l.source === 'auto')}
+                            projectName={project.name}
+                            projectId={project.id}
+                            sitemapUrl={project.sitemapUrl}
+                        />
                     </TabsContent>
 
                     <TabsContent value="checklist" className="mt-4 sm:mt-6">

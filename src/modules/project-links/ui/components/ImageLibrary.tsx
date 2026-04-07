@@ -10,8 +10,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
+  Camera,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   ExternalLink,
   Grid2x2,
@@ -23,10 +26,12 @@ import {
   Search,
   Smartphone,
   Tablet,
+  Terminal,
   X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -298,15 +303,150 @@ function ImageCard({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Empty state                                                        */
+/* ------------------------------------------------------------------ */
+
+function EmptyState({
+  projectName,
+  projectId,
+  sitemapUrl,
+}: {
+  projectName: string;
+  projectId: string;
+  sitemapUrl?: string;
+}) {
+  const [scanning, setScanning] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const captureCommand = sitemapUrl
+    ? `npx @activeset/capture --sitemap ${sitemapUrl} --name "${slug}"`
+    : `npx @activeset/capture --url https://example.com --name "${slug}"`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(captureCommand);
+    setCopied(true);
+    toast.success('Command copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleScanWithScreenshots = async () => {
+    if (!sitemapUrl) return;
+    setScanning(true);
+    try {
+      const res = await fetch('/api/scan-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          options: {
+            scanCollections: true,
+            captureScreenshots: true,
+          },
+        }),
+      });
+      if (res.ok) {
+        toast.success('Scan started with screenshots enabled. Check the Audit Dashboard for progress.');
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Failed to start scan');
+      }
+    } catch {
+      toast.error('Failed to start scan');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-dashed p-8">
+      <div className="flex flex-col items-center text-center">
+        <ImageIcon className="h-12 w-12 text-muted-foreground/50" />
+        <h3 className="mt-4 text-lg font-medium">No screenshots yet</h3>
+        <p className="mt-1 max-w-md text-sm text-muted-foreground">
+          Capture screenshots of your pages to build a visual library. Choose an option below to get started.
+        </p>
+      </div>
+
+      <div className="mx-auto mt-8 grid max-w-2xl gap-4 sm:grid-cols-2">
+        {/* Option 1: Scan with screenshots */}
+        {sitemapUrl && (
+          <Card className="relative overflow-hidden">
+            <CardContent className="p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <Camera className="h-4.5 w-4.5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Scan with Screenshots</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Run a full scan using your sitemap with screenshots enabled.
+                  </p>
+                </div>
+              </div>
+              <Button
+                className="mt-4 w-full"
+                size="sm"
+                onClick={handleScanWithScreenshots}
+                disabled={scanning}
+              >
+                {scanning ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Starting scan...
+                  </>
+                ) : (
+                  <>
+                    <Camera className="mr-1.5 h-3.5 w-3.5" />
+                    Scan &amp; Capture
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Option 2: CLI capture command */}
+        <Card className="relative overflow-hidden">
+          <CardContent className="p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                <Terminal className="h-4.5 w-4.5 text-muted-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Capture via CLI</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Run this command in your terminal for high-quality screenshots.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              <code className="flex-1 truncate rounded bg-muted px-2.5 py-1.5 font-mono text-[11px]">
+                {captureCommand}
+              </code>
+              <Button variant="outline" size="sm" className="shrink-0" onClick={handleCopy}>
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
 interface ImageLibraryProps {
   links: ProjectLink[];
   projectName: string;
+  projectId: string;
+  sitemapUrl?: string;
 }
 
-export function ImageLibrary({ links, projectName }: ImageLibraryProps) {
+export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: ImageLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [previewSizeKey, setPreviewSizeKey] = useState<PreviewSize>('medium');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -420,15 +560,7 @@ export function ImageLibrary({ links, projectName }: ImageLibraryProps) {
   }
 
   if (allImages.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16">
-        <ImageIcon className="h-12 w-12 text-muted-foreground/50" />
-        <h3 className="mt-4 text-lg font-medium">No screenshots yet</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Enable the Screenshots toggle and run a scan to capture page screenshots.
-        </p>
-      </div>
-    );
+    return <EmptyState projectName={projectName} projectId={projectId} sitemapUrl={sitemapUrl} />;
   }
 
   const renderGrid = (images: ImageEntry[]) => {
