@@ -28,6 +28,7 @@ import {
   ImageIcon,
   Loader2,
   Monitor,
+  RefreshCw,
   Rows3,
   Search,
   Smartphone,
@@ -380,16 +381,65 @@ function Lightbox({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Recapture helper                                                   */
+/* ------------------------------------------------------------------ */
+
+function buildCaptureCommand(slug: string, urls: string[]) {
+  const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
+  return `npx @activeset/capture --project "${slug}" --urls "${urls.join(',')}" --upload ${uploadUrl}`;
+}
+
+function RecaptureButton({
+  urls,
+  slug,
+  label,
+  variant = 'ghost',
+  className,
+}: {
+  urls: string[];
+  slug: string;
+  label?: string;
+  variant?: 'ghost' | 'outline';
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const cmd = buildCaptureCommand(slug, urls);
+    navigator.clipboard.writeText(cmd);
+    setCopied(true);
+    toast.success(`Copied recapture command for ${urls.length} URL${urls.length > 1 ? 's' : ''}`);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Button
+      variant={variant}
+      size="sm"
+      className={cn('h-7 gap-1.5 text-xs', className)}
+      onClick={handleCopy}
+      title={`Copy CLI command to recapture ${urls.length} page${urls.length > 1 ? 's' : ''}`}
+    >
+      {copied ? <Check className="h-3 w-3" /> : <RefreshCw className="h-3 w-3" />}
+      {label ?? (copied ? 'Copied' : 'Recapture')}
+    </Button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Image card                                                         */
 /* ------------------------------------------------------------------ */
 
 function ImageCard({
   image,
   maxWidth,
+  slug,
   onClick,
 }: {
   image: ImageEntry;
   maxWidth: number | 'full';
+  slug: string;
   onClick: () => void;
 }) {
   const DeviceIcon = DEVICE_ICON[image.device] || Monitor;
@@ -408,6 +458,9 @@ function ImageCard({
         <img src={image.url} alt={image.pageTitle} className="w-full object-cover object-top" loading="lazy" />
         <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20">
           <ZoomIn className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
+        <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+          <RecaptureButton urls={[image.pageUrl]} slug={slug} variant="outline" className="bg-black/60 text-white border-white/20 hover:bg-black/80 hover:text-white" />
         </div>
       </div>
       <CardContent className="p-3">
@@ -914,6 +967,7 @@ function FolderGroup({
   allImages,
   columns,
   maxWidth,
+  slug,
   onImageClick,
 }: {
   folder: string;
@@ -921,32 +975,43 @@ function FolderGroup({
   allImages: ImageEntry[];
   columns: string;
   maxWidth: number | 'full';
+  slug: string;
   onImageClick: (globalIdx: number) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const folderUrls = useMemo(() => [...new Set(images.map((img) => img.pageUrl))], [images]);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <button className="flex w-full items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
-          {open ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
-          )}
-          {open ? (
-            <FolderOpen className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <Folder className="h-4 w-4 text-muted-foreground" />
-          )}
-          <span className="text-sm font-medium">
-            {folder === '/' ? 'Root' : folder}
-          </span>
-          <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-[10px] font-normal">
-            {images.length}
-          </Badge>
-        </button>
-      </CollapsibleTrigger>
+      <div className="flex items-center gap-1">
+        <CollapsibleTrigger asChild>
+          <button className="flex flex-1 items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
+            {open ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
+            )}
+            {open ? (
+              <FolderOpen className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <Folder className="h-4 w-4 text-muted-foreground" />
+            )}
+            <span className="text-sm font-medium">
+              {folder === '/' ? 'Root' : folder}
+            </span>
+            <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-[10px] font-normal">
+              {images.length}
+            </Badge>
+          </button>
+        </CollapsibleTrigger>
+        <RecaptureButton
+          urls={folderUrls}
+          slug={slug}
+          label={`Recapture ${folderUrls.length}`}
+          variant="outline"
+          className="shrink-0"
+        />
+      </div>
       <CollapsibleContent>
         <div className="mt-2 pb-2" style={{ columns: columns, columnGap: '1rem' }}>
           {images.map((img, i) => {
@@ -956,6 +1021,7 @@ function FolderGroup({
                 <ImageCard
                   image={img}
                   maxWidth={maxWidth}
+                  slug={slug}
                   onClick={() => onImageClick(globalIdx >= 0 ? globalIdx : 0)}
                 />
               </div>
@@ -1103,6 +1169,8 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     return <EmptyState projectName={projectName} projectId={projectId} sitemapUrl={sitemapUrl} />;
   }
 
+  const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
   const renderGrid = (images: ImageEntry[], deviceOverride?: string) => {
     const filtered = filterImages(images);
     if (filtered.length === 0) {
@@ -1145,6 +1213,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
                 <ImageCard
                   image={img}
                   maxWidth={w.maxWidth}
+                  slug={slug}
                   onClick={() => setLightboxIndex(globalIdx >= 0 ? globalIdx : 0)}
                 />
               </div>
@@ -1166,6 +1235,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
               allImages={allImages}
               columns={w.columns}
               maxWidth={w.maxWidth}
+              slug={slug}
               onImageClick={(globalIdx) => setLightboxIndex(globalIdx)}
             />
           );
