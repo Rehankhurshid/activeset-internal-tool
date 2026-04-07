@@ -14,16 +14,21 @@ export async function GET(request: NextRequest) {
     // So we query all and filter client-side for flexibility
     const snapshot = await db
       .collection('capture_runs')
-      .where('status', '==', 'complete')
-      .orderBy('createdAt', 'desc')
-      .limit(50)
       .get();
 
     const runs = snapshot.docs
       .filter((doc) => {
-        const name = (doc.data().projectName || '').toLowerCase();
-        return name.includes(projectName.toLowerCase());
+        const data = doc.data();
+        const name = (data.projectName || '').toLowerCase();
+        const statusOk = !data.status || data.status === 'complete';
+        return statusOk && name.includes(projectName.toLowerCase());
       })
+      .sort((a, b) => {
+        const aTime = a.data().createdAt || '';
+        const bTime = b.data().createdAt || '';
+        return bTime > aTime ? 1 : bTime < aTime ? -1 : 0;
+      })
+      .slice(0, 50)
       .map((doc) => {
         const data = doc.data();
         return {

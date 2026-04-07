@@ -126,20 +126,22 @@ if (!admin.apps.length) {
 
 // Export db and auth, with fallback mocks for build time or missing credentials
 export const db = (admin.apps.length ? admin.firestore() : {
-    collection: () => ({
-        doc: () => ({
-            get: async () => ({ exists: false, data: () => undefined }),
-            set: async () => { },
-            update: async () => { },
-            delete: async () => { }
-        }),
-        where: () => ({ get: async () => ({ empty: true, docs: [] }) }),
-        orderBy: () => ({
-            limit: () => ({ get: async () => ({ empty: true, docs: [] }) })
-        }),
-        add: async () => ({ id: 'mock-id' }),
-        get: async () => ({ empty: true, docs: [] })
-    })
+    collection: () => {
+        const mockQuery = {
+            doc: () => ({
+                get: async () => ({ exists: false, data: () => undefined }),
+                set: async () => { },
+                update: async () => { },
+                delete: async () => { }
+            }),
+            where: () => mockQuery,
+            orderBy: () => mockQuery,
+            limit: () => mockQuery,
+            add: async () => ({ id: 'mock-id' }),
+            get: async () => ({ empty: true, docs: [] })
+        };
+        return mockQuery;
+    }
 }) as unknown as Firestore;
 
 if (!admin.apps.length) {

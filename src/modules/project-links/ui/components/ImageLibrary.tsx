@@ -12,11 +12,16 @@ import { cn } from '@/lib/utils';
 import {
   Camera,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronRight as ChevronRightIcon,
   Copy,
   Download,
   ExternalLink,
+  Folder,
+  FolderOpen,
+  Globe,
   Grid2x2,
   Grid3x3,
   ImageIcon,
@@ -31,6 +36,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 
 /* ------------------------------------------------------------------ */
@@ -303,6 +309,333 @@ function ImageCard({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Sitemap Browser types                                              */
+/* ------------------------------------------------------------------ */
+
+interface SitemapEntry {
+  url: string;
+  pathname: string;
+  lang?: string;
+}
+
+interface ParsedSitemap {
+  domain: string;
+  totalUrls: number;
+  languages: Record<string, number>;
+  folders: Record<string, SitemapEntry[]>;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sitemap Browser                                                    */
+/* ------------------------------------------------------------------ */
+
+function SitemapBrowser({
+  sitemapUrl,
+  projectName,
+}: {
+  sitemapUrl: string;
+  projectName: string;
+}) {
+  const [sitemap, setSitemap] = useState<ParsedSitemap | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [copied, setCopied] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  // Fetch and parse sitemap on mount
+  useEffect(() => {
+    const fetchSitemap = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/parse-sitemap?url=${encodeURIComponent(sitemapUrl)}`);
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to parse sitemap');
+        }
+        const data: ParsedSitemap = await res.json();
+        setSitemap(data);
+        // Select all URLs by default
+        const allUrls = new Set<string>();
+        for (const entries of Object.values(data.folders)) {
+          for (const entry of entries) {
+            allUrls.add(entry.url);
+          }
+        }
+        setSelectedUrls(allUrls);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to parse sitemap');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSitemap();
+  }, [sitemapUrl]);
+
+  const toggleFolder = (folder: string) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folder)) next.delete(folder);
+      else next.add(folder);
+      return next;
+    });
+  };
+
+  const toggleFolderSelection = (folder: string) => {
+    if (!sitemap) return;
+    const entries = sitemap.folders[folder] || [];
+    const folderUrls = entries.map((e) => e.url);
+    const allSelected = folderUrls.every((u) => selectedUrls.has(u));
+
+    setSelectedUrls((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        folderUrls.forEach((u) => next.delete(u));
+      } else {
+        folderUrls.forEach((u) => next.add(u));
+      }
+      return next;
+    });
+  };
+
+  const toggleUrl = (url: string) => {
+    setSelectedUrls((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (!sitemap) return;
+    const allUrls = new Set<string>();
+    for (const entries of Object.values(sitemap.folders)) {
+      for (const entry of entries) allUrls.add(entry.url);
+    }
+    setSelectedUrls(allUrls);
+  };
+
+  const deselectAll = () => {
+    setSelectedUrls(new Set());
+  };
+
+  // Filter folders/entries by search
+  const filteredFolders = useMemo(() => {
+    if (!sitemap) return {};
+    if (!searchQuery.trim()) return sitemap.folders;
+    const q = searchQuery.toLowerCase();
+    const result: Record<string, SitemapEntry[]> = {};
+    for (const [folder, entries] of Object.entries(sitemap.folders)) {
+      const matched = entries.filter(
+        (e) => e.pathname.toLowerCase().includes(q) || e.url.toLowerCase().includes(q)
+      );
+      if (matched.length > 0 || folder.toLowerCase().includes(q)) {
+        result[folder] = matched.length > 0 ? matched : entries;
+      }
+    }
+    return result;
+  }, [sitemap, searchQuery]);
+
+  const sortedFolders = useMemo(() => {
+    return Object.keys(filteredFolders).sort((a, b) => {
+      if (a === '/') return -1;
+      if (b === '/') return 1;
+      return a.localeCompare(b);
+    });
+  }, [filteredFolders]);
+
+  // Build CLI command from selected URLs (with --upload since this is from the project context)
+  const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
+  const captureCommand = useMemo(() => {
+    if (selectedUrls.size === 0) return '';
+    if (!sitemap) return '';
+
+    const upload = `--upload ${uploadUrl}`;
+
+    // If all URLs are selected, use --sitemap flag
+    const totalUrls = Object.values(sitemap.folders).reduce((sum, entries) => sum + entries.length, 0);
+    if (selectedUrls.size === totalUrls) {
+      return `npx @activeset/capture --sitemap ${sitemapUrl} --project "${slug}" ${upload}`;
+    }
+
+    // Otherwise, list selected URLs
+    const urls = [...selectedUrls].sort();
+    return `npx @activeset/capture --project "${slug}" --urls "${urls.join(',')}" ${upload}`;
+  }, [selectedUrls, sitemap, sitemapUrl, slug, uploadUrl]);
+
+  const handleCopy = () => {
+    if (!captureCommand) return;
+    navigator.clipboard.writeText(captureCommand);
+    setCopied(true);
+    toast.success(`Copied command with ${selectedUrls.size} URLs`);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (loading) {
+    return (
+      <div className="mt-6 rounded-lg border p-6">
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <div>
+            <p className="text-sm font-medium">Parsing sitemap...</p>
+            <p className="text-xs text-muted-foreground">{sitemapUrl}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+        <p className="text-sm text-destructive">{error}</p>
+      </div>
+    );
+  }
+
+  if (!sitemap) return null;
+
+  const totalUrls = Object.values(sitemap.folders).reduce((sum, entries) => sum + entries.length, 0);
+  const langEntries = Object.entries(sitemap.languages);
+
+  return (
+    <div className="mt-6 space-y-4">
+      {/* Summary header */}
+      <div className="rounded-lg border p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <Globe className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">{sitemap.domain}</p>
+              <p className="text-xs text-muted-foreground">
+                {totalUrls} pages in {Object.keys(sitemap.folders).length} folders
+                {langEntries.length > 0 && (
+                  <> &middot; {langEntries.map(([lang]) => lang).join(', ')}</>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs">
+              {selectedUrls.size} / {totalUrls} selected
+            </Badge>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAll}>
+              All
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={deselectAll}>
+              None
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Search within sitemap */}
+      {totalUrls > 10 && (
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Filter pages..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9 text-sm"
+          />
+        </div>
+      )}
+
+      {/* Folder tree */}
+      <div className="max-h-[400px] overflow-y-auto rounded-lg border">
+        {sortedFolders.map((folder) => {
+          const entries = filteredFolders[folder] || [];
+          const isExpanded = expandedFolders.has(folder);
+          const folderUrls = entries.map((e) => e.url);
+          const selectedCount = folderUrls.filter((u) => selectedUrls.has(u)).length;
+          const allSelected = selectedCount === entries.length;
+          const someSelected = selectedCount > 0 && !allSelected;
+          const FolderIcon = isExpanded ? FolderOpen : Folder;
+
+          return (
+            <div key={folder} className="border-b last:border-b-0">
+              <div
+                className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer"
+                onClick={() => toggleFolder(folder)}
+              >
+                <Checkbox
+                  checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                  onCheckedChange={() => toggleFolderSelection(folder)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-4 w-4"
+                />
+                {isExpanded ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+                <FolderIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">{folder === '/' ? 'Root' : folder}</span>
+                <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-[10px] font-normal">
+                  {selectedCount}/{entries.length}
+                </Badge>
+              </div>
+
+              {isExpanded && (
+                <div className="border-t bg-muted/20">
+                  {entries.map((entry) => (
+                    <label
+                      key={entry.url}
+                      className="flex items-center gap-2 px-3 py-1.5 pl-12 hover:bg-muted/30 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={selectedUrls.has(entry.url)}
+                        onCheckedChange={() => toggleUrl(entry.url)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span className="truncate text-xs text-muted-foreground font-mono">
+                        {entry.pathname}
+                      </span>
+                      {entry.lang && (
+                        <Badge variant="outline" className="ml-auto h-4 px-1 text-[9px] font-normal shrink-0">
+                          {entry.lang}
+                        </Badge>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* CLI command output */}
+      {selectedUrls.size > 0 && (
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium">CLI Command</span>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={handleCopy}>
+              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+          <code className="block overflow-x-auto whitespace-pre-wrap break-all rounded bg-background px-3 py-2 font-mono text-[11px]">
+            {captureCommand}
+          </code>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Empty state                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -317,11 +650,13 @@ function EmptyState({
 }) {
   const [scanning, setScanning] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showSitemapBrowser, setShowSitemapBrowser] = useState(false);
 
   const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
   const captureCommand = sitemapUrl
-    ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${slug}"`
-    : `npx @activeset/capture --project "${slug}" --file urls.txt`;
+    ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${slug}" --upload ${uploadUrl}`
+    : `npx @activeset/capture --project "${slug}" --file urls.txt --upload ${uploadUrl}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(captureCommand);
@@ -431,6 +766,27 @@ function EmptyState({
           </CardContent>
         </Card>
       </div>
+
+      {/* Sitemap Browser: select pages for CLI capture */}
+      {sitemapUrl && !showSitemapBrowser && (
+        <div className="mx-auto mt-6 max-w-2xl text-center">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setShowSitemapBrowser(true)}
+          >
+            <Globe className="h-3.5 w-3.5" />
+            Browse Sitemap &amp; Select Pages
+          </Button>
+        </div>
+      )}
+
+      {sitemapUrl && showSitemapBrowser && (
+        <div className="mx-auto max-w-2xl">
+          <SitemapBrowser sitemapUrl={sitemapUrl} projectName={projectName} />
+        </div>
+      )}
     </div>
   );
 }
