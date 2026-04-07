@@ -228,16 +228,19 @@ function getDefaultLightboxWidth(device: string) {
 function Lightbox({
   images,
   initialIndex,
+  widthKey,
+  onWidthChange,
   onClose,
 }: {
   images: ImageEntry[];
   initialIndex: number;
+  widthKey: string;
+  onWidthChange: (key: string) => void;
   onClose: () => void;
 }) {
   const [index, setIndex] = useState(initialIndex);
   const [zoom, setZoom] = useState(1);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [widthKey, setWidthKey] = useState(() => getDefaultLightboxWidth(images[initialIndex]?.device || 'desktop'));
 
   const current = images[index];
   const hasPrev = index > 0;
@@ -252,13 +255,8 @@ function Lightbox({
       setIndex(i);
       setZoom(1);
       scrollRef.current?.scrollTo({ top: 0 });
-      // Update width preset when switching between device types
-      const nextDevice = images[i]?.device || 'desktop';
-      if (nextDevice !== images[index]?.device) {
-        setWidthKey(getDefaultLightboxWidth(nextDevice));
-      }
     },
-    [images, index]
+    []
   );
 
   useEffect(() => {
@@ -297,7 +295,7 @@ function Lightbox({
             {widthPresets.map((w) => (
               <button
                 key={w.key}
-                onClick={() => setWidthKey(w.key)}
+                onClick={() => onWidthChange(w.key)}
                 className={cn(
                   'h-6 rounded px-2 text-[11px] font-medium transition-colors',
                   widthKey === w.key
@@ -459,7 +457,17 @@ function ImageCard({
         <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20">
           <ZoomIn className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100" />
         </div>
-        <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <a
+            href={image.pageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white border border-white/20 hover:bg-black/80"
+            title="Open page"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </a>
           <RecaptureButton urls={[image.pageUrl]} slug={slug} variant="outline" className="bg-black/60 text-white border-white/20 hover:bg-black/80 hover:text-white" />
         </div>
       </div>
@@ -1047,6 +1055,7 @@ interface ImageLibraryProps {
 export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: ImageLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [lightboxWidthKey, setLightboxWidthKey] = useState('1280');
   const [captureRuns, setCaptureRuns] = useState<CaptureRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeDevice, setActiveDevice] = useState('desktop');
@@ -1315,6 +1324,8 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
         <Lightbox
           images={allImages}
           initialIndex={lightboxIndex}
+          widthKey={lightboxWidthKey}
+          onWidthChange={setLightboxWidthKey}
           onClose={() => setLightboxIndex(null)}
         />
       )}
