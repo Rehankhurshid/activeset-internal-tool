@@ -51,8 +51,41 @@ interface ImageEntry {
   pageTitle: string;
   pathname: string;
   device: 'desktop' | 'tablet' | 'mobile';
+  lang: string;
   capturedAt?: string;
   source: 'capture' | 'audit';
+}
+
+/** Known language path prefixes */
+const LANG_PREFIXES = new Set([
+  'en', 'es', 'es-mx', 'es-es', 'fr', 'de', 'pt', 'pt-br', 'it', 'nl', 'ja', 'ko', 'zh',
+  'zh-cn', 'zh-tw', 'ru', 'ar', 'hi', 'sv', 'da', 'no', 'fi', 'pl', 'tr', 'cs', 'th', 'vi',
+  'id', 'ms', 'he', 'uk', 'ro', 'hu', 'el', 'bg', 'sk', 'hr', 'sr', 'sl', 'lt', 'lv', 'et',
+]);
+
+function detectLangFromPath(pathname: string): string {
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length === 0) return 'en';
+  const first = segments[0].toLowerCase();
+  if (LANG_PREFIXES.has(first)) return first;
+  return 'en';
+}
+
+function formatTimestamp(ts?: string): string | null {
+  if (!ts) return null;
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch {
+    return null;
+  }
 }
 
 interface CaptureScreenshot {
@@ -150,6 +183,7 @@ function extractCaptureImages(runs: CaptureRun[]): ImageEntry[] {
         pageTitle,
         pathname,
         device: (s.device as ImageEntry['device']) || 'desktop',
+        lang: detectLangFromPath(pathname),
         capturedAt: run.createdAt,
         source: 'capture',
       });
@@ -180,6 +214,7 @@ function extractAuditImages(links: ProjectLink[]): ImageEntry[] {
         pageTitle: link.title || pathname,
         pathname,
         device: 'desktop',
+        lang: detectLangFromPath(pathname),
         capturedAt: audit.screenshotCapturedAt,
         source: 'audit',
       });
@@ -476,6 +511,12 @@ function ImageCard({
         <div className="mt-1 flex items-center gap-2">
           <DeviceIcon className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
           <span className="truncate text-xs text-muted-foreground">{image.pathname}</span>
+          {image.capturedAt && (
+            <>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="shrink-0 text-[10px] text-muted-foreground/60">{formatTimestamp(image.capturedAt)}</span>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -984,7 +1025,7 @@ function FolderGroup({
   columns: string;
   maxWidth: number | 'full';
   slug: string;
-  onImageClick: (globalIdx: number) => void;
+  onImageClick: (image: ImageEntry) => void;
 }) {
   const [open, setOpen] = useState(true);
   const folderUrls = useMemo(() => [...new Set(images.map((img) => img.pageUrl))], [images]);
@@ -1022,19 +1063,16 @@ function FolderGroup({
       </div>
       <CollapsibleContent>
         <div className="mt-2 pb-2" style={{ columns: columns, columnGap: '1rem' }}>
-          {images.map((img, i) => {
-            const globalIdx = allImages.indexOf(img);
-            return (
-              <div key={`${img.device}-${img.pathname}-${i}`} className="mb-4 break-inside-avoid">
-                <ImageCard
-                  image={img}
-                  maxWidth={maxWidth}
-                  slug={slug}
-                  onClick={() => onImageClick(globalIdx >= 0 ? globalIdx : 0)}
-                />
-              </div>
-            );
-          })}
+          {images.map((img, i) => (
+            <div key={`${img.device}-${img.pathname}-${i}`} className="mb-4 break-inside-avoid">
+              <ImageCard
+                image={img}
+                maxWidth={maxWidth}
+                slug={slug}
+                onClick={() => onImageClick(img)}
+              />
+            </div>
+          ))}
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -1054,13 +1092,17 @@ interface ImageLibraryProps {
 
 export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: ImageLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [lightboxImages, setLightboxImages] = useState<ImageEntry[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [lightboxWidthKey, setLightboxWidthKey] = useState('1280');
   const [captureRuns, setCaptureRuns] = useState<CaptureRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeLang, setActiveLang] = useState('en');
   const [activeDevice, setActiveDevice] = useState('desktop');
-  // Per-device width selection
   const [widthByDevice, setWidthByDevice] = useState<Record<string, string>>(DEVICE_DEFAULT_WIDTH);
+  const [copiedAll, setCopiedAll] = useState(false);
+
+  const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
   // Fetch capture runs for this project
   useEffect(() => {
@@ -1091,7 +1133,6 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     const captureImages = extractCaptureImages(captureRuns);
     const auditImages = extractAuditImages(links);
 
-    // Deduplicate by pageUrl+device (capture images take priority)
     const seen = new Set<string>();
     const combined: ImageEntry[] = [];
 
@@ -1113,16 +1154,51 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     return combined;
   }, [captureRuns, links]);
 
-  // Group by device
-  const deviceGroups = useMemo(() => {
+  // Group by language
+  const langGroups = useMemo(() => {
     const groups = new Map<string, ImageEntry[]>();
     for (const img of allImages) {
+      const bucket = groups.get(img.lang) || [];
+      bucket.push(img);
+      groups.set(img.lang, bucket);
+    }
+    return groups;
+  }, [allImages]);
+
+  const languages = useMemo(() => {
+    const langs = [...langGroups.keys()].sort((a, b) => {
+      if (a === 'en') return -1;
+      if (b === 'en') return 1;
+      return a.localeCompare(b);
+    });
+    return langs;
+  }, [langGroups]);
+
+  const hasMultipleLangs = languages.length > 1;
+
+  // Set initial active language
+  useEffect(() => {
+    if (languages.length > 0 && !languages.includes(activeLang)) {
+      setActiveLang(languages[0]);
+    }
+  }, [languages, activeLang]);
+
+  // Images for the active language
+  const langImages = useMemo(() => {
+    if (!hasMultipleLangs) return allImages;
+    return langGroups.get(activeLang) || [];
+  }, [hasMultipleLangs, langGroups, activeLang, allImages]);
+
+  // Group by device within the active language
+  const deviceGroups = useMemo(() => {
+    const groups = new Map<string, ImageEntry[]>();
+    for (const img of langImages) {
       const bucket = groups.get(img.device) || [];
       bucket.push(img);
       groups.set(img.device, bucket);
     }
     return groups;
-  }, [allImages]);
+  }, [langImages]);
 
   const devices = useMemo(() => {
     const order = ['desktop', 'tablet', 'mobile'];
@@ -1152,11 +1228,28 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
 
   const currentWidthKey = widthByDevice[activeDevice] || DEVICE_DEFAULT_WIDTH[activeDevice] || '1024';
   const widthOptions = DEVICE_WIDTHS[activeDevice] || DESKTOP_WIDTHS;
-  const currentWidth = widthOptions.find((w) => w.key === currentWidthKey) || widthOptions[0];
 
   const setDeviceWidth = useCallback((key: string) => {
     setWidthByDevice((prev) => ({ ...prev, [activeDevice]: key }));
   }, [activeDevice]);
+
+  // Open lightbox with the filtered list (not allImages)
+  const openLightbox = useCallback((filteredList: ImageEntry[], indexInList: number) => {
+    setLightboxImages(filteredList);
+    setLightboxIndex(indexInList);
+  }, []);
+
+  // Recapture all (whole sitemap)
+  const handleCopyAllCapture = useCallback(() => {
+    const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
+    const cmd = sitemapUrl
+      ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${slug}" --upload ${uploadUrl}`
+      : buildCaptureCommand(slug, [...new Set(allImages.map((i) => i.pageUrl))]);
+    navigator.clipboard.writeText(cmd);
+    setCopiedAll(true);
+    toast.success('Copied full sitemap capture command');
+    setTimeout(() => setCopiedAll(false), 2000);
+  }, [sitemapUrl, slug, allImages]);
 
   if (loading) {
     return (
@@ -1178,8 +1271,6 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     return <EmptyState projectName={projectName} projectId={projectId} sitemapUrl={sitemapUrl} />;
   }
 
-  const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-
   const renderGrid = (images: ImageEntry[], deviceOverride?: string) => {
     const filtered = filterImages(images);
     if (filtered.length === 0) {
@@ -1194,40 +1285,38 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     const wOptions = DEVICE_WIDTHS[device] || DESKTOP_WIDTHS;
     const w = wOptions.find((o) => o.key === wKey) || wOptions[0];
 
-    // Group images by folder (first path segment)
+    // Group images by folder (first path segment, excluding lang prefix)
     const folderMap = new Map<string, ImageEntry[]>();
     for (const img of filtered) {
       const segments = img.pathname.split('/').filter(Boolean);
-      const folder = segments.length > 1 ? '/' + segments[0] : '/';
+      // Skip the language prefix if present
+      const startIdx = LANG_PREFIXES.has(segments[0]?.toLowerCase()) ? 1 : 0;
+      const remaining = segments.slice(startIdx);
+      const folder = remaining.length > 1 ? '/' + remaining[0] : '/';
       const bucket = folderMap.get(folder) || [];
       bucket.push(img);
       folderMap.set(folder, bucket);
     }
 
-    // Sort folders: root first, then alphabetical
     const sortedFolders = [...folderMap.keys()].sort((a, b) => {
       if (a === '/') return -1;
       if (b === '/') return 1;
       return a.localeCompare(b);
     });
 
-    // If only one folder, skip the grouping UI
     if (sortedFolders.length <= 1) {
       return (
         <div style={{ columns: w.columns, columnGap: '1rem' }}>
-          {filtered.map((img, i) => {
-            const globalIdx = allImages.indexOf(img);
-            return (
-              <div key={`${img.device}-${img.pathname}-${i}`} className="mb-4 break-inside-avoid">
-                <ImageCard
-                  image={img}
-                  maxWidth={w.maxWidth}
-                  slug={slug}
-                  onClick={() => setLightboxIndex(globalIdx >= 0 ? globalIdx : 0)}
-                />
-              </div>
-            );
-          })}
+          {filtered.map((img, i) => (
+            <div key={`${img.device}-${img.pathname}-${i}`} className="mb-4 break-inside-avoid">
+              <ImageCard
+                image={img}
+                maxWidth={w.maxWidth}
+                slug={slug}
+                onClick={() => openLightbox(filtered, i)}
+              />
+            </div>
+          ))}
         </div>
       );
     }
@@ -1241,11 +1330,11 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
               key={folder}
               folder={folder}
               images={folderImages}
-              allImages={allImages}
+              allImages={filtered}
               columns={w.columns}
               maxWidth={w.maxWidth}
               slug={slug}
-              onImageClick={(globalIdx) => setLightboxIndex(globalIdx)}
+              onImageClick={(img) => openLightbox(filtered, filtered.indexOf(img))}
             />
           );
         })}
@@ -1257,14 +1346,25 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     <div>
       {/* Toolbar */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="relative w-full max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search pages..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+        <div className="flex items-center gap-3">
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search pages..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5 text-xs"
+            onClick={handleCopyAllCapture}
+          >
+            {copiedAll ? <Check className="h-3 w-3" /> : <RefreshCw className="h-3 w-3" />}
+            {copiedAll ? 'Copied' : 'Recapture All'}
+          </Button>
         </div>
 
         <div className="flex items-center gap-3">
@@ -1290,8 +1390,57 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
         </div>
       </div>
 
-      {/* Content */}
-      {hasMultipleDevices ? (
+      {/* Language tabs (main) → Device subtabs */}
+      {hasMultipleLangs ? (
+        <Tabs value={activeLang} onValueChange={setActiveLang}>
+          <TabsList className="mb-4">
+            {languages.map((lang) => {
+              const count = langGroups.get(lang)?.length || 0;
+              return (
+                <TabsTrigger key={lang} value={lang} className="gap-1.5">
+                  <Globe className="h-3.5 w-3.5" />
+                  {lang.toUpperCase()}
+                  <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 text-[10px] font-normal">
+                    {count}
+                  </Badge>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+
+          {languages.map((lang) => (
+            <TabsContent key={lang} value={lang}>
+              {hasMultipleDevices ? (
+                <Tabs defaultValue={devices[0]} onValueChange={setActiveDevice}>
+                  <TabsList className="mb-4">
+                    {devices.map((device) => {
+                      const Icon = DEVICE_ICON[device] || Monitor;
+                      const count = deviceGroups.get(device)?.length || 0;
+                      return (
+                        <TabsTrigger key={device} value={device} className="gap-1.5">
+                          <Icon className="h-3.5 w-3.5" />
+                          {device.charAt(0).toUpperCase() + device.slice(1)}
+                          <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 text-[10px] font-normal">
+                            {count}
+                          </Badge>
+                        </TabsTrigger>
+                      );
+                    })}
+                  </TabsList>
+
+                  {devices.map((device) => (
+                    <TabsContent key={device} value={device}>
+                      {renderGrid(deviceGroups.get(device) || [], device)}
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              ) : (
+                renderGrid(langImages)
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
+      ) : hasMultipleDevices ? (
         <Tabs defaultValue={devices[0]} onValueChange={setActiveDevice}>
           <TabsList className="mb-4">
             {devices.map((device) => {
@@ -1319,10 +1468,10 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
         renderGrid(allImages)
       )}
 
-      {/* Lightbox */}
-      {lightboxIndex !== null && (
+      {/* Lightbox — uses the filtered list, not allImages */}
+      {lightboxIndex !== null && lightboxImages.length > 0 && (
         <Lightbox
-          images={allImages}
+          images={lightboxImages}
           initialIndex={lightboxIndex}
           widthKey={lightboxWidthKey}
           onWidthChange={setLightboxWidthKey}
