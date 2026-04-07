@@ -192,6 +192,38 @@ function extractAuditImages(links: ProjectLink[]): ImageEntry[] {
 /*  Lightbox (full-width scrollable)                                   */
 /* ------------------------------------------------------------------ */
 
+/** All lightbox width presets (superset) */
+const LIGHTBOX_WIDTHS = [
+  { key: 'full', label: 'Full', px: 0 },
+  { key: '1440', label: '1440', px: 1440 },
+  { key: '1280', label: '1280', px: 1280 },
+  { key: '1024', label: '1024', px: 1024 },
+  { key: '768', label: '768', px: 768 },
+  { key: '430', label: '430', px: 430 },
+  { key: '390', label: '390', px: 390 },
+  { key: '360', label: '360', px: 360 },
+];
+
+/** Return sensible width presets based on device */
+function getLightboxWidths(device: string) {
+  switch (device) {
+    case 'mobile':
+      return LIGHTBOX_WIDTHS.filter((w) => w.key === 'full' || (w.px > 0 && w.px <= 480));
+    case 'tablet':
+      return LIGHTBOX_WIDTHS.filter((w) => w.key === 'full' || (w.px >= 768 && w.px <= 1024));
+    default:
+      return LIGHTBOX_WIDTHS.filter((w) => w.key === 'full' || w.px >= 768);
+  }
+}
+
+function getDefaultLightboxWidth(device: string) {
+  switch (device) {
+    case 'mobile': return '390';
+    case 'tablet': return '768';
+    default: return '1280';
+  }
+}
+
 function Lightbox({
   images,
   initialIndex,
@@ -204,18 +236,28 @@ function Lightbox({
   const [index, setIndex] = useState(initialIndex);
   const [zoom, setZoom] = useState(1);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [widthKey, setWidthKey] = useState(() => getDefaultLightboxWidth(images[initialIndex]?.device || 'desktop'));
 
   const current = images[index];
   const hasPrev = index > 0;
   const hasNext = index < images.length - 1;
+
+  const widthPresets = getLightboxWidths(current.device);
+  const activeWidth = LIGHTBOX_WIDTHS.find((w) => w.key === widthKey);
+  const maxWidthPx = activeWidth && activeWidth.px > 0 ? activeWidth.px : 0;
 
   const goTo = useCallback(
     (i: number) => {
       setIndex(i);
       setZoom(1);
       scrollRef.current?.scrollTo({ top: 0 });
+      // Update width preset when switching between device types
+      const nextDevice = images[i]?.device || 'desktop';
+      if (nextDevice !== images[index]?.device) {
+        setWidthKey(getDefaultLightboxWidth(nextDevice));
+      }
     },
-    []
+    [images, index]
   );
 
   useEffect(() => {
@@ -240,7 +282,8 @@ function Lightbox({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/95">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+      {/* Top bar */}
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2">
         <div className="flex items-center gap-3 text-sm text-white/80">
           <DeviceIcon className="h-4 w-4" />
           <span className="max-w-[200px] truncate text-xs sm:max-w-none">{current.pageTitle}</span>
@@ -248,29 +291,49 @@ function Lightbox({
           <span className="text-white/40">{index + 1} / {images.length}</span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => setZoom((z) => Math.max(z - 0.5, 0.5))}>
-            <ZoomOut className="h-4 w-4" />
+          {/* Width presets */}
+          <div className="flex items-center gap-0.5 rounded-md border border-white/10 p-0.5">
+            {widthPresets.map((w) => (
+              <button
+                key={w.key}
+                onClick={() => setWidthKey(w.key)}
+                className={cn(
+                  'h-6 rounded px-2 text-[11px] font-medium transition-colors',
+                  widthKey === w.key
+                    ? 'bg-white text-black'
+                    : 'text-white/50 hover:bg-white/10 hover:text-white/80'
+                )}
+              >
+                {w.label}
+              </button>
+            ))}
+          </div>
+          <div className="mx-1.5 h-4 w-px bg-white/20" />
+          {/* Zoom */}
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => setZoom((z) => Math.max(z - 0.5, 0.5))}>
+            <ZoomOut className="h-3.5 w-3.5" />
           </Button>
-          <span className="w-12 text-center text-xs text-white/50">{Math.round(zoom * 100)}%</span>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => setZoom((z) => Math.min(z + 0.5, 5))}>
-            <ZoomIn className="h-4 w-4" />
+          <span className="w-10 text-center text-[11px] text-white/50">{Math.round(zoom * 100)}%</span>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => setZoom((z) => Math.min(z + 0.5, 5))}>
+            <ZoomIn className="h-3.5 w-3.5" />
           </Button>
-          <div className="mx-2 h-4 w-px bg-white/20" />
-          <a href={current.pageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white/70 hover:bg-white/10 hover:text-white">
-            <ExternalLink className="h-4 w-4" />
+          <div className="mx-1.5 h-4 w-px bg-white/20" />
+          <a href={current.pageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-7 w-7 items-center justify-center rounded-md text-white/70 hover:bg-white/10 hover:text-white">
+            <ExternalLink className="h-3.5 w-3.5" />
           </a>
           {!current.url.startsWith('data:') && (
-            <a href={current.url} download className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white/70 hover:bg-white/10 hover:text-white">
-              <Download className="h-4 w-4" />
+            <a href={current.url} download className="inline-flex h-7 w-7 items-center justify-center rounded-md text-white/70 hover:bg-white/10 hover:text-white">
+              <Download className="h-3.5 w-3.5" />
             </a>
           )}
-          <div className="mx-2 h-4 w-px bg-white/20" />
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-white/70 hover:bg-white/10 hover:text-white" onClick={onClose}>
-            <X className="h-4 w-4" />
+          <div className="mx-1.5 h-4 w-px bg-white/20" />
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-white/70 hover:bg-white/10 hover:text-white" onClick={onClose}>
+            <X className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
 
+      {/* Image area */}
       <div className="relative flex flex-1 overflow-hidden">
         {hasPrev && (
           <button onClick={() => goTo(index - 1)} className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white sm:left-4">
@@ -283,14 +346,20 @@ function Lightbox({
           </button>
         )}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <img
-            src={current.url} alt={current.pageTitle} draggable={false}
-            className="w-full select-none"
-            style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
-          />
+          <div
+            className="mx-auto"
+            style={maxWidthPx > 0 ? { maxWidth: `${maxWidthPx}px` } : undefined}
+          >
+            <img
+              src={current.url} alt={current.pageTitle} draggable={false}
+              className="w-full select-none"
+              style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
+            />
+          </div>
         </div>
       </div>
 
+      {/* Thumbnail strip */}
       {images.length > 1 && (
         <div className="flex gap-1.5 overflow-x-auto border-t border-white/10 px-4 py-2">
           {images.map((img, i) => (
