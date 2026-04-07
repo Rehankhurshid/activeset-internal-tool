@@ -17,24 +17,45 @@ const shouldUseApplicationDefaultCredentials = (): boolean => {
     );
 };
 
-const parseServiceAccountFromEnv = (): admin.ServiceAccount | null => {
-    const rawJson =
-        process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
-        process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+const serviceAccountRawCandidates = (): string[] => {
+    const candidates = [
+        process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+        process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+        process.env.GOOGLE_CREDENTIALS,
+        process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
+        process.env.GCLOUD_SERVICE_ACCOUNT_KEY,
+    ];
 
-    if (!rawJson) return null;
+    return candidates.filter((value): value is string => Boolean(value && value.trim()));
+};
+
+const parseServiceAccount = (raw: string): admin.ServiceAccount | null => {
+    const normalizeServiceAccount = (value: unknown): admin.ServiceAccount | null => {
+        if (!value || typeof value !== 'object') return null;
+
+        const record = value as Record<string, unknown>;
+        const projectId = (record.projectId || record.project_id) as string | undefined;
+        const clientEmail = (record.clientEmail || record.client_email) as string | undefined;
+        const privateKey = (record.privateKey || record.private_key) as string | undefined;
+
+        if (!projectId || !clientEmail || !privateKey) return null;
+
+        return { projectId, clientEmail, privateKey };
+    };
 
     try {
-        const parsed = JSON.parse(rawJson) as admin.ServiceAccount;
-        if (parsed.privateKey && parsed.clientEmail && parsed.projectId) return parsed;
+        const parsed = JSON.parse(raw) as unknown;
+        const normalized = normalizeServiceAccount(parsed);
+        if (normalized) return normalized;
     } catch {
         // Not plain JSON, continue to base64 attempt.
     }
 
     try {
-        const decoded = Buffer.from(rawJson, 'base64').toString('utf8');
-        const parsed = JSON.parse(decoded) as admin.ServiceAccount;
-        if (parsed.privateKey && parsed.clientEmail && parsed.projectId) return parsed;
+        const decoded = Buffer.from(raw, 'base64').toString('utf8');
+        const parsed = JSON.parse(decoded) as unknown;
+        const normalized = normalizeServiceAccount(parsed);
+        if (normalized) return normalized;
     } catch {
         // Ignore parsing error and fall through.
     }
@@ -42,9 +63,32 @@ const parseServiceAccountFromEnv = (): admin.ServiceAccount | null => {
     return null;
 };
 
+const parseServiceAccountFromEnv = (): admin.ServiceAccount | null => {
+    for (const candidate of serviceAccountRawCandidates()) {
+        const parsed = parseServiceAccount(candidate);
+        if (parsed) return parsed;
+    }
+
+    return null;
+};
+
+const getExplicitClientEmail = (): string | undefined =>
+    process.env.FIREBASE_CLIENT_EMAIL ||
+    process.env.FIREBASE_ADMIN_CLIENT_EMAIL ||
+    process.env.FIREBASE_SERVICE_ACCOUNT_CLIENT_EMAIL;
+
+const getExplicitPrivateKey = (): string | undefined =>
+    process.env.FIREBASE_PRIVATE_KEY ||
+    process.env.FIREBASE_ADMIN_PRIVATE_KEY ||
+    process.env.FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY;
+
+const getStorageBucket = (): string | undefined =>
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET;
+
 if (!admin.apps.length) {
     try {
         const projectId = getProjectId();
+        const storageBucket = getStorageBucket();
         const serviceAccountFromJson = parseServiceAccountFromEnv();
 
         if (serviceAccountFromJson) {
@@ -54,22 +98,25 @@ if (!admin.apps.length) {
                     privateKey: serviceAccountFromJson.privateKey?.replace(/\\n/g, '\n'),
                 }),
                 projectId: projectId || serviceAccountFromJson.projectId,
+                storageBucket,
             });
-        } else if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
-            const normalizedPrivateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+        } else if (getExplicitPrivateKey() && getExplicitClientEmail()) {
+            const normalizedPrivateKey = getExplicitPrivateKey()!.replace(/\\n/g, '\n');
             admin.initializeApp({
                 credential: admin.credential.cert({
                     projectId,
-                    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                    clientEmail: getExplicitClientEmail(),
                     privateKey: normalizedPrivateKey,
                 }),
                 projectId,
+                storageBucket,
             });
         } else if (shouldUseApplicationDefaultCredentials()) {
             // Use ADC only when explicitly configured or when running in an environment that typically provides it.
             admin.initializeApp({
                 credential: admin.credential.applicationDefault(),
                 projectId,
+                storageBucket,
             });
         }
     } catch (error) {
@@ -96,10 +143,12 @@ export const db = (admin.apps.length ? admin.firestore() : {
 }) as unknown as Firestore;
 
 if (!admin.apps.length) {
-    console.warn('[firebase-admin] Running without admin credentials. Public share links will not resolve.');
+    console.warn('[firebase-admin] Running without admin credentials. Public share links cannot be resolved.');
 }
 
 export const auth = (admin.apps.length ? admin.auth() : {
     getUser: async () => ({}),
     verifyIdToken: async () => ({})
 }) as unknown as Auth;
+
+export const hasFirebaseAdminCredentials = admin.apps.length > 0;

@@ -14,13 +14,10 @@ export async function OPTIONS() {
 }
 
 function getBucket() {
-  const bucketName =
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
-    process.env.FIREBASE_STORAGE_BUCKET;
   if (!admin.apps.length) {
     throw new Error('Firebase admin is not initialized. Check server credentials.');
   }
-  return admin.storage().bucket(bucketName);
+  return admin.storage().bucket();
 }
 
 interface UploadedScreenshot {
