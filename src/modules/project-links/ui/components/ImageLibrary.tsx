@@ -78,31 +78,31 @@ interface DisplayWidth {
   label: string;
   /** Max width in px for each card, or 'full' for no constraint */
   maxWidth: number | 'full';
-  /** CSS grid columns */
-  cols: string;
+  /** CSS columns value for masonry layout */
+  columns: string;
 }
 
 const DESKTOP_WIDTHS: DisplayWidth[] = [
-  { key: '1440', label: '1440px', maxWidth: 1440, cols: 'grid-cols-1' },
-  { key: '1280', label: '1280px', maxWidth: 1280, cols: 'grid-cols-1' },
-  { key: '1024', label: '1024px', maxWidth: 1024, cols: 'grid-cols-1 lg:grid-cols-2' },
-  { key: '768', label: '768px',  maxWidth: 768,  cols: 'sm:grid-cols-2' },
-  { key: '480', label: '480px',  maxWidth: 480,  cols: 'sm:grid-cols-2 lg:grid-cols-3' },
-  { key: 'full', label: 'Full',  maxWidth: 'full', cols: 'grid-cols-1' },
+  { key: '1440', label: '1440px', maxWidth: 1440, columns: '1' },
+  { key: '1280', label: '1280px', maxWidth: 1280, columns: '1' },
+  { key: '1024', label: '1024px', maxWidth: 1024, columns: '2' },
+  { key: '768', label: '768px',  maxWidth: 768,  columns: '2' },
+  { key: '480', label: '480px',  maxWidth: 480,  columns: '3' },
+  { key: 'full', label: 'Full',  maxWidth: 'full', columns: '1' },
 ];
 
 const TABLET_WIDTHS: DisplayWidth[] = [
-  { key: '1024', label: '1024px', maxWidth: 1024, cols: 'grid-cols-1 lg:grid-cols-2' },
-  { key: '768', label: '768px',  maxWidth: 768,  cols: 'sm:grid-cols-2' },
-  { key: '480', label: '480px',  maxWidth: 480,  cols: 'sm:grid-cols-2 lg:grid-cols-3' },
-  { key: 'full', label: 'Full',  maxWidth: 'full', cols: 'grid-cols-1' },
+  { key: '1024', label: '1024px', maxWidth: 1024, columns: '2' },
+  { key: '768', label: '768px',  maxWidth: 768,  columns: '2' },
+  { key: '480', label: '480px',  maxWidth: 480,  columns: '3' },
+  { key: 'full', label: 'Full',  maxWidth: 'full', columns: '1' },
 ];
 
 const MOBILE_WIDTHS: DisplayWidth[] = [
-  { key: '430', label: '430px',  maxWidth: 430,  cols: 'sm:grid-cols-2 lg:grid-cols-3' },
-  { key: '390', label: '390px',  maxWidth: 390,  cols: 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' },
-  { key: '360', label: '360px',  maxWidth: 360,  cols: 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' },
-  { key: 'full', label: 'Full',  maxWidth: 'full', cols: 'grid-cols-1' },
+  { key: '430', label: '430px',  maxWidth: 430,  columns: '3' },
+  { key: '390', label: '390px',  maxWidth: 390,  columns: '4' },
+  { key: '360', label: '360px',  maxWidth: 360,  columns: '4' },
+  { key: 'full', label: 'Full',  maxWidth: 'full', columns: '1' },
 ];
 
 const DEVICE_WIDTHS: Record<string, DisplayWidth[]> = {
@@ -912,14 +912,14 @@ function FolderGroup({
   folder,
   images,
   allImages,
-  cols,
+  columns,
   maxWidth,
   onImageClick,
 }: {
   folder: string;
   images: ImageEntry[];
   allImages: ImageEntry[];
-  cols: string;
+  columns: string;
   maxWidth: number | 'full';
   onImageClick: (globalIdx: number) => void;
 }) {
@@ -948,16 +948,17 @@ function FolderGroup({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className={cn('mt-2 grid gap-4 pb-2', cols)}>
+        <div className="mt-2 pb-2" style={{ columns: columns, columnGap: '1rem' }}>
           {images.map((img, i) => {
             const globalIdx = allImages.indexOf(img);
             return (
-              <ImageCard
-                key={`${img.device}-${img.pathname}-${i}`}
-                image={img}
-                maxWidth={maxWidth}
-                onClick={() => onImageClick(globalIdx >= 0 ? globalIdx : 0)}
-              />
+              <div key={`${img.device}-${img.pathname}-${i}`} className="mb-4 break-inside-avoid">
+                <ImageCard
+                  image={img}
+                  maxWidth={maxWidth}
+                  onClick={() => onImageClick(globalIdx >= 0 ? globalIdx : 0)}
+                />
+              </div>
             );
           })}
         </div>
@@ -1136,16 +1137,17 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     // If only one folder, skip the grouping UI
     if (sortedFolders.length <= 1) {
       return (
-        <div className={cn('grid gap-4', w.cols)}>
+        <div style={{ columns: w.columns, columnGap: '1rem' }}>
           {filtered.map((img, i) => {
             const globalIdx = allImages.indexOf(img);
             return (
-              <ImageCard
-                key={`${img.device}-${img.pathname}-${i}`}
-                image={img}
-                maxWidth={w.maxWidth}
-                onClick={() => setLightboxIndex(globalIdx >= 0 ? globalIdx : 0)}
-              />
+              <div key={`${img.device}-${img.pathname}-${i}`} className="mb-4 break-inside-avoid">
+                <ImageCard
+                  image={img}
+                  maxWidth={w.maxWidth}
+                  onClick={() => setLightboxIndex(globalIdx >= 0 ? globalIdx : 0)}
+                />
+              </div>
             );
           })}
         </div>
@@ -1156,14 +1158,13 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
       <div className="space-y-2">
         {sortedFolders.map((folder) => {
           const folderImages = folderMap.get(folder) || [];
-          const FIcon = Folder;
           return (
             <FolderGroup
               key={folder}
               folder={folder}
               images={folderImages}
               allImages={allImages}
-              cols={w.cols}
+              columns={w.columns}
               maxWidth={w.maxWidth}
               onImageClick={(globalIdx) => setLightboxIndex(globalIdx)}
             />
