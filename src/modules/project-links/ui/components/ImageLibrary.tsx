@@ -319,9 +319,7 @@ function EmptyState({
   const [copied, setCopied] = useState(false);
 
   const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const captureCommand = sitemapUrl
-    ? `npx @activeset/capture --sitemap ${sitemapUrl} --name "${slug}"`
-    : `npx @activeset/capture --url https://example.com --name "${slug}"`;
+  const captureCommand = `npx @activeset/capture --project "${slug}" --file urls.txt`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(captureCommand);
@@ -416,7 +414,7 @@ function EmptyState({
               <div className="min-w-0">
                 <p className="text-sm font-medium">Capture via CLI</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Run this command in your terminal for high-quality screenshots.
+                  Run in terminal. Or use <code className="text-[10px]">npx @activeset/capture</code> for the interactive wizard.
                 </p>
               </div>
             </div>
