@@ -36,6 +36,9 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runCaptureLocalCli = runCaptureLocalCli;
 const os = __importStar(require("node:os"));
+const fs = __importStar(require("node:fs/promises"));
+const path = __importStar(require("node:path"));
+const node_child_process_1 = require("node:child_process");
 const promises_1 = require("node:readline/promises");
 const engine_1 = require("../core/engine");
 const io_1 = require("../core/io");
@@ -46,8 +49,6 @@ Local-first responsive screenshot capture
 Usage:
   activeset-capture run --project "My Project" [--urls "https://a.com,https://b.com"] [options]
   activeset-capture run --project "My Project" --file ./urls.txt [options]
-  activeset-capture-local --project "My Project" [--urls "https://a.com,https://b.com"] [options]
-  activeset-capture-local --project "My Project" --file ./urls.txt [options]
   cat urls.txt | activeset-capture run --project "My Project" [options]
 
 Required:
@@ -62,6 +63,8 @@ Options:
   --devices <list>         desktop,mobile (default: desktop,mobile)
   --format <webp|png>      Screenshot format (default: webp)
   --warmup <always|off>    Scroll-first warmup mode (default: always)
+  --upload <url>           Upload captures and get a shareable link
+  --no-open                Don't open the output folder after capture
   --help                   Show this help
 
 Output:
@@ -115,6 +118,10 @@ function parseArgs(argv) {
             parsed.help = true;
             continue;
         }
+        if (token === '--no-open') {
+            parsed.noOpen = true;
+            continue;
+        }
         if (!token.startsWith('--')) {
             throw new Error(`Unexpected argument: ${token}`);
         }
@@ -153,6 +160,9 @@ function parseArgs(argv) {
                 break;
             case 'warmup':
                 parsed.warmup = parseWarmup(value);
+                break;
+            case 'upload':
+                parsed.upload = value;
                 break;
             default:
                 throw new Error(`Unknown flag: --${flag}`);
@@ -259,6 +269,77 @@ function printRunSummary(manifestPath, runDirectory, errorsPath) {
         console.log(`Errors:   ${errorsPath}`);
     }
 }
+function openFolder(folderPath) {
+    const platform = process.platform;
+    const command = platform === 'darwin' ? 'open' : platform === 'win32' ? 'explorer' : 'xdg-open';
+    (0, node_child_process_1.exec)(`${command} "${folderPath}"`, () => {
+        // Silently ignore errors (e.g. no display on CI).
+    });
+}
+async function uploadCaptures(runDirectory, uploadUrl, projectName) {
+    try {
+        console.log('\nUploading captures...');
+        const manifestPath = path.join(runDirectory, 'manifest.json');
+        const manifestText = await fs.readFile(manifestPath, 'utf8');
+        const manifest = JSON.parse(manifestText);
+        // Collect all screenshot files
+        const files = [];
+        for (const result of manifest.results) {
+            for (const deviceResult of result.deviceResults) {
+                if (!deviceResult.success || !deviceResult.outputPath)
+                    continue;
+                const buffer = await fs.readFile(deviceResult.outputPath);
+                const ext = path.extname(deviceResult.outputPath).slice(1);
+                files.push({
+                    name: path.basename(deviceResult.outputPath),
+                    device: deviceResult.device,
+                    buffer,
+                    contentType: ext === 'png' ? 'image/png' : 'image/webp',
+                });
+            }
+        }
+        if (files.length === 0) {
+            console.log('No successful captures to upload.');
+            return null;
+        }
+        // Build multipart form data manually (no external deps)
+        const boundary = `----ActiveSetCapture${Date.now()}`;
+        const parts = [];
+        // Add manifest as JSON field
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="manifest"\r\nContent-Type: application/json\r\n\r\n${manifestText}\r\n`));
+        // Add project name
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="projectName"\r\n\r\n${projectName}\r\n`));
+        // Add each screenshot file
+        for (const file of files) {
+            const header = `--${boundary}\r\nContent-Disposition: form-data; name="screenshots"; filename="${file.device}/${file.name}"\r\nContent-Type: ${file.contentType}\r\n\r\n`;
+            parts.push(Buffer.from(header));
+            parts.push(file.buffer);
+            parts.push(Buffer.from('\r\n'));
+        }
+        parts.push(Buffer.from(`--${boundary}--\r\n`));
+        const body = Buffer.concat(parts);
+        const endpoint = uploadUrl.replace(/\/+$/, '') + '/api/upload-captures';
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+            body,
+        });
+        if (!response.ok) {
+            const errorBody = await response.text().catch(() => '');
+            throw new Error(`Upload failed (${response.status}): ${errorBody}`);
+        }
+        const result = (await response.json());
+        if (result.shareUrl) {
+            console.log(`\nShareable link: ${result.shareUrl}`);
+            return result.shareUrl;
+        }
+        return null;
+    }
+    catch (error) {
+        console.error(`\nUpload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return null;
+    }
+}
 async function runCaptureLocalCli(argv = process.argv.slice(2)) {
     const parsedArgs = parseArgs(argv);
     if (parsedArgs.help) {
@@ -303,6 +384,14 @@ async function runCaptureLocalCli(argv = process.argv.slice(2)) {
         },
     });
     printRunSummary(output.manifestPath, output.runDirectory, output.errorsPath);
+    // Open folder in file explorer (unless --no-open)
+    if (!args.noOpen) {
+        openFolder(output.runDirectory);
+    }
+    // Upload if --upload was provided
+    if (args.upload) {
+        await uploadCaptures(output.runDirectory, args.upload, args.projectName);
+    }
     const { failedUrls, partialUrls } = output.manifest.summary;
     if (failedUrls > 0 || partialUrls > 0) {
         process.exitCode = 1;

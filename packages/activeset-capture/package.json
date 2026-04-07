@@ -1,10 +1,11 @@
 {
   "name": "@activeset/capture",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Local-first responsive screenshot capture (desktop + mobile) with scroll warmup.",
   "license": "MIT",
   "type": "commonjs",
   "bin": {
+    "capture": "dist/bin/activeset-capture.js",
     "activeset-capture": "dist/bin/activeset-capture.js",
     "activeset-capture-local": "dist/bin/capture-local.js",
     "activeset-capture-wizard": "dist/bin/capture-wizard.js"

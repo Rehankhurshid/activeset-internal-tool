@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import * as os from 'node:os';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { exec } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { runLocalCapture } from '../core/engine';
 import { normalizeAndValidateUrls, parseUrlsText, readUtf8File } from '../core/io';
@@ -18,6 +21,8 @@ interface ParsedArgs {
   devices?: LocalCaptureDevice[];
   format?: LocalCaptureFormat;
   warmup?: LocalCaptureWarmupMode;
+  upload?: string;
+  noOpen?: boolean;
 }
 
 function printHelp(): void {
@@ -27,8 +32,6 @@ Local-first responsive screenshot capture
 Usage:
   activeset-capture run --project "My Project" [--urls "https://a.com,https://b.com"] [options]
   activeset-capture run --project "My Project" --file ./urls.txt [options]
-  activeset-capture-local --project "My Project" [--urls "https://a.com,https://b.com"] [options]
-  activeset-capture-local --project "My Project" --file ./urls.txt [options]
   cat urls.txt | activeset-capture run --project "My Project" [options]
 
 Required:
@@ -43,6 +46,8 @@ Options:
   --devices <list>         desktop,mobile (default: desktop,mobile)
   --format <webp|png>      Screenshot format (default: webp)
   --warmup <always|off>    Scroll-first warmup mode (default: always)
+  --upload <url>           Upload captures and get a shareable link
+  --no-open                Don't open the output folder after capture
   --help                   Show this help
 
 Output:
@@ -108,6 +113,11 @@ function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
 
+    if (token === '--no-open') {
+      parsed.noOpen = true;
+      continue;
+    }
+
     if (!token.startsWith('--')) {
       throw new Error(`Unexpected argument: ${token}`);
     }
@@ -149,6 +159,9 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case 'warmup':
         parsed.warmup = parseWarmup(value);
+        break;
+      case 'upload':
+        parsed.upload = value;
         break;
       default:
         throw new Error(`Unknown flag: --${flag}`);
@@ -287,6 +300,100 @@ function printRunSummary(manifestPath: string, runDirectory: string, errorsPath?
   }
 }
 
+function openFolder(folderPath: string): void {
+  const platform = process.platform;
+  const command =
+    platform === 'darwin' ? 'open' : platform === 'win32' ? 'explorer' : 'xdg-open';
+
+  exec(`${command} "${folderPath}"`, () => {
+    // Silently ignore errors (e.g. no display on CI).
+  });
+}
+
+async function uploadCaptures(
+  runDirectory: string,
+  uploadUrl: string,
+  projectName: string
+): Promise<string | null> {
+  try {
+    console.log('\nUploading captures...');
+
+    const manifestPath = path.join(runDirectory, 'manifest.json');
+    const manifestText = await fs.readFile(manifestPath, 'utf8');
+    const manifest = JSON.parse(manifestText);
+
+    // Collect all screenshot files
+    const files: Array<{ name: string; device: string; buffer: Buffer; contentType: string }> = [];
+
+    for (const result of manifest.results) {
+      for (const deviceResult of result.deviceResults) {
+        if (!deviceResult.success || !deviceResult.outputPath) continue;
+        const buffer = await fs.readFile(deviceResult.outputPath);
+        const ext = path.extname(deviceResult.outputPath).slice(1);
+        files.push({
+          name: path.basename(deviceResult.outputPath),
+          device: deviceResult.device,
+          buffer,
+          contentType: ext === 'png' ? 'image/png' : 'image/webp',
+        });
+      }
+    }
+
+    if (files.length === 0) {
+      console.log('No successful captures to upload.');
+      return null;
+    }
+
+    // Build multipart form data manually (no external deps)
+    const boundary = `----ActiveSetCapture${Date.now()}`;
+    const parts: Buffer[] = [];
+
+    // Add manifest as JSON field
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="manifest"\r\nContent-Type: application/json\r\n\r\n${manifestText}\r\n`
+    ));
+
+    // Add project name
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="projectName"\r\n\r\n${projectName}\r\n`
+    ));
+
+    // Add each screenshot file
+    for (const file of files) {
+      const header = `--${boundary}\r\nContent-Disposition: form-data; name="screenshots"; filename="${file.device}/${file.name}"\r\nContent-Type: ${file.contentType}\r\n\r\n`;
+      parts.push(Buffer.from(header));
+      parts.push(file.buffer);
+      parts.push(Buffer.from('\r\n'));
+    }
+
+    parts.push(Buffer.from(`--${boundary}--\r\n`));
+    const body = Buffer.concat(parts);
+
+    const endpoint = uploadUrl.replace(/\/+$/, '') + '/api/upload-captures';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      throw new Error(`Upload failed (${response.status}): ${errorBody}`);
+    }
+
+    const result = (await response.json()) as { shareUrl?: string };
+    if (result.shareUrl) {
+      console.log(`\nShareable link: ${result.shareUrl}`);
+      return result.shareUrl;
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`\nUpload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return null;
+  }
+}
+
 export async function runCaptureLocalCli(argv = process.argv.slice(2)): Promise<void> {
   const parsedArgs = parseArgs(argv);
 
@@ -344,6 +451,16 @@ export async function runCaptureLocalCli(argv = process.argv.slice(2)): Promise<
   });
 
   printRunSummary(output.manifestPath, output.runDirectory, output.errorsPath);
+
+  // Open folder in file explorer (unless --no-open)
+  if (!args.noOpen) {
+    openFolder(output.runDirectory);
+  }
+
+  // Upload if --upload was provided
+  if (args.upload) {
+    await uploadCaptures(output.runDirectory, args.upload, args.projectName!);
+  }
 
   const { failedUrls, partialUrls } = output.manifest.summary;
   if (failedUrls > 0 || partialUrls > 0) {
