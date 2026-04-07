@@ -69,17 +69,52 @@ interface CaptureRun {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Preview size                                                       */
+/*  Display width presets (per device type)                            */
 /* ------------------------------------------------------------------ */
 
-type PreviewSize = 'compact' | 'medium' | 'large' | 'full';
+interface DisplayWidth {
+  key: string;
+  label: string;
+  /** Max width in px for each card, or 'full' for no constraint */
+  maxWidth: number | 'full';
+  /** CSS grid columns */
+  cols: string;
+}
 
-const PREVIEW_SIZES: { key: PreviewSize; label: string; icon: typeof Grid3x3; cols: string; height: string }[] = [
-  { key: 'compact', label: 'Compact', icon: Grid3x3, cols: 'sm:grid-cols-3 lg:grid-cols-4', height: 'h-36' },
-  { key: 'medium', label: 'Medium', icon: Grid2x2, cols: 'sm:grid-cols-2 lg:grid-cols-3', height: 'h-48' },
-  { key: 'large', label: 'Large', icon: Grid2x2, cols: 'sm:grid-cols-2', height: 'h-64' },
-  { key: 'full', label: 'Full width', icon: Rows3, cols: 'grid-cols-1', height: 'h-80' },
+const DESKTOP_WIDTHS: DisplayWidth[] = [
+  { key: '1440', label: '1440px', maxWidth: 1440, cols: 'grid-cols-1' },
+  { key: '1280', label: '1280px', maxWidth: 1280, cols: 'grid-cols-1' },
+  { key: '1024', label: '1024px', maxWidth: 1024, cols: 'grid-cols-1 lg:grid-cols-2' },
+  { key: '768', label: '768px',  maxWidth: 768,  cols: 'sm:grid-cols-2' },
+  { key: '480', label: '480px',  maxWidth: 480,  cols: 'sm:grid-cols-2 lg:grid-cols-3' },
+  { key: 'full', label: 'Full',  maxWidth: 'full', cols: 'grid-cols-1' },
 ];
+
+const TABLET_WIDTHS: DisplayWidth[] = [
+  { key: '1024', label: '1024px', maxWidth: 1024, cols: 'grid-cols-1 lg:grid-cols-2' },
+  { key: '768', label: '768px',  maxWidth: 768,  cols: 'sm:grid-cols-2' },
+  { key: '480', label: '480px',  maxWidth: 480,  cols: 'sm:grid-cols-2 lg:grid-cols-3' },
+  { key: 'full', label: 'Full',  maxWidth: 'full', cols: 'grid-cols-1' },
+];
+
+const MOBILE_WIDTHS: DisplayWidth[] = [
+  { key: '430', label: '430px',  maxWidth: 430,  cols: 'sm:grid-cols-2 lg:grid-cols-3' },
+  { key: '390', label: '390px',  maxWidth: 390,  cols: 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' },
+  { key: '360', label: '360px',  maxWidth: 360,  cols: 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' },
+  { key: 'full', label: 'Full',  maxWidth: 'full', cols: 'grid-cols-1' },
+];
+
+const DEVICE_WIDTHS: Record<string, DisplayWidth[]> = {
+  desktop: DESKTOP_WIDTHS,
+  tablet: TABLET_WIDTHS,
+  mobile: MOBILE_WIDTHS,
+};
+
+const DEVICE_DEFAULT_WIDTH: Record<string, string> = {
+  desktop: '1024',
+  tablet: '768',
+  mobile: '390',
+};
 
 const DEVICE_ICON: Record<string, typeof Monitor> = {
   desktop: Monitor,
@@ -280,18 +315,26 @@ function Lightbox({
 
 function ImageCard({
   image,
-  height,
+  maxWidth,
   onClick,
 }: {
   image: ImageEntry;
-  height: string;
+  maxWidth: number | 'full';
   onClick: () => void;
 }) {
   const DeviceIcon = DEVICE_ICON[image.device] || Monitor;
+  const cardStyle = maxWidth !== 'full' ? { maxWidth: `${maxWidth}px` } : undefined;
 
   return (
-    <Card className="group cursor-pointer overflow-hidden transition-shadow hover:shadow-lg" onClick={onClick}>
-      <div className={cn('relative overflow-hidden bg-muted', height)}>
+    <Card
+      className={cn(
+        'group cursor-pointer overflow-hidden transition-shadow hover:shadow-lg',
+        maxWidth !== 'full' && 'mx-auto w-full'
+      )}
+      style={cardStyle}
+      onClick={onClick}
+    >
+      <div className="relative overflow-hidden bg-muted">
         <img src={image.url} alt={image.pageTitle} className="w-full object-cover object-top" loading="lazy" />
         <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20">
           <ZoomIn className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100" />
@@ -804,10 +847,12 @@ interface ImageLibraryProps {
 
 export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: ImageLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [previewSizeKey, setPreviewSizeKey] = useState<PreviewSize>('medium');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [captureRuns, setCaptureRuns] = useState<CaptureRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeDevice, setActiveDevice] = useState('desktop');
+  // Per-device width selection
+  const [widthByDevice, setWidthByDevice] = useState<Record<string, string>>(DEVICE_DEFAULT_WIDTH);
 
   // Fetch capture runs for this project
   useEffect(() => {
@@ -897,7 +942,13 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     [searchQuery]
   );
 
-  const previewSize = PREVIEW_SIZES.find((p) => p.key === previewSizeKey) || PREVIEW_SIZES[1];
+  const currentWidthKey = widthByDevice[activeDevice] || DEVICE_DEFAULT_WIDTH[activeDevice] || '1024';
+  const widthOptions = DEVICE_WIDTHS[activeDevice] || DESKTOP_WIDTHS;
+  const currentWidth = widthOptions.find((w) => w.key === currentWidthKey) || widthOptions[0];
+
+  const setDeviceWidth = useCallback((key: string) => {
+    setWidthByDevice((prev) => ({ ...prev, [activeDevice]: key }));
+  }, [activeDevice]);
 
   if (loading) {
     return (
@@ -919,7 +970,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     return <EmptyState projectName={projectName} projectId={projectId} sitemapUrl={sitemapUrl} />;
   }
 
-  const renderGrid = (images: ImageEntry[]) => {
+  const renderGrid = (images: ImageEntry[], deviceOverride?: string) => {
     const filtered = filterImages(images);
     if (filtered.length === 0) {
       return (
@@ -928,15 +979,20 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
         </p>
       );
     }
+    const device = deviceOverride || activeDevice;
+    const wKey = widthByDevice[device] || DEVICE_DEFAULT_WIDTH[device] || '1024';
+    const wOptions = DEVICE_WIDTHS[device] || DESKTOP_WIDTHS;
+    const w = wOptions.find((o) => o.key === wKey) || wOptions[0];
+
     return (
-      <div className={cn('grid gap-4', previewSize.cols)}>
+      <div className={cn('grid gap-4', w.cols)}>
         {filtered.map((img, i) => {
           const globalIdx = allImages.indexOf(img);
           return (
             <ImageCard
               key={`${img.device}-${img.pathname}-${i}`}
               image={img}
-              height={previewSize.height}
+              maxWidth={w.maxWidth}
               onClick={() => setLightboxIndex(globalIdx >= 0 ? globalIdx : 0)}
             />
           );
@@ -961,28 +1017,30 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
 
         <div className="flex items-center gap-3">
           <Badge variant="secondary">{allImages.length} screenshots</Badge>
-          <div className="flex items-center gap-1 rounded-lg border p-1">
-            {PREVIEW_SIZES.map((size) => {
-              const Icon = size.icon;
-              return (
-                <button
-                  key={size.key} onClick={() => setPreviewSizeKey(size.key)} title={size.label}
-                  className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded transition-colors',
-                    previewSizeKey === size.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-0.5 rounded-lg border p-1">
+            <Monitor className="mx-1 h-3.5 w-3.5 text-muted-foreground" />
+            {widthOptions.map((w) => (
+              <button
+                key={w.key}
+                onClick={() => setDeviceWidth(w.key)}
+                title={w.label}
+                className={cn(
+                  'h-7 rounded px-2 text-xs font-medium transition-colors',
+                  currentWidthKey === w.key
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted'
+                )}
+              >
+                {w.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
       {/* Content */}
       {hasMultipleDevices ? (
-        <Tabs defaultValue={devices[0]}>
+        <Tabs defaultValue={devices[0]} onValueChange={setActiveDevice}>
           <TabsList className="mb-4">
             {devices.map((device) => {
               const Icon = DEVICE_ICON[device] || Monitor;
@@ -1001,7 +1059,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
 
           {devices.map((device) => (
             <TabsContent key={device} value={device}>
-              {renderGrid(deviceGroups.get(device) || [])}
+              {renderGrid(deviceGroups.get(device) || [], device)}
             </TabsContent>
           ))}
         </Tabs>
