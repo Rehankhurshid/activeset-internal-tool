@@ -347,16 +347,13 @@ export default function CaptureViewer({ data }: { data: CaptureRunData }) {
               className="cursor-pointer overflow-hidden transition-shadow hover:shadow-lg"
               onClick={() => setLightboxIndex(i)}
             >
-              <div className="relative aspect-[4/3] bg-muted">
+              <div className="relative h-48 overflow-hidden bg-muted">
                 <img
                   src={screenshot.url}
                   alt={screenshot.fileName}
-                  className="h-full w-full object-cover object-top"
+                  className="w-full object-cover object-top"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors hover:bg-black/20">
-                  <ZoomIn className="h-8 w-8 text-white opacity-0 transition-opacity group-hover:opacity-100" />
-                </div>
               </div>
               <CardContent className="p-3">
                 <div className="flex items-center gap-2">
