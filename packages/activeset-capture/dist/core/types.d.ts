@@ -91,6 +91,8 @@ export interface LocalCaptureManifest {
     };
     summary: LocalCaptureRunSummary;
     results: LocalCaptureUrlResult[];
+    /** HMAC-SHA256 signature proving this was produced by @activeset/capture */
+    signature?: string;
 }
 export interface LocalCaptureRunOutput {
     manifest: LocalCaptureManifest;

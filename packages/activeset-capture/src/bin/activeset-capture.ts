@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { runCaptureLocalCli } from './capture-local';
+import { runCaptureUploadCli } from './capture-upload';
 import { runCaptureWizardCli } from './capture-wizard';
 
 function printHelp(): void {
@@ -8,14 +9,15 @@ function printHelp(): void {
 @activeset/capture
 
 Usage:
-  activeset-capture                Open the interactive wizard
-  activeset-capture wizard         Open the interactive wizard
-  activeset-capture run [options]  Run capture directly without the wizard
+  activeset-capture                         Open the interactive wizard
+  activeset-capture wizard                  Open the interactive wizard
+  activeset-capture run [options]           Run capture directly without the wizard
+  activeset-capture upload <dir> --to <url> Upload an existing capture run
 
 Examples:
   npx @activeset/capture
   npx @activeset/capture run --project "My Project" --file ./urls.txt
-  activeset-capture run --project "My Project" --urls "https://a.com,https://b.com"
+  npx @activeset/capture upload ./captures/my-run --to https://app.activeset.co
 
 Tip:
   Passing flags directly also works:
@@ -44,6 +46,11 @@ async function main(): Promise<void> {
 
   if (mode === 'run' || mode === 'capture' || mode === 'local') {
     await runCaptureLocalCli(rest);
+    return;
+  }
+
+  if (mode === 'upload') {
+    await runCaptureUploadCli(rest);
     return;
   }
 

@@ -2,20 +2,22 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const capture_local_1 = require("./capture-local");
+const capture_upload_1 = require("./capture-upload");
 const capture_wizard_1 = require("./capture-wizard");
 function printHelp() {
     console.log(`
 @activeset/capture
 
 Usage:
-  activeset-capture                Open the interactive wizard
-  activeset-capture wizard         Open the interactive wizard
-  activeset-capture run [options]  Run capture directly without the wizard
+  activeset-capture                         Open the interactive wizard
+  activeset-capture wizard                  Open the interactive wizard
+  activeset-capture run [options]           Run capture directly without the wizard
+  activeset-capture upload <dir> --to <url> Upload an existing capture run
 
 Examples:
   npx @activeset/capture
   npx @activeset/capture run --project "My Project" --file ./urls.txt
-  activeset-capture run --project "My Project" --urls "https://a.com,https://b.com"
+  npx @activeset/capture upload ./captures/my-run --to https://app.activeset.co
 
 Tip:
   Passing flags directly also works:
@@ -39,6 +41,10 @@ async function main() {
     }
     if (mode === 'run' || mode === 'capture' || mode === 'local') {
         await (0, capture_local_1.runCaptureLocalCli)(rest);
+        return;
+    }
+    if (mode === 'upload') {
+        await (0, capture_upload_1.runCaptureUploadCli)(rest);
         return;
     }
     if (mode.startsWith('--')) {

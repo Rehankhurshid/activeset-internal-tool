@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHmac } from 'node:crypto';
 // Import db first — this triggers firebase-admin initialization as a side effect.
 import { db } from '@/lib/firebase-admin';
 import * as admin from 'firebase-admin';
@@ -12,6 +13,55 @@ const corsHeaders = {
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
+
+/* ------------------------------------------------------------------ */
+/*  Signature verification (mirrors packages/activeset-capture/src/core/signing.ts) */
+/* ------------------------------------------------------------------ */
+
+const DEFAULT_KEY = 'activeset-capture-v1';
+
+function getKey(): string {
+  return process.env.ACTIVESET_UPLOAD_KEY || DEFAULT_KEY;
+}
+
+interface ManifestForSigning {
+  schemaVersion: number;
+  run: { id: string; projectName: string; startedAt: string; finishedAt: string };
+  summary: {
+    totalUrls: number;
+    successfulUrls: number;
+    failedUrls: number;
+    totalDurationMs: number;
+  };
+  signature?: string;
+}
+
+function verifySignature(manifest: ManifestForSigning, signature: string): boolean {
+  const payload = [
+    `schema:${manifest.schemaVersion}`,
+    `run:${manifest.run.id}`,
+    `project:${manifest.run.projectName}`,
+    `started:${manifest.run.startedAt}`,
+    `finished:${manifest.run.finishedAt}`,
+    `urls:${manifest.summary.totalUrls}`,
+    `success:${manifest.summary.successfulUrls}`,
+    `failed:${manifest.summary.failedUrls}`,
+    `duration:${manifest.summary.totalDurationMs}`,
+  ].join('|');
+
+  const expected = createHmac('sha256', getKey()).update(payload).digest('hex');
+
+  if (expected.length !== signature.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < expected.length; i++) {
+    mismatch |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Storage                                                            */
+/* ------------------------------------------------------------------ */
 
 function getBucket() {
   if (!admin.apps.length) {
@@ -29,7 +79,7 @@ interface UploadedScreenshot {
 
 /**
  * Accept multipart upload from the CLI capture tool.
- * Stores screenshots in Firebase Storage via admin SDK (bypasses security rules),
+ * Verifies the manifest signature, stores screenshots in Firebase Storage,
  * creates a Firestore doc, and returns a shareable link.
  */
 export async function POST(request: NextRequest) {
@@ -46,6 +96,23 @@ export async function POST(request: NextRequest) {
     }
 
     const manifest = JSON.parse(manifestRaw);
+
+    // Verify signature — reject unsigned or tampered uploads
+    const signature = manifest.signature;
+    if (!signature || typeof signature !== 'string') {
+      return NextResponse.json(
+        { error: 'Missing manifest signature. Only captures from @activeset/capture are accepted.' },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    if (!verifySignature(manifest, signature)) {
+      return NextResponse.json(
+        { error: 'Invalid manifest signature. Upload rejected.' },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
     const runId = manifest.run?.id || `run-${Date.now()}`;
     const bucket = getBucket();
 
@@ -72,7 +139,6 @@ export async function POST(request: NextRequest) {
 
       const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
 
-      // Try to find the original URL from manifest results
       const matchingResult = manifest.results?.find(
         (r: { slug?: string }) => r.slug && fileName.startsWith(r.slug)
       );

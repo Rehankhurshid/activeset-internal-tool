@@ -41,6 +41,7 @@ const path = __importStar(require("node:path"));
 const puppeteer_1 = __importDefault(require("puppeteer"));
 const io_1 = require("./io");
 const manifest_1 = require("./manifest");
+const signing_1 = require("./signing");
 const warmup_scroll_1 = require("./warmup-scroll");
 const DEFAULT_CONCURRENCY = 3;
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -354,6 +355,7 @@ async function runLocalCapture(options) {
     const finishedAt = new Date().toISOString();
     const totalDurationMs = Date.now() - startTimeMs;
     const manifest = (0, manifest_1.finalizeManifest)(initialManifest, results, finishedAt, totalDurationMs);
+    manifest.signature = (0, signing_1.signManifest)(manifest);
     const manifestPath = path.join(normalized.directories.runDirectory, 'manifest.json');
     await (0, io_1.writeJsonFile)(manifestPath, manifest);
     let errorsPath;

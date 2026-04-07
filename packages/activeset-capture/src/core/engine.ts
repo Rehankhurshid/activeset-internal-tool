@@ -25,6 +25,7 @@ import {
   writeJsonFile,
 } from './io';
 import { createErrorsReport, createInitialManifest, finalizeManifest } from './manifest';
+import { signManifest } from './signing';
 import { warmupPageByScrolling } from './warmup-scroll';
 
 const DEFAULT_CONCURRENCY = 3;
@@ -435,6 +436,7 @@ export async function runLocalCapture(options: LocalCaptureRunOptions): Promise<
   const totalDurationMs = Date.now() - startTimeMs;
 
   const manifest = finalizeManifest(initialManifest, results, finishedAt, totalDurationMs);
+  manifest.signature = signManifest(manifest);
 
   const manifestPath = path.join(normalized.directories.runDirectory, 'manifest.json');
   await writeJsonFile(manifestPath, manifest);
