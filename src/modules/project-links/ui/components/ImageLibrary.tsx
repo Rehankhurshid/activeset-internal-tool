@@ -337,14 +337,31 @@ export function ImageLibrary({ links, projectName }: ImageLibraryProps) {
     fetchCaptures();
   }, [projectName]);
 
-  // Combine capture images + audit images (capture takes priority)
+  // Combine both sources: capture runs + audit screenshots
   const allImages = useMemo(() => {
     const captureImages = extractCaptureImages(captureRuns);
     const auditImages = extractAuditImages(links);
 
-    // If we have capture images, use those; audit images are fallback
-    if (captureImages.length > 0) return captureImages;
-    return auditImages;
+    // Deduplicate by pageUrl+device (capture images take priority)
+    const seen = new Set<string>();
+    const combined: ImageEntry[] = [];
+
+    for (const img of captureImages) {
+      const key = `${img.pageUrl}::${img.device}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        combined.push(img);
+      }
+    }
+    for (const img of auditImages) {
+      const key = `${img.pageUrl}::${img.device}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        combined.push(img);
+      }
+    }
+
+    return combined;
   }, [captureRuns, links]);
 
   // Group by device
@@ -408,7 +425,7 @@ export function ImageLibrary({ links, projectName }: ImageLibraryProps) {
         <ImageIcon className="h-12 w-12 text-muted-foreground/50" />
         <h3 className="mt-4 text-lg font-medium">No screenshots yet</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Use <code className="rounded bg-muted px-1.5 py-0.5 text-xs">@activeset/capture</code> to capture screenshots of your pages.
+          Enable the Screenshots toggle and run a scan to capture page screenshots.
         </p>
       </div>
     );
