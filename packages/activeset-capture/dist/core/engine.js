@@ -43,7 +43,7 @@ const io_1 = require("./io");
 const manifest_1 = require("./manifest");
 const signing_1 = require("./signing");
 const warmup_scroll_1 = require("./warmup-scroll");
-const DEFAULT_CONCURRENCY = 3;
+const DEFAULT_CONCURRENCY = 6;
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_RETRIES = 1;
 const DEFAULT_OUTPUT_DIR = './captures';
@@ -164,72 +164,72 @@ function getUrlStatus(deviceResults) {
         return 'success';
     return 'partial';
 }
-async function captureSingleAttempt(browser, url, index, attempt, settings, directories) {
-    const startedAt = new Date().toISOString();
-    const attemptStartMs = Date.now();
-    const slug = (0, io_1.sanitizeUrlSlug)(url, index);
-    const deviceResults = [];
+async function captureDeviceOnPage(browser, url, index, device, settings, directories) {
+    const preset = DEVICE_PRESETS[device];
+    const deviceStartMs = Date.now();
     const page = await browser.newPage();
     page.setDefaultNavigationTimeout(settings.timeoutMs);
     page.setDefaultTimeout(settings.timeoutMs);
     try {
-        for (const device of settings.devices) {
-            const preset = DEVICE_PRESETS[device];
-            const deviceStartMs = Date.now();
-            try {
-                await configurePageForDevice(page, preset);
-                await page.goto(url, {
-                    waitUntil: 'networkidle2',
-                    timeout: settings.timeoutMs,
-                });
-                try {
-                    await page.waitForFunction(() => document.readyState === 'complete', {
-                        timeout: Math.min(settings.timeoutMs, 10_000),
-                    });
-                }
-                catch {
-                    // Continue if readyState confirmation times out; networkidle already completed.
-                }
-                if (settings.warmup === 'always') {
-                    await (0, warmup_scroll_1.warmupPageByScrolling)(page);
-                }
-                const outputPath = (0, io_1.buildScreenshotPath)(directories, url, index, device, settings.format);
-                const screenshotOptions = {
-                    type: settings.format,
-                    fullPage: true,
-                    captureBeyondViewport: true,
-                };
-                if (settings.format === 'webp') {
-                    screenshotOptions.quality = 80;
-                }
-                const screenshotBuffer = (await page.screenshot(screenshotOptions));
-                await (0, io_1.writeBinaryFile)(outputPath, screenshotBuffer);
-                deviceResults.push({
-                    device,
-                    width: preset.width,
-                    height: preset.height,
-                    format: settings.format,
-                    success: true,
-                    outputPath,
-                    durationMs: Date.now() - deviceStartMs,
-                });
-            }
-            catch (error) {
-                deviceResults.push({
-                    device,
-                    width: preset.width,
-                    height: preset.height,
-                    format: settings.format,
-                    success: false,
-                    durationMs: Date.now() - deviceStartMs,
-                    error: getErrorMessage(error),
-                });
-            }
+        await configurePageForDevice(page, preset);
+        await page.goto(url, {
+            waitUntil: 'domcontentloaded',
+            timeout: settings.timeoutMs,
+        });
+        // Brief wait for critical resources after DOM is ready
+        try {
+            await page.waitForFunction(() => document.readyState === 'complete', {
+                timeout: Math.min(settings.timeoutMs, 8_000),
+            });
         }
+        catch {
+            // Continue — domcontentloaded is sufficient for most pages.
+        }
+        if (settings.warmup === 'always') {
+            await (0, warmup_scroll_1.warmupPageByScrolling)(page);
+        }
+        const outputPath = (0, io_1.buildScreenshotPath)(directories, url, index, device, settings.format);
+        const screenshotOptions = {
+            type: settings.format,
+            fullPage: true,
+            captureBeyondViewport: true,
+        };
+        if (settings.format === 'webp') {
+            screenshotOptions.quality = 80;
+        }
+        const screenshotBuffer = (await page.screenshot(screenshotOptions));
+        await (0, io_1.writeBinaryFile)(outputPath, screenshotBuffer);
+        return {
+            device,
+            width: preset.width,
+            height: preset.height,
+            format: settings.format,
+            success: true,
+            outputPath,
+            durationMs: Date.now() - deviceStartMs,
+        };
+    }
+    catch (error) {
+        return {
+            device,
+            width: preset.width,
+            height: preset.height,
+            format: settings.format,
+            success: false,
+            durationMs: Date.now() - deviceStartMs,
+            error: getErrorMessage(error),
+        };
     }
     finally {
         await page.close();
     }
+}
+async function captureSingleAttempt(browser, url, index, attempt, settings, directories) {
+    const startedAt = new Date().toISOString();
+    const attemptStartMs = Date.now();
+    const slug = (0, io_1.sanitizeUrlSlug)(url, index);
+    // Capture all devices in parallel — each gets its own page
+    const deviceResults = await Promise.all(settings.devices.map((device) => captureDeviceOnPage(browser, url, index, device, settings, directories)));
     const status = getUrlStatus(deviceResults);
     const finishedAt = new Date().toISOString();
     const primaryError = status === 'success'

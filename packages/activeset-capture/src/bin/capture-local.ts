@@ -310,6 +310,35 @@ function openFolder(folderPath: string): void {
   });
 }
 
+function buildMultipartBody(
+  fields: Record<string, string>,
+  file?: { fieldName: string; fileName: string; contentType: string; buffer: Buffer }
+): { body: Buffer; contentType: string } {
+  const boundary = `----ActiveSetCapture${Date.now()}${Math.random().toString(36).slice(2)}`;
+  const parts: Buffer[] = [];
+
+  for (const [name, value] of Object.entries(fields)) {
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`
+    ));
+  }
+
+  if (file) {
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${file.fieldName}"; filename="${file.fileName}"\r\nContent-Type: ${file.contentType}\r\n\r\n`
+    ));
+    parts.push(file.buffer);
+    parts.push(Buffer.from('\r\n'));
+  }
+
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+  return {
+    body: Buffer.concat(parts),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
+}
+
 async function uploadCaptures(
   runDirectory: string,
   uploadUrl: string,
@@ -322,69 +351,101 @@ async function uploadCaptures(
     const manifestText = await fs.readFile(manifestPath, 'utf8');
     const manifest = JSON.parse(manifestText);
 
-    // Collect all screenshot files
-    const files: Array<{ name: string; device: string; buffer: Buffer; contentType: string }> = [];
+    // Collect file metadata
+    const fileMetas: Array<{
+      filePath: string;
+      fileName: string;
+      device: string;
+      contentType: string;
+      originalUrl: string;
+    }> = [];
 
     for (const result of manifest.results) {
       for (const deviceResult of result.deviceResults) {
         if (!deviceResult.success || !deviceResult.outputPath) continue;
-        const buffer = await fs.readFile(deviceResult.outputPath);
         const ext = path.extname(deviceResult.outputPath).slice(1);
-        files.push({
-          name: path.basename(deviceResult.outputPath),
+        fileMetas.push({
+          filePath: deviceResult.outputPath,
+          fileName: path.basename(deviceResult.outputPath),
           device: deviceResult.device,
-          buffer,
           contentType: ext === 'png' ? 'image/png' : 'image/webp',
+          originalUrl: result.url || '',
         });
       }
     }
 
-    if (files.length === 0) {
+    if (fileMetas.length === 0) {
       console.log('No successful captures to upload.');
       return null;
     }
 
-    // Build multipart form data manually (no external deps)
-    const boundary = `----ActiveSetCapture${Date.now()}`;
-    const parts: Buffer[] = [];
-
-    // Add manifest as JSON field
-    parts.push(Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="manifest"\r\nContent-Type: application/json\r\n\r\n${manifestText}\r\n`
-    ));
-
-    // Add project name
-    parts.push(Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="projectName"\r\n\r\n${projectName}\r\n`
-    ));
-
-    // Add each screenshot file
-    for (const file of files) {
-      const header = `--${boundary}\r\nContent-Disposition: form-data; name="screenshots"; filename="${file.device}/${file.name}"\r\nContent-Type: ${file.contentType}\r\n\r\n`;
-      parts.push(Buffer.from(header));
-      parts.push(file.buffer);
-      parts.push(Buffer.from('\r\n'));
-    }
-
-    parts.push(Buffer.from(`--${boundary}--\r\n`));
-    const body = Buffer.concat(parts);
-
     const endpoint = uploadUrl.replace(/\/+$/, '') + '/api/upload-captures';
-    const response = await fetch(endpoint, {
+
+    // Phase 1: Init — send manifest only (JSON), get runId back
+    const initResponse = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-      body,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phase: 'init', manifest, projectName }),
     });
 
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      throw new Error(`Upload failed (${response.status}): ${errorBody}`);
+    if (!initResponse.ok) {
+      const errorBody = await initResponse.text().catch(() => '');
+      throw new Error(`Init failed (${initResponse.status}): ${errorBody}`);
     }
 
-    const result = (await response.json()) as { shareUrl?: string };
-    if (result.shareUrl) {
-      console.log(`\nShareable link: ${result.shareUrl}`);
-      return result.shareUrl;
+    const { runId } = (await initResponse.json()) as { runId: string };
+    console.log(`Uploading ${fileMetas.length} screenshots...`);
+
+    // Phase 2: Upload each file individually (multipart, one per request)
+    const PARALLEL_UPLOADS = 4;
+    let uploaded = 0;
+
+    for (let i = 0; i < fileMetas.length; i += PARALLEL_UPLOADS) {
+      const batch = fileMetas.slice(i, i + PARALLEL_UPLOADS);
+
+      await Promise.all(
+        batch.map(async (meta) => {
+          const buffer = await fs.readFile(meta.filePath);
+
+          const { body, contentType } = buildMultipartBody(
+            { phase: 'file', runId, device: meta.device, originalUrl: meta.originalUrl },
+            { fieldName: 'screenshot', fileName: meta.fileName, contentType: meta.contentType, buffer }
+          );
+
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': contentType },
+            body,
+          });
+
+          if (!res.ok) {
+            console.warn(`\n  Failed: ${meta.device}/${meta.fileName} (${res.status})`);
+          } else {
+            uploaded++;
+            process.stdout.write(`\r  Uploaded ${uploaded}/${fileMetas.length}`);
+          }
+        })
+      );
+    }
+
+    console.log('');
+
+    // Phase 3: Finalize — get share URL
+    const finalizeResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phase: 'finalize', runId }),
+    });
+
+    if (!finalizeResponse.ok) {
+      const errorBody = await finalizeResponse.text().catch(() => '');
+      throw new Error(`Finalize failed (${finalizeResponse.status}): ${errorBody}`);
+    }
+
+    const finalResult = (await finalizeResponse.json()) as { shareUrl?: string };
+    if (finalResult.shareUrl) {
+      console.log(`\nShareable link: ${finalResult.shareUrl}`);
+      return finalResult.shareUrl;
     }
 
     return null;

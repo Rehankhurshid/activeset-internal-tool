@@ -56,7 +56,6 @@ function parseArgs(argv: string[]): UploadParsedArgs {
       throw new Error(`Unknown flag: ${token}`);
     }
 
-    // Positional arg = run directory
     if (!parsed.runDirectory) {
       parsed.runDirectory = token;
     } else {
@@ -65,6 +64,35 @@ function parseArgs(argv: string[]): UploadParsedArgs {
   }
 
   return parsed;
+}
+
+function buildMultipartBody(
+  fields: Record<string, string>,
+  file?: { fieldName: string; fileName: string; contentType: string; buffer: Buffer }
+): { body: Buffer; contentType: string } {
+  const boundary = `----ActiveSetCapture${Date.now()}${Math.random().toString(36).slice(2)}`;
+  const parts: Buffer[] = [];
+
+  for (const [name, value] of Object.entries(fields)) {
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`
+    ));
+  }
+
+  if (file) {
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${file.fieldName}"; filename="${file.fileName}"\r\nContent-Type: ${file.contentType}\r\n\r\n`
+    ));
+    parts.push(file.buffer);
+    parts.push(Buffer.from('\r\n'));
+  }
+
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+  return {
+    body: Buffer.concat(parts),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
 }
 
 export async function runCaptureUploadCli(argv: string[]): Promise<void> {
@@ -86,18 +114,15 @@ export async function runCaptureUploadCli(argv: string[]): Promise<void> {
   const runDir = path.resolve(args.runDirectory);
   const manifestPath = path.join(runDir, 'manifest.json');
 
-  // Verify manifest exists
   try {
     await fs.access(manifestPath);
   } catch {
     throw new Error(`No manifest.json found in ${runDir}. Is this a valid capture run folder?`);
   }
 
-  // Read and parse manifest
   const manifestText = await fs.readFile(manifestPath, 'utf8');
   const manifest: LocalCaptureManifest = JSON.parse(manifestText);
 
-  // Verify signature if present, or sign if missing (for older captures)
   if (manifest.signature) {
     if (!verifyManifest(manifest, manifest.signature)) {
       throw new Error('Invalid manifest signature. This capture may have been tampered with.');
@@ -114,8 +139,14 @@ export async function runCaptureUploadCli(argv: string[]): Promise<void> {
   console.log(`Run ID:  ${manifest.run.id}`);
   console.log(`URLs:    ${manifest.summary.totalUrls}`);
 
-  // Collect screenshot files
-  const files: Array<{ name: string; device: string; buffer: Buffer; contentType: string }> = [];
+  // Collect file metadata
+  const fileMetas: Array<{
+    filePath: string;
+    fileName: string;
+    device: string;
+    contentType: string;
+    originalUrl: string;
+  }> = [];
 
   for (const result of manifest.results) {
     for (const deviceResult of result.deviceResults) {
@@ -126,13 +157,14 @@ export async function runCaptureUploadCli(argv: string[]): Promise<void> {
         : path.join(runDir, deviceResult.outputPath);
 
       try {
-        const buffer = await fs.readFile(filePath);
+        await fs.access(filePath);
         const ext = path.extname(filePath).slice(1);
-        files.push({
-          name: path.basename(filePath),
+        fileMetas.push({
+          filePath,
+          fileName: path.basename(filePath),
           device: deviceResult.device,
-          buffer,
           contentType: ext === 'png' ? 'image/png' : 'image/webp',
+          originalUrl: result.url || '',
         });
       } catch {
         console.warn(`  Skipping missing file: ${filePath}`);
@@ -140,49 +172,82 @@ export async function runCaptureUploadCli(argv: string[]): Promise<void> {
     }
   }
 
-  if (files.length === 0) {
+  if (fileMetas.length === 0) {
     throw new Error('No screenshot files found to upload.');
   }
 
-  console.log(`\nUploading ${files.length} screenshots...`);
-
-  // Build multipart form
-  const boundary = `----ActiveSetCapture${Date.now()}`;
-  const parts: Buffer[] = [];
-
-  parts.push(Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="manifest"\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(manifest)}\r\n`
-  ));
-
-  parts.push(Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="projectName"\r\n\r\n${manifest.run.projectName}\r\n`
-  ));
-
-  for (const file of files) {
-    const header = `--${boundary}\r\nContent-Disposition: form-data; name="screenshots"; filename="${file.device}/${file.name}"\r\nContent-Type: ${file.contentType}\r\n\r\n`;
-    parts.push(Buffer.from(header));
-    parts.push(file.buffer);
-    parts.push(Buffer.from('\r\n'));
-  }
-
-  parts.push(Buffer.from(`--${boundary}--\r\n`));
-  const body = Buffer.concat(parts);
-
   const endpoint = args.to.replace(/\/+$/, '') + '/api/upload-captures';
-  const response = await fetch(endpoint, {
+
+  // Phase 1: Init
+  console.log(`\nRegistering upload...`);
+
+  const initResponse = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-    body,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      phase: 'init',
+      manifest,
+      projectName: manifest.run.projectName,
+    }),
   });
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => '');
-    throw new Error(`Upload failed (${response.status}): ${errorBody}`);
+  if (!initResponse.ok) {
+    const errorBody = await initResponse.text().catch(() => '');
+    throw new Error(`Init failed (${initResponse.status}): ${errorBody}`);
   }
 
-  const result = (await response.json()) as { shareUrl?: string; screenshotCount?: number };
+  const { runId } = (await initResponse.json()) as { runId: string };
+  console.log(`Uploading ${fileMetas.length} screenshots...`);
 
-  console.log(`\nUploaded ${result.screenshotCount || files.length} screenshots.`);
+  // Phase 2: Upload each file individually
+  const PARALLEL_UPLOADS = 4;
+  let uploaded = 0;
+
+  for (let i = 0; i < fileMetas.length; i += PARALLEL_UPLOADS) {
+    const batch = fileMetas.slice(i, i + PARALLEL_UPLOADS);
+
+    await Promise.all(
+      batch.map(async (meta) => {
+        const buffer = await fs.readFile(meta.filePath);
+
+        const { body, contentType } = buildMultipartBody(
+          { phase: 'file', runId, device: meta.device, originalUrl: meta.originalUrl },
+          { fieldName: 'screenshot', fileName: meta.fileName, contentType: meta.contentType, buffer }
+        );
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': contentType },
+          body,
+        });
+
+        if (!res.ok) {
+          console.warn(`\n  Failed: ${meta.device}/${meta.fileName} (${res.status})`);
+        } else {
+          uploaded++;
+          process.stdout.write(`\r  Uploaded ${uploaded}/${fileMetas.length}`);
+        }
+      })
+    );
+  }
+
+  console.log('');
+
+  // Phase 3: Finalize
+  const finalizeResponse = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phase: 'finalize', runId }),
+  });
+
+  if (!finalizeResponse.ok) {
+    const errorBody = await finalizeResponse.text().catch(() => '');
+    throw new Error(`Finalize failed (${finalizeResponse.status}): ${errorBody}`);
+  }
+
+  const result = (await finalizeResponse.json()) as { shareUrl?: string; screenshotCount?: number };
+
+  console.log(`\nUploaded ${result.screenshotCount || fileMetas.length} screenshots.`);
   if (result.shareUrl) {
     console.log(`\nShareable link: ${result.shareUrl}`);
   }

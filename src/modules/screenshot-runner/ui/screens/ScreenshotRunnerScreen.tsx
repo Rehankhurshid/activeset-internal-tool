@@ -5,18 +5,21 @@ import {
   Check,
   ChevronDown,
   Copy,
+  FileJson,
   Globe,
   Loader2,
   Settings2,
   Terminal,
+  Upload,
+  X,
 } from 'lucide-react';
 import { useAuth } from '@/modules/auth-access';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import {
   Collapsible,
   CollapsibleContent,
@@ -70,6 +73,16 @@ function shellQuote(v: string): string {
   return `"${v.replace(/(["\\$`])/g, '\\$1')}"`;
 }
 
+function shortenUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const path = u.pathname === '/' ? '' : u.pathname;
+    return u.host + path;
+  } catch {
+    return url;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -79,10 +92,24 @@ export default function ScreenshotRunnerPage() {
 
   // Core state
   const [projectName, setProjectName] = useState('');
-  const [urlsInput, setUrlsInput] = useState('');
+  const [urlInput, setUrlInput] = useState('');
+  const [urlsList, setUrlsList] = useState<string[]>([]);
   const [sitemapUrl, setSitemapUrl] = useState('');
   const [isFetchingSitemap, setIsFetchingSitemap] = useState(false);
   const [sitemapError, setSitemapError] = useState('');
+  const [showAllUrls, setShowAllUrls] = useState(false);
+
+  // Upload state
+  const [uploadDir, setUploadDir] = useState('');
+  const [uploadCopied, setUploadCopied] = useState(false);
+  const [uploadManifest, setUploadManifest] = useState<{
+    projectName: string;
+    runId: string;
+    urlCount: number;
+    signed: boolean;
+    dir: string;
+  } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Advanced (hidden by default)
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -97,7 +124,7 @@ export default function ScreenshotRunnerPage() {
   const [copied, setCopied] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const urls = useMemo(() => dedupeUrls(parseUrls(urlsInput)), [urlsInput]);
+  const urls = useMemo(() => dedupeUrls(urlsList), [urlsList]);
   const devices = [captureDesktop && 'desktop', captureMobile && 'mobile'].filter(Boolean) as string[];
   const slug = useMemo(() => slugify(projectName), [projectName]);
   const fileName = `${slug}-urls.txt`;
@@ -105,6 +132,8 @@ export default function ScreenshotRunnerPage() {
   const canRun = urls.length > 0 && devices.length > 0 && projectName.trim().length > 0;
 
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
+
+  const VISIBLE_URL_COUNT = 5;
 
   // Build the CLI command
   const cliCommand = useMemo(() => {
@@ -135,7 +164,41 @@ export default function ScreenshotRunnerPage() {
     ].join('\n');
   }, [canRun, urls, fileName, cliCommand]);
 
+  // Upload command
+  const uploadCommand = useMemo(() => {
+    if (!uploadDir.trim()) return '';
+    return `npx @activeset/capture upload ${shellQuote(uploadDir.trim())} --to ${shellQuote(appUrl)}`;
+  }, [uploadDir, appUrl]);
+
   /* -- Actions -- */
+
+  const addUrl = (text: string) => {
+    const newUrls = dedupeUrls(parseUrls(text));
+    if (newUrls.length > 0) {
+      setUrlsList((prev) => dedupeUrls([...prev, ...newUrls]));
+    }
+    setUrlInput('');
+  };
+
+  const removeUrl = (url: string) => {
+    setUrlsList((prev) => prev.filter((u) => u !== url));
+  };
+
+  const handleUrlKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addUrl(urlInput);
+    }
+  };
+
+  const handleUrlPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text');
+    const lines = pasted.split(/\r?\n/).filter(Boolean);
+    if (lines.length > 1) {
+      e.preventDefault();
+      addUrl(pasted);
+    }
+  };
 
   const copyToClipboard = async () => {
     if (!terminalBlock) return;
@@ -145,6 +208,17 @@ export default function ScreenshotRunnerPage() {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       /* fallback: user can manually select */
+    }
+  };
+
+  const copyUploadCommand = async () => {
+    if (!uploadCommand) return;
+    try {
+      await navigator.clipboard.writeText(uploadCommand);
+      setUploadCopied(true);
+      setTimeout(() => setUploadCopied(false), 2000);
+    } catch {
+      /* fallback */
     }
   };
 
@@ -162,8 +236,8 @@ export default function ScreenshotRunnerPage() {
       const { urls: fetched } = (await res.json()) as { urls?: string[] };
       const valid = dedupeUrls(fetched ?? []);
       if (valid.length === 0) throw new Error('No URLs found in sitemap.');
-      const merged = dedupeUrls([...urls, ...valid]);
-      setUrlsInput(merged.join('\n'));
+      setUrlsList((prev) => dedupeUrls([...prev, ...valid]));
+      setSitemapUrl('');
     } catch (e) {
       setSitemapError(e instanceof Error ? e.message : 'Failed to fetch sitemap.');
     } finally {
@@ -178,8 +252,50 @@ export default function ScreenshotRunnerPage() {
     const text = await file.text();
     const parsed = dedupeUrls(parseUrls(text));
     if (parsed.length > 0) {
-      const merged = dedupeUrls([...urls, ...parsed]);
-      setUrlsInput(merged.join('\n'));
+      setUrlsList((prev) => dedupeUrls([...prev, ...parsed]));
+    }
+  };
+
+  const handleManifestDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const manifest = JSON.parse(text);
+
+      if (!manifest.run?.id) throw new Error('Invalid manifest');
+
+      // Try to extract the capture directory from the first outputPath
+      let dir = '';
+      for (const result of manifest.results || []) {
+        for (const dr of result.deviceResults || []) {
+          if (dr.outputPath) {
+            // outputPath is like /Users/.../captures/project-name-timestamp/desktop/file.webp
+            // Go up two levels from the file to get the run directory
+            const parts = dr.outputPath.replace(/\\/g, '/').split('/');
+            // Remove filename and device folder
+            parts.pop(); // file
+            parts.pop(); // device
+            dir = parts.join('/');
+            break;
+          }
+        }
+        if (dir) break;
+      }
+
+      setUploadManifest({
+        projectName: manifest.run.projectName || 'Unknown',
+        runId: manifest.run.id,
+        urlCount: manifest.summary?.totalUrls || 0,
+        signed: !!manifest.signature,
+        dir,
+      });
+      setUploadDir(dir);
+    } catch {
+      setUploadManifest(null);
     }
   };
 
@@ -204,6 +320,9 @@ export default function ScreenshotRunnerPage() {
 
   /* -- Render -- */
 
+  const visibleUrls = showAllUrls ? urls : urls.slice(0, VISIBLE_URL_COUNT);
+  const hiddenCount = urls.length - VISIBLE_URL_COUNT;
+
   return (
     <div className="min-h-screen bg-background">
       <AppNavigation title="Screenshot Runner" showBackButton backHref="/" />
@@ -226,7 +345,14 @@ export default function ScreenshotRunnerPage() {
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">URLs</label>
+                <label className="text-sm font-medium">
+                  URLs
+                  {urls.length > 0 && (
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      ({urls.length})
+                    </span>
+                  )}
+                </label>
                 <div className="flex gap-2">
                   <Button
                     variant="ghost"
@@ -236,6 +362,16 @@ export default function ScreenshotRunnerPage() {
                   >
                     Import file
                   </Button>
+                  {urls.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-destructive hover:text-destructive"
+                      onClick={() => setUrlsList([])}
+                    >
+                      Clear all
+                    </Button>
+                  )}
                   <input
                     ref={fileRef}
                     type="file"
@@ -245,16 +381,57 @@ export default function ScreenshotRunnerPage() {
                   />
                 </div>
               </div>
-              <Textarea
-                value={urlsInput}
-                onChange={(e) => setUrlsInput(e.target.value)}
-                placeholder={'https://example.com\nhttps://example.com/about\nhttps://example.com/pricing'}
-                className="min-h-32 font-mono text-sm"
+
+              {/* URL input */}
+              <Input
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={handleUrlKeyDown}
+                onPaste={handleUrlPaste}
+                placeholder="Paste URLs and press Enter (supports multiple lines)"
+                className="font-mono text-sm"
               />
+
+              {/* URL chips */}
               {urls.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {urls.length} valid URL{urls.length !== 1 && 's'}
-                </p>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {visibleUrls.map((url) => (
+                    <Badge
+                      key={url}
+                      variant="secondary"
+                      className="max-w-[300px] gap-1 pr-1 font-mono text-xs font-normal"
+                    >
+                      <span className="truncate">{shortenUrl(url)}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeUrl(url)}
+                        className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                  {!showAllUrls && hiddenCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setShowAllUrls(true)}
+                    >
+                      +{hiddenCount} more
+                    </Button>
+                  )}
+                  {showAllUrls && urls.length > VISIBLE_URL_COUNT && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setShowAllUrls(false)}
+                    >
+                      Show less
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -330,6 +507,93 @@ export default function ScreenshotRunnerPage() {
                     ? 'Add at least one URL above.'
                     : 'Select at least one device in advanced options.'}
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Upload existing captures ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Upload className="h-4 w-4" />
+              Upload existing captures
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Drop zone */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleManifestDrop}
+              className={cn(
+                'flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors',
+                isDragging
+                  ? 'border-primary bg-primary/5'
+                  : 'border-muted-foreground/25 hover:border-muted-foreground/40'
+              )}
+            >
+              <FileJson className="h-8 w-8 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">
+                Drop your <code className="rounded bg-muted px-1 py-0.5 text-xs">manifest.json</code> here
+              </p>
+              <p className="text-xs text-muted-foreground/60">
+                Found in your capture folder after a run
+              </p>
+            </div>
+
+            {/* Manifest info after drop */}
+            {uploadManifest && (
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{uploadManifest.projectName}</span>
+                  <Badge variant={uploadManifest.signed ? 'default' : 'secondary'} className="text-xs">
+                    {uploadManifest.signed ? 'Signed' : 'Unsigned'}
+                  </Badge>
+                </div>
+                <div className="flex gap-4 text-xs text-muted-foreground">
+                  <span>{uploadManifest.urlCount} URL{uploadManifest.urlCount !== 1 && 's'}</span>
+                  <span className="truncate font-mono">{uploadManifest.runId}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Manual path input */}
+            {!uploadManifest && (
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">or enter path manually</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            )}
+
+            <Input
+              value={uploadDir}
+              onChange={(e) => { setUploadDir(e.target.value); setUploadManifest(null); }}
+              placeholder="./captures/my-project-20260407-120000"
+              className="font-mono text-sm"
+            />
+
+            {uploadCommand && (
+              <>
+                <div className="rounded-lg bg-zinc-950 p-3 dark:bg-zinc-900">
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-zinc-100">
+                    {uploadCommand}
+                  </pre>
+                </div>
+                <Button onClick={copyUploadCommand} variant="outline" className="w-full">
+                  {uploadCopied ? (
+                    <>
+                      <Check className="mr-2 h-4 w-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy upload command
+                    </>
+                  )}
+                </Button>
+              </>
             )}
           </CardContent>
         </Card>
