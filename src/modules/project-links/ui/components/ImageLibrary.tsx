@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { ProjectLink } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
   ChevronLeft,
@@ -16,6 +17,7 @@ import {
   Grid2x2,
   Grid3x3,
   ImageIcon,
+  Loader2,
   Monitor,
   Rows3,
   Search,
@@ -37,6 +39,22 @@ interface ImageEntry {
   pathname: string;
   device: 'desktop' | 'tablet' | 'mobile';
   capturedAt?: string;
+  source: 'capture' | 'audit';
+}
+
+interface CaptureScreenshot {
+  device: string;
+  fileName: string;
+  url: string;
+  originalUrl: string;
+}
+
+interface CaptureRun {
+  runId: string;
+  projectName: string;
+  createdAt: string;
+  screenshotCount: number;
+  screenshots: CaptureScreenshot[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -59,10 +77,41 @@ const DEVICE_ICON: Record<string, typeof Monitor> = {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Extract images from project links                                  */
+/*  Extract images from capture runs                                   */
 /* ------------------------------------------------------------------ */
 
-function extractImages(links: ProjectLink[]): ImageEntry[] {
+function extractCaptureImages(runs: CaptureRun[]): ImageEntry[] {
+  const images: ImageEntry[] = [];
+
+  for (const run of runs) {
+    for (const s of run.screenshots) {
+      let pathname: string;
+      try {
+        pathname = new URL(s.originalUrl).pathname || '/';
+      } catch {
+        pathname = '/';
+      }
+
+      let pageTitle = pathname;
+      if (pathname === '/') pageTitle = 'Home';
+      else pageTitle = pathname.split('/').filter(Boolean).pop() || pathname;
+
+      images.push({
+        url: s.url,
+        pageUrl: s.originalUrl,
+        pageTitle,
+        pathname,
+        device: (s.device as ImageEntry['device']) || 'desktop',
+        capturedAt: run.createdAt,
+        source: 'capture',
+      });
+    }
+  }
+
+  return images;
+}
+
+function extractAuditImages(links: ProjectLink[]): ImageEntry[] {
   const images: ImageEntry[] = [];
 
   for (const link of links) {
@@ -76,7 +125,6 @@ function extractImages(links: ProjectLink[]): ImageEntry[] {
       pathname = '/';
     }
 
-    // Desktop screenshot (URL-based, preferred)
     if (audit.screenshotUrl) {
       images.push({
         url: audit.screenshotUrl,
@@ -85,40 +133,7 @@ function extractImages(links: ProjectLink[]): ImageEntry[] {
         pathname,
         device: 'desktop',
         capturedAt: audit.screenshotCapturedAt,
-      });
-    }
-
-    // Responsive screenshots (base64-based)
-    if (audit.desktopScreenshot && !audit.screenshotUrl) {
-      images.push({
-        url: `data:image/png;base64,${audit.desktopScreenshot}`,
-        pageUrl: link.url,
-        pageTitle: link.title || pathname,
-        pathname,
-        device: 'desktop',
-        capturedAt: audit.screenshotCapturedAt,
-      });
-    }
-
-    if (audit.tabletScreenshot) {
-      images.push({
-        url: `data:image/png;base64,${audit.tabletScreenshot}`,
-        pageUrl: link.url,
-        pageTitle: link.title || pathname,
-        pathname,
-        device: 'tablet',
-        capturedAt: audit.screenshotCapturedAt,
-      });
-    }
-
-    if (audit.mobileScreenshot) {
-      images.push({
-        url: `data:image/png;base64,${audit.mobileScreenshot}`,
-        pageUrl: link.url,
-        pageTitle: link.title || pathname,
-        pathname,
-        device: 'mobile',
-        capturedAt: audit.screenshotCapturedAt,
+        source: 'audit',
       });
     }
   }
@@ -127,7 +142,7 @@ function extractImages(links: ProjectLink[]): ImageEntry[] {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Lightbox                                                           */
+/*  Lightbox (full-width scrollable)                                   */
 /* ------------------------------------------------------------------ */
 
 function Lightbox({
@@ -141,25 +156,19 @@ function Lightbox({
 }) {
   const [index, setIndex] = useState(initialIndex);
   const [zoom, setZoom] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const current = images[index];
   const hasPrev = index > 0;
   const hasNext = index < images.length - 1;
 
-  const resetView = useCallback(() => {
-    setZoom(1);
-    setPosition({ x: 0, y: 0 });
-  }, []);
-
   const goTo = useCallback(
     (i: number) => {
       setIndex(i);
-      resetView();
+      setZoom(1);
+      scrollRef.current?.scrollTo({ top: 0 });
     },
-    [resetView]
+    []
   );
 
   useEffect(() => {
@@ -169,32 +178,16 @@ function Lightbox({
       if (e.key === 'ArrowRight' && hasNext) goTo(index + 1);
       if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(z + 0.5, 5));
       if (e.key === '-') setZoom((z) => Math.max(z - 0.5, 0.5));
-      if (e.key === '0') resetView();
+      if (e.key === '0') setZoom(1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [index, hasPrev, hasNext, onClose, goTo, resetView]);
+  }, [index, hasPrev, hasNext, onClose, goTo]);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (zoom <= 1) return;
-    setDragging(true);
-    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-  };
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragging) return;
-    setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
-  };
-  const handleMouseUp = () => setDragging(false);
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.25 : 0.25;
-    setZoom((z) => Math.min(Math.max(z + delta, 0.5), 5));
-  };
 
   const DeviceIcon = DEVICE_ICON[current.device] || Monitor;
 
@@ -231,27 +224,24 @@ function Lightbox({
         </div>
       </div>
 
-      <div
-        className="relative flex flex-1 items-center justify-center overflow-hidden"
-        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onWheel={handleWheel}
-        style={{ cursor: zoom > 1 ? (dragging ? 'grabbing' : 'grab') : 'default' }}
-      >
+      <div className="relative flex flex-1 overflow-hidden">
         {hasPrev && (
-          <button onClick={() => goTo(index - 1)} className="absolute left-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white sm:left-4">
+          <button onClick={() => goTo(index - 1)} className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white sm:left-4">
             <ChevronLeft className="h-5 w-5" />
           </button>
         )}
         {hasNext && (
-          <button onClick={() => goTo(index + 1)} className="absolute right-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white sm:right-4">
+          <button onClick={() => goTo(index + 1)} className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white sm:right-4">
             <ChevronRight className="h-5 w-5" />
           </button>
         )}
-        <img
-          src={current.url} alt={current.pageTitle} draggable={false}
-          className="max-h-full max-w-full select-none transition-transform duration-150"
-          style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})` }}
-        />
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+          <img
+            src={current.url} alt={current.pageTitle} draggable={false}
+            className="w-full select-none"
+            style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
+          />
+        </div>
       </div>
 
       {images.length > 1 && (
@@ -313,14 +303,49 @@ function ImageCard({
 
 interface ImageLibraryProps {
   links: ProjectLink[];
+  projectName: string;
 }
 
-export function ImageLibrary({ links }: ImageLibraryProps) {
+export function ImageLibrary({ links, projectName }: ImageLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [previewSizeKey, setPreviewSizeKey] = useState<PreviewSize>('medium');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [captureRuns, setCaptureRuns] = useState<CaptureRun[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const allImages = useMemo(() => extractImages(links), [links]);
+  // Fetch capture runs for this project
+  useEffect(() => {
+    if (!projectName) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchCaptures = async () => {
+      try {
+        const res = await fetch(`/api/capture-runs?projectName=${encodeURIComponent(projectName)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCaptureRuns(data.runs || []);
+        }
+      } catch (error) {
+        console.error('[ImageLibrary] Failed to fetch captures:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCaptures();
+  }, [projectName]);
+
+  // Combine capture images + audit images (capture takes priority)
+  const allImages = useMemo(() => {
+    const captureImages = extractCaptureImages(captureRuns);
+    const auditImages = extractAuditImages(links);
+
+    // If we have capture images, use those; audit images are fallback
+    if (captureImages.length > 0) return captureImages;
+    return auditImages;
+  }, [captureRuns, links]);
 
   // Group by device
   const deviceGroups = useMemo(() => {
@@ -361,13 +386,29 @@ export function ImageLibrary({ links }: ImageLibraryProps) {
 
   const previewSize = PREVIEW_SIZES.find((p) => p.key === previewSizeKey) || PREVIEW_SIZES[1];
 
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading screenshots...
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-48 rounded-lg" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (allImages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16">
         <ImageIcon className="h-12 w-12 text-muted-foreground/50" />
         <h3 className="mt-4 text-lg font-medium">No screenshots yet</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Run a scan to capture screenshots of your pages.
+          Use <code className="rounded bg-muted px-1.5 py-0.5 text-xs">@activeset/capture</code> to capture screenshots of your pages.
         </p>
       </div>
     );
