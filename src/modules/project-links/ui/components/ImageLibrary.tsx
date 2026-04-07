@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
@@ -835,6 +836,68 @@ function EmptyState({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Folder group (collapsible)                                         */
+/* ------------------------------------------------------------------ */
+
+function FolderGroup({
+  folder,
+  images,
+  allImages,
+  cols,
+  maxWidth,
+  onImageClick,
+}: {
+  folder: string;
+  images: ImageEntry[];
+  allImages: ImageEntry[];
+  cols: string;
+  maxWidth: number | 'full';
+  onImageClick: (globalIdx: number) => void;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="flex w-full items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
+          {open ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
+          )}
+          {open ? (
+            <FolderOpen className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <Folder className="h-4 w-4 text-muted-foreground" />
+          )}
+          <span className="text-sm font-medium">
+            {folder === '/' ? 'Root' : folder}
+          </span>
+          <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-[10px] font-normal">
+            {images.length}
+          </Badge>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className={cn('mt-2 grid gap-4 pb-2', cols)}>
+          {images.map((img, i) => {
+            const globalIdx = allImages.indexOf(img);
+            return (
+              <ImageCard
+                key={`${img.device}-${img.pathname}-${i}`}
+                image={img}
+                maxWidth={maxWidth}
+                onClick={() => onImageClick(globalIdx >= 0 ? globalIdx : 0)}
+              />
+            );
+          })}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -984,16 +1047,56 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     const wOptions = DEVICE_WIDTHS[device] || DESKTOP_WIDTHS;
     const w = wOptions.find((o) => o.key === wKey) || wOptions[0];
 
+    // Group images by folder (first path segment)
+    const folderMap = new Map<string, ImageEntry[]>();
+    for (const img of filtered) {
+      const segments = img.pathname.split('/').filter(Boolean);
+      const folder = segments.length > 1 ? '/' + segments[0] : '/';
+      const bucket = folderMap.get(folder) || [];
+      bucket.push(img);
+      folderMap.set(folder, bucket);
+    }
+
+    // Sort folders: root first, then alphabetical
+    const sortedFolders = [...folderMap.keys()].sort((a, b) => {
+      if (a === '/') return -1;
+      if (b === '/') return 1;
+      return a.localeCompare(b);
+    });
+
+    // If only one folder, skip the grouping UI
+    if (sortedFolders.length <= 1) {
+      return (
+        <div className={cn('grid gap-4', w.cols)}>
+          {filtered.map((img, i) => {
+            const globalIdx = allImages.indexOf(img);
+            return (
+              <ImageCard
+                key={`${img.device}-${img.pathname}-${i}`}
+                image={img}
+                maxWidth={w.maxWidth}
+                onClick={() => setLightboxIndex(globalIdx >= 0 ? globalIdx : 0)}
+              />
+            );
+          })}
+        </div>
+      );
+    }
+
     return (
-      <div className={cn('grid gap-4', w.cols)}>
-        {filtered.map((img, i) => {
-          const globalIdx = allImages.indexOf(img);
+      <div className="space-y-2">
+        {sortedFolders.map((folder) => {
+          const folderImages = folderMap.get(folder) || [];
+          const FIcon = Folder;
           return (
-            <ImageCard
-              key={`${img.device}-${img.pathname}-${i}`}
-              image={img}
+            <FolderGroup
+              key={folder}
+              folder={folder}
+              images={folderImages}
+              allImages={allImages}
+              cols={w.cols}
               maxWidth={w.maxWidth}
-              onClick={() => setLightboxIndex(globalIdx >= 0 ? globalIdx : 0)}
+              onImageClick={(globalIdx) => setLightboxIndex(globalIdx)}
             />
           );
         })}
