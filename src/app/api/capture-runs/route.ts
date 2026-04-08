@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
 
+function normalizeProjectKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 export async function GET(request: NextRequest) {
-  const projectName = request.nextUrl.searchParams.get('projectName');
+  const projectName = request.nextUrl.searchParams.get('projectName')?.trim();
 
   if (!projectName) {
     return NextResponse.json({ error: 'projectName is required' }, { status: 400 });
   }
 
+  const queryLower = projectName.toLowerCase();
+  const queryKey = normalizeProjectKey(projectName);
+
   try {
-    // Query capture_runs where projectName contains the search term (case-sensitive)
-    // The CLI stores names like "muffins-website" while projects store "Muffins"
-    // So we query all and filter client-side for flexibility
+    // Query all runs, then match by flexible name normalization.
+    // This allows "DDE UHP" to match CLI runs named "dde-uhp" (and vice versa).
     const snapshot = await db
       .collection('capture_runs')
       .get();
@@ -20,8 +26,11 @@ export async function GET(request: NextRequest) {
       .filter((doc) => {
         const data = doc.data();
         const name = (data.projectName || '').toLowerCase();
+        const nameKey = normalizeProjectKey(name);
         const statusOk = !data.status || data.status === 'complete';
-        return statusOk && name.includes(projectName.toLowerCase());
+        const matchesText = name.includes(queryLower) || queryLower.includes(name);
+        const matchesKey = Boolean(queryKey) && (nameKey.includes(queryKey) || queryKey.includes(nameKey));
+        return statusOk && (matchesText || matchesKey);
       })
       .sort((a, b) => {
         const aTime = a.data().createdAt || '';

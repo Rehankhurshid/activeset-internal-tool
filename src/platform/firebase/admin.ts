@@ -1,2 +1,1 @@
-export { auth, db } from '@/lib/firebase-admin';
-
+export { auth, db, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';

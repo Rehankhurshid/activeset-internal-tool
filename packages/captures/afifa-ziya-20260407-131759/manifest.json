@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "id": "afifa-ziya-20260407-131759",
+    "projectName": "Afifa Ziya",
+    "projectSlug": "afifa-ziya",
+    "startedAt": "2026-04-07T13:17:59.067Z",
+    "finishedAt": "2026-04-07T13:18:06.018Z",
+    "outputDirectory": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/afifa-ziya-20260407-131759"
+  },
+  "machine": {
+    "platform": "darwin",
+    "release": "25.0.0",
+    "arch": "arm64",
+    "nodeVersion": "v23.11.0",
+    "hostname": "Nayyars-MacBook-Air.local",
+    "cpuCount": 8
+  },
+  "settings": {
+    "concurrency": 1,
+    "timeoutMs": 45000,
+    "retries": 1,
+    "devices": [
+      "desktop",
+      "mobile"
+    ],
+    "format": "webp",
+    "warmup": "always"
+  },
+  "summary": {
+    "totalUrls": 1,
+    "successfulUrls": 1,
+    "failedUrls": 0,
+    "partialUrls": 0,
+    "totalDurationMs": 6950
+  },
+  "results": [
+    {
+      "url": "https://www.afifaziya.com/",
+      "index": 0,
+      "slug": "001-www-afifaziya-com",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T13:17:59.994Z",
+      "finishedAt": "2026-04-07T13:18:05.929Z",
+      "durationMs": 5935,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/afifa-ziya-20260407-131759/desktop/001-www-afifaziya-com.webp",
+          "durationMs": 2794
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/afifa-ziya-20260407-131759/mobile/001-www-afifaziya-com.webp",
+          "durationMs": 2575
+        }
+      ]
+    }
+  ]
+}

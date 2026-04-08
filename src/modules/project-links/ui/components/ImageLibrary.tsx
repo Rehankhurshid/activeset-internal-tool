@@ -417,20 +417,24 @@ function Lightbox({
 /*  Recapture helper                                                   */
 /* ------------------------------------------------------------------ */
 
-function buildCaptureCommand(slug: string, urls: string[]) {
+function escapeCliValue(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function buildCaptureCommand(projectName: string, urls: string[]) {
   const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
-  return `npx @activeset/capture --project "${slug}" --urls "${urls.join(',')}" --upload ${uploadUrl}`;
+  return `npx @activeset/capture --project "${escapeCliValue(projectName)}" --urls "${urls.join(',')}" --upload ${uploadUrl}`;
 }
 
 function RecaptureButton({
   urls,
-  slug,
+  projectName,
   label,
   variant = 'ghost',
   className,
 }: {
   urls: string[];
-  slug: string;
+  projectName: string;
   label?: string;
   variant?: 'ghost' | 'outline';
   className?: string;
@@ -439,7 +443,7 @@ function RecaptureButton({
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const cmd = buildCaptureCommand(slug, urls);
+    const cmd = buildCaptureCommand(projectName, urls);
     navigator.clipboard.writeText(cmd);
     setCopied(true);
     toast.success(`Copied recapture command for ${urls.length} URL${urls.length > 1 ? 's' : ''}`);
@@ -467,12 +471,12 @@ function RecaptureButton({
 function ImageCard({
   image,
   maxWidth,
-  slug,
+  projectName,
   onClick,
 }: {
   image: ImageEntry;
   maxWidth: number | 'full';
-  slug: string;
+  projectName: string;
   onClick: () => void;
 }) {
   const DeviceIcon = DEVICE_ICON[image.device] || Monitor;
@@ -503,7 +507,7 @@ function ImageCard({
           >
             <ExternalLink className="h-3 w-3" />
           </a>
-          <RecaptureButton urls={[image.pageUrl]} slug={slug} variant="outline" className="bg-black/60 text-white border-white/20 hover:bg-black/80 hover:text-white" />
+          <RecaptureButton urls={[image.pageUrl]} projectName={projectName} variant="outline" className="bg-black/60 text-white border-white/20 hover:bg-black/80 hover:text-white" />
         </div>
       </div>
       <CardContent className="p-3">
@@ -558,8 +562,6 @@ function SitemapBrowser({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
   // Fetch and parse sitemap on mount
   useEffect(() => {
@@ -675,13 +677,13 @@ function SitemapBrowser({
     // If all URLs are selected, use --sitemap flag
     const totalUrls = Object.values(sitemap.folders).reduce((sum, entries) => sum + entries.length, 0);
     if (selectedUrls.size === totalUrls) {
-      return `npx @activeset/capture --sitemap ${sitemapUrl} --project "${slug}" ${upload}`;
+      return `npx @activeset/capture --sitemap ${sitemapUrl} --project "${escapeCliValue(projectName)}" ${upload}`;
     }
 
     // Otherwise, list selected URLs
     const urls = [...selectedUrls].sort();
-    return `npx @activeset/capture --project "${slug}" --urls "${urls.join(',')}" ${upload}`;
-  }, [selectedUrls, sitemap, sitemapUrl, slug, uploadUrl]);
+    return `npx @activeset/capture --project "${escapeCliValue(projectName)}" --urls "${urls.join(',')}" ${upload}`;
+  }, [selectedUrls, sitemap, sitemapUrl, projectName, uploadUrl]);
 
   const handleCopy = () => {
     if (!captureCommand) return;
@@ -867,11 +869,10 @@ function EmptyState({
   const [copied, setCopied] = useState(false);
   const [showSitemapBrowser, setShowSitemapBrowser] = useState(false);
 
-  const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
   const captureCommand = sitemapUrl
-    ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${slug}" --upload ${uploadUrl}`
-    : `npx @activeset/capture --project "${slug}" --file urls.txt --upload ${uploadUrl}`;
+    ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${escapeCliValue(projectName)}" --upload ${uploadUrl}`
+    : `npx @activeset/capture --project "${escapeCliValue(projectName)}" --file urls.txt --upload ${uploadUrl}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(captureCommand);
@@ -1016,7 +1017,7 @@ function FolderGroup({
   allImages,
   columns,
   maxWidth,
-  slug,
+  projectName,
   onImageClick,
 }: {
   folder: string;
@@ -1024,7 +1025,7 @@ function FolderGroup({
   allImages: ImageEntry[];
   columns: string;
   maxWidth: number | 'full';
-  slug: string;
+  projectName: string;
   onImageClick: (image: ImageEntry) => void;
 }) {
   const [open, setOpen] = useState(true);
@@ -1055,7 +1056,7 @@ function FolderGroup({
         </CollapsibleTrigger>
         <RecaptureButton
           urls={folderUrls}
-          slug={slug}
+          projectName={projectName}
           label={`Recapture ${folderUrls.length}`}
           variant="outline"
           className="shrink-0"
@@ -1068,7 +1069,7 @@ function FolderGroup({
               <ImageCard
                 image={img}
                 maxWidth={maxWidth}
-                slug={slug}
+                projectName={projectName}
                 onClick={() => onImageClick(img)}
               />
             </div>
@@ -1101,8 +1102,6 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
   const [activeDevice, setActiveDevice] = useState('desktop');
   const [widthByDevice, setWidthByDevice] = useState<Record<string, string>>(DEVICE_DEFAULT_WIDTH);
   const [copiedAll, setCopiedAll] = useState(false);
-
-  const slug = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
   // Fetch capture runs for this project
   useEffect(() => {
@@ -1243,13 +1242,13 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
   const handleCopyAllCapture = useCallback(() => {
     const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
     const cmd = sitemapUrl
-      ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${slug}" --upload ${uploadUrl}`
-      : buildCaptureCommand(slug, [...new Set(allImages.map((i) => i.pageUrl))]);
+      ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${escapeCliValue(projectName)}" --upload ${uploadUrl}`
+      : buildCaptureCommand(projectName, [...new Set(allImages.map((i) => i.pageUrl))]);
     navigator.clipboard.writeText(cmd);
     setCopiedAll(true);
     toast.success('Copied full sitemap capture command');
     setTimeout(() => setCopiedAll(false), 2000);
-  }, [sitemapUrl, slug, allImages]);
+  }, [sitemapUrl, projectName, allImages]);
 
   if (loading) {
     return (
@@ -1312,7 +1311,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
               <ImageCard
                 image={img}
                 maxWidth={w.maxWidth}
-                slug={slug}
+                projectName={projectName}
                 onClick={() => openLightbox(filtered, i)}
               />
             </div>
@@ -1326,16 +1325,16 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
         {sortedFolders.map((folder) => {
           const folderImages = folderMap.get(folder) || [];
           return (
-            <FolderGroup
-              key={folder}
-              folder={folder}
-              images={folderImages}
-              allImages={filtered}
-              columns={w.columns}
-              maxWidth={w.maxWidth}
-              slug={slug}
-              onImageClick={(img) => openLightbox(filtered, filtered.indexOf(img))}
-            />
+              <FolderGroup
+                key={folder}
+                folder={folder}
+                images={folderImages}
+                allImages={filtered}
+                columns={w.columns}
+                maxWidth={w.maxWidth}
+                projectName={projectName}
+                onImageClick={(img) => openLightbox(filtered, filtered.indexOf(img))}
+              />
           );
         })}
       </div>

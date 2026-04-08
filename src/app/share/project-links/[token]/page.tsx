@@ -2,7 +2,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { WebsiteAuditDashboardScreen, type FolderPageTypes, type ProjectLink } from '@/modules/site-monitoring';
-import { db } from '@/platform/firebase/admin';
+import { db, hasFirebaseAdminCredentials } from '@/platform/firebase/admin';
+import type { AuditResult } from '@/types';
 import { Globe } from 'lucide-react';
 import Link from 'next/link';
 
@@ -45,10 +46,30 @@ const getSharedAuditProject = async (token: string): Promise<SharedAuditProject 
 
     if (data.publicAuditShareEnabled === false) return null;
 
+    const links = Array.isArray(data.links) ? data.links : [];
+
+    // Audit results are persisted in projects/{id}/link_audits/{linkId}.
+    // Merge them into links so public share mirrors the private dashboard data.
+    const auditSnapshot = await db
+      .collection('projects')
+      .doc(projectDoc.id)
+      .collection('link_audits')
+      .get();
+
+    const auditMap = new Map<string, AuditResult>();
+    auditSnapshot.docs.forEach((doc) => {
+      auditMap.set(doc.id, doc.data() as AuditResult);
+    });
+
+    const mergedLinks = links.map((link) => {
+      const auditResult = auditMap.get(link.id);
+      return auditResult ? { ...link, auditResult } : link;
+    });
+
     return {
       id: projectDoc.id,
       name: data.name || 'Shared Audit',
-      links: Array.isArray(data.links) ? data.links : [],
+      links: mergedLinks,
       folderPageTypes: data.folderPageTypes,
       detectedLocales: Array.isArray(data.detectedLocales) ? data.detectedLocales : [],
       pathToLocaleMap: data.pathToLocaleMap || {},
@@ -61,6 +82,22 @@ const getSharedAuditProject = async (token: string): Promise<SharedAuditProject 
 
 export default async function SharedProjectAuditPage({ params }: PageProps) {
   const { token } = await params;
+
+  if (!hasFirebaseAdminCredentials) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <Card className="max-w-lg w-full">
+          <CardHeader>
+            <CardTitle>Share link temporarily unavailable</CardTitle>
+            <CardDescription>
+              Public sharing is misconfigured on this deployment. The link token is valid only when Firebase admin credentials are set.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   const project = await getSharedAuditProject(token);
 
   if (!project) {

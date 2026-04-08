@@ -1,0 +1,3460 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "id": "muffins-20260407-214949",
+    "projectName": "muffins",
+    "projectSlug": "muffins",
+    "startedAt": "2026-04-07T21:49:49.242Z",
+    "finishedAt": "2026-04-07T22:01:04.784Z",
+    "outputDirectory": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949"
+  },
+  "machine": {
+    "platform": "darwin",
+    "release": "25.0.0",
+    "arch": "arm64",
+    "nodeVersion": "v23.11.0",
+    "hostname": "Nayyars-MacBook-Air.local",
+    "cpuCount": 8
+  },
+  "settings": {
+    "concurrency": 6,
+    "timeoutMs": 45000,
+    "retries": 1,
+    "devices": [
+      "desktop",
+      "mobile"
+    ],
+    "format": "webp",
+    "warmup": "always"
+  },
+  "summary": {
+    "totalUrls": 114,
+    "successfulUrls": 114,
+    "failedUrls": 0,
+    "partialUrls": 0,
+    "totalDurationMs": 675540
+  },
+  "results": [
+    {
+      "url": "https://www.muffins.ai/es-mx",
+      "index": 0,
+      "slug": "001-www-muffins-ai-es-mx",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:49:50.303Z",
+      "finishedAt": "2026-04-07T21:53:15.652Z",
+      "durationMs": 205349,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/001-www-muffins-ai-es-mx.webp",
+          "durationMs": 201092
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/001-www-muffins-ai-es-mx.webp",
+          "durationMs": 205347
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/",
+      "index": 1,
+      "slug": "002-www-muffins-ai",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:49:50.303Z",
+      "finishedAt": "2026-04-07T21:53:13.655Z",
+      "durationMs": 203352,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/002-www-muffins-ai.webp",
+          "durationMs": 201771
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/002-www-muffins-ai.webp",
+          "durationMs": 203348
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/features/test-design-automate",
+      "index": 2,
+      "slug": "003-www-muffins-ai-es-mx-features-test-design-automate",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:49:50.303Z",
+      "finishedAt": "2026-04-07T21:53:30.816Z",
+      "durationMs": 220513,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/003-www-muffins-ai-es-mx-features-test-design-automate.webp",
+          "durationMs": 215115
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/003-www-muffins-ai-es-mx-features-test-design-automate.webp",
+          "durationMs": 219810
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/features/test-design-automate",
+      "index": 3,
+      "slug": "004-www-muffins-ai-features-test-design-automate",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:49:50.303Z",
+      "finishedAt": "2026-04-07T21:53:28.754Z",
+      "durationMs": 218451,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/004-www-muffins-ai-features-test-design-automate.webp",
+          "durationMs": 215546
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/004-www-muffins-ai-features-test-design-automate.webp",
+          "durationMs": 218447
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/solutions/enterprises",
+      "index": 4,
+      "slug": "005-www-muffins-ai-es-mx-solutions-enterprises",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:49:50.303Z",
+      "finishedAt": "2026-04-07T21:50:15.767Z",
+      "durationMs": 25464,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/005-www-muffins-ai-es-mx-solutions-enterprises.webp",
+          "durationMs": 22774
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/005-www-muffins-ai-es-mx-solutions-enterprises.webp",
+          "durationMs": 25461
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/solutions/enterprises",
+      "index": 5,
+      "slug": "006-www-muffins-ai-solutions-enterprises",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:49:50.303Z",
+      "finishedAt": "2026-04-07T21:50:17.120Z",
+      "durationMs": 26817,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/006-www-muffins-ai-solutions-enterprises.webp",
+          "durationMs": 23510
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/006-www-muffins-ai-solutions-enterprises.webp",
+          "durationMs": 26790
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/features/intelligent-test-execution",
+      "index": 6,
+      "slug": "007-www-muffins-ai-es-mx-features-intelligent-test-execution",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:50:15.767Z",
+      "finishedAt": "2026-04-07T21:50:43.498Z",
+      "durationMs": 27731,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/007-www-muffins-ai-es-mx-features-intelligent-test-execution.webp",
+          "durationMs": 27728
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/007-www-muffins-ai-es-mx-features-intelligent-test-execution.webp",
+          "durationMs": 22114
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/features/intelligent-test-execution",
+      "index": 7,
+      "slug": "008-www-muffins-ai-features-intelligent-test-execution",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:50:17.120Z",
+      "finishedAt": "2026-04-07T21:50:39.967Z",
+      "durationMs": 22847,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/008-www-muffins-ai-features-intelligent-test-execution.webp",
+          "durationMs": 22838
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/008-www-muffins-ai-features-intelligent-test-execution.webp",
+          "durationMs": 19458
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/solutions/regulated-industries",
+      "index": 8,
+      "slug": "009-www-muffins-ai-es-mx-solutions-regulated-industries",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:50:39.967Z",
+      "finishedAt": "2026-04-07T21:50:59.881Z",
+      "durationMs": 19914,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/009-www-muffins-ai-es-mx-solutions-regulated-industries.webp",
+          "durationMs": 18223
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/009-www-muffins-ai-es-mx-solutions-regulated-industries.webp",
+          "durationMs": 19906
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/solutions/regulated-industries",
+      "index": 9,
+      "slug": "010-www-muffins-ai-solutions-regulated-industries",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:50:43.498Z",
+      "finishedAt": "2026-04-07T21:51:04.879Z",
+      "durationMs": 21381,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/010-www-muffins-ai-solutions-regulated-industries.webp",
+          "durationMs": 18545
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/010-www-muffins-ai-solutions-regulated-industries.webp",
+          "durationMs": 21375
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/features/defect-management",
+      "index": 10,
+      "slug": "011-www-muffins-ai-es-mx-features-defect-management",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:50:59.881Z",
+      "finishedAt": "2026-04-07T21:51:27.154Z",
+      "durationMs": 27273,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/011-www-muffins-ai-es-mx-features-defect-management.webp",
+          "durationMs": 27270
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/011-www-muffins-ai-es-mx-features-defect-management.webp",
+          "durationMs": 17720
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/features/defect-management",
+      "index": 11,
+      "slug": "012-www-muffins-ai-features-defect-management",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:51:04.879Z",
+      "finishedAt": "2026-04-07T21:51:23.765Z",
+      "durationMs": 18886,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/012-www-muffins-ai-features-defect-management.webp",
+          "durationMs": 18878
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/012-www-muffins-ai-features-defect-management.webp",
+          "durationMs": 15580
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/features/analytics-reporting",
+      "index": 12,
+      "slug": "013-www-muffins-ai-es-mx-features-analytics-reporting",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:51:23.765Z",
+      "finishedAt": "2026-04-07T21:51:50.633Z",
+      "durationMs": 26868,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/013-www-muffins-ai-es-mx-features-analytics-reporting.webp",
+          "durationMs": 26863
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/013-www-muffins-ai-es-mx-features-analytics-reporting.webp",
+          "durationMs": 18749
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/features/analytics-reporting",
+      "index": 13,
+      "slug": "014-www-muffins-ai-features-analytics-reporting",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:51:27.154Z",
+      "finishedAt": "2026-04-07T21:51:47.198Z",
+      "durationMs": 20044,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/014-www-muffins-ai-features-analytics-reporting.webp",
+          "durationMs": 20035
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/014-www-muffins-ai-features-analytics-reporting.webp",
+          "durationMs": 16726
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/customer-stories",
+      "index": 14,
+      "slug": "015-www-muffins-ai-es-mx-customer-stories",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:51:47.198Z",
+      "finishedAt": "2026-04-07T21:52:05.786Z",
+      "durationMs": 18588,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/015-www-muffins-ai-es-mx-customer-stories.webp",
+          "durationMs": 16840
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/015-www-muffins-ai-es-mx-customer-stories.webp",
+          "durationMs": 18577
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/customer-stories",
+      "index": 15,
+      "slug": "016-www-muffins-ai-customer-stories",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:51:50.633Z",
+      "finishedAt": "2026-04-07T21:52:07.874Z",
+      "durationMs": 17241,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/016-www-muffins-ai-customer-stories.webp",
+          "durationMs": 16503
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/016-www-muffins-ai-customer-stories.webp",
+          "durationMs": 17227
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers",
+      "index": 16,
+      "slug": "017-www-muffins-ai-es-mx-careers",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:52:05.786Z",
+      "finishedAt": "2026-04-07T21:52:19.972Z",
+      "durationMs": 14186,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/017-www-muffins-ai-es-mx-careers.webp",
+          "durationMs": 14182
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/017-www-muffins-ai-es-mx-careers.webp",
+          "durationMs": 7936
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers",
+      "index": 17,
+      "slug": "018-www-muffins-ai-careers",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:52:07.874Z",
+      "finishedAt": "2026-04-07T21:52:21.252Z",
+      "durationMs": 13378,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/018-www-muffins-ai-careers.webp",
+          "durationMs": 13361
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/018-www-muffins-ai-careers.webp",
+          "durationMs": 9904
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/event-webinar",
+      "index": 18,
+      "slug": "019-www-muffins-ai-es-mx-event-webinar",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:52:19.972Z",
+      "finishedAt": "2026-04-07T21:52:33.454Z",
+      "durationMs": 13482,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/019-www-muffins-ai-es-mx-event-webinar.webp",
+          "durationMs": 13480
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/019-www-muffins-ai-es-mx-event-webinar.webp",
+          "durationMs": 11431
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/event-webinar",
+      "index": 19,
+      "slug": "020-www-muffins-ai-event-webinar",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:52:21.252Z",
+      "finishedAt": "2026-04-07T21:52:29.223Z",
+      "durationMs": 7971,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/020-www-muffins-ai-event-webinar.webp",
+          "durationMs": 7964
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/020-www-muffins-ai-event-webinar.webp",
+          "durationMs": 5048
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/contact",
+      "index": 20,
+      "slug": "021-www-muffins-ai-es-mx-contact",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:52:29.223Z",
+      "finishedAt": "2026-04-07T21:52:49.298Z",
+      "durationMs": 20075,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/021-www-muffins-ai-es-mx-contact.webp",
+          "durationMs": 20072
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/021-www-muffins-ai-es-mx-contact.webp",
+          "durationMs": 7184
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/contact",
+      "index": 21,
+      "slug": "022-www-muffins-ai-contact",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:52:33.454Z",
+      "finishedAt": "2026-04-07T21:52:45.140Z",
+      "durationMs": 11686,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/022-www-muffins-ai-contact.webp",
+          "durationMs": 11677
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/022-www-muffins-ai-contact.webp",
+          "durationMs": 8451
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/solutions/startups",
+      "index": 22,
+      "slug": "023-www-muffins-ai-es-mx-solutions-startups",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:52:45.140Z",
+      "finishedAt": "2026-04-07T21:53:04.025Z",
+      "durationMs": 18885,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/023-www-muffins-ai-es-mx-solutions-startups.webp",
+          "durationMs": 17393
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/023-www-muffins-ai-es-mx-solutions-startups.webp",
+          "durationMs": 18878
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/solutions/startups",
+      "index": 23,
+      "slug": "024-www-muffins-ai-solutions-startups",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:52:49.298Z",
+      "finishedAt": "2026-04-07T21:53:07.089Z",
+      "durationMs": 17791,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/024-www-muffins-ai-solutions-startups.webp",
+          "durationMs": 17607
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/024-www-muffins-ai-solutions-startups.webp",
+          "durationMs": 17783
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs",
+      "index": 24,
+      "slug": "025-www-muffins-ai-es-mx-blogs",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:04.025Z",
+      "finishedAt": "2026-04-07T21:53:37.759Z",
+      "durationMs": 33734,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/025-www-muffins-ai-es-mx-blogs.webp",
+          "durationMs": 33201
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/025-www-muffins-ai-es-mx-blogs.webp",
+          "durationMs": 22040
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs",
+      "index": 25,
+      "slug": "026-www-muffins-ai-blogs",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:07.089Z",
+      "finishedAt": "2026-04-07T21:53:31.084Z",
+      "durationMs": 23995,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/026-www-muffins-ai-blogs.webp",
+          "durationMs": 17907
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/026-www-muffins-ai-blogs.webp",
+          "durationMs": 23721
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/solutions/product-owners",
+      "index": 26,
+      "slug": "027-www-muffins-ai-es-mx-solutions-product-owners",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:13.655Z",
+      "finishedAt": "2026-04-07T21:53:34.581Z",
+      "durationMs": 20926,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/027-www-muffins-ai-es-mx-solutions-product-owners.webp",
+          "durationMs": 17420
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/027-www-muffins-ai-es-mx-solutions-product-owners.webp",
+          "durationMs": 20081
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/solutions/product-owners",
+      "index": 27,
+      "slug": "028-www-muffins-ai-solutions-product-owners",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:15.652Z",
+      "finishedAt": "2026-04-07T21:53:34.585Z",
+      "durationMs": 18933,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/028-www-muffins-ai-solutions-product-owners.webp",
+          "durationMs": 18925
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/028-www-muffins-ai-solutions-product-owners.webp",
+          "durationMs": 16716
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/solutions/quality-engineers",
+      "index": 28,
+      "slug": "029-www-muffins-ai-es-mx-solutions-quality-engineers",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:28.755Z",
+      "finishedAt": "2026-04-07T21:53:47.718Z",
+      "durationMs": 18963,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/029-www-muffins-ai-es-mx-solutions-quality-engineers.webp",
+          "durationMs": 16821
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/029-www-muffins-ai-es-mx-solutions-quality-engineers.webp",
+          "durationMs": 18438
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/solutions/quality-engineers",
+      "index": 29,
+      "slug": "030-www-muffins-ai-solutions-quality-engineers",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:30.816Z",
+      "finishedAt": "2026-04-07T21:53:49.448Z",
+      "durationMs": 18632,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/030-www-muffins-ai-solutions-quality-engineers.webp",
+          "durationMs": 18331
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/030-www-muffins-ai-solutions-quality-engineers.webp",
+          "durationMs": 18627
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/integrations",
+      "index": 30,
+      "slug": "031-www-muffins-ai-es-mx-integrations",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:31.084Z",
+      "finishedAt": "2026-04-07T21:53:45.900Z",
+      "durationMs": 14816,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/031-www-muffins-ai-es-mx-integrations.webp",
+          "durationMs": 14814
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/031-www-muffins-ai-es-mx-integrations.webp",
+          "durationMs": 9040
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/integrations",
+      "index": 31,
+      "slug": "032-www-muffins-ai-integrations",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:34.581Z",
+      "finishedAt": "2026-04-07T21:54:07.433Z",
+      "durationMs": 32852,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/032-www-muffins-ai-integrations.webp",
+          "durationMs": 14739
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/032-www-muffins-ai-integrations.webp",
+          "durationMs": 32200
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/about",
+      "index": 32,
+      "slug": "033-www-muffins-ai-es-mx-about",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:34.586Z",
+      "finishedAt": "2026-04-07T21:53:58.563Z",
+      "durationMs": 23977,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/033-www-muffins-ai-es-mx-about.webp",
+          "durationMs": 19982
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/033-www-muffins-ai-es-mx-about.webp",
+          "durationMs": 23974
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/about",
+      "index": 33,
+      "slug": "034-www-muffins-ai-about",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:37.759Z",
+      "finishedAt": "2026-04-07T21:53:59.937Z",
+      "durationMs": 22178,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/034-www-muffins-ai-about.webp",
+          "durationMs": 17864
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/034-www-muffins-ai-about.webp",
+          "durationMs": 22169
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/solutions/project-management-leads",
+      "index": 34,
+      "slug": "035-www-muffins-ai-es-mx-solutions-project-management-leads",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:45.900Z",
+      "finishedAt": "2026-04-07T21:54:05.533Z",
+      "durationMs": 19633,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/035-www-muffins-ai-es-mx-solutions-project-management-leads.webp",
+          "durationMs": 17862
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/035-www-muffins-ai-es-mx-solutions-project-management-leads.webp",
+          "durationMs": 19631
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/solutions/project-management-leads",
+      "index": 35,
+      "slug": "036-www-muffins-ai-solutions-project-management-leads",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:47.719Z",
+      "finishedAt": "2026-04-07T21:54:08.849Z",
+      "durationMs": 21130,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/036-www-muffins-ai-solutions-project-management-leads.webp",
+          "durationMs": 17354
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/036-www-muffins-ai-solutions-project-management-leads.webp",
+          "durationMs": 21089
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/privacy-policy",
+      "index": 36,
+      "slug": "037-www-muffins-ai-es-mx-privacy-policy",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:49.448Z",
+      "finishedAt": "2026-04-07T21:54:01.802Z",
+      "durationMs": 12354,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/037-www-muffins-ai-es-mx-privacy-policy.webp",
+          "durationMs": 11807
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/037-www-muffins-ai-es-mx-privacy-policy.webp",
+          "durationMs": 7753
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/privacy-policy",
+      "index": 37,
+      "slug": "038-www-muffins-ai-privacy-policy",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:58.563Z",
+      "finishedAt": "2026-04-07T21:54:14.258Z",
+      "durationMs": 15695,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/038-www-muffins-ai-privacy-policy.webp",
+          "durationMs": 15690
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/038-www-muffins-ai-privacy-policy.webp",
+          "durationMs": 8864
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/start-free-trial",
+      "index": 38,
+      "slug": "039-www-muffins-ai-es-mx-start-free-trial",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:53:59.937Z",
+      "finishedAt": "2026-04-07T21:54:16.179Z",
+      "durationMs": 16242,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/039-www-muffins-ai-es-mx-start-free-trial.webp",
+          "durationMs": 15672
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/039-www-muffins-ai-es-mx-start-free-trial.webp",
+          "durationMs": 7570
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/start-free-trial",
+      "index": 39,
+      "slug": "040-www-muffins-ai-start-free-trial",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:01.803Z",
+      "finishedAt": "2026-04-07T21:54:21.045Z",
+      "durationMs": 19242,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/040-www-muffins-ai-start-free-trial.webp",
+          "durationMs": 19231
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/040-www-muffins-ai-start-free-trial.webp",
+          "durationMs": 8285
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/pricing",
+      "index": 40,
+      "slug": "041-www-muffins-ai-es-mx-pricing",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:05.534Z",
+      "finishedAt": "2026-04-07T21:54:21.038Z",
+      "durationMs": 15504,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/041-www-muffins-ai-es-mx-pricing.webp",
+          "durationMs": 15356
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/041-www-muffins-ai-es-mx-pricing.webp",
+          "durationMs": 5563
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/pricing",
+      "index": 41,
+      "slug": "042-www-muffins-ai-pricing",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:07.433Z",
+      "finishedAt": "2026-04-07T21:54:23.759Z",
+      "durationMs": 16326,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/042-www-muffins-ai-pricing.webp",
+          "durationMs": 16310
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/042-www-muffins-ai-pricing.webp",
+          "durationMs": 6060
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/an-automation-experts-view-muffins-makes-test-automation-inclusive-intelligent-and-easy",
+      "index": 42,
+      "slug": "043-www-muffins-ai-blogs-an-automation-experts-view-muffins-makes-test-automation-inclusive-in",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:08.849Z",
+      "finishedAt": "2026-04-07T21:54:33.012Z",
+      "durationMs": 24163,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/043-www-muffins-ai-blogs-an-automation-experts-view-muffins-makes-test-automation-inclusive-in.webp",
+          "durationMs": 24154
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/043-www-muffins-ai-blogs-an-automation-experts-view-muffins-makes-test-automation-inclusive-in.webp",
+          "durationMs": 23735
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/la-vision-de-un-experto-en-automatizacion-muffins-hace-que-la-automatizacion-de-pruebas-sea-inclusiva-inteligente-y-sencilla",
+      "index": 43,
+      "slug": "044-www-muffins-ai-es-mx-blogs-la-vision-de-un-experto-en-automatizacion-muffins-hace-que-la-a",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:14.258Z",
+      "finishedAt": "2026-04-07T21:54:38.639Z",
+      "durationMs": 24381,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/044-www-muffins-ai-es-mx-blogs-la-vision-de-un-experto-en-automatizacion-muffins-hace-que-la-a.webp",
+          "durationMs": 19192
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/044-www-muffins-ai-es-mx-blogs-la-vision-de-un-experto-en-automatizacion-muffins-hace-que-la-a.webp",
+          "durationMs": 24333
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/beyond-selenium-playwright-muffins-brings-no-code-simplicity-to-test-automation",
+      "index": 44,
+      "slug": "045-www-muffins-ai-blogs-beyond-selenium-playwright-muffins-brings-no-code-simplicity-to-test-",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:16.180Z",
+      "finishedAt": "2026-04-07T21:55:16.684Z",
+      "durationMs": 60504,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/045-www-muffins-ai-blogs-beyond-selenium-playwright-muffins-brings-no-code-simplicity-to-test-.webp",
+          "durationMs": 33124
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/045-www-muffins-ai-blogs-beyond-selenium-playwright-muffins-brings-no-code-simplicity-to-test-.webp",
+          "durationMs": 60338
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/mas-alla-de-selenium-y-playwright-muffins-ofrece-simplicidad-sin-codigo-para-la-automatizacion-de-pruebas",
+      "index": 45,
+      "slug": "046-www-muffins-ai-es-mx-blogs-mas-alla-de-selenium-y-playwright-muffins-ofrece-simplicidad-si",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:21.038Z",
+      "finishedAt": "2026-04-07T21:54:54.113Z",
+      "durationMs": 33075,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/046-www-muffins-ai-es-mx-blogs-mas-alla-de-selenium-y-playwright-muffins-ofrece-simplicidad-si.webp",
+          "durationMs": 33066
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/046-www-muffins-ai-es-mx-blogs-mas-alla-de-selenium-y-playwright-muffins-ofrece-simplicidad-si.webp",
+          "durationMs": 24869
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/built-custom-made-seamless-document-and-custom-text-verification-for-a-top-mexican-manufacturer",
+      "index": 46,
+      "slug": "047-www-muffins-ai-blogs-built-custom-made-seamless-document-and-custom-text-verification-for-",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:21.045Z",
+      "finishedAt": "2026-04-07T21:54:56.738Z",
+      "durationMs": 35693,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/047-www-muffins-ai-blogs-built-custom-made-seamless-document-and-custom-text-verification-for-.webp",
+          "durationMs": 17230
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/047-www-muffins-ai-blogs-built-custom-made-seamless-document-and-custom-text-verification-for-.webp",
+          "durationMs": 35344
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/verificacion-personalizada-de-documentos-y-texto-para-fabricantes-establecidos-en-mexico-de-alto-nivel",
+      "index": 47,
+      "slug": "048-www-muffins-ai-es-mx-blogs-verificacion-personalizada-de-documentos-y-texto-para-fabricant",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:23.760Z",
+      "finishedAt": "2026-04-07T21:54:56.412Z",
+      "durationMs": 32652,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/048-www-muffins-ai-es-mx-blogs-verificacion-personalizada-de-documentos-y-texto-para-fabricant.webp",
+          "durationMs": 31872
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/048-www-muffins-ai-es-mx-blogs-verificacion-personalizada-de-documentos-y-texto-para-fabricant.webp",
+          "durationMs": 18638
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/how-is-muffins-simplifying-and-scaling-qa-for-fast-paced-startups",
+      "index": 48,
+      "slug": "049-www-muffins-ai-blogs-how-is-muffins-simplifying-and-scaling-qa-for-fast-paced-startups",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:33.012Z",
+      "finishedAt": "2026-04-07T21:55:07.092Z",
+      "durationMs": 34080,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/049-www-muffins-ai-blogs-how-is-muffins-simplifying-and-scaling-qa-for-fast-paced-startups.webp",
+          "durationMs": 34063
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/049-www-muffins-ai-blogs-how-is-muffins-simplifying-and-scaling-qa-for-fast-paced-startups.webp",
+          "durationMs": 23706
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/how-is-muffins-simplifying-and-scaling-qa-for-fast-paced-startups",
+      "index": 49,
+      "slug": "050-www-muffins-ai-es-mx-blogs-how-is-muffins-simplifying-and-scaling-qa-for-fast-paced-startu",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:38.639Z",
+      "finishedAt": "2026-04-07T21:55:12.979Z",
+      "durationMs": 34340,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/050-www-muffins-ai-es-mx-blogs-how-is-muffins-simplifying-and-scaling-qa-for-fast-paced-startu.webp",
+          "durationMs": 34298
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/050-www-muffins-ai-es-mx-blogs-how-is-muffins-simplifying-and-scaling-qa-for-fast-paced-startu.webp",
+          "durationMs": 26126
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/implementacion-de-qa-estructurado-y-trazable-para-el-sistema-de-reembolso-masivo-de-boletos-de-una-empresa-lider-en-entretenimiento-en-mexico",
+      "index": 50,
+      "slug": "051-www-muffins-ai-es-mx-blogs-implementacion-de-qa-estructurado-y-trazable-para-el-sistema-de",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:54.114Z",
+      "finishedAt": "2026-04-07T21:55:14.518Z",
+      "durationMs": 20404,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/051-www-muffins-ai-es-mx-blogs-implementacion-de-qa-estructurado-y-trazable-para-el-sistema-de.webp",
+          "durationMs": 16932
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/051-www-muffins-ai-es-mx-blogs-implementacion-de-qa-estructurado-y-trazable-para-el-sistema-de.webp",
+          "durationMs": 20324
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/implemented-structured-traceable-qa-for-a-top-mexican-entertainment-ticketing-companys-mass-ticket-refund-system",
+      "index": 51,
+      "slug": "052-www-muffins-ai-blogs-implemented-structured-traceable-qa-for-a-top-mexican-entertainment-t",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:56.413Z",
+      "finishedAt": "2026-04-07T21:55:30.396Z",
+      "durationMs": 33983,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/052-www-muffins-ai-blogs-implemented-structured-traceable-qa-for-a-top-mexican-entertainment-t.webp",
+          "durationMs": 19716
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/052-www-muffins-ai-blogs-implemented-structured-traceable-qa-for-a-top-mexican-entertainment-t.webp",
+          "durationMs": 33963
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/la-perspectiva-de-muffins-por-que-el-design-thinking-es-esencial-para-el-exito-agil-parte-1",
+      "index": 52,
+      "slug": "053-www-muffins-ai-es-mx-blogs-la-perspectiva-de-muffins-por-que-el-design-thinking-es-esencia",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:54:56.738Z",
+      "finishedAt": "2026-04-07T21:55:33.011Z",
+      "durationMs": 36273,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/053-www-muffins-ai-es-mx-blogs-la-perspectiva-de-muffins-por-que-el-design-thinking-es-esencia.webp",
+          "durationMs": 35330
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/053-www-muffins-ai-es-mx-blogs-la-perspectiva-de-muffins-por-que-el-design-thinking-es-esencia.webp",
+          "durationMs": 25630
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/muffins-perspective-why-design-thinking-essential-for-agile-success-part-1",
+      "index": 53,
+      "slug": "054-www-muffins-ai-blogs-muffins-perspective-why-design-thinking-essential-for-agile-success-p",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:55:07.092Z",
+      "finishedAt": "2026-04-07T21:55:41.197Z",
+      "durationMs": 34105,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/054-www-muffins-ai-blogs-muffins-perspective-why-design-thinking-essential-for-agile-success-p.webp",
+          "durationMs": 33977
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/054-www-muffins-ai-blogs-muffins-perspective-why-design-thinking-essential-for-agile-success-p.webp",
+          "durationMs": 25868
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/las-grandes-tendencias-que-estan-moldeando-las-pruebas-de-software-y-el-aseguramiento-de-la-calidad-en-2025",
+      "index": 54,
+      "slug": "055-www-muffins-ai-es-mx-blogs-las-grandes-tendencias-que-estan-moldeando-las-pruebas-de-softw",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:55:12.979Z",
+      "finishedAt": "2026-04-07T21:55:57.340Z",
+      "durationMs": 44361,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/055-www-muffins-ai-es-mx-blogs-las-grandes-tendencias-que-estan-moldeando-las-pruebas-de-softw.webp",
+          "durationMs": 22922
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/055-www-muffins-ai-es-mx-blogs-las-grandes-tendencias-que-estan-moldeando-las-pruebas-de-softw.webp",
+          "durationMs": 44299
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/the-big-trends-shaping-software-testing-and-quality-assurance-in-2025",
+      "index": 55,
+      "slug": "056-www-muffins-ai-blogs-the-big-trends-shaping-software-testing-and-quality-assurance-in-2025",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:55:14.519Z",
+      "finishedAt": "2026-04-07T21:56:07.269Z",
+      "durationMs": 52750,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/056-www-muffins-ai-blogs-the-big-trends-shaping-software-testing-and-quality-assurance-in-2025.webp",
+          "durationMs": 38944
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/056-www-muffins-ai-blogs-the-big-trends-shaping-software-testing-and-quality-assurance-in-2025.webp",
+          "durationMs": 52697
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/manual-testing-automated-testing-hybrid-testing-in-software-quality-assurance",
+      "index": 56,
+      "slug": "057-www-muffins-ai-blogs-manual-testing-automated-testing-hybrid-testing-in-software-quality-a",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:55:16.684Z",
+      "finishedAt": "2026-04-07T21:55:47.482Z",
+      "durationMs": 30798,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/057-www-muffins-ai-blogs-manual-testing-automated-testing-hybrid-testing-in-software-quality-a.webp",
+          "durationMs": 30720
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/057-www-muffins-ai-blogs-manual-testing-automated-testing-hybrid-testing-in-software-quality-a.webp",
+          "durationMs": 30096
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/pruebas-manuales-automatizadas-e-hibridas-en-la-aseguramiento-de-la-calidad-de-software",
+      "index": 57,
+      "slug": "058-www-muffins-ai-es-mx-blogs-pruebas-manuales-automatizadas-e-hibridas-en-la-aseguramiento-d",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:55:30.396Z",
+      "finishedAt": "2026-04-07T21:55:54.970Z",
+      "durationMs": 24574,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/058-www-muffins-ai-es-mx-blogs-pruebas-manuales-automatizadas-e-hibridas-en-la-aseguramiento-d.webp",
+          "durationMs": 20435
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/058-www-muffins-ai-es-mx-blogs-pruebas-manuales-automatizadas-e-hibridas-en-la-aseguramiento-d.webp",
+          "durationMs": 24561
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/muffins-perspective-why-design-thinking-essential-for-agile-success-part-2",
+      "index": 58,
+      "slug": "059-www-muffins-ai-blogs-muffins-perspective-why-design-thinking-essential-for-agile-success-p",
+      "status": "success",
+      "attempts": 2,
+      "startedAt": "2026-04-07T21:56:19.798Z",
+      "finishedAt": "2026-04-07T21:56:59.958Z",
+      "durationMs": 40160,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/059-www-muffins-ai-blogs-muffins-perspective-why-design-thinking-essential-for-agile-success-p.webp",
+          "durationMs": 21926
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/059-www-muffins-ai-blogs-muffins-perspective-why-design-thinking-essential-for-agile-success-p.webp",
+          "durationMs": 40149
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/muffins-perspective-why-design-thinking-essential-for-agile-success-part-2",
+      "index": 59,
+      "slug": "060-www-muffins-ai-es-mx-blogs-muffins-perspective-why-design-thinking-essential-for-agile-suc",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:55:41.197Z",
+      "finishedAt": "2026-04-07T21:56:19.811Z",
+      "durationMs": 38614,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/060-www-muffins-ai-es-mx-blogs-muffins-perspective-why-design-thinking-essential-for-agile-suc.webp",
+          "durationMs": 38575
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/060-www-muffins-ai-es-mx-blogs-muffins-perspective-why-design-thinking-essential-for-agile-suc.webp",
+          "durationMs": 29782
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/muffins-reusable-test-blocks-built-for-reusability-speed-scale-and-collaboration",
+      "index": 60,
+      "slug": "061-www-muffins-ai-blogs-muffins-reusable-test-blocks-built-for-reusability-speed-scale-and-co",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:55:47.483Z",
+      "finishedAt": "2026-04-07T21:56:27.768Z",
+      "durationMs": 40285,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/061-www-muffins-ai-blogs-muffins-reusable-test-blocks-built-for-reusability-speed-scale-and-co.webp",
+          "durationMs": 40235
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/061-www-muffins-ai-blogs-muffins-reusable-test-blocks-built-for-reusability-speed-scale-and-co.webp",
+          "durationMs": 35340
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/muffins-reusable-test-blocks-built-for-reusability-speed-scale-and-collaboration",
+      "index": 61,
+      "slug": "062-www-muffins-ai-es-mx-blogs-muffins-reusable-test-blocks-built-for-reusability-speed-scale-",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:55:54.970Z",
+      "finishedAt": "2026-04-07T21:56:27.741Z",
+      "durationMs": 32771,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/062-www-muffins-ai-es-mx-blogs-muffins-reusable-test-blocks-built-for-reusability-speed-scale-.webp",
+          "durationMs": 31546
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/062-www-muffins-ai-es-mx-blogs-muffins-reusable-test-blocks-built-for-reusability-speed-scale-.webp",
+          "durationMs": 31971
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/scalable-qa-with-built-in-data-parameterization-muffins",
+      "index": 62,
+      "slug": "063-www-muffins-ai-blogs-scalable-qa-with-built-in-data-parameterization-muffins",
+      "status": "success",
+      "attempts": 2,
+      "startedAt": "2026-04-07T21:56:43.687Z",
+      "finishedAt": "2026-04-07T21:57:19.158Z",
+      "durationMs": 35471,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/063-www-muffins-ai-blogs-scalable-qa-with-built-in-data-parameterization-muffins.webp",
+          "durationMs": 35400
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/063-www-muffins-ai-blogs-scalable-qa-with-built-in-data-parameterization-muffins.webp",
+          "durationMs": 26935
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/scalable-qa-with-built-in-data-parameterization-muffins",
+      "index": 63,
+      "slug": "064-www-muffins-ai-es-mx-blogs-scalable-qa-with-built-in-data-parameterization-muffins",
+      "status": "success",
+      "attempts": 2,
+      "startedAt": "2026-04-07T21:56:57.153Z",
+      "finishedAt": "2026-04-07T21:57:20.928Z",
+      "durationMs": 23775,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/064-www-muffins-ai-es-mx-blogs-scalable-qa-with-built-in-data-parameterization-muffins.webp",
+          "durationMs": 19476
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/064-www-muffins-ai-es-mx-blogs-scalable-qa-with-built-in-data-parameterization-muffins.webp",
+          "durationMs": 23754
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/smarter-verification-object-management-with-muffins",
+      "index": 64,
+      "slug": "065-www-muffins-ai-blogs-smarter-verification-object-management-with-muffins",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:56:19.811Z",
+      "finishedAt": "2026-04-07T21:56:49.721Z",
+      "durationMs": 29910,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/065-www-muffins-ai-blogs-smarter-verification-object-management-with-muffins.webp",
+          "durationMs": 25479
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/065-www-muffins-ai-blogs-smarter-verification-object-management-with-muffins.webp",
+          "durationMs": 29902
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/smarter-verification-object-management-with-muffins",
+      "index": 65,
+      "slug": "066-www-muffins-ai-es-mx-blogs-smarter-verification-object-management-with-muffins",
+      "status": "success",
+      "attempts": 2,
+      "startedAt": "2026-04-07T21:57:14.589Z",
+      "finishedAt": "2026-04-07T21:57:52.956Z",
+      "durationMs": 38367,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/066-www-muffins-ai-es-mx-blogs-smarter-verification-object-management-with-muffins.webp",
+          "durationMs": 33729
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/066-www-muffins-ai-es-mx-blogs-smarter-verification-object-management-with-muffins.webp",
+          "durationMs": 38359
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/superior-test-designs-with-muffins-intelligent-design-studio",
+      "index": 66,
+      "slug": "067-www-muffins-ai-blogs-superior-test-designs-with-muffins-intelligent-design-studio",
+      "status": "success",
+      "attempts": 2,
+      "startedAt": "2026-04-07T21:57:17.270Z",
+      "finishedAt": "2026-04-07T21:57:54.972Z",
+      "durationMs": 37702,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/067-www-muffins-ai-blogs-superior-test-designs-with-muffins-intelligent-design-studio.webp",
+          "durationMs": 18671
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/067-www-muffins-ai-blogs-superior-test-designs-with-muffins-intelligent-design-studio.webp",
+          "durationMs": 37515
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/superior-test-designs-with-muffins-intelligent-design-studio",
+      "index": 67,
+      "slug": "068-www-muffins-ai-es-mx-blogs-superior-test-designs-with-muffins-intelligent-design-studio",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:56:49.721Z",
+      "finishedAt": "2026-04-07T21:57:10.916Z",
+      "durationMs": 21195,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/068-www-muffins-ai-es-mx-blogs-superior-test-designs-with-muffins-intelligent-design-studio.webp",
+          "durationMs": 17408
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/068-www-muffins-ai-es-mx-blogs-superior-test-designs-with-muffins-intelligent-design-studio.webp",
+          "durationMs": 21182
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/transicion-a-la-automatizacion-de-pruebas-hecha-facil-para-testers-manuales-muffins",
+      "index": 68,
+      "slug": "069-www-muffins-ai-es-mx-blogs-transicion-a-la-automatizacion-de-pruebas-hecha-facil-para-test",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:56:59.958Z",
+      "finishedAt": "2026-04-07T21:57:34.049Z",
+      "durationMs": 34091,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/069-www-muffins-ai-es-mx-blogs-transicion-a-la-automatizacion-de-pruebas-hecha-facil-para-test.webp",
+          "durationMs": 34084
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/069-www-muffins-ai-es-mx-blogs-transicion-a-la-automatizacion-de-pruebas-hecha-facil-para-test.webp",
+          "durationMs": 24276
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/transition-to-test-automation-made-easy-for-manual-testers-muffins",
+      "index": 69,
+      "slug": "070-www-muffins-ai-blogs-transition-to-test-automation-made-easy-for-manual-testers-muffins",
+      "status": "success",
+      "attempts": 2,
+      "startedAt": "2026-04-07T21:57:59.512Z",
+      "finishedAt": "2026-04-07T21:58:37.443Z",
+      "durationMs": 37931,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/070-www-muffins-ai-blogs-transition-to-test-automation-made-easy-for-manual-testers-muffins.webp",
+          "durationMs": 34644
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/070-www-muffins-ai-blogs-transition-to-test-automation-made-easy-for-manual-testers-muffins.webp",
+          "durationMs": 37925
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/blogs/why-enterprises-need-muffins-the-preventive-no-code-qa-that-can-stop-software-outages",
+      "index": 70,
+      "slug": "071-www-muffins-ai-blogs-why-enterprises-need-muffins-the-preventive-no-code-qa-that-can-stop-",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:57:19.158Z",
+      "finishedAt": "2026-04-07T21:57:59.547Z",
+      "durationMs": 40389,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/071-www-muffins-ai-blogs-why-enterprises-need-muffins-the-preventive-no-code-qa-that-can-stop-.webp",
+          "durationMs": 35303
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/071-www-muffins-ai-blogs-why-enterprises-need-muffins-the-preventive-no-code-qa-that-can-stop-.webp",
+          "durationMs": 39009
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/blogs/why-enterprises-need-muffins-the-preventive-no-code-qa-that-can-stop-software-outages",
+      "index": 71,
+      "slug": "072-www-muffins-ai-es-mx-blogs-why-enterprises-need-muffins-the-preventive-no-code-qa-that-can",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:57:20.928Z",
+      "finishedAt": "2026-04-07T21:57:56.596Z",
+      "durationMs": 35668,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/072-www-muffins-ai-es-mx-blogs-why-enterprises-need-muffins-the-preventive-no-code-qa-that-can.webp",
+          "durationMs": 34510
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/072-www-muffins-ai-es-mx-blogs-why-enterprises-need-muffins-the-preventive-no-code-qa-that-can.webp",
+          "durationMs": 23357
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/architect---test-complete",
+      "index": 72,
+      "slug": "073-www-muffins-ai-careers-architect-test-complete",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:57:34.049Z",
+      "finishedAt": "2026-04-07T21:57:44.945Z",
+      "durationMs": 10896,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/073-www-muffins-ai-careers-architect-test-complete.webp",
+          "durationMs": 10884
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/073-www-muffins-ai-careers-architect-test-complete.webp",
+          "durationMs": 7343
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/architect---test-complete",
+      "index": 73,
+      "slug": "074-www-muffins-ai-es-mx-careers-architect-test-complete",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:57:44.945Z",
+      "finishedAt": "2026-04-07T21:57:55.446Z",
+      "durationMs": 10501,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/074-www-muffins-ai-es-mx-careers-architect-test-complete.webp",
+          "durationMs": 10019
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/074-www-muffins-ai-es-mx-careers-architect-test-complete.webp",
+          "durationMs": 5948
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/gen-ai-developer",
+      "index": 74,
+      "slug": "075-www-muffins-ai-careers-gen-ai-developer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:57:52.956Z",
+      "finishedAt": "2026-04-07T21:58:10.641Z",
+      "durationMs": 17685,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/075-www-muffins-ai-careers-gen-ai-developer.webp",
+          "durationMs": 17682
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/075-www-muffins-ai-careers-gen-ai-developer.webp",
+          "durationMs": 13129
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/gen-ai-developer",
+      "index": 75,
+      "slug": "076-www-muffins-ai-es-mx-careers-gen-ai-developer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:57:54.973Z",
+      "finishedAt": "2026-04-07T21:58:32.414Z",
+      "durationMs": 37441,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/076-www-muffins-ai-es-mx-careers-gen-ai-developer.webp",
+          "durationMs": 31169
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/076-www-muffins-ai-es-mx-careers-gen-ai-developer.webp",
+          "durationMs": 37436
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/javascript-developer",
+      "index": 76,
+      "slug": "077-www-muffins-ai-careers-javascript-developer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:57:55.446Z",
+      "finishedAt": "2026-04-07T21:58:31.133Z",
+      "durationMs": 35687,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/077-www-muffins-ai-careers-javascript-developer.webp",
+          "durationMs": 34927
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/077-www-muffins-ai-careers-javascript-developer.webp",
+          "durationMs": 35565
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/javascript-developer",
+      "index": 77,
+      "slug": "078-www-muffins-ai-es-mx-careers-javascript-developer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:57:56.596Z",
+      "finishedAt": "2026-04-07T21:58:15.582Z",
+      "durationMs": 18986,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/078-www-muffins-ai-es-mx-careers-javascript-developer.webp",
+          "durationMs": 16982
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/078-www-muffins-ai-es-mx-careers-javascript-developer.webp",
+          "durationMs": 18982
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/ml-data-scientist",
+      "index": 78,
+      "slug": "079-www-muffins-ai-careers-ml-data-scientist",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:57:59.547Z",
+      "finishedAt": "2026-04-07T21:58:29.041Z",
+      "durationMs": 29494,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/079-www-muffins-ai-careers-ml-data-scientist.webp",
+          "durationMs": 29486
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/079-www-muffins-ai-careers-ml-data-scientist.webp",
+          "durationMs": 21306
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/ml-data-scientist",
+      "index": 79,
+      "slug": "080-www-muffins-ai-es-mx-careers-ml-data-scientist",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:10.641Z",
+      "finishedAt": "2026-04-07T21:58:24.017Z",
+      "durationMs": 13376,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/080-www-muffins-ai-es-mx-careers-ml-data-scientist.webp",
+          "durationMs": 13373
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/080-www-muffins-ai-es-mx-careers-ml-data-scientist.webp",
+          "durationMs": 6139
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/react-js-developer",
+      "index": 80,
+      "slug": "081-www-muffins-ai-careers-react-js-developer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:15.583Z",
+      "finishedAt": "2026-04-07T21:58:26.307Z",
+      "durationMs": 10724,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/081-www-muffins-ai-careers-react-js-developer.webp",
+          "durationMs": 10709
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/081-www-muffins-ai-careers-react-js-developer.webp",
+          "durationMs": 6292
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/react-js-developer",
+      "index": 81,
+      "slug": "082-www-muffins-ai-es-mx-careers-react-js-developer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:24.017Z",
+      "finishedAt": "2026-04-07T21:58:50.184Z",
+      "durationMs": 26167,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/082-www-muffins-ai-es-mx-careers-react-js-developer.webp",
+          "durationMs": 26164
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/082-www-muffins-ai-es-mx-careers-react-js-developer.webp",
+          "durationMs": 7107
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/selenium-architect",
+      "index": 82,
+      "slug": "083-www-muffins-ai-careers-selenium-architect",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:26.307Z",
+      "finishedAt": "2026-04-07T21:58:51.531Z",
+      "durationMs": 25224,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/083-www-muffins-ai-careers-selenium-architect.webp",
+          "durationMs": 25188
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/083-www-muffins-ai-careers-selenium-architect.webp",
+          "durationMs": 17460
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/selenium-architect",
+      "index": 83,
+      "slug": "084-www-muffins-ai-es-mx-careers-selenium-architect",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:29.041Z",
+      "finishedAt": "2026-04-07T21:58:58.166Z",
+      "durationMs": 29125,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/084-www-muffins-ai-es-mx-careers-selenium-architect.webp",
+          "durationMs": 29122
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/084-www-muffins-ai-es-mx-careers-selenium-architect.webp",
+          "durationMs": 6752
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/senior-sw-test-engineer",
+      "index": 84,
+      "slug": "085-www-muffins-ai-careers-senior-sw-test-engineer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:31.134Z",
+      "finishedAt": "2026-04-07T21:59:03.065Z",
+      "durationMs": 31931,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/085-www-muffins-ai-careers-senior-sw-test-engineer.webp",
+          "durationMs": 30764
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/085-www-muffins-ai-careers-senior-sw-test-engineer.webp",
+          "durationMs": 31925
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/senior-sw-test-engineer",
+      "index": 85,
+      "slug": "086-www-muffins-ai-es-mx-careers-senior-sw-test-engineer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:32.414Z",
+      "finishedAt": "2026-04-07T21:59:03.061Z",
+      "durationMs": 30647,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/086-www-muffins-ai-es-mx-careers-senior-sw-test-engineer.webp",
+          "durationMs": 30536
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/086-www-muffins-ai-es-mx-careers-senior-sw-test-engineer.webp",
+          "durationMs": 7992
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/senior-test-automation-engineer",
+      "index": 86,
+      "slug": "087-www-muffins-ai-careers-senior-test-automation-engineer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:37.443Z",
+      "finishedAt": "2026-04-07T21:58:52.827Z",
+      "durationMs": 15384,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/087-www-muffins-ai-careers-senior-test-automation-engineer.webp",
+          "durationMs": 15376
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/087-www-muffins-ai-careers-senior-test-automation-engineer.webp",
+          "durationMs": 10307
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/senior-test-automation-engineer",
+      "index": 87,
+      "slug": "088-www-muffins-ai-es-mx-careers-senior-test-automation-engineer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:50.184Z",
+      "finishedAt": "2026-04-07T21:59:05.578Z",
+      "durationMs": 15394,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/088-www-muffins-ai-es-mx-careers-senior-test-automation-engineer.webp",
+          "durationMs": 15388
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/088-www-muffins-ai-es-mx-careers-senior-test-automation-engineer.webp",
+          "durationMs": 7851
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/ui-ux-designer",
+      "index": 88,
+      "slug": "089-www-muffins-ai-careers-ui-ux-designer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:51.531Z",
+      "finishedAt": "2026-04-07T21:59:21.196Z",
+      "durationMs": 29665,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/089-www-muffins-ai-careers-ui-ux-designer.webp",
+          "durationMs": 29565
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/089-www-muffins-ai-careers-ui-ux-designer.webp",
+          "durationMs": 29645
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/ui-ux-designer",
+      "index": 89,
+      "slug": "090-www-muffins-ai-es-mx-careers-ui-ux-designer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:52.828Z",
+      "finishedAt": "2026-04-07T21:59:11.672Z",
+      "durationMs": 18844,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/090-www-muffins-ai-es-mx-careers-ui-ux-designer.webp",
+          "durationMs": 18838
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/090-www-muffins-ai-es-mx-careers-ui-ux-designer.webp",
+          "durationMs": 6547
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/careers/wpf-c-developer",
+      "index": 90,
+      "slug": "091-www-muffins-ai-careers-wpf-c-developer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:58:58.166Z",
+      "finishedAt": "2026-04-07T21:59:15.916Z",
+      "durationMs": 17750,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/091-www-muffins-ai-careers-wpf-c-developer.webp",
+          "durationMs": 17746
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/091-www-muffins-ai-careers-wpf-c-developer.webp",
+          "durationMs": 9439
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/careers/wpf-c-developer",
+      "index": 91,
+      "slug": "092-www-muffins-ai-es-mx-careers-wpf-c-developer",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:03.061Z",
+      "finishedAt": "2026-04-07T21:59:32.616Z",
+      "durationMs": 29555,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/092-www-muffins-ai-es-mx-careers-wpf-c-developer.webp",
+          "durationMs": 29553
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/092-www-muffins-ai-es-mx-careers-wpf-c-developer.webp",
+          "durationMs": 22331
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/customer-stories/a-20b-global-manufacturing-giant-launched-their-complex-productivity-portal-66-faster",
+      "index": 92,
+      "slug": "093-www-muffins-ai-customer-stories-a-20b-global-manufacturing-giant-launched-their-complex-pr",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:03.066Z",
+      "finishedAt": "2026-04-07T21:59:35.145Z",
+      "durationMs": 32079,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/093-www-muffins-ai-customer-stories-a-20b-global-manufacturing-giant-launched-their-complex-pr.webp",
+          "durationMs": 32073
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/093-www-muffins-ai-customer-stories-a-20b-global-manufacturing-giant-launched-their-complex-pr.webp",
+          "durationMs": 19470
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/customer-stories/un-gigante-global-de-la-manufactura-con-ingresos-de-mas-de-20-mil-millones-de-dolares-lanzo-su-complejo-portal-de-productividad-en-solo-6-meses-66-mas-rapido-cero-defectos-criticos",
+      "index": 93,
+      "slug": "094-www-muffins-ai-es-mx-customer-stories-un-gigante-global-de-la-manufactura-con-ingresos-de-",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:05.578Z",
+      "finishedAt": "2026-04-07T21:59:22.978Z",
+      "durationMs": 17400,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/094-www-muffins-ai-es-mx-customer-stories-un-gigante-global-de-la-manufactura-con-ingresos-de-.webp",
+          "durationMs": 15403
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/094-www-muffins-ai-es-mx-customer-stories-un-gigante-global-de-la-manufactura-con-ingresos-de-.webp",
+          "durationMs": 17393
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/customer-stories/a-global-retail-giant-evolved-from-legacy-complexity-to-seamless-operations",
+      "index": 94,
+      "slug": "095-www-muffins-ai-customer-stories-a-global-retail-giant-evolved-from-legacy-complexity-to-se",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:11.672Z",
+      "finishedAt": "2026-04-07T21:59:31.378Z",
+      "durationMs": 19706,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/095-www-muffins-ai-customer-stories-a-global-retail-giant-evolved-from-legacy-complexity-to-se.webp",
+          "durationMs": 19703
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/095-www-muffins-ai-customer-stories-a-global-retail-giant-evolved-from-legacy-complexity-to-se.webp",
+          "durationMs": 18025
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/customer-stories/a-global-retail-giant-evolved-from-legacy-complexity-to-seamless-operations",
+      "index": 95,
+      "slug": "096-www-muffins-ai-es-mx-customer-stories-a-global-retail-giant-evolved-from-legacy-complexity",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:15.916Z",
+      "finishedAt": "2026-04-07T21:59:47.702Z",
+      "durationMs": 31786,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/096-www-muffins-ai-es-mx-customer-stories-a-global-retail-giant-evolved-from-legacy-complexity.webp",
+          "durationMs": 31025
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/096-www-muffins-ai-es-mx-customer-stories-a-global-retail-giant-evolved-from-legacy-complexity.webp",
+          "durationMs": 18081
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/customer-stories/a-leading-mexico-based-entertainment-ticketing-firm-achieved-100-accuracy-in-mass-refunds",
+      "index": 96,
+      "slug": "097-www-muffins-ai-customer-stories-a-leading-mexico-based-entertainment-ticketing-firm-achiev",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:21.196Z",
+      "finishedAt": "2026-04-07T21:59:53.803Z",
+      "durationMs": 32607,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/097-www-muffins-ai-customer-stories-a-leading-mexico-based-entertainment-ticketing-firm-achiev.webp",
+          "durationMs": 30938
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/097-www-muffins-ai-customer-stories-a-leading-mexico-based-entertainment-ticketing-firm-achiev.webp",
+          "durationMs": 32603
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/customer-stories/a-leading-mexico-based-entertainment-ticketing-firm-achieved-100-accuracy-in-mass-refunds",
+      "index": 97,
+      "slug": "098-www-muffins-ai-es-mx-customer-stories-a-leading-mexico-based-entertainment-ticketing-firm-",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:22.978Z",
+      "finishedAt": "2026-04-07T21:59:45.510Z",
+      "durationMs": 22532,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/098-www-muffins-ai-es-mx-customer-stories-a-leading-mexico-based-entertainment-ticketing-firm-.webp",
+          "durationMs": 22528
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/098-www-muffins-ai-es-mx-customer-stories-a-leading-mexico-based-entertainment-ticketing-firm-.webp",
+          "durationMs": 18265
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/customer-stories/a-us-based-blockchain-startup-achieved-90-automation-coverage-and-cut-regression-time",
+      "index": 98,
+      "slug": "099-www-muffins-ai-customer-stories-a-us-based-blockchain-startup-achieved-90-automation-cover",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:31.378Z",
+      "finishedAt": "2026-04-07T22:00:04.930Z",
+      "durationMs": 33552,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/099-www-muffins-ai-customer-stories-a-us-based-blockchain-startup-achieved-90-automation-cover.webp",
+          "durationMs": 16318
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/099-www-muffins-ai-customer-stories-a-us-based-blockchain-startup-achieved-90-automation-cover.webp",
+          "durationMs": 33548
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/customer-stories/a-us-based-blockchain-startup-achieved-90-automation-coverage-and-cut-regression-time",
+      "index": 99,
+      "slug": "100-www-muffins-ai-es-mx-customer-stories-a-us-based-blockchain-startup-achieved-90-automation",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:32.616Z",
+      "finishedAt": "2026-04-07T21:59:50.636Z",
+      "durationMs": 18020,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/100-www-muffins-ai-es-mx-customer-stories-a-us-based-blockchain-startup-achieved-90-automation.webp",
+          "durationMs": 15320
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/100-www-muffins-ai-es-mx-customer-stories-a-us-based-blockchain-startup-achieved-90-automation.webp",
+          "durationMs": 18013
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/customer-stories/a-us-based-entrepreneurship-education-institution-established-their-first-ever-qa---brought-structure-speed-and-scale",
+      "index": 100,
+      "slug": "101-www-muffins-ai-customer-stories-a-us-based-entrepreneurship-education-institution-establis",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:35.145Z",
+      "finishedAt": "2026-04-07T21:59:59.900Z",
+      "durationMs": 24755,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/101-www-muffins-ai-customer-stories-a-us-based-entrepreneurship-education-institution-establis.webp",
+          "durationMs": 22431
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/101-www-muffins-ai-customer-stories-a-us-based-entrepreneurship-education-institution-establis.webp",
+          "durationMs": 24746
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/customer-stories/a-us-based-entrepreneurship-education-institution-established-their-first-ever-qa---brought-structure-speed-and-scale",
+      "index": 101,
+      "slug": "102-www-muffins-ai-es-mx-customer-stories-a-us-based-entrepreneurship-education-institution-es",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:45.510Z",
+      "finishedAt": "2026-04-07T22:00:16.838Z",
+      "durationMs": 31328,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/102-www-muffins-ai-es-mx-customer-stories-a-us-based-entrepreneurship-education-institution-es.webp",
+          "durationMs": 30598
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/102-www-muffins-ai-es-mx-customer-stories-a-us-based-entrepreneurship-education-institution-es.webp",
+          "durationMs": 18134
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/customer-stories/a-wealth-tech-platform-reduced-regression-time-by-75",
+      "index": 102,
+      "slug": "103-www-muffins-ai-customer-stories-a-wealth-tech-platform-reduced-regression-time-by-75",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:47.702Z",
+      "finishedAt": "2026-04-07T22:00:16.851Z",
+      "durationMs": 29149,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/103-www-muffins-ai-customer-stories-a-wealth-tech-platform-reduced-regression-time-by-75.webp",
+          "durationMs": 25145
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/103-www-muffins-ai-customer-stories-a-wealth-tech-platform-reduced-regression-time-by-75.webp",
+          "durationMs": 29131
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/customer-stories/a-wealth-tech-platform-reduced-regression-time-by-75",
+      "index": 103,
+      "slug": "104-www-muffins-ai-es-mx-customer-stories-a-wealth-tech-platform-reduced-regression-time-by-75",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:50.636Z",
+      "finishedAt": "2026-04-07T22:00:22.619Z",
+      "durationMs": 31983,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/104-www-muffins-ai-es-mx-customer-stories-a-wealth-tech-platform-reduced-regression-time-by-75.webp",
+          "durationMs": 31930
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/104-www-muffins-ai-es-mx-customer-stories-a-wealth-tech-platform-reduced-regression-time-by-75.webp",
+          "durationMs": 19297
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/featured-case-studies/banking-financial-services",
+      "index": 104,
+      "slug": "105-www-muffins-ai-featured-case-studies-banking-financial-services",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:53.803Z",
+      "finishedAt": "2026-04-07T22:00:12.960Z",
+      "durationMs": 19157,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/105-www-muffins-ai-featured-case-studies-banking-financial-services.webp",
+          "durationMs": 17636
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/105-www-muffins-ai-featured-case-studies-banking-financial-services.webp",
+          "durationMs": 19142
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/featured-case-studies/banking-financial-services",
+      "index": 105,
+      "slug": "106-www-muffins-ai-es-mx-featured-case-studies-banking-financial-services",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T21:59:59.900Z",
+      "finishedAt": "2026-04-07T22:00:14.542Z",
+      "durationMs": 14642,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/106-www-muffins-ai-es-mx-featured-case-studies-banking-financial-services.webp",
+          "durationMs": 14416
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/106-www-muffins-ai-es-mx-featured-case-studies-banking-financial-services.webp",
+          "durationMs": 14633
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/featured-case-studies/global-footwear-retail-giant",
+      "index": 106,
+      "slug": "107-www-muffins-ai-es-mx-featured-case-studies-global-footwear-retail-giant",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T22:00:04.930Z",
+      "finishedAt": "2026-04-07T22:00:21.113Z",
+      "durationMs": 16183,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/107-www-muffins-ai-es-mx-featured-case-studies-global-footwear-retail-giant.webp",
+          "durationMs": 14994
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/107-www-muffins-ai-es-mx-featured-case-studies-global-footwear-retail-giant.webp",
+          "durationMs": 16171
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/featured-case-studies/global-footwear-retail-giant",
+      "index": 107,
+      "slug": "108-www-muffins-ai-featured-case-studies-global-footwear-retail-giant",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T22:00:12.960Z",
+      "finishedAt": "2026-04-07T22:00:43.736Z",
+      "durationMs": 30776,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/108-www-muffins-ai-featured-case-studies-global-footwear-retail-giant.webp",
+          "durationMs": 29450
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/108-www-muffins-ai-featured-case-studies-global-footwear-retail-giant.webp",
+          "durationMs": 30768
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/featured-case-studies/global-manufacturing-giant",
+      "index": 108,
+      "slug": "109-www-muffins-ai-es-mx-featured-case-studies-global-manufacturing-giant",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T22:00:14.542Z",
+      "finishedAt": "2026-04-07T22:00:43.731Z",
+      "durationMs": 29189,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/109-www-muffins-ai-es-mx-featured-case-studies-global-manufacturing-giant.webp",
+          "durationMs": 29092
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/109-www-muffins-ai-es-mx-featured-case-studies-global-manufacturing-giant.webp",
+          "durationMs": 15411
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/featured-case-studies/global-manufacturing-giant",
+      "index": 109,
+      "slug": "110-www-muffins-ai-featured-case-studies-global-manufacturing-giant",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T22:00:16.838Z",
+      "finishedAt": "2026-04-07T22:00:46.964Z",
+      "durationMs": 30126,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/110-www-muffins-ai-featured-case-studies-global-manufacturing-giant.webp",
+          "durationMs": 29048
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/110-www-muffins-ai-featured-case-studies-global-manufacturing-giant.webp",
+          "durationMs": 30121
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/featured-case-studies/healthcare-medical-devices",
+      "index": 110,
+      "slug": "111-www-muffins-ai-featured-case-studies-healthcare-medical-devices",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T22:00:16.851Z",
+      "finishedAt": "2026-04-07T22:00:39.974Z",
+      "durationMs": 23123,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/111-www-muffins-ai-featured-case-studies-healthcare-medical-devices.webp",
+          "durationMs": 22281
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/111-www-muffins-ai-featured-case-studies-healthcare-medical-devices.webp",
+          "durationMs": 23116
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/featured-case-studies/healthcare-medical-devices",
+      "index": 111,
+      "slug": "112-www-muffins-ai-es-mx-featured-case-studies-healthcare-medical-devices",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T22:00:21.113Z",
+      "finishedAt": "2026-04-07T22:00:37.128Z",
+      "durationMs": 16015,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/112-www-muffins-ai-es-mx-featured-case-studies-healthcare-medical-devices.webp",
+          "durationMs": 14874
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/112-www-muffins-ai-es-mx-featured-case-studies-healthcare-medical-devices.webp",
+          "durationMs": 16011
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/featured-case-studies/us-based-blockchain-startup",
+      "index": 112,
+      "slug": "113-www-muffins-ai-featured-case-studies-us-based-blockchain-startup",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T22:00:22.619Z",
+      "finishedAt": "2026-04-07T22:00:42.531Z",
+      "durationMs": 19912,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/113-www-muffins-ai-featured-case-studies-us-based-blockchain-startup.webp",
+          "durationMs": 18233
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/113-www-muffins-ai-featured-case-studies-us-based-blockchain-startup.webp",
+          "durationMs": 19900
+        }
+      ]
+    },
+    {
+      "url": "https://www.muffins.ai/es-mx/featured-case-studies/us-based-blockchain-startup",
+      "index": 113,
+      "slug": "114-www-muffins-ai-es-mx-featured-case-studies-us-based-blockchain-startup",
+      "status": "success",
+      "attempts": 1,
+      "startedAt": "2026-04-07T22:00:37.128Z",
+      "finishedAt": "2026-04-07T22:01:04.686Z",
+      "durationMs": 27558,
+      "deviceResults": [
+        {
+          "device": "desktop",
+          "width": 1280,
+          "height": 800,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/desktop/114-www-muffins-ai-es-mx-featured-case-studies-us-based-blockchain-startup.webp",
+          "durationMs": 27547
+        },
+        {
+          "device": "mobile",
+          "width": 375,
+          "height": 812,
+          "format": "webp",
+          "success": true,
+          "outputPath": "/Users/nayyarkhurshid/Desktop/Widget Folders/project-links-widget/packages/captures/muffins-20260407-214949/mobile/114-www-muffins-ai-es-mx-featured-case-studies-us-based-blockchain-startup.webp",
+          "durationMs": 15350
+        }
+      ]
+    }
+  ],
+  "signature": "e725c1612e53665b073a0f85a5627f9ae7bc48e60fb8a2d31f0467f039c00b6f"
+}
