@@ -13,7 +13,8 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, FileText, Loader2, Upload } from 'lucide-react';
+import { AlertTriangle, Copy, FileText, Loader2, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 import {
     detectEarliestDate,
     parseTimelineMarkdown,
@@ -34,6 +35,20 @@ const EXAMPLE_MARKDOWN = `## Discovery [violet]
 
 ## Launch [amber]
 - Launch day: 2026-06-02`;
+
+const LLM_PROMPT = `Generate a project timeline in this exact markdown format:
+
+## Phase name [color]
+- Milestone title: YYYY-MM-DD → YYYY-MM-DD [status]
+
+Rules:
+- \`##\` starts a phase. Optional \`[color]\`: blue, emerald, amber, rose, violet, slate.
+- \`-\` bullets are milestones. Use \`:\` between title and dates.
+- Dates are ISO \`YYYY-MM-DD\`. Separator: \`→\`, \`->\`, or \`to\`. A single date means a 1-day milestone.
+- Optional \`[status]\`: not_started, in_progress, completed, blocked.
+- Leave a blank line between phases. No extra prose, no code fences.
+
+Ask me for the project name, target start date, and rough scope, then generate the timeline.`;
 
 interface TimelineImportMarkdownDialogProps {
     open: boolean;
@@ -81,6 +96,15 @@ export function TimelineImportMarkdownDialog({
 
     const handleUseExample = () => {
         setMarkdown(EXAMPLE_MARKDOWN);
+    };
+
+    const handleCopyPrompt = async () => {
+        try {
+            await navigator.clipboard.writeText(LLM_PROMPT);
+            toast.success('Prompt copied');
+        } catch {
+            toast.error('Failed to copy prompt');
+        }
     };
 
     const reset = (nextOpen: boolean) => {
@@ -144,6 +168,16 @@ export function TimelineImportMarkdownDialog({
                                 Markdown
                             </label>
                             <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[11px] gap-1"
+                                    onClick={handleCopyPrompt}
+                                >
+                                    <Copy className="h-3 w-3" />
+                                    Copy prompt
+                                </Button>
                                 <Button
                                     type="button"
                                     variant="ghost"
