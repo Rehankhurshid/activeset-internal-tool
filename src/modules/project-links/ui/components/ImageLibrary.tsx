@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, type CSSProperties } from 'react';
 import type { ProjectLink } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -157,6 +157,60 @@ const DEVICE_ICON: Record<string, typeof Monitor> = {
   mobile: Smartphone,
 };
 
+const GALLERY_WIDTH_PRESET_KEY = 'activeset:image-library:gallery-width:v1';
+const LIGHTBOX_WIDTH_PRESET_KEY = 'activeset:image-library:lightbox-width:v1';
+
+const DEFAULT_LIGHTBOX_WIDTH_BY_DEVICE: Record<string, string> = {
+  desktop: '1280',
+  tablet: '768',
+  mobile: '390',
+};
+
+function loadPresetMap(
+  storageKey: string,
+  defaults: Record<string, string>,
+  allowedKeysByDevice: Record<string, Set<string>>
+): Record<string, string> {
+  if (typeof window === 'undefined') return defaults;
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return defaults;
+
+    const next: Record<string, string> = { ...defaults };
+    for (const [device, fallback] of Object.entries(defaults)) {
+      const candidate = (parsed as Record<string, unknown>)[device];
+      if (typeof candidate === 'string' && allowedKeysByDevice[device]?.has(candidate)) {
+        next[device] = candidate;
+      } else {
+        next[device] = fallback;
+      }
+    }
+    return next;
+  } catch {
+    return defaults;
+  }
+}
+
+function savePresetMap(storageKey: string, values: Record<string, string>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(values));
+  } catch {
+    // Ignore storage errors (private mode, quota, etc.)
+  }
+}
+
+function getMasonryStyle(width: DisplayWidth): CSSProperties {
+  const count = Number.parseInt(width.columns, 10);
+  return {
+    columnCount: Number.isFinite(count) && count > 0 ? count : 1,
+    columnGap: '0.75rem',
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Extract images from capture runs                                   */
 /* ------------------------------------------------------------------ */
@@ -260,17 +314,29 @@ function getDefaultLightboxWidth(device: string) {
   }
 }
 
+const GALLERY_ALLOWED_WIDTH_KEYS: Record<string, Set<string>> = {
+  desktop: new Set(DESKTOP_WIDTHS.map((w) => w.key)),
+  tablet: new Set(TABLET_WIDTHS.map((w) => w.key)),
+  mobile: new Set(MOBILE_WIDTHS.map((w) => w.key)),
+};
+
+const LIGHTBOX_ALLOWED_WIDTH_KEYS: Record<string, Set<string>> = {
+  desktop: new Set(getLightboxWidths('desktop').map((w) => w.key)),
+  tablet: new Set(getLightboxWidths('tablet').map((w) => w.key)),
+  mobile: new Set(getLightboxWidths('mobile').map((w) => w.key)),
+};
+
 function Lightbox({
   images,
   initialIndex,
-  widthKey,
+  widthByDevice,
   onWidthChange,
   onClose,
 }: {
   images: ImageEntry[];
   initialIndex: number;
-  widthKey: string;
-  onWidthChange: (key: string) => void;
+  widthByDevice: Record<string, string>;
+  onWidthChange: (device: string, key: string) => void;
   onClose: () => void;
 }) {
   const [index, setIndex] = useState(initialIndex);
@@ -282,7 +348,11 @@ function Lightbox({
   const hasNext = index < images.length - 1;
 
   const widthPresets = getLightboxWidths(current.device);
-  const activeWidth = LIGHTBOX_WIDTHS.find((w) => w.key === widthKey);
+  const widthKey = widthByDevice[current.device] || getDefaultLightboxWidth(current.device);
+  const activeWidth =
+    widthPresets.find((w) => w.key === widthKey) ||
+    widthPresets.find((w) => w.key === getDefaultLightboxWidth(current.device)) ||
+    widthPresets[0];
   const maxWidthPx = activeWidth && activeWidth.px > 0 ? activeWidth.px : 0;
 
   const goTo = useCallback(
@@ -312,6 +382,12 @@ function Lightbox({
     return () => { document.body.style.overflow = ''; };
   }, []);
 
+  useEffect(() => {
+    if (!widthPresets.some((w) => w.key === widthKey)) {
+      onWidthChange(current.device, getDefaultLightboxWidth(current.device));
+    }
+  }, [current.device, widthPresets, widthKey, onWidthChange]);
+
   const DeviceIcon = DEVICE_ICON[current.device] || Monitor;
 
   return (
@@ -330,7 +406,7 @@ function Lightbox({
             {widthPresets.map((w) => (
               <button
                 key={w.key}
-                onClick={() => onWidthChange(w.key)}
+                onClick={() => onWidthChange(current.device, w.key)}
                 className={cn(
                   'h-6 rounded px-2 text-[11px] font-medium transition-colors',
                   widthKey === w.key
@@ -517,7 +593,7 @@ function ImageCard({
   return (
     <Card
       className={cn(
-        'group cursor-pointer overflow-hidden transition-shadow hover:shadow-lg',
+        'group cursor-pointer overflow-hidden gap-0 py-0 transition-shadow hover:shadow-lg',
         maxWidth !== 'full' && 'mx-auto w-full'
       )}
       style={cardStyle}
@@ -542,8 +618,8 @@ function ImageCard({
           <RecaptureButton urls={[image.pageUrl]} projectName={projectName} variant="outline" className="bg-black/60 text-white border-white/20 hover:bg-black/80 hover:text-white" />
         </div>
       </div>
-      <CardContent className="p-3">
-        <p className="truncate text-sm font-medium">{image.pageTitle}</p>
+      <CardContent className="px-3 py-2.5">
+        <p className="truncate text-sm font-medium leading-tight">{image.pageTitle}</p>
         <div className="mt-1 flex items-center gap-2">
           <DeviceIcon className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
           <span className="truncate text-xs text-muted-foreground">{image.pathname}</span>
@@ -1051,16 +1127,14 @@ function EmptyState({
 function FolderGroup({
   folder,
   images,
-  allImages,
-  columns,
+  masonryStyle,
   maxWidth,
   projectName,
   onImageClick,
 }: {
   folder: string;
   images: ImageEntry[];
-  allImages: ImageEntry[];
-  columns: string;
+  masonryStyle: CSSProperties;
   maxWidth: number | 'full';
   projectName: string;
   onImageClick: (image: ImageEntry) => void;
@@ -1100,9 +1174,9 @@ function FolderGroup({
         />
       </div>
       <CollapsibleContent>
-        <div className="mt-2 pb-2" style={{ columns: columns, columnGap: '1rem' }}>
+        <div className="mt-2 pb-1" style={masonryStyle}>
           {images.map((img, i) => (
-            <div key={`${img.device}-${img.pathname}-${i}`} className="mb-4 break-inside-avoid">
+            <div key={`${img.device}-${img.pathname}-${i}`} className="mb-3 break-inside-avoid">
               <ImageCard
                 image={img}
                 maxWidth={maxWidth}
@@ -1132,14 +1206,34 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
   const [searchQuery, setSearchQuery] = useState('');
   const [lightboxImages, setLightboxImages] = useState<ImageEntry[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [lightboxWidthKey, setLightboxWidthKey] = useState('1280');
+  const [lightboxWidthByDevice, setLightboxWidthByDevice] = useState<Record<string, string>>(() =>
+    loadPresetMap(
+      LIGHTBOX_WIDTH_PRESET_KEY,
+      DEFAULT_LIGHTBOX_WIDTH_BY_DEVICE,
+      LIGHTBOX_ALLOWED_WIDTH_KEYS
+    )
+  );
   const [captureRuns, setCaptureRuns] = useState<CaptureRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeLang, setActiveLang] = useState('en');
   const [activeDevice, setActiveDevice] = useState('desktop');
-  const [widthByDevice, setWidthByDevice] = useState<Record<string, string>>(DEVICE_DEFAULT_WIDTH);
+  const [widthByDevice, setWidthByDevice] = useState<Record<string, string>>(() =>
+    loadPresetMap(
+      GALLERY_WIDTH_PRESET_KEY,
+      DEVICE_DEFAULT_WIDTH,
+      GALLERY_ALLOWED_WIDTH_KEYS
+    )
+  );
   const [copiedAll, setCopiedAll] = useState(false);
   const projectUrls = useMemo(() => getProjectCaptureUrls(links), [links]);
+
+  useEffect(() => {
+    savePresetMap(GALLERY_WIDTH_PRESET_KEY, widthByDevice);
+  }, [widthByDevice]);
+
+  useEffect(() => {
+    savePresetMap(LIGHTBOX_WIDTH_PRESET_KEY, lightboxWidthByDevice);
+  }, [lightboxWidthByDevice]);
 
   // Fetch capture runs for this project
   useEffect(() => {
@@ -1271,6 +1365,12 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
     setWidthByDevice((prev) => ({ ...prev, [activeDevice]: key }));
   }, [activeDevice]);
 
+  const setLightboxDeviceWidth = useCallback((device: string, key: string) => {
+    const allowedKeys = LIGHTBOX_ALLOWED_WIDTH_KEYS[device];
+    if (!allowedKeys?.has(key)) return;
+    setLightboxWidthByDevice((prev) => ({ ...prev, [device]: key }));
+  }, []);
+
   // Open lightbox with the filtered list (not allImages)
   const openLightbox = useCallback((filteredList: ImageEntry[], indexInList: number) => {
     setLightboxImages(filteredList);
@@ -1349,9 +1449,9 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
 
     if (sortedFolders.length <= 1) {
       return (
-        <div style={{ columns: w.columns, columnGap: '1rem' }}>
+        <div style={getMasonryStyle(w)}>
           {filtered.map((img, i) => (
-            <div key={`${img.device}-${img.pathname}-${i}`} className="mb-4 break-inside-avoid">
+            <div key={`${img.device}-${img.pathname}-${i}`} className="mb-3 break-inside-avoid">
               <ImageCard
                 image={img}
                 maxWidth={w.maxWidth}
@@ -1370,14 +1470,13 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
           const folderImages = folderMap.get(folder) || [];
           return (
               <FolderGroup
-                key={folder}
-                folder={folder}
-                images={folderImages}
-                allImages={filtered}
-                columns={w.columns}
-                maxWidth={w.maxWidth}
-                projectName={projectName}
-                onImageClick={(img) => openLightbox(filtered, filtered.indexOf(img))}
+              key={folder}
+              folder={folder}
+              images={folderImages}
+              masonryStyle={getMasonryStyle(w)}
+              maxWidth={w.maxWidth}
+              projectName={projectName}
+              onImageClick={(img) => openLightbox(filtered, filtered.indexOf(img))}
               />
           );
         })}
@@ -1516,8 +1615,8 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
         <Lightbox
           images={lightboxImages}
           initialIndex={lightboxIndex}
-          widthKey={lightboxWidthKey}
-          onWidthChange={setLightboxWidthKey}
+          widthByDevice={lightboxWidthByDevice}
+          onWidthChange={setLightboxDeviceWidth}
           onClose={() => setLightboxIndex(null)}
         />
       )}
