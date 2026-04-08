@@ -565,4 +565,7 @@ export interface TimelineTemplate {
   icon: string;
   phases: TimelineTemplatePhase[];
   milestones: TimelineTemplateMilestone[];
+  isBuiltIn?: boolean;       // true for static templates (read-only)
+  createdAt?: Date;
+  updatedAt?: Date;
 }

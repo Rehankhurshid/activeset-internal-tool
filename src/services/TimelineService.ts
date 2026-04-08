@@ -12,6 +12,7 @@ import type {
     ProjectTimeline,
     TimelinePhase,
     TimelineMilestone,
+    TimelineTemplate,
     TimelineTemplatePhase,
     TimelineTemplateMilestone,
 } from '@/types';
@@ -287,7 +288,23 @@ export const timelineService = {
         startDate?: string
     ): Promise<void> {
         try {
-            const template = getTimelineTemplate(templateId);
+            // Try built-ins first, then fall through to Firestore custom templates.
+            let template: TimelineTemplate | undefined = getTimelineTemplate(templateId);
+            if (!template) {
+                const docRef = doc(db, COLLECTIONS.TIMELINE_TEMPLATES, templateId);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    template = {
+                        id: docSnap.id,
+                        name: (data.name as string) ?? 'Untitled template',
+                        description: (data.description as string) ?? '',
+                        icon: (data.icon as string) ?? '📌',
+                        phases: (data.phases as TimelineTemplatePhase[]) ?? [],
+                        milestones: (data.milestones as TimelineTemplateMilestone[]) ?? [],
+                    };
+                }
+            }
             if (!template) throw new DatabaseError(`Unknown template: ${templateId}`);
 
             const start = startDate ?? todayISO();

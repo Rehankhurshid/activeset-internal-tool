@@ -29,11 +29,19 @@ import {
     Loader2,
     Sparkles,
     FileText,
+    Pencil,
+    Trash2,
+    Save,
 } from 'lucide-react';
-import type { TimelineItemStatus, TimelineMilestone } from '@/types';
-import { TIMELINE_TEMPLATES } from '@/lib/timeline-templates';
+import type {
+    TimelineItemStatus,
+    TimelineMilestone,
+    TimelineTemplate,
+} from '@/types';
 import { timelineRepository } from '../../infrastructure/timeline.repository';
+import { timelineTemplateService } from '@/services/TimelineTemplateService';
 import { useProjectTimeline } from '@/hooks/useProjectTimeline';
+import { useTimelineTemplates } from '@/hooks/useTimelineTemplates';
 import type {
     TimelineViewMode,
     TimelineZoom,
@@ -46,6 +54,8 @@ import {
     type MilestoneDraft,
 } from '../components/TimelineEditSheet';
 import { TimelineImportMarkdownDialog } from '../components/TimelineImportMarkdownDialog';
+import { SaveTimelineTemplateDialog } from '../components/SaveTimelineTemplateDialog';
+import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
 
 interface ProjectTimelineOverviewProps {
     projectId: string;
@@ -56,6 +66,8 @@ export function ProjectTimelineOverview({
     projectId,
 }: ProjectTimelineOverviewProps) {
     const { timeline, loading } = useProjectTimeline(projectId);
+    const { builtIn: builtInTemplates, custom: customTemplates } =
+        useTimelineTemplates();
 
     const [viewMode, setViewMode] = useState<TimelineViewMode>('timeline');
     const [zoom, setZoom] = useState<TimelineZoom>('week');
@@ -64,6 +76,11 @@ export function ProjectTimelineOverview({
     const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
     const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
     const [importDialogOpen, setImportDialogOpen] = useState(false);
+    const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+    const [editingTemplate, setEditingTemplate] =
+        useState<TimelineTemplate | null>(null);
+    const [templateToDelete, setTemplateToDelete] =
+        useState<TimelineTemplate | null>(null);
 
     // Auto-switch to list on small viewports
     useEffect(() => {
@@ -237,6 +254,24 @@ export function ProjectTimelineOverview({
         [projectId]
     );
 
+    const handleEditTemplate = useCallback((template: TimelineTemplate) => {
+        setEditingTemplate(template);
+        setSaveTemplateOpen(true);
+        setTemplateDialogOpen(false);
+    }, []);
+
+    const handleConfirmDeleteTemplate = useCallback(async () => {
+        if (!templateToDelete) return;
+        try {
+            await timelineTemplateService.delete(templateToDelete.id);
+            toast.success('Template deleted');
+        } catch {
+            toast.error('Failed to delete template');
+        } finally {
+            setTemplateToDelete(null);
+        }
+    }, [templateToDelete]);
+
     if (loading) {
         return (
             <div className="space-y-3">
@@ -302,12 +337,28 @@ export function ProjectTimelineOverview({
                                 <FileText className="h-4 w-4" />
                                 <span className="hidden sm:inline">Import MD</span>
                             </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => {
+                                    setEditingTemplate(null);
+                                    setSaveTemplateOpen(true);
+                                }}
+                            >
+                                <Save className="h-4 w-4" />
+                                <span className="hidden sm:inline">Save as template</span>
+                            </Button>
                             <TemplateDialogButton
                                 open={templateDialogOpen}
                                 onOpenChange={setTemplateDialogOpen}
                                 onApply={handleApplyTemplate}
                                 applyingId={applyingTemplateId}
                                 variant="ghost"
+                                builtInTemplates={builtInTemplates}
+                                customTemplates={customTemplates}
+                                onEditTemplate={handleEditTemplate}
+                                onDeleteTemplate={setTemplateToDelete}
                             />
                         </>
                     )}
@@ -327,6 +378,10 @@ export function ProjectTimelineOverview({
                     onTemplateDialogOpenChange={setTemplateDialogOpen}
                     onApplyTemplate={handleApplyTemplate}
                     applyingTemplateId={applyingTemplateId}
+                    builtInTemplates={builtInTemplates}
+                    customTemplates={customTemplates}
+                    onEditTemplate={handleEditTemplate}
+                    onDeleteTemplate={setTemplateToDelete}
                 />
             ) : viewMode === 'timeline' ? (
                 <TimelineGantt
@@ -359,6 +414,29 @@ export function ProjectTimelineOverview({
                 open={importDialogOpen}
                 onOpenChange={setImportDialogOpen}
                 onImport={handleImportMarkdown}
+            />
+
+            <SaveTimelineTemplateDialog
+                open={saveTemplateOpen}
+                onOpenChange={(open) => {
+                    setSaveTemplateOpen(open);
+                    if (!open) setEditingTemplate(null);
+                }}
+                timeline={timeline ?? null}
+                customTemplates={customTemplates}
+                editingTemplate={editingTemplate}
+            />
+
+            <ConfirmDialog
+                open={!!templateToDelete}
+                onOpenChange={(open) => {
+                    if (!open) setTemplateToDelete(null);
+                }}
+                title="Delete template?"
+                description={`"${templateToDelete?.name ?? ''}" will be permanently removed. Timelines already created from this template will not change.`}
+                confirmText="Delete"
+                variant="destructive"
+                onConfirm={handleConfirmDeleteTemplate}
             />
         </div>
     );
@@ -399,6 +477,10 @@ function EmptyState({
     onTemplateDialogOpenChange,
     onApplyTemplate,
     applyingTemplateId,
+    builtInTemplates,
+    customTemplates,
+    onEditTemplate,
+    onDeleteTemplate,
 }: {
     onNew: () => void;
     onImportMarkdown: () => void;
@@ -406,6 +488,10 @@ function EmptyState({
     onTemplateDialogOpenChange: (open: boolean) => void;
     onApplyTemplate: (id: string) => void;
     applyingTemplateId: string | null;
+    builtInTemplates: TimelineTemplate[];
+    customTemplates: TimelineTemplate[];
+    onEditTemplate: (template: TimelineTemplate) => void;
+    onDeleteTemplate: (template: TimelineTemplate) => void;
 }) {
     return (
         <div className="flex flex-col items-center justify-center py-16 text-center border rounded-xl bg-card">
@@ -428,6 +514,10 @@ function EmptyState({
                     onApply={onApplyTemplate}
                     applyingId={applyingTemplateId}
                     variant="outline"
+                    builtInTemplates={builtInTemplates}
+                    customTemplates={customTemplates}
+                    onEditTemplate={onEditTemplate}
+                    onDeleteTemplate={onDeleteTemplate}
                 />
                 <Button variant="outline" className="gap-1.5" onClick={onImportMarkdown}>
                     <FileText className="h-4 w-4" />
@@ -444,12 +534,20 @@ function TemplateDialogButton({
     onApply,
     applyingId,
     variant,
+    builtInTemplates,
+    customTemplates,
+    onEditTemplate,
+    onDeleteTemplate,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onApply: (id: string) => void;
     applyingId: string | null;
     variant: 'outline' | 'ghost';
+    builtInTemplates: TimelineTemplate[];
+    customTemplates: TimelineTemplate[];
+    onEditTemplate: (template: TimelineTemplate) => void;
+    onDeleteTemplate: (template: TimelineTemplate) => void;
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -459,51 +557,145 @@ function TemplateDialogButton({
                     Use Template
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Start from a template</DialogTitle>
                     <DialogDescription>
-                        Seed the timeline with phases and milestones. Dates start from today
-                        and can be dragged around afterward.
+                        Seed the timeline with phases and milestones. Dates start
+                        from today and can be dragged around afterward.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-3 mt-2">
-                    {TIMELINE_TEMPLATES.map((t) => {
-                        const isApplying = applyingId === t.id;
-                        return (
-                            <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => onApply(t.id)}
-                                disabled={applyingId !== null}
-                                className={cn(
-                                    'w-full text-left p-4 rounded-xl border transition-all',
-                                    'hover:border-primary/40 hover:bg-muted/40',
-                                    applyingId !== null && 'opacity-50 cursor-not-allowed'
-                                )}
-                            >
-                                <div className="flex items-start gap-3">
-                                    <span className="text-2xl">{t.icon}</span>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <p className="font-semibold text-sm">{t.name}</p>
-                                            {isApplying && (
-                                                <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                                            )}
-                                        </div>
-                                        <p className="text-xs text-muted-foreground mt-0.5">
-                                            {t.description}
-                                        </p>
-                                        <p className="text-[10px] text-muted-foreground mt-1 font-mono">
-                                            {t.phases.length} phases · {t.milestones.length} milestones
-                                        </p>
-                                    </div>
-                                </div>
-                            </button>
-                        );
-                    })}
+
+                <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-4 mt-2">
+                    <TemplateSection
+                        label="Built-in"
+                        templates={builtInTemplates}
+                        applyingId={applyingId}
+                        onApply={onApply}
+                    />
+
+                    <TemplateSection
+                        label="Your templates"
+                        templates={customTemplates}
+                        applyingId={applyingId}
+                        onApply={onApply}
+                        onEdit={onEditTemplate}
+                        onDelete={onDeleteTemplate}
+                        emptyHint="Save a timeline as a template to see it here."
+                    />
                 </div>
             </DialogContent>
         </Dialog>
+    );
+}
+
+function TemplateSection({
+    label,
+    templates,
+    applyingId,
+    onApply,
+    onEdit,
+    onDelete,
+    emptyHint,
+}: {
+    label: string;
+    templates: TimelineTemplate[];
+    applyingId: string | null;
+    onApply: (id: string) => void;
+    onEdit?: (template: TimelineTemplate) => void;
+    onDelete?: (template: TimelineTemplate) => void;
+    emptyHint?: string;
+}) {
+    return (
+        <div className="space-y-2">
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground px-1">
+                {label}
+            </div>
+            {templates.length === 0 && emptyHint && (
+                <p className="text-xs text-muted-foreground italic px-1">
+                    {emptyHint}
+                </p>
+            )}
+            {templates.map((t) => {
+                const isApplying = applyingId === t.id;
+                const disabled = applyingId !== null;
+                return (
+                    <div
+                        key={t.id}
+                        className={cn(
+                            'group relative w-full rounded-xl border transition-all',
+                            'hover:border-primary/40 hover:bg-muted/40',
+                            disabled && 'opacity-50'
+                        )}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => onApply(t.id)}
+                            disabled={disabled}
+                            className="w-full text-left p-4 disabled:cursor-not-allowed"
+                        >
+                            <div className="flex items-start gap-3">
+                                <span className="text-2xl">{t.icon}</span>
+                                <div className="flex-1 min-w-0 pr-16">
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-semibold text-sm truncate">
+                                            {t.name}
+                                        </p>
+                                        {isApplying && (
+                                            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                                        )}
+                                    </div>
+                                    {t.description && (
+                                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                                            {t.description}
+                                        </p>
+                                    )}
+                                    <p className="text-[10px] text-muted-foreground mt-1 font-mono">
+                                        {t.phases.length} phase
+                                        {t.phases.length === 1 ? '' : 's'} ·{' '}
+                                        {t.milestones.length} milestone
+                                        {t.milestones.length === 1 ? '' : 's'}
+                                    </p>
+                                </div>
+                            </div>
+                        </button>
+                        {(onEdit || onDelete) && (
+                            <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {onEdit && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onEdit(t);
+                                        }}
+                                        aria-label={`Edit ${t.name}`}
+                                    >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                )}
+                                {onDelete && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:text-destructive"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onDelete(t);
+                                        }}
+                                        aria-label={`Delete ${t.name}`}
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
     );
 }
