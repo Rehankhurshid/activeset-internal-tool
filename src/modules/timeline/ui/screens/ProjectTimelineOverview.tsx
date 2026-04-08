@@ -17,8 +17,13 @@ import {
     DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -32,6 +37,7 @@ import {
     Pencil,
     Trash2,
     Save,
+    MoreHorizontal,
 } from 'lucide-react';
 import type {
     TimelineItemStatus,
@@ -325,40 +331,41 @@ export function ProjectTimelineOverview({
 
                 <div className="flex items-center gap-2">
                     {!isEmpty && (
-                        <>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="gap-1.5"
-                                onClick={() => setImportDialogOpen(true)}
-                            >
-                                <FileText className="h-4 w-4" />
-                                <span className="hidden sm:inline">Import MD</span>
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="gap-1.5"
-                                onClick={() => {
-                                    setEditingTemplate(null);
-                                    setSaveTemplateOpen(true);
-                                }}
-                            >
-                                <Save className="h-4 w-4" />
-                                <span className="hidden sm:inline">Save as template</span>
-                            </Button>
-                            <TemplateDialogButton
-                                open={templateDialogOpen}
-                                onOpenChange={setTemplateDialogOpen}
-                                onApply={handleApplyTemplate}
-                                applyingId={applyingTemplateId}
-                                variant="ghost"
-                                builtInTemplates={builtInTemplates}
-                                customTemplates={customTemplates}
-                                onEditTemplate={handleEditTemplate}
-                                onDeleteTemplate={setTemplateToDelete}
-                            />
-                        </>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    aria-label="Timeline actions"
+                                >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem
+                                    onSelect={() => setTemplateDialogOpen(true)}
+                                >
+                                    <Sparkles className="h-4 w-4" />
+                                    Use template
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onSelect={() => setImportDialogOpen(true)}
+                                >
+                                    <FileText className="h-4 w-4" />
+                                    Import markdown
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onSelect={() => {
+                                        setEditingTemplate(null);
+                                        setSaveTemplateOpen(true);
+                                    }}
+                                >
+                                    <Save className="h-4 w-4" />
+                                    Save as template
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     )}
                     <Button size="sm" className="gap-1.5" onClick={openNew}>
                         <Plus className="h-4 w-4" />
@@ -372,14 +379,7 @@ export function ProjectTimelineOverview({
                 <EmptyState
                     onNew={openNew}
                     onImportMarkdown={() => setImportDialogOpen(true)}
-                    templateDialogOpen={templateDialogOpen}
-                    onTemplateDialogOpenChange={setTemplateDialogOpen}
-                    onApplyTemplate={handleApplyTemplate}
-                    applyingTemplateId={applyingTemplateId}
-                    builtInTemplates={builtInTemplates}
-                    customTemplates={customTemplates}
-                    onEditTemplate={handleEditTemplate}
-                    onDeleteTemplate={setTemplateToDelete}
+                    onOpenTemplates={() => setTemplateDialogOpen(true)}
                 />
             ) : viewMode === 'timeline' ? (
                 <TimelineGantt
@@ -406,6 +406,17 @@ export function ProjectTimelineOverview({
                 onSave={handleSave}
                 onDelete={editingMilestone ? handleDelete : undefined}
                 onAddPhase={handleAddPhase}
+            />
+
+            <TemplatePickerDialog
+                open={templateDialogOpen}
+                onOpenChange={setTemplateDialogOpen}
+                onApply={handleApplyTemplate}
+                applyingId={applyingTemplateId}
+                builtInTemplates={builtInTemplates}
+                customTemplates={customTemplates}
+                onEditTemplate={handleEditTemplate}
+                onDeleteTemplate={setTemplateToDelete}
             />
 
             <TimelineImportMarkdownDialog
@@ -471,25 +482,11 @@ function ViewToggle({
 function EmptyState({
     onNew,
     onImportMarkdown,
-    templateDialogOpen,
-    onTemplateDialogOpenChange,
-    onApplyTemplate,
-    applyingTemplateId,
-    builtInTemplates,
-    customTemplates,
-    onEditTemplate,
-    onDeleteTemplate,
+    onOpenTemplates,
 }: {
     onNew: () => void;
     onImportMarkdown: () => void;
-    templateDialogOpen: boolean;
-    onTemplateDialogOpenChange: (open: boolean) => void;
-    onApplyTemplate: (id: string) => void;
-    applyingTemplateId: string | null;
-    builtInTemplates: TimelineTemplate[];
-    customTemplates: TimelineTemplate[];
-    onEditTemplate: (template: TimelineTemplate) => void;
-    onDeleteTemplate: (template: TimelineTemplate) => void;
+    onOpenTemplates: () => void;
 }) {
     return (
         <div className="flex flex-col items-center justify-center py-16 text-center border rounded-xl bg-card">
@@ -506,17 +503,10 @@ function EmptyState({
                     <Plus className="h-4 w-4" />
                     Add Milestone
                 </Button>
-                <TemplateDialogButton
-                    open={templateDialogOpen}
-                    onOpenChange={onTemplateDialogOpenChange}
-                    onApply={onApplyTemplate}
-                    applyingId={applyingTemplateId}
-                    variant="outline"
-                    builtInTemplates={builtInTemplates}
-                    customTemplates={customTemplates}
-                    onEditTemplate={onEditTemplate}
-                    onDeleteTemplate={onDeleteTemplate}
-                />
+                <Button variant="outline" className="gap-1.5" onClick={onOpenTemplates}>
+                    <Sparkles className="h-4 w-4" />
+                    Use Template
+                </Button>
                 <Button variant="outline" className="gap-1.5" onClick={onImportMarkdown}>
                     <FileText className="h-4 w-4" />
                     Import Markdown
@@ -526,12 +516,11 @@ function EmptyState({
     );
 }
 
-function TemplateDialogButton({
+function TemplatePickerDialog({
     open,
     onOpenChange,
     onApply,
     applyingId,
-    variant,
     builtInTemplates,
     customTemplates,
     onEditTemplate,
@@ -541,7 +530,6 @@ function TemplateDialogButton({
     onOpenChange: (open: boolean) => void;
     onApply: (id: string) => void;
     applyingId: string | null;
-    variant: 'outline' | 'ghost';
     builtInTemplates: TimelineTemplate[];
     customTemplates: TimelineTemplate[];
     onEditTemplate: (template: TimelineTemplate) => void;
@@ -549,12 +537,6 @@ function TemplateDialogButton({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogTrigger asChild>
-                <Button variant={variant} size="sm" className="gap-1.5">
-                    <Sparkles className="h-4 w-4" />
-                    Use Template
-                </Button>
-            </DialogTrigger>
             <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Start from a template</DialogTitle>
