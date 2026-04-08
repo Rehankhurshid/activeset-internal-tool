@@ -119,7 +119,6 @@ export function timelineToTemplateShape(
                         : undefined,
                 startDate: '',
                 endDate: '',
-                progress: undefined,
                 color: m.color,
                 assignee: undefined,
                 notes: m.notes,

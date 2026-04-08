@@ -64,7 +64,6 @@ export function TimelineList({
                         <TableHead>End</TableHead>
                         <TableHead>Duration</TableHead>
                         <TableHead>Assignee</TableHead>
-                        <TableHead>Progress</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -126,19 +125,6 @@ export function TimelineList({
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground truncate max-w-[180px]">
                                 {milestone.assignee || '—'}
-                            </TableCell>
-                            <TableCell>
-                                <div className="flex items-center gap-2 w-28">
-                                    <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
-                                        <div
-                                            className={cn('h-full', TIMELINE_COLOR_BG[effectiveColor])}
-                                            style={{ width: `${milestone.progress ?? 0}%` }}
-                                        />
-                                    </div>
-                                    <span className="text-[10px] tabular-nums text-muted-foreground w-7 text-right">
-                                        {milestone.progress ?? 0}%
-                                    </span>
-                                </div>
                             </TableCell>
                         </TableRow>
                     ))}

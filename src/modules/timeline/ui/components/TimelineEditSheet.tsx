@@ -38,7 +38,6 @@ export interface MilestoneDraft {
     status: TimelineItemStatus;
     startDate: string;
     endDate: string;
-    progress: number;
     color?: TimelineColor;
     assignee?: string;
     notes?: string;
@@ -68,7 +67,6 @@ const NEW_DRAFT = (startDate?: string): MilestoneDraft => ({
         d.setDate(d.getDate() + 6);
         return d.toISOString().slice(0, 10);
     })(),
-    progress: 0,
     color: undefined,
     assignee: '',
     notes: '',
@@ -101,7 +99,6 @@ export function TimelineEditSheet({
                 status: milestone.status,
                 startDate: milestone.startDate,
                 endDate: milestone.endDate,
-                progress: milestone.progress ?? 0,
                 color: milestone.color,
                 assignee: milestone.assignee ?? '',
                 notes: milestone.notes ?? '',
@@ -277,28 +274,6 @@ export function TimelineEditSheet({
                                     onChange={(v) => setDraft({ ...draft, endDate: v })}
                                 />
                             </div>
-                        </div>
-
-                        {/* Progress */}
-                        <div className="space-y-1.5">
-                            <div className="flex items-center justify-between">
-                                <Label htmlFor="ms-progress">Progress</Label>
-                                <span className="text-xs text-muted-foreground tabular-nums">
-                                    {draft.progress}%
-                                </span>
-                            </div>
-                            <input
-                                id="ms-progress"
-                                type="range"
-                                min={0}
-                                max={100}
-                                step={5}
-                                value={draft.progress}
-                                onChange={(e) =>
-                                    setDraft({ ...draft, progress: Number(e.target.value) })
-                                }
-                                className="w-full accent-primary"
-                            />
                         </div>
 
                         {/* Color */}

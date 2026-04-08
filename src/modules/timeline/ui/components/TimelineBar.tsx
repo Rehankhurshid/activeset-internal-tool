@@ -8,10 +8,7 @@ import type {
     TimelineColor,
 } from '@/types';
 import { TIMELINE_STATUS_LABELS } from '@/types';
-import {
-    TIMELINE_COLOR_BG,
-    TIMELINE_COLOR_SOFT,
-} from '../../domain/timeline.types';
+import { TIMELINE_COLOR_SOFT } from '../../domain/timeline.types';
 import { daysBetween, formatDateShort, shiftISO } from '../../domain/timeline.utils';
 import { StatusPicker } from './StatusPicker';
 
@@ -182,9 +179,7 @@ export function TimelineBar({
         setPreviewShift({ startDelta: 0, endDelta: 0 });
     }, [milestone.id, milestone.startDate, milestone.endDate]);
 
-    const progress = Math.max(0, Math.min(100, milestone.progress ?? 0));
     const bgSoft = TIMELINE_COLOR_SOFT[effectiveColor] ?? TIMELINE_COLOR_SOFT.blue;
-    const bgFill = TIMELINE_COLOR_BG[effectiveColor] ?? TIMELINE_COLOR_BG.blue;
     const isDragging = dragRef.current !== null;
     const showPreviewDates =
         previewShift.startDelta !== 0 || previewShift.endDelta !== 0;
@@ -210,14 +205,6 @@ export function TimelineBar({
             onKeyDown={handleKeyDown}
             title={`${milestone.title} · ${formatDateShort(previewStart)} → ${formatDateShort(previewEnd)}`}
         >
-            {/* Progress fill */}
-            {progress > 0 && (
-                <div
-                    className={cn('absolute inset-y-0 left-0 rounded-l-md opacity-40', bgFill)}
-                    style={{ width: `${progress}%` }}
-                />
-            )}
-
             {/* Resize handles */}
             <div
                 role="separator"

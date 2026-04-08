@@ -269,9 +269,7 @@ function ReadOnlyBar({
     const left = leftDays * dayWidth;
     const width = Math.max(durationDays * dayWidth, 16);
 
-    const progress = Math.max(0, Math.min(100, milestone.progress ?? 0));
     const bgSoft = TIMELINE_COLOR_SOFT[color] ?? TIMELINE_COLOR_SOFT.blue;
-    const bgFill = TIMELINE_COLOR_BG[color] ?? TIMELINE_COLOR_BG.blue;
 
     return (
         <div
@@ -285,15 +283,6 @@ function ReadOnlyBar({
             title={`${projectName} · ${milestone.title} · ${formatDateShort(milestone.startDate)} → ${formatDateShort(milestone.endDate)} · ${TIMELINE_STATUS_LABELS[milestone.status]}`}
             aria-label={`${projectName}: ${milestone.title}, ${formatDateShort(milestone.startDate)} to ${formatDateShort(milestone.endDate)}, ${TIMELINE_STATUS_LABELS[milestone.status]}`}
         >
-            {progress > 0 && (
-                <div
-                    className={cn(
-                        'absolute inset-y-0 left-0 rounded-l-md opacity-40',
-                        bgFill
-                    )}
-                    style={{ width: `${progress}%` }}
-                />
-            )}
             <div className="relative z-10 px-2 text-[11px] font-medium truncate flex items-center gap-1.5 w-full">
                 <StatusDot status={milestone.status} />
                 <span className="truncate">{milestone.title}</span>

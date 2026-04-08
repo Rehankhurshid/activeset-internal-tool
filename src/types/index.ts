@@ -525,7 +525,6 @@ export interface TimelineMilestone {
   status: TimelineItemStatus;
   startDate: string;             // ISO YYYY-MM-DD (matches DatePicker)
   endDate: string;               // ISO YYYY-MM-DD (inclusive)
-  progress?: number;             // 0–100
   color?: TimelineColor;         // falls back to phase color
   assignee?: string;             // email
   notes?: string;
