@@ -323,6 +323,7 @@ export interface Project {
   createdAt: Date;
   updatedAt: Date;
   userId: string;
+  client?: string; // Optional client/company name used to group projects together
   webflowConfig?: WebflowConfig;
   sitemapUrl?: string; // For daily scheduled scans
   folderPageTypes?: FolderPageTypes; // Simple folder → CMS/Static mapping

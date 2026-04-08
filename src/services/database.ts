@@ -2,6 +2,7 @@
 
 import {
   collection,
+  deleteField,
   doc,
   getDocs,
   getDoc,
@@ -248,6 +249,16 @@ export const projectsService = {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       name,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // Update the project's client (group label). Empty string clears it.
+  async updateProjectClient(projectId: string, client: string): Promise<void> {
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    const trimmed = client.trim();
+    await updateDoc(projectRef, {
+      client: trimmed.length > 0 ? trimmed : deleteField(),
       updatedAt: Timestamp.now(),
     });
   },

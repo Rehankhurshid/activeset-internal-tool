@@ -6,6 +6,7 @@ export interface ProjectLinksRepository {
   subscribeToProject: (projectId: string, callback: (project: Project | null) => void) => () => void;
   createProject: (userId: string, name: string) => Promise<string>;
   updateProjectName: (projectId: string, name: string) => Promise<void>;
+  updateProjectClient: (projectId: string, client: string) => Promise<void>;
   createAuditShareLink: (projectId: string) => Promise<string>;
 }
 
@@ -14,5 +15,6 @@ export const projectLinksRepository: ProjectLinksRepository = {
   subscribeToProject: (projectId, callback) => projectsService.subscribeToProject(projectId, callback),
   createProject: (userId, name) => projectsService.createProject(userId, name),
   updateProjectName: (projectId, name) => projectsService.updateProjectName(projectId, name),
+  updateProjectClient: (projectId, client) => projectsService.updateProjectClient(projectId, client),
   createAuditShareLink: (projectId) => projectsService.createAuditShareLink(projectId),
 };

@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare } from 'lucide-react';
+import { Building2, Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
@@ -65,6 +65,17 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const handleUpdateProjectName = async (newName: string) => {
         if (!project) return;
         await projectLinksRepository.updateProjectName(project.id, newName);
+    };
+
+    const handleUpdateProjectClient = async (newClient: string) => {
+        if (!project) return;
+        try {
+            await projectLinksRepository.updateProjectClient(project.id, newClient);
+            toast.success(newClient.trim() ? 'Client updated' : 'Client cleared');
+        } catch (error) {
+            console.error('Failed to update client:', error);
+            toast.error('Failed to update client');
+        }
     };
 
     const handleSaveWebflowConfig = async (config: WebflowConfig) => {
@@ -232,10 +243,21 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             onSave={handleUpdateProjectName}
                             className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight"
                         />
-                        <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                        <div className="flex flex-wrap items-center gap-2 text-muted-foreground mt-1">
                             <Badge variant="secondary" className="font-mono text-xs">
                                 {project.links.filter(l => l.source !== 'auto').length} links
                             </Badge>
+                            <div className="flex items-center gap-1 text-xs">
+                                <Building2 className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
+                                <InlineEdit
+                                    value={project.client ?? ''}
+                                    onSave={handleUpdateProjectClient}
+                                    placeholder="Add client…"
+                                    className="text-xs"
+                                    displayClassName="text-xs"
+                                    inputClassName="h-7 text-xs w-48"
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
