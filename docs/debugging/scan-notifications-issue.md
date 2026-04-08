@@ -65,7 +65,7 @@ If both fail, throws. If either succeeds (including `'skipped'`), returns succes
 1. `vercel env add SLACK_WEBHOOK_URL production` via CLI — value confirmed with `vercel env pull` but NOT injected at runtime
 2. Added for both `production` and `preview` environments — still not injected
 3. Multiple redeploys (both `vercel --prod` and git push) — still not injected
-4. Verified the value is correct: `https://hooks.slack.com/services/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`
+4. Verified the value is correct: `<redacted-slack-webhook>`
 
 **Why other env vars work:**
 - `GMAIL_USER`, `GMAIL_APP_PASSWORD`, Firebase vars all work at runtime
@@ -128,7 +128,7 @@ If both fail, throws. If either succeeds (including `'skipped'`), returns succes
 
 1. **Set `SLACK_WEBHOOK_URL` via Vercel Dashboard UI** (not CLI)
    - Go to: Vercel > project-links-widget > Settings > Environment Variables
-   - Add `SLACK_WEBHOOK_URL` = `https://hooks.slack.com/services/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`
+   - Add `SLACK_WEBHOOK_URL` = `<redacted-slack-webhook>`
    - Select: Production environment
    - Redeploy from Deployments tab
 
