@@ -3,6 +3,8 @@ import type {
     ProjectTimeline,
     TimelinePhase,
     TimelineMilestone,
+    TimelineTemplatePhase,
+    TimelineTemplateMilestone,
 } from '@/types';
 
 export interface TimelineRepository {
@@ -36,6 +38,14 @@ export interface TimelineRepository {
         templateId: string,
         startDate?: string
     ) => Promise<void>;
+    importParsed: (
+        projectId: string,
+        parsed: {
+            phases: TimelineTemplatePhase[];
+            milestones: TimelineTemplateMilestone[];
+        },
+        startDate?: string
+    ) => Promise<{ phaseCount: number; milestoneCount: number }>;
     clearTimeline: (projectId: string) => Promise<void>;
 }
 
@@ -56,5 +66,7 @@ export const timelineRepository: TimelineRepository = {
         timelineService.deletePhase(projectId, phaseId),
     applyTemplate: (projectId, templateId, startDate) =>
         timelineService.applyTemplate(projectId, templateId, startDate),
+    importParsed: (projectId, parsed, startDate) =>
+        timelineService.importParsed(projectId, parsed, startDate),
     clearTimeline: (projectId) => timelineService.clearTimeline(projectId),
 };

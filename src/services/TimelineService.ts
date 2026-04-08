@@ -12,6 +12,8 @@ import type {
     ProjectTimeline,
     TimelinePhase,
     TimelineMilestone,
+    TimelineTemplatePhase,
+    TimelineTemplateMilestone,
 } from '@/types';
 import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
@@ -329,6 +331,70 @@ export const timelineService = {
             logError(error, 'applyTemplate');
             if (error instanceof DatabaseError) throw error;
             throw new DatabaseError('Failed to apply template');
+        }
+    },
+
+    /**
+     * Import a parsed set of phases + milestones (as produced by the
+     * markdown parser or any future importer) onto a project's timeline.
+     *
+     * Dates are resolved by anchoring day offsets to `startDate`, matching
+     * the applyTemplate contract.
+     */
+    async importParsed(
+        projectId: string,
+        parsed: {
+            phases: TimelineTemplatePhase[];
+            milestones: TimelineTemplateMilestone[];
+        },
+        startDate?: string
+    ): Promise<{ phaseCount: number; milestoneCount: number }> {
+        try {
+            const start = startDate ?? todayISO();
+            const timeline = await this.getOrCreateTimeline(projectId);
+
+            const newPhases: TimelinePhase[] = parsed.phases.map((p, i) => ({
+                id: `ph_${generateId()}`,
+                title: p.title,
+                color: p.color,
+                order: timeline.phases.length + i,
+                collapsed: false,
+            }));
+            const phaseIds = newPhases.map((p) => p.id);
+
+            const nowISO = new Date().toISOString();
+            const newMilestones: TimelineMilestone[] = parsed.milestones.map(
+                (m, i) => ({
+                    id: `ms_${generateId()}`,
+                    title: m.title,
+                    status: m.status,
+                    phaseId:
+                        m.phaseIndex !== undefined ? phaseIds[m.phaseIndex] : undefined,
+                    startDate: addDaysISO(start, m.startOffsetDays),
+                    endDate: addDaysISO(start, m.startOffsetDays + m.durationDays - 1),
+                    progress: m.progress,
+                    color: m.color,
+                    assignee: m.assignee,
+                    notes: m.notes,
+                    order: timeline.milestones.length + i,
+                    createdAt: nowISO,
+                    updatedAt: nowISO,
+                })
+            );
+
+            await this._writeTimeline(projectId, {
+                phases: [...timeline.phases, ...newPhases],
+                milestones: [...timeline.milestones, ...newMilestones],
+            });
+
+            return {
+                phaseCount: newPhases.length,
+                milestoneCount: newMilestones.length,
+            };
+        } catch (error) {
+            logError(error, 'importParsed');
+            if (error instanceof DatabaseError) throw error;
+            throw new DatabaseError('Failed to import timeline');
         }
     },
 

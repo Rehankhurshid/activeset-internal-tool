@@ -28,6 +28,7 @@ import {
     CalendarRange,
     Loader2,
     Sparkles,
+    FileText,
 } from 'lucide-react';
 import type { TimelineItemStatus, TimelineMilestone } from '@/types';
 import { TIMELINE_TEMPLATES } from '@/lib/timeline-templates';
@@ -37,12 +38,14 @@ import type {
     TimelineViewMode,
     TimelineZoom,
 } from '../../domain/timeline.types';
+import type { ParsedTimelineMarkdown } from '../../domain/timeline.markdown';
 import { TimelineGantt } from '../components/TimelineGantt';
 import { TimelineList } from '../components/TimelineList';
 import {
     TimelineEditSheet,
     type MilestoneDraft,
 } from '../components/TimelineEditSheet';
+import { TimelineImportMarkdownDialog } from '../components/TimelineImportMarkdownDialog';
 
 interface ProjectTimelineOverviewProps {
     projectId: string;
@@ -60,6 +63,7 @@ export function ProjectTimelineOverview({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
     const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
+    const [importDialogOpen, setImportDialogOpen] = useState(false);
 
     // Auto-switch to list on small viewports
     useEffect(() => {
@@ -192,6 +196,31 @@ export function ProjectTimelineOverview({
         [projectId]
     );
 
+    const handleImportMarkdown = useCallback(
+        async (parsed: ParsedTimelineMarkdown) => {
+            try {
+                const result = await timelineRepository.importParsed(projectId, {
+                    phases: parsed.phases,
+                    milestones: parsed.milestones,
+                });
+                const parts: string[] = [];
+                if (result.phaseCount > 0) {
+                    parts.push(
+                        `${result.phaseCount} phase${result.phaseCount === 1 ? '' : 's'}`
+                    );
+                }
+                parts.push(
+                    `${result.milestoneCount} milestone${result.milestoneCount === 1 ? '' : 's'}`
+                );
+                toast.success(`Imported ${parts.join(' and ')}`);
+            } catch {
+                toast.error('Failed to import markdown');
+                throw new Error('import failed');
+            }
+        },
+        [projectId]
+    );
+
     const handleApplyTemplate = useCallback(
         async (templateId: string) => {
             setApplyingTemplateId(templateId);
@@ -263,13 +292,24 @@ export function ProjectTimelineOverview({
 
                 <div className="flex items-center gap-2">
                     {!isEmpty && (
-                        <TemplateDialogButton
-                            open={templateDialogOpen}
-                            onOpenChange={setTemplateDialogOpen}
-                            onApply={handleApplyTemplate}
-                            applyingId={applyingTemplateId}
-                            variant="ghost"
-                        />
+                        <>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => setImportDialogOpen(true)}
+                            >
+                                <FileText className="h-4 w-4" />
+                                <span className="hidden sm:inline">Import MD</span>
+                            </Button>
+                            <TemplateDialogButton
+                                open={templateDialogOpen}
+                                onOpenChange={setTemplateDialogOpen}
+                                onApply={handleApplyTemplate}
+                                applyingId={applyingTemplateId}
+                                variant="ghost"
+                            />
+                        </>
                     )}
                     <Button size="sm" className="gap-1.5" onClick={openNew}>
                         <Plus className="h-4 w-4" />
@@ -282,6 +322,7 @@ export function ProjectTimelineOverview({
             {isEmpty ? (
                 <EmptyState
                     onNew={openNew}
+                    onImportMarkdown={() => setImportDialogOpen(true)}
                     templateDialogOpen={templateDialogOpen}
                     onTemplateDialogOpenChange={setTemplateDialogOpen}
                     onApplyTemplate={handleApplyTemplate}
@@ -312,6 +353,12 @@ export function ProjectTimelineOverview({
                 onSave={handleSave}
                 onDelete={editingMilestone ? handleDelete : undefined}
                 onAddPhase={handleAddPhase}
+            />
+
+            <TimelineImportMarkdownDialog
+                open={importDialogOpen}
+                onOpenChange={setImportDialogOpen}
+                onImport={handleImportMarkdown}
             />
         </div>
     );
@@ -347,12 +394,14 @@ function ViewToggle({
 
 function EmptyState({
     onNew,
+    onImportMarkdown,
     templateDialogOpen,
     onTemplateDialogOpenChange,
     onApplyTemplate,
     applyingTemplateId,
 }: {
     onNew: () => void;
+    onImportMarkdown: () => void;
     templateDialogOpen: boolean;
     onTemplateDialogOpenChange: (open: boolean) => void;
     onApplyTemplate: (id: string) => void;
@@ -368,7 +417,7 @@ function EmptyState({
                 Plan phases, milestones, and dates on a visual timeline. Drag bars to
                 move them, resize to change duration.
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2">
                 <Button className="gap-1.5" onClick={onNew}>
                     <Plus className="h-4 w-4" />
                     Add Milestone
@@ -380,6 +429,10 @@ function EmptyState({
                     applyingId={applyingTemplateId}
                     variant="outline"
                 />
+                <Button variant="outline" className="gap-1.5" onClick={onImportMarkdown}>
+                    <FileText className="h-4 w-4" />
+                    Import Markdown
+                </Button>
             </div>
         </div>
     );
