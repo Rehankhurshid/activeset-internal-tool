@@ -1,9 +1,22 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Sparkles, Search, LayoutGrid, List, FolderOpen, Link as LinkIcon, Filter } from 'lucide-react';
+import {
+  Plus,
+  Sparkles,
+  Search,
+  LayoutGrid,
+  List,
+  FolderOpen,
+  Link as LinkIcon,
+  Filter,
+  Building2,
+  GanttChartSquare,
+  Users,
+} from 'lucide-react';
 import { useAuth } from '@/modules/auth-access';
 import { type Project, type ProjectStatus, type ProjectTag } from '@/modules/project-links';
 import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
@@ -36,6 +49,7 @@ export function ProjectLinksDashboardScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [groupByClient, setGroupByClient] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('current');
   const [activeTags, setActiveTags] = useState<ProjectTag[]>([]);
   const { isLoading: isCreatingProject, execute: executeCreateProject } = useAsyncOperation();
@@ -96,6 +110,33 @@ export function ProjectLinksDashboardScreen() {
       return true;
     });
   }, [projects, searchQuery, statusFilter, activeTags]);
+
+  // Group by client (stable alphabetical, unassigned last)
+  const groupedProjects = useMemo(() => {
+    const groups = new Map<string, Project[]>();
+    const unassigned: Project[] = [];
+    for (const project of filteredProjects) {
+      const client = project.client?.trim();
+      if (!client) {
+        unassigned.push(project);
+        continue;
+      }
+      const existing = groups.get(client);
+      if (existing) {
+        existing.push(project);
+      } else {
+        groups.set(client, [project]);
+      }
+    }
+    const sortedGroups: Array<{ client: string | null; projects: Project[] }> =
+      Array.from(groups.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([client, projects]) => ({ client, projects }));
+    if (unassigned.length > 0) {
+      sortedGroups.push({ client: null, projects: unassigned });
+    }
+    return sortedGroups;
+  }, [filteredProjects]);
 
   // Counts
   const currentCount = projects.filter(p => (p.status || 'current') === 'current').length;
@@ -158,6 +199,16 @@ export function ProjectLinksDashboardScreen() {
                   >
                     <List className="h-4 w-4" />
                     <span className="sr-only sm:not-sr-only sm:ml-2">List</span>
+                  </Button>
+                  <Button
+                    variant={groupByClient ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setGroupByClient(prev => !prev)}
+                    aria-label="Group by client"
+                    aria-pressed={groupByClient}
+                  >
+                    <Users className="h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:ml-2">By Client</span>
                   </Button>
                 </div>
               </div>
@@ -295,19 +346,71 @@ export function ProjectLinksDashboardScreen() {
 
             {/* Projects Grid/List */}
             {filteredProjects.length > 0 ? (
-              <div className={cn(
-                viewMode === 'grid'
-                  ? "grid gap-4 md:gap-6 md:grid-cols-2 xl:grid-cols-3"
-                  : "space-y-4"
-              )}>
-                {filteredProjects.map((project) => (
-                  <ProjectCard
-                    key={project.id}
-                    project={project}
-                    onDelete={handleDeleteProject}
-                  />
-                ))}
-              </div>
+              groupByClient ? (
+                <div className="space-y-8">
+                  {groupedProjects.map(({ client, projects: clientProjects }) => (
+                    <section key={client ?? '__unassigned__'}>
+                      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-2 border-b border-border/60">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Building2 className={cn(
+                            "h-4 w-4 shrink-0",
+                            client ? "text-muted-foreground" : "text-muted-foreground/40"
+                          )} />
+                          <h2 className={cn(
+                            "text-sm sm:text-base font-semibold tracking-tight truncate",
+                            !client && "text-muted-foreground italic"
+                          )}>
+                            {client ?? 'Unassigned'}
+                          </h2>
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 shrink-0">
+                            {clientProjects.length}
+                          </Badge>
+                        </div>
+                        {client && (
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs shrink-0"
+                          >
+                            <Link href={`/modules/project-links/clients/${encodeURIComponent(client)}`}>
+                              <GanttChartSquare className="h-3.5 w-3.5 mr-1.5" />
+                              View combined timeline
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
+                      <div className={cn(
+                        viewMode === 'grid'
+                          ? "grid gap-4 md:gap-6 md:grid-cols-2 xl:grid-cols-3"
+                          : "space-y-4"
+                      )}>
+                        {clientProjects.map((project) => (
+                          <ProjectCard
+                            key={project.id}
+                            project={project}
+                            onDelete={handleDeleteProject}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <div className={cn(
+                  viewMode === 'grid'
+                    ? "grid gap-4 md:gap-6 md:grid-cols-2 xl:grid-cols-3"
+                    : "space-y-4"
+                )}>
+                  {filteredProjects.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      onDelete={handleDeleteProject}
+                    />
+                  ))}
+                </div>
+              )
             ) : (
               <Card className="border-dashed">
                 <CardContent className="flex flex-col items-center justify-center py-12">
