@@ -421,6 +421,38 @@ function escapeCliValue(value: string) {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+function getProjectCaptureUrls(links: ProjectLink[]): string[] {
+  const seen = new Set<string>();
+  const urls: string[] = [];
+
+  for (const link of links) {
+    const rawUrl = (link.url || '').trim();
+    if (!rawUrl) continue;
+
+    let normalizedKey = rawUrl;
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') continue;
+
+      // Canonicalize key to avoid duplicates from trailing slashes/hash/query variations.
+      parsed.hash = '';
+      parsed.search = '';
+      const normalizedPath = parsed.pathname.replace(/\/+$/, '') || '/';
+      parsed.pathname = normalizedPath;
+      normalizedKey = parsed.toString();
+    } catch {
+      continue;
+    }
+
+    if (!seen.has(normalizedKey)) {
+      seen.add(normalizedKey);
+      urls.push(rawUrl);
+    }
+  }
+
+  return urls;
+}
+
 function buildCaptureCommand(projectName: string, urls: string[]) {
   const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
   return `npx @activeset/capture --project "${escapeCliValue(projectName)}" --urls "${urls.join(',')}" --upload ${uploadUrl}`;
@@ -860,19 +892,24 @@ function EmptyState({
   projectName,
   projectId,
   sitemapUrl,
+  links,
 }: {
   projectName: string;
   projectId: string;
   sitemapUrl?: string;
+  links: ProjectLink[];
 }) {
   const [scanning, setScanning] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showSitemapBrowser, setShowSitemapBrowser] = useState(false);
+  const projectUrls = useMemo(() => getProjectCaptureUrls(links), [links]);
 
   const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
   const captureCommand = sitemapUrl
     ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${escapeCliValue(projectName)}" --upload ${uploadUrl}`
-    : `npx @activeset/capture --project "${escapeCliValue(projectName)}" --file urls.txt --upload ${uploadUrl}`;
+    : projectUrls.length > 0
+      ? buildCaptureCommand(projectName, projectUrls)
+      : `npx @activeset/capture --project "${escapeCliValue(projectName)}" --file urls.txt --upload ${uploadUrl}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(captureCommand);
@@ -1102,6 +1139,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
   const [activeDevice, setActiveDevice] = useState('desktop');
   const [widthByDevice, setWidthByDevice] = useState<Record<string, string>>(DEVICE_DEFAULT_WIDTH);
   const [copiedAll, setCopiedAll] = useState(false);
+  const projectUrls = useMemo(() => getProjectCaptureUrls(links), [links]);
 
   // Fetch capture runs for this project
   useEffect(() => {
@@ -1152,6 +1190,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
 
     return combined;
   }, [captureRuns, links]);
+  const fallbackImageUrls = useMemo(() => [...new Set(allImages.map((i) => i.pageUrl))], [allImages]);
 
   // Group by language
   const langGroups = useMemo(() => {
@@ -1241,14 +1280,19 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
   // Recapture all (whole sitemap)
   const handleCopyAllCapture = useCallback(() => {
     const uploadUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.activeset.co';
+    const urlsForCopy = projectUrls.length > 0 ? projectUrls : fallbackImageUrls;
     const cmd = sitemapUrl
       ? `npx @activeset/capture --sitemap ${sitemapUrl} --project "${escapeCliValue(projectName)}" --upload ${uploadUrl}`
-      : buildCaptureCommand(projectName, [...new Set(allImages.map((i) => i.pageUrl))]);
+      : buildCaptureCommand(projectName, urlsForCopy);
     navigator.clipboard.writeText(cmd);
     setCopiedAll(true);
-    toast.success('Copied full sitemap capture command');
+    toast.success(
+      sitemapUrl
+        ? 'Copied full sitemap capture command'
+        : `Copied capture command for ${urlsForCopy.length} project URL${urlsForCopy.length === 1 ? '' : 's'}`
+    );
     setTimeout(() => setCopiedAll(false), 2000);
-  }, [sitemapUrl, projectName, allImages]);
+  }, [sitemapUrl, projectName, projectUrls, fallbackImageUrls]);
 
   if (loading) {
     return (
@@ -1267,7 +1311,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
   }
 
   if (allImages.length === 0) {
-    return <EmptyState projectName={projectName} projectId={projectId} sitemapUrl={sitemapUrl} />;
+    return <EmptyState projectName={projectName} projectId={projectId} sitemapUrl={sitemapUrl} links={links} />;
   }
 
   const renderGrid = (images: ImageEntry[], deviceOverride?: string) => {
