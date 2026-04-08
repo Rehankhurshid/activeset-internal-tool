@@ -6,13 +6,14 @@ import { EmbedDialog } from '@/modules/project-links';
 import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
 import type { Project } from '@/modules/project-links';
 import { ChecklistOverview } from '@/modules/checklists';
+import { ProjectTimelineOverview } from '@/modules/timeline';
 import { ProjectTextCheckCard, WebsiteAuditDashboardScreen } from '@/modules/site-monitoring';
 import { WebflowPagesDashboard, webflowConfigRepository, type WebflowConfig } from '@/modules/webflow';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2 } from 'lucide-react';
+import { Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
@@ -263,6 +264,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                 <span className="hidden sm:inline">Checklist</span>
                                 <span className="sm:hidden">SOP</span>
                             </TabsTrigger>
+                            <TabsTrigger value="timeline" className="gap-2 flex-1 sm:flex-none">
+                                <GanttChartSquare className="h-4 w-4" />
+                                <span className="hidden sm:inline">Timeline</span>
+                                <span className="sm:hidden">Timeline</span>
+                            </TabsTrigger>
                         </TabsList>
 
                         {/* Show Scan Sitemap when in audit tab */}
@@ -316,6 +322,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
                     <TabsContent value="checklist" className="mt-4 sm:mt-6">
                         <ChecklistOverview
+                            projectId={project.id}
+                            userEmail={user?.email ?? undefined}
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="timeline" className="mt-4 sm:mt-6">
+                        <ProjectTimelineOverview
                             projectId={project.id}
                             userEmail={user?.email ?? undefined}
                         />

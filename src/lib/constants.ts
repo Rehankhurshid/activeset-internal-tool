@@ -2,6 +2,7 @@
 export const COLLECTIONS = {
   PROJECTS: 'projects',
   PROJECT_CHECKLISTS: 'project_checklists',
+  PROJECT_TIMELINES: 'project_timelines',
   SOP_TEMPLATES: 'sop_templates',
   SCAN_JOBS: 'scan_jobs',
   SITE_ALERTS: 'site_alerts',

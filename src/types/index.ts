@@ -480,3 +480,88 @@ export interface SOPTemplate {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+// --- PROJECT TIMELINE TYPES ---
+
+export type TimelineItemStatus = 'not_started' | 'in_progress' | 'completed' | 'blocked';
+
+export type TimelineColor =
+  | 'blue'
+  | 'emerald'
+  | 'amber'
+  | 'rose'
+  | 'violet'
+  | 'slate';
+
+export const TIMELINE_STATUS_LABELS: Record<TimelineItemStatus, string> = {
+  not_started: 'Not Started',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  blocked: 'Blocked',
+};
+
+export const TIMELINE_COLORS: TimelineColor[] = [
+  'blue',
+  'emerald',
+  'amber',
+  'rose',
+  'violet',
+  'slate',
+];
+
+export interface TimelinePhase {
+  id: string;
+  title: string;
+  color?: TimelineColor;
+  order: number;
+  collapsed?: boolean;
+}
+
+export interface TimelineMilestone {
+  id: string;
+  title: string;
+  phaseId?: string;              // optional group
+  status: TimelineItemStatus;
+  startDate: string;             // ISO YYYY-MM-DD (matches DatePicker)
+  endDate: string;               // ISO YYYY-MM-DD (inclusive)
+  progress?: number;             // 0–100
+  color?: TimelineColor;         // falls back to phase color
+  assignee?: string;             // email
+  notes?: string;
+  order: number;
+  createdAt?: string;            // ISO
+  updatedAt?: string;            // ISO
+}
+
+export interface ProjectTimeline {
+  id: string;                    // Firestore doc ID (equals projectId)
+  projectId: string;
+  phases: TimelinePhase[];
+  milestones: TimelineMilestone[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Template definitions (for seeding a blank timeline)
+export type TimelineTemplatePhase = Omit<TimelinePhase, 'id' | 'order'> & {
+  order: number;
+};
+
+export type TimelineTemplateMilestone = Omit<
+  TimelineMilestone,
+  'id' | 'order' | 'phaseId' | 'createdAt' | 'updatedAt'
+> & {
+  order: number;
+  phaseIndex?: number;    // index into template.phases
+  startOffsetDays: number; // days from timeline start
+  durationDays: number;    // length in days
+};
+
+export interface TimelineTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  phases: TimelineTemplatePhase[];
+  milestones: TimelineTemplateMilestone[];
+}
