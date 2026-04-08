@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type {
     ProjectTimeline,
+    TimelineItemStatus,
     TimelineMilestone,
     TimelinePhase,
     TimelineColor,
@@ -32,6 +33,10 @@ interface TimelineGanttProps {
         startDate: string,
         endDate: string
     ) => void;
+    onUpdateMilestoneStatus: (
+        milestoneId: string,
+        status: TimelineItemStatus
+    ) => void;
     onTogglePhaseCollapsed: (phaseId: string) => void;
 }
 
@@ -58,6 +63,7 @@ export function TimelineGantt({
     zoom,
     onOpenMilestone,
     onUpdateMilestoneDates,
+    onUpdateMilestoneStatus,
     onTogglePhaseCollapsed,
 }: TimelineGanttProps) {
     const dayWidth = ZOOM_DAY_WIDTH[zoom];
@@ -233,6 +239,9 @@ export function TimelineGantt({
                                         onOpen={() => onOpenMilestone(row.milestone.id)}
                                         onUpdateDates={(s, e) =>
                                             onUpdateMilestoneDates(row.milestone.id, s, e)
+                                        }
+                                        onStatusChange={(s) =>
+                                            onUpdateMilestoneStatus(row.milestone.id, s)
                                         }
                                     />
                                 </div>

@@ -2,12 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { TimelineMilestone, TimelineColor } from '@/types';
+import type {
+    TimelineItemStatus,
+    TimelineMilestone,
+    TimelineColor,
+} from '@/types';
+import { TIMELINE_STATUS_LABELS } from '@/types';
 import {
     TIMELINE_COLOR_BG,
     TIMELINE_COLOR_SOFT,
 } from '../../domain/timeline.types';
 import { daysBetween, formatDateShort, shiftISO } from '../../domain/timeline.utils';
+import { StatusPicker } from './StatusPicker';
 
 type DragMode = 'move' | 'resize-start' | 'resize-end';
 
@@ -18,6 +24,7 @@ interface TimelineBarProps {
     effectiveColor: TimelineColor;
     onOpen: () => void;
     onUpdateDates: (startDate: string, endDate: string) => void;
+    onStatusChange: (status: TimelineItemStatus) => void;
 }
 
 export function TimelineBar({
@@ -27,6 +34,7 @@ export function TimelineBar({
     effectiveColor,
     onOpen,
     onUpdateDates,
+    onStatusChange,
 }: TimelineBarProps) {
     const barRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{
@@ -230,7 +238,25 @@ export function TimelineBar({
 
             {/* Label */}
             <div className="relative z-10 px-2 text-[11px] font-medium truncate flex items-center gap-1.5 w-full">
-                <StatusDot status={milestone.status} />
+                <StatusPicker
+                    status={milestone.status}
+                    onChange={onStatusChange}
+                    align="start"
+                >
+                    <button
+                        type="button"
+                        // Keep the status picker independent of drag and
+                        // open-on-click: stop pointer and click propagation
+                        // before the parent bar's handlers see the event.
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onPointerUp={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                        className="shrink-0 p-0.5 -m-0.5 rounded hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-ring/60"
+                        aria-label={`Change status (currently ${TIMELINE_STATUS_LABELS[milestone.status]})`}
+                    >
+                        <StatusDot status={milestone.status} />
+                    </button>
+                </StatusPicker>
                 <span className="truncate">{milestone.title}</span>
                 {showPreviewDates && (
                     <span className="ml-auto shrink-0 text-[10px] opacity-70 tabular-nums">

@@ -29,7 +29,7 @@ import {
     Loader2,
     Sparkles,
 } from 'lucide-react';
-import type { TimelineMilestone } from '@/types';
+import type { TimelineItemStatus, TimelineMilestone } from '@/types';
 import { TIMELINE_TEMPLATES } from '@/lib/timeline-templates';
 import { timelineRepository } from '../../infrastructure/timeline.repository';
 import { useProjectTimeline } from '@/hooks/useProjectTimeline';
@@ -144,6 +144,20 @@ export function ProjectTimelineOverview({
                 });
             } catch {
                 toast.error('Failed to update dates');
+            }
+        },
+        [projectId]
+    );
+
+    const handleUpdateStatus = useCallback(
+        async (milestoneId: string, status: TimelineItemStatus) => {
+            try {
+                await timelineRepository.updateMilestone(projectId, milestoneId, {
+                    status,
+                });
+                toast.success('Status updated');
+            } catch {
+                toast.error('Failed to update status');
             }
         },
         [projectId]
@@ -279,10 +293,15 @@ export function ProjectTimelineOverview({
                     zoom={zoom}
                     onOpenMilestone={openEdit}
                     onUpdateMilestoneDates={handleUpdateDates}
+                    onUpdateMilestoneStatus={handleUpdateStatus}
                     onTogglePhaseCollapsed={handleTogglePhaseCollapsed}
                 />
             ) : (
-                <TimelineList timeline={timeline!} onOpenMilestone={openEdit} />
+                <TimelineList
+                    timeline={timeline!}
+                    onOpenMilestone={openEdit}
+                    onStatusChange={handleUpdateStatus}
+                />
             )}
 
             <TimelineEditSheet
