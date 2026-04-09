@@ -23,6 +23,7 @@ import {
 } from '../../domain/timeline.utils';
 import { TimelineBar } from './TimelineBar';
 import { TimelineRuler } from './TimelineRuler';
+import { TodayLine } from './TodayLine';
 
 interface TimelineGanttProps {
     timeline: ProjectTimeline;
@@ -206,12 +207,7 @@ export function TimelineGantt({
 
                         {/* Today vertical line */}
                         {todayDaysFromStart !== null && (
-                            <div
-                                className="absolute top-0 bottom-0 w-px bg-rose-500/70 z-10 pointer-events-none"
-                                style={{ left: todayDaysFromStart * dayWidth }}
-                            >
-                                <div className="absolute -top-0.5 -translate-x-1/2 w-2 h-2 rounded-full bg-rose-500" />
-                            </div>
+                            <TodayLine left={todayDaysFromStart * dayWidth} />
                         )}
 
                         {/* Rows */}
