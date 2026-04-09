@@ -9,8 +9,10 @@ import {
     startOfMonth,
     startOfWeek,
     startOfQuarter,
+    startOfYear,
     endOfMonth,
     endOfQuarter,
+    endOfYear,
     isValid,
 } from 'date-fns';
 import type { TimelineMilestone } from '@/types';
@@ -142,6 +144,25 @@ export function buildQuarterCells(startISO: string, endISO: string): RulerCell[]
             widthDays: differenceInCalendarDays(clampedEnd, clampedStart) + 1,
         });
         cursor = addDays(endOfQuarter(cursor), 1);
+    }
+    return cells;
+}
+
+export function buildYearCells(startISO: string, endISO: string): RulerCell[] {
+    const start = parseDate(startISO);
+    const end = parseDate(endISO);
+    const cells: RulerCell[] = [];
+    let cursor = startOfYear(start);
+    while (cursor <= end) {
+        const yEnd = endOfYear(cursor);
+        const clampedStart = cursor < start ? start : cursor;
+        const clampedEnd = yEnd > end ? end : yEnd;
+        cells.push({
+            label: format(cursor, 'yyyy'),
+            leftDays: differenceInCalendarDays(clampedStart, start),
+            widthDays: differenceInCalendarDays(clampedEnd, clampedStart) + 1,
+        });
+        cursor = addDays(endOfYear(cursor), 1);
     }
     return cells;
 }

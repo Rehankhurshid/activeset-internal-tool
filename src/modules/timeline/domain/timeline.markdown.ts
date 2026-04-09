@@ -1,6 +1,9 @@
 import type {
+    ProjectTimeline,
     TimelineColor,
     TimelineItemStatus,
+    TimelineMilestone,
+    TimelinePhase,
     TimelineTemplateMilestone,
     TimelineTemplatePhase,
 } from '@/types';
@@ -207,4 +210,58 @@ export function detectEarliestDate(markdown: string): string {
         return new Date().toISOString().slice(0, 10);
     }
     return matches.slice().sort()[0];
+}
+
+/**
+ * Serialize a live ProjectTimeline back to the canonical markdown format.
+ * Milestones are grouped by phase; ungrouped milestones appear first.
+ */
+export function serializeTimelineToMarkdown(timeline: ProjectTimeline): string {
+    const phaseMap = new Map<string, TimelinePhase>();
+    const sortedPhases = [...timeline.phases].sort((a, b) => a.order - b.order);
+    for (const p of sortedPhases) phaseMap.set(p.id, p);
+
+    const milestonesByPhase = new Map<string | undefined, TimelineMilestone[]>();
+    const sorted = [...timeline.milestones].sort((a, b) => a.order - b.order);
+    for (const m of sorted) {
+        const key = m.phaseId;
+        if (!milestonesByPhase.has(key)) milestonesByPhase.set(key, []);
+        milestonesByPhase.get(key)!.push(m);
+    }
+
+    const lines: string[] = [];
+
+    // Ungrouped milestones first
+    const ungrouped = milestonesByPhase.get(undefined) ?? [];
+    for (const m of ungrouped) {
+        lines.push(formatMilestoneLine(m));
+    }
+    if (ungrouped.length > 0 && sortedPhases.length > 0) {
+        lines.push('');
+    }
+
+    for (let i = 0; i < sortedPhases.length; i++) {
+        const phase = sortedPhases[i];
+        const colorSuffix = phase.color ? ` [${phase.color}]` : '';
+        lines.push(`## ${phase.title}${colorSuffix}`);
+        const phaseMilestones = milestonesByPhase.get(phase.id) ?? [];
+        for (const m of phaseMilestones) {
+            lines.push(formatMilestoneLine(m));
+        }
+        if (i < sortedPhases.length - 1) {
+            lines.push('');
+        }
+    }
+
+    return lines.join('\n');
+}
+
+function formatMilestoneLine(m: TimelineMilestone): string {
+    const datePart =
+        m.startDate === m.endDate
+            ? m.startDate
+            : `${m.startDate} → ${m.endDate}`;
+    const statusSuffix =
+        m.status !== 'not_started' ? ` [${m.status}]` : '';
+    return `- ${m.title}: ${datePart}${statusSuffix}`;
 }

@@ -38,6 +38,7 @@ import {
     Trash2,
     Save,
     MoreHorizontal,
+    Code2,
 } from 'lucide-react';
 import type {
     TimelineItemStatus,
@@ -60,6 +61,7 @@ import {
     type MilestoneDraft,
 } from '../components/TimelineEditSheet';
 import { TimelineImportMarkdownDialog } from '../components/TimelineImportMarkdownDialog';
+import { TimelineMarkdownEditorDialog } from '../components/TimelineMarkdownEditorDialog';
 import { SaveTimelineTemplateDialog } from '../components/SaveTimelineTemplateDialog';
 import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
 
@@ -82,6 +84,7 @@ export function ProjectTimelineOverview({
     const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
     const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
     const [importDialogOpen, setImportDialogOpen] = useState(false);
+    const [mdEditorOpen, setMdEditorOpen] = useState(false);
     const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
     const [editingTemplate, setEditingTemplate] =
         useState<TimelineTemplate | null>(null);
@@ -242,6 +245,26 @@ export function ProjectTimelineOverview({
         [projectId]
     );
 
+    const handleReplaceFromMarkdown = useCallback(
+        async (parsed: ParsedTimelineMarkdown) => {
+            try {
+                // Clear existing then import fresh
+                await timelineRepository.clearTimeline(projectId);
+                const result = await timelineRepository.importParsed(projectId, {
+                    phases: parsed.phases,
+                    milestones: parsed.milestones,
+                });
+                toast.success(
+                    `Timeline replaced — ${result.phaseCount} phase${result.phaseCount === 1 ? '' : 's'}, ${result.milestoneCount} milestone${result.milestoneCount === 1 ? '' : 's'}`
+                );
+            } catch {
+                toast.error('Failed to save markdown changes');
+                throw new Error('replace failed');
+            }
+        },
+        [projectId]
+    );
+
     const handleApplyTemplate = useCallback(
         async (templateId: string) => {
             setApplyingTemplateId(templateId);
@@ -317,6 +340,7 @@ export function ProjectTimelineOverview({
                                 <SelectItem value="week">Week</SelectItem>
                                 <SelectItem value="month">Month</SelectItem>
                                 <SelectItem value="quarter">Quarter</SelectItem>
+                                <SelectItem value="year">Year</SelectItem>
                             </SelectContent>
                         </Select>
                     )}
@@ -354,6 +378,12 @@ export function ProjectTimelineOverview({
                                 >
                                     <FileText className="h-4 w-4" />
                                     Import markdown
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onSelect={() => setMdEditorOpen(true)}
+                                >
+                                    <Code2 className="h-4 w-4" />
+                                    Edit as markdown
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                     onSelect={() => {
@@ -424,6 +454,15 @@ export function ProjectTimelineOverview({
                 onOpenChange={setImportDialogOpen}
                 onImport={handleImportMarkdown}
             />
+
+            {timeline && (
+                <TimelineMarkdownEditorDialog
+                    open={mdEditorOpen}
+                    onOpenChange={setMdEditorOpen}
+                    timeline={timeline}
+                    onSave={handleReplaceFromMarkdown}
+                />
+            )}
 
             <SaveTimelineTemplateDialog
                 open={saveTemplateOpen}

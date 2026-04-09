@@ -8,6 +8,7 @@ import {
     buildQuarterCells,
     buildWeekCells,
     buildWeekGroupCells,
+    buildYearCells,
     type RulerCell,
 } from '../../domain/timeline.utils';
 
@@ -39,9 +40,15 @@ export function TimelineRuler({
                 secondary: buildWeekGroupCells(rangeStart, rangeEnd),
             };
         }
+        if (zoom === 'quarter') {
+            return {
+                primary: buildQuarterCells(rangeStart, rangeEnd),
+                secondary: buildMonthCells(rangeStart, rangeEnd),
+            };
+        }
         return {
-            primary: buildQuarterCells(rangeStart, rangeEnd),
-            secondary: buildMonthCells(rangeStart, rangeEnd),
+            primary: buildYearCells(rangeStart, rangeEnd),
+            secondary: buildQuarterCells(rangeStart, rangeEnd),
         };
     }, [rangeStart, rangeEnd, zoom]);
 

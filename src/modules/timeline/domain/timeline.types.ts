@@ -9,12 +9,13 @@ export type {
 
 export type TimelineViewMode = 'timeline' | 'list';
 
-export type TimelineZoom = 'week' | 'month' | 'quarter';
+export type TimelineZoom = 'week' | 'month' | 'quarter' | 'year';
 
 export const ZOOM_DAY_WIDTH: Record<TimelineZoom, number> = {
     week: 40,
     month: 20,
     quarter: 8,
+    year: 3,
 };
 
 export const TIMELINE_COLOR_BG: Record<string, string> = {
