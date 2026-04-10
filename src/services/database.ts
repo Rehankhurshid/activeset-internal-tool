@@ -281,6 +281,18 @@ export const projectsService = {
     });
   },
 
+  // Update embedded-widget display flags
+  async updateProjectWidgetFlags(
+    projectId: string,
+    flags: { disableAuditBadge?: boolean; disableDropdown?: boolean }
+  ): Promise<void> {
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+      ...flags,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
   // Update project sitemap URL
   async updateProjectSitemap(projectId: string, sitemapUrl: string): Promise<void> {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);

@@ -334,6 +334,9 @@ export interface Project {
   publicAuditShareToken?: string;
   publicAuditShareEnabled?: boolean;
   publicAuditShareUpdatedAt?: string;
+  // Embedded widget display flags
+  disableAuditBadge?: boolean; // Hide the floating score badge on the right
+  disableDropdown?: boolean; // Hide the bottom-right project-links dropdown
 }
 
 export interface WebsiteTextCheckTarget {

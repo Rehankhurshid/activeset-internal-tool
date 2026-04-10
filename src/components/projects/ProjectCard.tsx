@@ -18,6 +18,7 @@ import {
     Tag,
     Check,
     Globe,
+    SlidersHorizontal,
 } from 'lucide-react';
 import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS } from '@/types';
 import { projectsService } from '@/services/database';
@@ -62,6 +63,8 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const isCurrent = status === 'current';
     const hasScanning = !!project.sitemapUrl || project.links?.some(l => l.source === 'auto');
     const hasWebflow = !!project.webflowConfig;
+    const disableAuditBadge = project.disableAuditBadge === true;
+    const disableDropdown = project.disableDropdown === true;
 
     const handleDelete = async () => {
         setIsDeleting(true);
@@ -84,6 +87,18 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             ? tags.filter(t => t !== tag)
             : [...tags, tag];
         await projectsService.updateProjectTags(project.id, newTags);
+    };
+
+    const handleToggleAuditBadge = async () => {
+        await projectsService.updateProjectWidgetFlags(project.id, {
+            disableAuditBadge: !disableAuditBadge,
+        });
+    };
+
+    const handleToggleDropdown = async () => {
+        await projectsService.updateProjectWidgetFlags(project.id, {
+            disableDropdown: !disableDropdown,
+        });
     };
 
     const handleAddLink = async (title: string, url: string) => {
@@ -260,6 +275,28 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                             {PROJECT_TAG_LABELS[tag]}
                                         </DropdownMenuCheckboxItem>
                                     ))}
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+
+                            {/* Embedded widget display sub-menu */}
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <SlidersHorizontal className="mr-2 h-4 w-4" />
+                                    Widget Display
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    <DropdownMenuCheckboxItem
+                                        checked={!disableAuditBadge}
+                                        onCheckedChange={handleToggleAuditBadge}
+                                    >
+                                        Show audit badge
+                                    </DropdownMenuCheckboxItem>
+                                    <DropdownMenuCheckboxItem
+                                        checked={!disableDropdown}
+                                        onCheckedChange={handleToggleDropdown}
+                                    >
+                                        Show links dropdown
+                                    </DropdownMenuCheckboxItem>
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
 

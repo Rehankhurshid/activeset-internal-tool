@@ -26,7 +26,7 @@
     baseUrl: scriptBaseUrl,
     style: "dropdown", // Enforced
     position: "bottom-right", // Enforced
-    showOnDomains: [], 
+    showOnDomains: [],
   };
 
   // Font Loader
@@ -1144,7 +1144,6 @@
     }
 
     async init() {
-      this.initContentAudit(); // Auto-run audit on load
       loadFonts(); // Ensure fonts are loaded
       this.checklistProgress = null; // Will be { completed, total }
       try {
@@ -1156,9 +1155,19 @@
           ]);
           this.links = data.links || [];
           this.checklistProgress = clProgress;
-          this.render(data);
+          // Per-project display flags (set from the Project Dashboard)
+          const disableAuditBadge = data.disableAuditBadge === true;
+          const disableDropdown = data.disableDropdown === true;
+          if (!disableAuditBadge) {
+            this.initContentAudit(); // Auto-run audit on load
+          }
+          if (!disableDropdown) {
+            this.render(data);
+          }
         } else if (this.config.initialLinks) {
           this.links = this.config.initialLinks;
+          // No project = no per-project flags; fall back to showing both
+          this.initContentAudit();
           this.render({ links: this.config.initialLinks });
         } else {
           console.warn("Project Links: No project ID provided");
