@@ -336,7 +336,11 @@ async function compressCmd(
         continue;
       }
 
-      const fileName = (r.image_url.split('/').pop() || `image.${ext}`).split('?')[0];
+      // Use the compressed format's extension (usually .webp), not the
+      // original, so the asset's name matches its content.
+      const rawName = (r.image_url.split('/').pop() || `image.${ext}`).split('?')[0];
+      const baseName = rawName.replace(/\.[^.]+$/, '') || 'image';
+      const fileName = `${baseName}.${result.ext}`;
       const uploaded = await uploadAssetToWebflow(
         opts.site,
         token,
