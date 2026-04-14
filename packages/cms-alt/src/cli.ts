@@ -656,32 +656,48 @@ async function cleanupCmd(
   });
 
   const ids = [...seen.keys()];
-  const concurrency = Math.max(1, Math.min(4, parseInt(opts.concurrency, 10) || 2));
-  let done = 0, ok = 0, notFound = 0, failed = 0;
-  let cursor = 0;
-  async function worker() {
-    for (;;) {
-      const idx = cursor++;
-      if (idx >= ids.length) return;
-      const id = ids[idx];
+  void opts.concurrency; // kept for flag back-compat, but we always run sequentially now
+  let ok = 0, notFound = 0, failed = 0;
+
+  // Webflow's asset API caps at ~60 req/min. Run strictly sequential with
+  // >1s pacing, and on 429 honour Retry-After (or back off progressively)
+  // instead of burning the budget.
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i];
+    let attempt = 0;
+    let settled = false;
+    while (!settled) {
+      attempt++;
       const res = await deleteAsset(id, token);
-      done++;
       if (res.ok || res.status === 204) {
         ok++;
-        process.stdout.write(`  ✓ ${id} (${done}/${ids.length})\n`);
+        process.stdout.write(`  ✓ ${id} (${i + 1}/${ids.length})\n`);
+        settled = true;
       } else if (res.status === 404) {
         notFound++;
-        process.stdout.write(`  · ${id} already gone (${done}/${ids.length})\n`);
+        process.stdout.write(`  · ${id} already gone (${i + 1}/${ids.length})\n`);
+        settled = true;
+      } else if (res.status === 429) {
+        if (attempt > 6) {
+          failed++;
+          process.stdout.write(`  ✗ ${id} → still 429 after ${attempt} attempts, giving up\n`);
+          settled = true;
+        } else {
+          // exponential backoff: 5s, 10s, 20s, 40s, 60s, 90s
+          const waits = [5000, 10000, 20000, 40000, 60000, 90000];
+          const waitMs = waits[Math.min(attempt - 1, waits.length - 1)];
+          process.stdout.write(`  ⏸  ${id} rate-limited, sleeping ${waitMs / 1000}s… (attempt ${attempt})\n`);
+          await sleep(waitMs);
+        }
       } else {
         failed++;
         process.stdout.write(`  ✗ ${id} → ${res.status} ${res.text.slice(0, 120)}\n`);
+        settled = true;
       }
-      // gentle pacing — Webflow rate-limits assets around 60 req/min
-      await sleep(250);
     }
+    // Pace requests: 1.2s between deletes keeps us comfortably under 60/min.
+    if (i < ids.length - 1) await sleep(1200);
   }
-
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
   log('');
   log(`Cleanup complete: ${ok} deleted, ${notFound} already gone, ${failed} failed.`);
