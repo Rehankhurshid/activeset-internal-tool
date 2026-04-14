@@ -149,8 +149,6 @@ export class PageScanner {
         mainContent: any,
         pageUrl: string
     ): { images: ImageInfo[]; uniqueMissingAltCount: number } {
-        const images: ImageInfo[] = [];
-
         // Precompute set of srcs that live inside main content once (O(N)) instead of
         // per-image tree walks (O(N²)) — massive win on CMS pages with 100s of images.
         const mainContentSrcs = new Set<string>();
@@ -159,26 +157,39 @@ export class PageScanner {
             if (src) mainContentSrcs.add(src);
         });
 
+        // Webflow and other CMS builders render the same image multiple times
+        // for responsive breakpoints (mobile / tablet / desktop). One variant
+        // can have proper alt while a duplicate leaves alt="". For reporting
+        // purposes we treat an image as "has alt" if ANY instance on the page
+        // has a non-empty alt — otherwise a perfectly-tagged image keeps
+        // showing up as missing just because its mobile twin has empty alt.
+        const perSrc = new Map<string, { src: string; alt: string; inMainContent: boolean }>();
+
         $('img').each((_, el) => {
             const $el = $(el);
             const src = $el.attr('src') || '';
-            const alt = $el.attr('alt') || '';
+            const alt = ($el.attr('alt') || '').trim();
             if (!src) return;
 
-            images.push({ src, alt, inMainContent: mainContentSrcs.has(src) });
+            // Key by normalized src so `?w=100` vs `?w=500` variants collapse.
+            const key = this.normalizeImageSource(src, pageUrl) || src;
+            const existing = perSrc.get(key);
+            const inMain = mainContentSrcs.has(src) || (existing?.inMainContent ?? false);
+
+            if (!existing) {
+                perSrc.set(key, { src, alt, inMainContent: inMain });
+                return;
+            }
+
+            // Non-empty alt wins — prefer to surface the human-written value.
+            if (!existing.alt && alt) existing.alt = alt;
+            existing.inMainContent = existing.inMainContent || inMain;
         });
 
-        const uniqueMissingAlt = new Set(
-            images
-                .filter((img) => !img.alt)
-                .map((img) => this.normalizeImageSource(img.src, pageUrl))
-                .filter(Boolean)
-        );
+        const images: ImageInfo[] = Array.from(perSrc.values());
+        const uniqueMissingAltCount = images.filter((img) => !img.alt).length;
 
-        return {
-            images,
-            uniqueMissingAltCount: uniqueMissingAlt.size,
-        };
+        return { images, uniqueMissingAltCount };
     }
 
     async scanImagesOnly(url: string): Promise<{
