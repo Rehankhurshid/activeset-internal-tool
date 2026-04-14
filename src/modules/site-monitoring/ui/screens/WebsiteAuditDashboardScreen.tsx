@@ -51,6 +51,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import { siteMonitoringRepository } from "@/modules/site-monitoring/infrastructure/site-monitoring.repository"
 
 interface WebsiteAuditDashboardProps {
@@ -1819,8 +1820,14 @@ export function WebsiteAuditDashboard({
     }
   }, [isReadOnly, isCheckingAllBrokenLinks, links, projectId])
 
-  const runImageScanForLink = useCallback(async (link: ProjectLink): Promise<void> => {
-    if (!link?.id || !link?.url) return
+  const runImageScanForLink = useCallback(async (
+    link: ProjectLink
+  ): Promise<{ before: number; after: number } | null> => {
+    if (!link?.id || !link?.url) return null
+
+    const before =
+      (link.auditResult?.categories?.seo as { imagesWithoutAlt?: number } | undefined)
+        ?.imagesWithoutAlt ?? 0
 
     const response = await fetch('/api/scan-images', {
       method: 'POST',
@@ -1832,10 +1839,13 @@ export function WebsiteAuditDashboard({
       }),
     })
 
+    const payload = await response.json().catch(() => ({}))
     if (!response.ok) {
-      const result = await response.json().catch(() => ({}))
-      throw new Error(result?.error || `Failed image scan for ${link.url}`)
+      throw new Error((payload as { error?: string })?.error || `Failed image scan for ${link.url}`)
     }
+
+    const after = Number((payload as { uniqueMissingAltCount?: number })?.uniqueMissingAltCount ?? 0)
+    return { before, after }
   }, [projectId])
 
   const handleScanImagesForPage = useCallback(async (pageId: string) => {
@@ -1845,9 +1855,25 @@ export function WebsiteAuditDashboard({
 
     setScanningImagePageIds((prev) => new Set(prev).add(pageId))
     try {
-      await runImageScanForLink(link)
+      const delta = await runImageScanForLink(link)
+      if (delta) {
+        const resolved = Math.max(0, delta.before - delta.after)
+        const pageLabel = link.title || getCompactUrl(link.url)
+        if (resolved > 0) {
+          toast.success(
+            `Resolved ALT text for ${resolved} image${resolved === 1 ? '' : 's'} on ${pageLabel}`
+          )
+        } else if (delta.after === 0) {
+          toast.success(`No missing ALT text on ${pageLabel}`)
+        } else {
+          toast.info(
+            `${delta.after} image${delta.after === 1 ? '' : 's'} still missing ALT on ${pageLabel}`
+          )
+        }
+      }
     } catch (error) {
       console.error('[ImageScan] Failed page image scan:', error)
+      toast.error(error instanceof Error ? error.message : 'Image scan failed')
     } finally {
       setScanningImagePageIds((prev) => {
         const next = new Set(prev)
@@ -1877,48 +1903,55 @@ export function WebsiteAuditDashboard({
       currentUrl: "",
     })
 
-    // Parallelize with a small concurrency pool for ultra-fast scanning.
-    const concurrency = Math.min(6, pagesToScan.length)
-    let cursor = 0
-    let completed = 0
+    // Scan block-by-block: process a fixed-size batch, then move on. This keeps
+    // pressure on Firestore/fetch predictable and makes progress visible.
+    const blockSize = 5
+    let totalResolved = 0
+    let pagesFullyResolved = 0
+    let pagesStillMissing = 0
+    let failedPages = 0
 
-    const worker = async () => {
-      while (true) {
-        const i = cursor
-        cursor += 1
-        if (i >= pagesToScan.length) return
-        const page = pagesToScan[i]
+    try {
+      for (let start = 0; start < pagesToScan.length; start += blockSize) {
+        const block = pagesToScan.slice(start, start + blockSize)
 
-        setImageScanProgress((prev) => ({
-          ...prev,
-          total: pagesToScan.length,
-          currentUrl: page.url,
-        }))
-        setScanningImagePageIds((prev) => new Set(prev).add(page.id))
+        for (const page of block) {
+          setImageScanProgress((prev) => ({
+            ...prev,
+            total: pagesToScan.length,
+            currentUrl: page.url,
+          }))
+          setScanningImagePageIds((prev) => new Set(prev).add(page.id))
+        }
 
-        try {
-          await runImageScanForLink(page)
-        } catch (error) {
-          console.error(`[ImageScan] Failed image scan for ${page.url}:`, error)
-        } finally {
-          completed += 1
-          const currentCompleted = completed
+        const results = await Promise.allSettled(block.map((page) => runImageScanForLink(page)))
+
+        results.forEach((outcome, idx) => {
+          const page = block[idx]
+          if (outcome.status === 'fulfilled' && outcome.value) {
+            const { before, after } = outcome.value
+            const resolved = Math.max(0, before - after)
+            totalResolved += resolved
+            if (after === 0 && before > 0) pagesFullyResolved += 1
+            if (after > 0) pagesStillMissing += 1
+          } else if (outcome.status === 'rejected') {
+            failedPages += 1
+            console.error(`[ImageScan] Failed image scan for ${page.url}:`, outcome.reason)
+          }
+
           setScanningImagePageIds((prev) => {
             const next = new Set(prev)
             next.delete(page.id)
             return next
           })
-          setImageScanProgress((prev) => ({
-            ...prev,
-            current: currentCompleted,
-            total: pagesToScan.length,
-          }))
-        }
-      }
-    }
+        })
 
-    try {
-      await Promise.all(Array.from({ length: concurrency }, () => worker()))
+        setImageScanProgress((prev) => ({
+          ...prev,
+          current: Math.min(start + block.length, pagesToScan.length),
+          total: pagesToScan.length,
+        }))
+      }
     } finally {
       setIsScanningAllImages(false)
       setImageScanProgress((prev) => ({
@@ -1926,6 +1959,30 @@ export function WebsiteAuditDashboard({
         current: prev.total,
         currentUrl: "",
       }))
+
+      if (totalResolved > 0) {
+        toast.success(
+          `Resolved ALT text for ${totalResolved} image${totalResolved === 1 ? '' : 's'}` +
+            (pagesFullyResolved > 0
+              ? ` across ${pagesFullyResolved} page${pagesFullyResolved === 1 ? '' : 's'}`
+              : '') +
+            (pagesStillMissing > 0
+              ? ` · ${pagesStillMissing} page${pagesStillMissing === 1 ? '' : 's'} still have missing ALT`
+              : '')
+        )
+      } else if (pagesStillMissing === 0 && failedPages === 0) {
+        toast.success('All scanned pages have complete ALT text')
+      } else if (pagesStillMissing > 0) {
+        toast.info(
+          `No new ALT fixes detected · ${pagesStillMissing} page${pagesStillMissing === 1 ? '' : 's'} still missing ALT`
+        )
+      }
+
+      if (failedPages > 0) {
+        toast.error(
+          `Failed to scan ${failedPages} page${failedPages === 1 ? '' : 's'}. Check console for details.`
+        )
+      }
     }
   }, [isReadOnly, isScanningAllImages, links, missingAltIssues, runImageScanForLink])
 
