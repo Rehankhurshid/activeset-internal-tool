@@ -456,24 +456,29 @@ export const projectsService = {
       const currentSeo = (currentCategories as { seo?: Record<string, unknown> }).seo || {};
       const currentSnapshot = (currentAudit as { contentSnapshot?: Record<string, unknown> }).contentSnapshot || {};
 
-      await this.updateLink(projectId, linkId, {
-        auditResult: ({
-          ...currentAudit,
-          lastRun: results.checkedAt,
-          categories: {
-            ...currentCategories,
-            seo: {
-              ...currentSeo,
-              imagesWithoutAlt: results.uniqueMissingAltCount,
-              imageScanCheckedAt: results.checkedAt,
-            },
+      const nextAuditResult = ({
+        ...currentAudit,
+        lastRun: results.checkedAt,
+        categories: {
+          ...currentCategories,
+          seo: {
+            ...currentSeo,
+            imagesWithoutAlt: results.uniqueMissingAltCount,
+            imageScanCheckedAt: results.checkedAt,
           },
-          contentSnapshot: {
-            ...currentSnapshot,
-            images: results.images,
-          },
-        } as unknown as ProjectLink['auditResult']),
-      });
+        },
+        contentSnapshot: {
+          ...currentSnapshot,
+          images: results.images,
+        },
+      } as unknown as ProjectLink['auditResult']);
+
+      // Write directly via updateProjectLinks to avoid a second getProject round-trip
+      // that would happen if we went through updateLink().
+      const updatedLinks = project.links.map((l) =>
+        l.id === linkId ? { ...l, auditResult: nextAuditResult } : l
+      );
+      await this.updateProjectLinks(projectId, updatedLinks);
     } catch (error) {
       logError(error, 'saveImageAltResults');
       if (error instanceof DatabaseError) throw error;

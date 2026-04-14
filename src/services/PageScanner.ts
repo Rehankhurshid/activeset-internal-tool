@@ -151,15 +151,21 @@ export class PageScanner {
     ): { images: ImageInfo[]; uniqueMissingAltCount: number } {
         const images: ImageInfo[] = [];
 
+        // Precompute set of srcs that live inside main content once (O(N)) instead of
+        // per-image tree walks (O(N²)) — massive win on CMS pages with 100s of images.
+        const mainContentSrcs = new Set<string>();
+        mainContent.find('img').each((_: number, img: unknown) => {
+            const src = $(img as any).attr('src') || '';
+            if (src) mainContentSrcs.add(src);
+        });
+
         $('img').each((_, el) => {
             const $el = $(el);
             const src = $el.attr('src') || '';
             const alt = $el.attr('alt') || '';
             if (!src) return;
 
-            // Check if image is within main content
-            const inMainContent = mainContent.find('img').filter((_: number, img: unknown) => $(img as any).attr('src') === src).length > 0;
-            images.push({ src, alt, inMainContent });
+            images.push({ src, alt, inMainContent: mainContentSrcs.has(src) });
         });
 
         const uniqueMissingAlt = new Set(
