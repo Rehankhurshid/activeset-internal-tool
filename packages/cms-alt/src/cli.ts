@@ -33,6 +33,7 @@ import { CSV_COLUMNS, entriesToCsv, parseCsv } from './csv';
 import { compressBuffer, downloadImage, extFromUrl, extFromContentType } from './compress';
 import { uploadAssetToWebflow } from './assets';
 import { generateAltForImages } from './ai-alt';
+import { configureReporter, emit, flush, isReporterActive } from './progress';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -158,11 +159,25 @@ async function exportCmd(opts: {
     : null;
 
   log(`Exporting ${collectionIds.length} collection(s)…${fieldSlugs ? ` (fields: ${[...fieldSlugs].join(', ')})` : ''}`);
+  emit({
+    step: 'export',
+    level: 'info',
+    message: `Exporting ${collectionIds.length} collection(s)`,
+    detail: fieldSlugs ? `fields: ${[...fieldSlugs].join(', ')}` : undefined,
+  });
   const all: CmsImageEntry[] = [];
-  for (const cid of collectionIds) {
+  for (let ci = 0; ci < collectionIds.length; ci++) {
+    const cid = collectionIds[ci];
     const images = await fetchAllImagesForCollection(cid, token);
     const scoped = fieldSlugs ? images.filter(i => fieldSlugs.has(i.fieldSlug)) : images;
     log(`  ${cid}: ${scoped.length} images${fieldSlugs ? ` (of ${images.length})` : ''}`);
+    emit({
+      step: 'export',
+      level: 'info',
+      message: `${cid.slice(-6)} · ${scoped.length} images`,
+      current: ci + 1,
+      total: collectionIds.length,
+    });
     all.push(...scoped);
   }
 
@@ -174,6 +189,12 @@ async function exportCmd(opts: {
   log(`\n→ Wrote ${filtered.length} row(s) to ${opts.out}`);
   log(`→ Raw field snapshot saved to ${jsonPath} (needed by 'import')`);
   if (opts.missingOnly) log(`  (filtered: ${all.length - filtered.length} rows with ALT set were skipped)`);
+  emit({
+    step: 'export',
+    level: 'success',
+    message: `Exported ${filtered.length} row(s)`,
+    detail: `${opts.out}${opts.missingOnly ? ` · ${all.length - filtered.length} already had ALT` : ''}`,
+  });
 }
 
 async function generateCmd(
@@ -199,6 +220,14 @@ async function generateCmd(
   }
 
   log(`Generating ALT for ${needAlt.length} row(s) via ${model} @ ${host}…\n`);
+  emit({
+    step: 'generate',
+    level: 'info',
+    message: `Generating ALT for ${needAlt.length} image(s)`,
+    detail: `${model} @ ${host}`,
+    total: needAlt.length,
+    current: 0,
+  });
 
   const startedAt = Date.now();
   const BATCH = 25;
@@ -219,6 +248,15 @@ async function generateCmd(
         const context = `${entry.collectionName} › ${entry.itemName} · ${entry.fieldDisplayName}`;
         log(`  ${pos} ${tag} ${time.padStart(5, ' ')} · ${context}`);
         log(`         “${preview}”${error ? ` (err: ${error.slice(0, 80)})` : ''}`);
+        emit({
+          step: 'generate',
+          level: error ? 'error' : fallback ? 'warn' : 'success',
+          message: `${context} — ${preview}`,
+          detail: error ? error.slice(0, 200) : undefined,
+          current: globalIndex,
+          total: needAlt.length,
+          durationMs,
+        });
 
         // Rolling ETA based on average time per image
         const elapsed = (Date.now() - startedAt) / 1000;
@@ -239,6 +277,14 @@ async function generateCmd(
   }
 
   log(`\n→ Updated ${csvPath}`);
+  emit({
+    step: 'generate',
+    level: 'success',
+    message: `ALT generation complete`,
+    detail: `wrote ${needAlt.length} row(s) to ${csvPath}`,
+    current: needAlt.length,
+    total: needAlt.length,
+  });
 }
 
 async function compressCmd(
@@ -255,10 +301,19 @@ async function compressCmd(
   let ok = 0, skipped = 0, failed = 0;
   let totalBefore = 0, totalAfter = 0;
 
+  emit({
+    step: 'compress',
+    level: 'info',
+    message: `Compressing ${batch.length} image(s)`,
+    total: batch.length,
+    current: 0,
+  });
+
   for (let i = 0; i < batch.length; i++) {
     const r = batch[i];
     const shortUrl = (r.image_url.split('/').pop() || '').slice(0, 40);
     process.stdout.write(`[${i + 1}/${batch.length}] ${shortUrl}… `);
+    const tStart = Date.now();
     try {
       const { buffer, contentType } = await downloadImage(r.image_url);
       const ext = extFromUrl(r.image_url) || extFromContentType(contentType);
@@ -269,6 +324,15 @@ async function compressCmd(
       if (result.skipped || result.savings < minSavings) {
         process.stdout.write(`skip (${result.reason ?? `${result.savings}% < ${minSavings}%`})\n`);
         skipped++;
+        emit({
+          step: 'compress',
+          level: 'warn',
+          message: `skip · ${shortUrl}`,
+          detail: result.reason ?? `${result.savings}% savings below ${minSavings}% threshold`,
+          current: i + 1,
+          total: batch.length,
+          durationMs: Date.now() - tStart,
+        });
         continue;
       }
 
@@ -283,9 +347,27 @@ async function compressCmd(
       r.compressed_url = uploaded.hostedUrl;
       process.stdout.write(`-${result.savings}% → ${uploaded.hostedUrl.slice(0, 60)}…\n`);
       ok++;
+      emit({
+        step: 'compress',
+        level: 'success',
+        message: `${shortUrl} · −${result.savings}%`,
+        detail: `${Math.round(result.originalSize / 1024)} KB → ${Math.round(result.compressedSize / 1024)} KB`,
+        current: i + 1,
+        total: batch.length,
+        durationMs: Date.now() - tStart,
+      });
     } catch (err) {
-      process.stdout.write(`FAILED: ${err instanceof Error ? err.message : String(err)}\n`);
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stdout.write(`FAILED: ${msg}\n`);
       failed++;
+      emit({
+        step: 'compress',
+        level: 'error',
+        message: `failed · ${shortUrl}`,
+        detail: msg.slice(0, 200),
+        current: i + 1,
+        total: batch.length,
+      });
     }
   }
 
@@ -293,6 +375,14 @@ async function compressCmd(
   const savedPct = totalBefore > 0 ? Math.round(((totalBefore - totalAfter) / totalBefore) * 100) : 0;
   log(`\n${ok} compressed, ${skipped} skipped, ${failed} failed`);
   log(`Bytes: ${Math.round(totalBefore / 1024)} KB → ${Math.round(totalAfter / 1024)} KB (-${savedPct}%)`);
+  emit({
+    step: 'compress',
+    level: failed > 0 ? 'warn' : 'success',
+    message: `Compression complete · ${ok} ok · ${skipped} skipped · ${failed} failed`,
+    detail: `${Math.round(totalBefore / 1024)} KB → ${Math.round(totalAfter / 1024)} KB (−${savedPct}%)`,
+    current: batch.length,
+    total: batch.length,
+  });
 }
 
 async function importCmd(csvPath: string, opts: { token?: string; dryRun?: boolean }) {
@@ -329,6 +419,13 @@ async function importCmd(csvPath: string, opts: { token?: string; dryRun?: boole
   }
 
   log(`${updates.length} change(s) to push.`);
+  emit({
+    step: 'import',
+    level: 'info',
+    message: `${updates.length} change(s) to push`,
+    total: updates.length,
+    current: 0,
+  });
   if (opts.dryRun) {
     for (const u of updates.slice(0, 20)) {
       log(
@@ -357,13 +454,35 @@ async function importCmd(csvPath: string, opts: { token?: string; dryRun?: boole
       if (res.ok) {
         updated += batch.length;
         log(`  ✓ ${collectionId.slice(-6)} ${updated}/${items.length}`);
+        emit({
+          step: 'import',
+          level: 'success',
+          message: `${collectionId.slice(-6)} · PATCH ${batch.length}`,
+          current: updated,
+          total: updates.length,
+        });
       } else {
         failed += batch.length;
         log(`  ✗ ${collectionId.slice(-6)} failed: ${res.text.slice(0, 200)}`);
+        emit({
+          step: 'import',
+          level: 'error',
+          message: `${collectionId.slice(-6)} · PATCH failed`,
+          detail: res.text.slice(0, 200),
+          current: updated,
+          total: updates.length,
+        });
       }
     }
   }
   log(`\n${updated} updated, ${failed} failed.`);
+  emit({
+    step: 'import',
+    level: failed > 0 ? 'warn' : 'success',
+    message: `Import complete · ${updated} updated · ${failed} failed`,
+    current: updates.length,
+    total: updates.length,
+  });
 }
 
 async function publishCmd(csvPath: string, opts: { token?: string }) {
@@ -393,11 +512,36 @@ async function publishCmd(csvPath: string, opts: { token?: string }) {
   for (const [collectionId, ids] of byCollection) {
     const idList = Array.from(ids);
     log(`Publishing ${idList.length} item(s) in ${collectionId.slice(-6)}…`);
+    emit({
+      step: 'publish',
+      level: 'info',
+      message: `Publishing ${idList.length} item(s) in ${collectionId.slice(-6)}`,
+      total: idList.length,
+      current: 0,
+    });
     for (let i = 0; i < idList.length; i += 100) {
       const slice = idList.slice(i, i + 100);
       const res = await rateLimited(() => publishItemsApi(collectionId, token, slice));
-      if (res.ok) log(`  ✓ published ${slice.length}`);
-      else log(`  ✗ ${res.text.slice(0, 200)}`);
+      if (res.ok) {
+        log(`  ✓ published ${slice.length}`);
+        emit({
+          step: 'publish',
+          level: 'success',
+          message: `${collectionId.slice(-6)} · published ${slice.length}`,
+          current: Math.min(i + slice.length, idList.length),
+          total: idList.length,
+        });
+      } else {
+        log(`  ✗ ${res.text.slice(0, 200)}`);
+        emit({
+          step: 'publish',
+          level: 'error',
+          message: `${collectionId.slice(-6)} · publish failed`,
+          detail: res.text.slice(0, 200),
+          current: Math.min(i + slice.length, idList.length),
+          total: idList.length,
+        });
+      }
     }
   }
 }
@@ -418,41 +562,62 @@ async function runCmd(opts: {
   maxCompress: string;
 }) {
   const site = requireSite(opts);
-  log('═══ step 1: export ═══');
-  await exportCmd({
-    site,
-    token: opts.token,
-    collections: opts.collections,
-    fields: opts.fields,
-    out: opts.out,
-    missingOnly: opts.missingOnly,
+  emit({
+    step: 'connect',
+    level: 'success',
+    message: `CLI connected · site ${site.slice(-6)}`,
+    detail: `steps: export${opts.ai ? ' → generate' : ''}${opts.compress ? ' → compress' : ''} → import${opts.publish ? ' → publish' : ''}`,
   });
 
-  if (opts.ai) {
-    log('\n═══ step 2: generate ═══');
-    await generateCmd(opts.out, {
-      ollamaHost: opts.ollamaHost,
-      model: opts.model,
-      siteName: opts.siteName,
-    });
-  }
-
-  if (opts.compress) {
-    log('\n═══ step 3: compress ═══');
-    await compressCmd(opts.out, {
+  try {
+    log('═══ step 1: export ═══');
+    await exportCmd({
       site,
       token: opts.token,
-      max: opts.maxCompress,
-      minSavings: '2',
+      collections: opts.collections,
+      fields: opts.fields,
+      out: opts.out,
+      missingOnly: opts.missingOnly,
     });
-  }
 
-  log('\n═══ step 4: import ═══');
-  await importCmd(opts.out, { token: opts.token });
+    if (opts.ai) {
+      log('\n═══ step 2: generate ═══');
+      await generateCmd(opts.out, {
+        ollamaHost: opts.ollamaHost,
+        model: opts.model,
+        siteName: opts.siteName,
+      });
+    }
 
-  if (opts.publish) {
-    log('\n═══ step 5: publish ═══');
-    await publishCmd(opts.out, { token: opts.token });
+    if (opts.compress) {
+      log('\n═══ step 3: compress ═══');
+      await compressCmd(opts.out, {
+        site,
+        token: opts.token,
+        max: opts.maxCompress,
+        minSavings: '2',
+      });
+    }
+
+    log('\n═══ step 4: import ═══');
+    await importCmd(opts.out, { token: opts.token });
+
+    if (opts.publish) {
+      log('\n═══ step 5: publish ═══');
+      await publishCmd(opts.out, { token: opts.token });
+    }
+
+    emit({ step: 'done', level: 'success', message: 'Pipeline complete' });
+  } catch (err) {
+    emit({
+      step: 'abort',
+      level: 'error',
+      message: 'Pipeline aborted',
+      detail: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  } finally {
+    await flush();
   }
 }
 
@@ -463,6 +628,24 @@ program
   .name('cms-alt')
   .description('Webflow CMS ALT text + lossless compression CLI')
   .version('1.0.0');
+
+// If the web UI provisioned a run (via --run-id/--run-secret/--progress-url
+// on the invoked subcommand), wire the reporter before the subcommand runs.
+// Applied to every command so any flow can stream live events.
+program.hook('preAction', (_thisCommand, actionCommand) => {
+  const opts = actionCommand.opts() as { runId?: string; runSecret?: string; progressUrl?: string };
+  if (opts.runId && opts.runSecret && opts.progressUrl) {
+    configureReporter({ runId: opts.runId, secret: opts.runSecret, url: opts.progressUrl });
+    try {
+      console.log(`▸ live progress: streaming to ${new URL(opts.progressUrl).origin} (run ${opts.runId.slice(0, 8)})`);
+    } catch {
+      console.log(`▸ live progress: streaming (run ${opts.runId.slice(0, 8)})`);
+    }
+  }
+});
+
+// Silence unused import warning — isReporterActive is exported for future use.
+void isReporterActive;
 
 program
   .command('scan')
@@ -533,6 +716,9 @@ program
   .option('--missing-only', 'only process rows with missing ALT')
   .option('--out <file>', 'CSV path', `cms-alt-${Date.now()}.csv`)
   .option('--max-compress <n>', 'cap compression to N images', '0')
+  .option('--run-id <id>', 'live-progress run ID (from the web UI)')
+  .option('--run-secret <secret>', 'live-progress auth secret')
+  .option('--progress-url <url>', 'live-progress POST endpoint')
   .action(runCmd);
 
 program.parseAsync(process.argv).catch(err => {

@@ -93,21 +93,196 @@ function fmtDuration(totalSec: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-function RunTicker({ startedAt }: { startedAt: number }) {
+// ─── Real backchannel: terminal output streamed from the CLI ───────────────
+
+interface RunEvent {
+  id: string;
+  step: string;
+  level: 'info' | 'success' | 'warn' | 'error';
+  message: string;
+  detail: string | null;
+  current: number | null;
+  total: number | null;
+  durationMs: number | null;
+  at: number;
+}
+
+interface RunState {
+  status: 'awaiting' | 'running' | 'completed' | 'aborted';
+  eventCount: number;
+  lastStep: string | null;
+  lastMessage: string | null;
+  expectedImages: number;
+}
+
+function levelColor(level: RunEvent['level']): string {
+  switch (level) {
+    case 'success': return 'text-emerald-500';
+    case 'warn': return 'text-amber-500';
+    case 'error': return 'text-rose-500';
+    default: return 'text-muted-foreground';
+  }
+}
+
+function stepGlyph(step: string, level: RunEvent['level']): string {
+  if (level === 'error') return '✗';
+  if (level === 'success') return '✓';
+  if (step === 'done') return '✓';
+  if (step === 'abort') return '✗';
+  return '▸';
+}
+
+function RunTerminal({
+  runId,
+  secret,
+  startedAt,
+  onReset,
+}: {
+  runId: string;
+  secret: string;
+  startedAt: number;
+  onReset: () => void;
+}) {
+  const [events, setEvents] = useState<RunEvent[]>([]);
+  const [run, setRun] = useState<RunState | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const lastAtRef = useRef<number>(0);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const terminal = run?.status === 'completed' || run?.status === 'aborted';
+
+  // Tick clock for elapsed display
   useEffect(() => {
+    if (terminal) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, []);
-  const elapsed = Math.floor((now - startedAt) / 1000);
-  const pulse = elapsed % 2 === 0 ? '●' : '○';
+  }, [terminal]);
+
+  // Poll events every 1s (2s once terminal) until reset
+  useEffect(() => {
+    let cancelled = false;
+    async function tick() {
+      try {
+        const since = lastAtRef.current;
+        const res = await fetch(
+          `/api/webflow/cms/progress/events?runId=${encodeURIComponent(runId)}&secret=${encodeURIComponent(secret)}${since ? `&since=${since}` : ''}`,
+          { cache: 'no-store' }
+        );
+        if (!res.ok) {
+          const msg = res.status === 404 ? 'run not found' : res.status === 401 ? 'unauthorized' : `HTTP ${res.status}`;
+          if (!cancelled) setConnectionError(msg);
+          return;
+        }
+        const data = (await res.json()) as { run: RunState; events: RunEvent[] };
+        if (cancelled) return;
+        setConnectionError(null);
+        setRun(data.run);
+        if (data.events.length > 0) {
+          setEvents(prev => [...prev, ...data.events]);
+          lastAtRef.current = data.events[data.events.length - 1].at;
+        }
+      } catch (err) {
+        if (!cancelled) setConnectionError(err instanceof Error ? err.message : 'poll failed');
+      }
+    }
+    tick();
+    const id = setInterval(tick, terminal ? 5000 : 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [runId, secret, terminal]);
+
+  // Autoscroll to latest
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [events.length]);
+
+  const elapsed = Math.floor(((terminal && events.length ? events[events.length - 1].at : now) - startedAt) / 1000);
+  const status = run?.status ?? 'awaiting';
+  const statusDot =
+    status === 'completed' ? 'bg-emerald-500' :
+    status === 'aborted' ? 'bg-rose-500' :
+    status === 'running' ? 'bg-emerald-500 animate-pulse' :
+    'bg-amber-500 animate-pulse';
+  const statusLabel =
+    status === 'completed' ? 'completed' :
+    status === 'aborted' ? 'aborted' :
+    status === 'running' ? 'live' :
+    'awaiting CLI…';
+
+  // Progress hint derived from last event with current/total
+  const lastProgressEvent = [...events].reverse().find(e => e.current != null && e.total != null);
+  const progressHint = lastProgressEvent
+    ? `${lastProgressEvent.step} ${lastProgressEvent.current}/${lastProgressEvent.total}`
+    : null;
+
   return (
-    <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-1.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
-      <span aria-hidden>{pulse}</span>
-      <span>run dispatched · elapsed {fmtDuration(elapsed)}</span>
-      <span className="ml-auto text-muted-foreground">
-        watch your terminal · Ctrl+C to abort
-      </span>
+    <div className="rounded-md border bg-zinc-950 text-zinc-100 overflow-hidden shadow-sm">
+      {/* fake titlebar */}
+      <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900/80 px-2.5 py-1.5 text-[11px] font-mono">
+        <span className="flex gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-rose-500/70" />
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-500/70" />
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
+        </span>
+        <span className="ml-1 text-zinc-400">cms-alt · {runId.slice(0, 8)}</span>
+        <span className={`ml-2 h-1.5 w-1.5 rounded-full ${statusDot}`} />
+        <span className="text-zinc-300">{statusLabel}</span>
+        {progressHint ? <span className="text-zinc-500">· {progressHint}</span> : null}
+        <span className="ml-auto text-zinc-500 tabular-nums">{fmtDuration(elapsed)}</span>
+        <button
+          type="button"
+          onClick={onReset}
+          className="ml-2 rounded px-1.5 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          title="Clear"
+        >
+          reset
+        </button>
+      </div>
+      {/* log body */}
+      <div
+        ref={scrollRef}
+        className="max-h-56 min-h-[84px] overflow-y-auto px-3 py-2 font-mono text-[11px] leading-snug"
+      >
+        {events.length === 0 ? (
+          <div className="text-zinc-500">
+            {connectionError ? (
+              <>
+                <span className="text-rose-400">!</span> {connectionError} — retrying…
+              </>
+            ) : (
+              <>
+                <span className="animate-pulse">▌</span> waiting for CLI to connect… paste the
+                command into your terminal
+              </>
+            )}
+          </div>
+        ) : (
+          events.map(ev => {
+            const ts = new Date(ev.at).toLocaleTimeString('en-US', { hour12: false });
+            return (
+              <div key={ev.id} className="whitespace-pre-wrap break-words">
+                <span className="text-zinc-600">{ts}</span>{' '}
+                <span className={`${levelColor(ev.level)}`}>{stepGlyph(ev.step, ev.level)}</span>{' '}
+                <span className="text-zinc-500">{ev.step.padEnd(8, ' ')}</span>{' '}
+                <span className="text-zinc-200">{ev.message}</span>
+                {ev.current != null && ev.total != null ? (
+                  <span className="text-zinc-500"> [{ev.current}/{ev.total}]</span>
+                ) : null}
+                {ev.durationMs != null ? (
+                  <span className="text-zinc-600"> · {(ev.durationMs / 1000).toFixed(1)}s</span>
+                ) : null}
+                {ev.detail ? (
+                  <div className="pl-6 text-zinc-500">{ev.detail}</div>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
@@ -221,6 +396,21 @@ function PlanPanel({
   );
 }
 
+interface StartPayload {
+  siteId: string;
+  siteLabel: string;
+  collectionIds: string[];
+  collectionLabel: string;
+  expectedImages: number;
+  actions: CliActions;
+}
+
+interface ActiveRun {
+  runId: string;
+  secret: string;
+  startedAt: number;
+}
+
 function ContextualCliBar({
   command,
   displayCommand,
@@ -229,6 +419,7 @@ function ContextualCliBar({
   onActionsChange,
   hint,
   plan,
+  startPayload,
 }: {
   command: string;
   displayCommand?: string;
@@ -237,10 +428,12 @@ function ContextualCliBar({
   onActionsChange: (next: CliActions) => void;
   hint?: string;
   plan?: RunPlan;
+  startPayload?: StartPayload;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
-  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [activeRun, setActiveRun] = useState<ActiveRun | null>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -249,14 +442,42 @@ function ContextualCliBar({
     };
   }, []);
 
-  const handleCopy = () => {
-    if (disabled) return;
-    navigator.clipboard.writeText(command);
-    setCopied(true);
-    setRunStartedAt(Date.now());
-    toast.success('Command copied · paste into your terminal');
-    if (copyResetRef.current) clearTimeout(copyResetRef.current);
-    copyResetRef.current = setTimeout(() => setCopied(false), 1500);
+  const handleCopy = async () => {
+    if (disabled || copying) return;
+    setCopying(true);
+    try {
+      // Provision a real run so the CLI can stream events back to this page.
+      let runSuffix = '';
+      let newRun: ActiveRun | null = null;
+      if (startPayload) {
+        try {
+          const res = await fetch('/api/webflow/cms/progress/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(startPayload),
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { runId: string; secret: string };
+            const origin = typeof window !== 'undefined' ? window.location.origin : '';
+            runSuffix = ` --run-id ${data.runId} --run-secret ${data.secret} --progress-url ${origin}/api/webflow/cms/progress/event`;
+            newRun = { runId: data.runId, secret: data.secret, startedAt: Date.now() };
+          } else {
+            toast.warning('Live terminal unavailable — command still copied');
+          }
+        } catch {
+          toast.warning('Live terminal unavailable — command still copied');
+        }
+      }
+      const finalCommand = command + runSuffix;
+      await navigator.clipboard.writeText(finalCommand);
+      setCopied(true);
+      if (newRun) setActiveRun(newRun);
+      toast.success('Command copied · paste into your terminal');
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+      copyResetRef.current = setTimeout(() => setCopied(false), 1500);
+    } finally {
+      setCopying(false);
+    }
   };
 
   const toggleClass = (on: boolean) =>
@@ -303,10 +524,16 @@ function ContextualCliBar({
           size="sm"
           className="h-7 w-7 shrink-0 p-0"
           onClick={handleCopy}
-          disabled={disabled}
+          disabled={disabled || copying}
           title="Copy command"
         >
-          {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+          {copying ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : copied ? (
+            <Check className="h-3.5 w-3.5 text-green-600" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
         </Button>
       </div>
       {plan && !disabled ? (
@@ -317,18 +544,13 @@ function ContextualCliBar({
           onToggle={() => setPlanOpen(o => !o)}
         />
       ) : null}
-      {runStartedAt != null && !disabled ? (
-        <div className="flex items-center gap-2">
-          <RunTicker startedAt={runStartedAt} />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-[10px]"
-            onClick={() => setRunStartedAt(null)}
-          >
-            reset
-          </Button>
-        </div>
+      {activeRun != null && !disabled ? (
+        <RunTerminal
+          runId={activeRun.runId}
+          secret={activeRun.secret}
+          startedAt={activeRun.startedAt}
+          onReset={() => setActiveRun(null)}
+        />
       ) : null}
     </div>
   );
@@ -528,6 +750,17 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
     };
   }, [cliArgs.collectionIds, images, filteredImages, collections, statusFilter, webflowConfig.siteId, webflowConfig.siteName]);
 
+  const startPayload: StartPayload | undefined = (cliArgs.collectionIds && cliArgs.collectionIds.length > 0)
+    ? {
+        siteId: cliArgs.siteId,
+        siteLabel: webflowConfig.siteName || webflowConfig.siteId,
+        collectionIds: cliArgs.collectionIds,
+        collectionLabel: runPlan?.collectionLabel ?? cliArgs.collectionIds.join(','),
+        expectedImages: runPlan?.imageCount ?? 0,
+        actions,
+      }
+    : undefined;
+
   // --- Discovery view ---
   if (collections.length === 0 && images.length === 0) {
     return (
@@ -581,6 +814,7 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
           actions={actions}
           onActionsChange={setActions}
           plan={runPlan}
+          startPayload={startPayload}
           hint={
             selectedCollections.size > 0
               ? `${selectedCollections.size} collection${selectedCollections.size !== 1 ? 's' : ''} selected`

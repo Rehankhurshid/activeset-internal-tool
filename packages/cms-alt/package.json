@@ -1,6 +1,6 @@
 {
   "name": "@activeset/cms-alt",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Webflow CMS ALT text & lossless WebP compression pipeline powered by local Ollama (Gemma 3 4B by default).",
   "keywords": [
     "webflow",
