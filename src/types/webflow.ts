@@ -185,6 +185,16 @@ export interface CmsCollectionSummary {
   imageFields: CollectionField[];
   richTextFields: CollectionField[];
   totalItems: number;
+  /** Populated by the missing-alt scan (per-collection /count-alt endpoint). */
+  altScan?: CmsAltScanCollectionResult;
+}
+
+export interface CmsAltScanCollectionResult {
+  collectionId: string;
+  totalImages: number;
+  missingAltCount: number;
+  /** ISO timestamp when this collection was last counted. */
+  scannedAt: string;
 }
 
 export interface CmsImageEntry {

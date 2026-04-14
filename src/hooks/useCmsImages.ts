@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import type {
   WebflowConfig,
   CmsCollectionSummary,
+  CmsAltScanCollectionResult,
   CmsImageEntry,
   CmsUpdatePayload,
   CmsCompressResult,
@@ -15,6 +16,12 @@ export interface UseCmsImagesReturn {
   collections: CmsCollectionSummary[];
   discoveryLoading: boolean;
   discoverCollections: () => Promise<void>;
+
+  // Missing-ALT scan (per collection, aggregated on top)
+  scanAltCounts: (collectionIds?: string[]) => Promise<void>;
+  altScanLoading: boolean;
+  altScanProgress: { completed: number; total: number };
+  altScanTotals: { totalImages: number; missingAltCount: number; scannedCollections: number };
 
   // Images
   images: CmsImageEntry[];
@@ -51,6 +58,11 @@ export interface UseCmsImagesReturn {
 export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsImagesReturn {
   const [collections, setCollections] = useState<CmsCollectionSummary[]>([]);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [altScanLoading, setAltScanLoading] = useState(false);
+  const [altScanProgress, setAltScanProgress] = useState<{ completed: number; total: number }>({
+    completed: 0,
+    total: 0,
+  });
 
   const [images, setImages] = useState<CmsImageEntry[]>([]);
   const [imagesLoading, setImagesLoading] = useState(false);
@@ -104,6 +116,81 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
       setDiscoveryLoading(false);
     }
   }, [webflowConfig]);
+
+  // --- Missing-ALT scan (counts only — no full image list) ---
+  const scanAltCounts = useCallback(
+    async (collectionIds?: string[]) => {
+      if (!webflowConfig?.apiToken) {
+        setError('Webflow configuration is missing');
+        return;
+      }
+
+      setAltScanLoading(true);
+      setError(null);
+
+      // Snapshot the target collections up front so the closure below doesn't
+      // get stale reads from setState batching.
+      let targetIds: string[] = [];
+      setCollections((prev) => {
+        targetIds = (collectionIds && collectionIds.length > 0
+          ? collectionIds
+          : prev.map((c) => c.id)
+        ).filter(Boolean);
+        return prev;
+      });
+
+      if (targetIds.length === 0) {
+        setAltScanLoading(false);
+        return;
+      }
+
+      setAltScanProgress({ completed: 0, total: targetIds.length });
+
+      // Fan out counts with a small concurrency window so a site with 20+
+      // collections finishes quickly without hammering Webflow's rate limits.
+      const CONCURRENCY = 4;
+      let completed = 0;
+      let index = 0;
+
+      const worker = async () => {
+        while (true) {
+          const i = index++;
+          if (i >= targetIds.length) return;
+          const collectionId = targetIds[i];
+          try {
+            const url = new URL('/api/webflow/cms/count-alt', window.location.origin);
+            url.searchParams.set('collectionId', collectionId);
+            const res = await fetch(url.toString(), {
+              headers: { 'x-webflow-token': webflowConfig.apiToken! },
+            });
+            const result = await res.json();
+            if (res.ok && result.success) {
+              const scan = result.data as CmsAltScanCollectionResult;
+              setCollections((prev) =>
+                prev.map((c) => (c.id === collectionId ? { ...c, altScan: scan } : c))
+              );
+            } else {
+              console.warn(`[cms-alt-scan] count failed for ${collectionId}:`, result.error);
+            }
+          } catch (err) {
+            console.warn(`[cms-alt-scan] count threw for ${collectionId}:`, err);
+          } finally {
+            completed += 1;
+            setAltScanProgress({ completed, total: targetIds.length });
+          }
+        }
+      };
+
+      try {
+        await Promise.all(
+          Array.from({ length: Math.min(CONCURRENCY, targetIds.length) }, () => worker())
+        );
+      } finally {
+        setAltScanLoading(false);
+      }
+    },
+    [webflowConfig]
+  );
 
   // --- Fetch images for a single collection ---
   const fetchImages = useCallback(async (collectionId: string, offset = 0) => {
@@ -443,10 +530,30 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
     }
   }, [webflowConfig]);
 
+  // Aggregate counts across collections that have been scanned.
+  let aggTotalImages = 0;
+  let aggMissingAlt = 0;
+  let scannedCollections = 0;
+  for (const coll of collections) {
+    if (coll.altScan) {
+      aggTotalImages += coll.altScan.totalImages;
+      aggMissingAlt += coll.altScan.missingAltCount;
+      scannedCollections += 1;
+    }
+  }
+
   return {
     collections,
     discoveryLoading,
     discoverCollections,
+    scanAltCounts,
+    altScanLoading,
+    altScanProgress,
+    altScanTotals: {
+      totalImages: aggTotalImages,
+      missingAltCount: aggMissingAlt,
+      scannedCollections,
+    },
     images,
     imagesLoading,
     hasMore,

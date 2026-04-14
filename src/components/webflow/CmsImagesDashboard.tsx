@@ -595,6 +595,10 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
     collections,
     discoveryLoading,
     discoverCollections,
+    scanAltCounts,
+    altScanLoading,
+    altScanProgress,
+    altScanTotals,
     images,
     imagesLoading,
     hasMore,
@@ -860,9 +864,30 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
                 <Database className="h-4 w-4" />
                 CMS Images — ALT Text & Compression
               </CardTitle>
-              <Button variant="ghost" size="sm" onClick={discoverCollections} disabled={discoveryLoading}>
-                <RefreshCw className={`h-4 w-4 ${discoveryLoading ? 'animate-spin' : ''}`} />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => scanAltCounts()}
+                  disabled={altScanLoading || collections.length === 0}
+                  title="Count images missing ALT across every collection — no full load required"
+                >
+                  {altScanLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      Scanning {altScanProgress.completed}/{altScanProgress.total}
+                    </>
+                  ) : (
+                    <>
+                      <Activity className="mr-2 h-3.5 w-3.5" />
+                      Scan missing ALT
+                    </>
+                  )}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={discoverCollections} disabled={discoveryLoading}>
+                  <RefreshCw className={`h-4 w-4 ${discoveryLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -872,6 +897,49 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
               <Button variant="ghost" size="sm" className="ml-2 h-6" onClick={clearError}>Dismiss</Button>
             </div>
           )}
+          {altScanTotals.scannedCollections > 0 ? (
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Images scanned
+                </div>
+                <div className="text-xl font-semibold tabular-nums">
+                  {altScanTotals.totalImages.toLocaleString()}
+                </div>
+              </div>
+              <div
+                className={`rounded-md border px-3 py-2 ${
+                  altScanTotals.missingAltCount > 0
+                    ? 'border-amber-500/40 bg-amber-500/5'
+                    : 'border-emerald-500/40 bg-emerald-500/5'
+                }`}
+              >
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Missing ALT
+                </div>
+                <div
+                  className={`text-xl font-semibold tabular-nums ${
+                    altScanTotals.missingAltCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
+                  {altScanTotals.missingAltCount.toLocaleString()}
+                </div>
+                {altScanTotals.totalImages > 0 ? (
+                  <div className="text-[11px] text-muted-foreground">
+                    {Math.round((altScanTotals.missingAltCount / altScanTotals.totalImages) * 100)}% of images
+                  </div>
+                ) : null}
+              </div>
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Collections scanned
+                </div>
+                <div className="text-xl font-semibold tabular-nums">
+                  {altScanTotals.scannedCollections} / {collections.length}
+                </div>
+              </div>
+            </div>
+          ) : null}
           <p className="text-sm text-muted-foreground mb-4">
             Found {collections.length} collection(s) with images. Select which to load:
           </p>
@@ -907,6 +975,23 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
                           <FileText className="h-3 w-3 mr-1" />
                           {coll.richTextFields.length} rich text
                         </Badge>
+                      ) : null}
+                      {coll.altScan ? (
+                        coll.altScan.missingAltCount > 0 ? (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                          >
+                            {coll.altScan.missingAltCount}/{coll.altScan.totalImages} missing ALT
+                          </Badge>
+                        ) : coll.altScan.totalImages > 0 ? (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                          >
+                            ALT complete ({coll.altScan.totalImages})
+                          </Badge>
+                        ) : null
                       ) : null}
                     </div>
                   </label>
