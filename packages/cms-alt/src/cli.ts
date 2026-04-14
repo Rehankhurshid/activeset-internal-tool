@@ -351,6 +351,9 @@ async function compressCmd(
       r.compressed_url = uploaded.hostedUrl;
       process.stdout.write(`-${result.savings}% → ${uploaded.hostedUrl.slice(0, 60)}…\n`);
       ok++;
+      // Flush after every row so a Ctrl+C never loses more than one upload.
+      // Cheap: <1ms for typical CSVs; keeps resume behaviour honest.
+      await writeCsv(rows, csvPath);
       emit({
         step: 'compress',
         level: 'success',
@@ -389,8 +392,14 @@ async function compressCmd(
   });
 }
 
-async function importCmd(csvPath: string, opts: { token?: string; dryRun?: boolean }) {
+type ImportMode = 'alt' | 'url' | 'both';
+
+async function importCmd(
+  csvPath: string,
+  opts: { token?: string; dryRun?: boolean; mode?: ImportMode }
+) {
   const token = requireToken(opts);
+  const mode: ImportMode = opts.mode ?? 'both';
   const jsonPath = csvPath.replace(/\.csv$/, '') + '.raw.json';
   const rawEntries = await readJsonFile<CmsImageEntry[]>(jsonPath);
   const rows = parseCsv(await fs.readFile(csvPath, 'utf8'));
@@ -404,14 +413,26 @@ async function importCmd(csvPath: string, opts: { token?: string; dryRun?: boole
     const compressed = r.compressed_url || undefined;
     const altChanged = newAlt !== entry.currentAlt;
     const urlChanged = !!compressed;
-    if (!altChanged && !urlChanged) continue;
+    // In 'alt' mode we push ALT changes only (before compression runs);
+    // in 'url' mode we push compressed URLs only (after compression) and
+    // piggyback the current ALT so Webflow's required `url+alt` pair is
+    // preserved on Image fields. 'both' is the pre-split default.
+    const shouldPush =
+      mode === 'alt' ? altChanged :
+      mode === 'url' ? urlChanged :
+      altChanged || urlChanged;
+    if (!shouldPush) continue;
+    // Defensive: never clobber an existing ALT with an empty string just
+    // because the user hasn't generated one yet. Only persist newAlt if it
+    // actually has content OR if it intentionally replaces the current one.
+    const effectiveAlt = newAlt !== '' ? newAlt : entry.currentAlt;
     updates.push({
       collectionId: entry.collectionId,
       itemId: entry.itemId,
       fieldSlug: entry.fieldSlug,
       fieldType: entry.fieldType,
-      newAlt,
-      newUrl: compressed,
+      newAlt: effectiveAlt,
+      newUrl: mode === 'alt' ? undefined : compressed,
       imageIndex: entry.imageIndex,
       rawFieldValue: entry.rawFieldValue,
     });
@@ -591,6 +612,16 @@ async function runCmd(opts: {
         model: opts.model,
         siteName: opts.siteName,
       });
+
+      // Commit generated ALT text to Webflow BEFORE compression. Compression
+      // can take a long time; if the user Ctrl+Cs during it, we don't want
+      // the ALT work to be stranded in the local CSV.
+      if (opts.compress) {
+        log('\n═══ step 2b: import ALT (safe-point) ═══');
+        log('   → pushing generated ALT to Webflow before compression starts');
+        log('   → after this line, ALT work is durable — Ctrl+C is safe');
+        await importCmd(opts.out, { token: opts.token, mode: 'alt' });
+      }
     }
 
     if (opts.compress) {
@@ -604,7 +635,9 @@ async function runCmd(opts: {
     }
 
     log('\n═══ step 4: import ═══');
-    await importCmd(opts.out, { token: opts.token });
+    // If we already imported ALT above, only push URL changes now.
+    const finalMode: ImportMode = opts.ai && opts.compress ? 'url' : 'both';
+    await importCmd(opts.out, { token: opts.token, mode: finalMode });
 
     if (opts.publish) {
       log('\n═══ step 5: publish ═══');
@@ -695,6 +728,7 @@ program
   .argument('<csv>', 'CSV file (companion .raw.json must exist)')
   .option('-t, --token <token>', 'Webflow API token')
   .option('--dry-run', 'log changes without calling the API')
+  .option('--mode <mode>', 'what to push: alt | url | both', 'both')
   .action(importCmd);
 
 program
