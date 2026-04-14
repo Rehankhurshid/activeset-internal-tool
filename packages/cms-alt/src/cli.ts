@@ -705,6 +705,7 @@ async function runCmd(opts: {
   ai?: boolean;
   compress?: boolean;
   publish?: boolean;
+  cleanup?: boolean;
   missingOnly?: boolean;
   out: string;
   maxCompress: string;
@@ -767,19 +768,31 @@ async function runCmd(opts: {
       await publishCmd(opts.out, { token: opts.token });
     }
 
-    // Post-run hint: if we compressed anything, the originals are now
-    // orphaned in the Assets library. Don't auto-delete (they may be used
-    // elsewhere on the site) — point the user at the opt-in cleanup.
+    // Post-run: if we compressed anything, the originals are now orphaned
+    // in the Assets library. Either auto-clean (opt-in --cleanup flag) or
+    // print a hint so the user can decide.
     if (opts.compress) {
       const postRows = parseCsv(await fs.readFile(opts.out, 'utf8'));
       const candidates = postRows.filter(r => r.compressed_url && extractWebflowAssetId(r.image_url)).length;
       if (candidates > 0) {
-        log('');
-        log(`ⓘ  ${candidates} original Webflow asset(s) were replaced by compressed versions`);
-        log(`   and now sit unused in your Assets library. Review and (optionally) delete:`);
-        log(`     cms-alt cleanup ${opts.out} --token <token>            # dry run`);
-        log(`     cms-alt cleanup ${opts.out} --token <token> --yes      # actually delete`);
-        log(`   ⚠  Deletion is irreversible and assets may be referenced on static pages.`);
+        if (opts.cleanup) {
+          if (!opts.publish) {
+            log('');
+            log(`⚠  --cleanup was requested but --publish was not. The live site still`);
+            log(`   references the original assets — deleting them would 404 until you publish.`);
+            log(`   Skipping cleanup. Run 'cms-alt cleanup ${opts.out} --yes' manually after publishing.`);
+          } else {
+            log('\n═══ step 6: cleanup ═══');
+            await cleanupCmd(opts.out, { token: opts.token, yes: true, concurrency: '2' });
+          }
+        } else {
+          log('');
+          log(`ⓘ  ${candidates} original Webflow asset(s) were replaced by compressed versions`);
+          log(`   and now sit unused in your Assets library. Review and (optionally) delete:`);
+          log(`     cms-alt cleanup ${opts.out} --token <token>            # dry run`);
+          log(`     cms-alt cleanup ${opts.out} --token <token> --yes      # actually delete`);
+          log(`   ⚠  Deletion is irreversible and assets may be referenced on static pages.`);
+        }
       }
     }
 
@@ -899,6 +912,7 @@ program
   .option('--ai', 'run local Gemma ALT generation for empty rows')
   .option('--compress', 'run lossless WebP compression + Webflow Assets upload')
   .option('--publish', 'publish changed items after import')
+  .option('--cleanup', 'after publish, delete original Webflow assets replaced by compressed versions (requires --compress and --publish)')
   .option('--missing-only', 'only process rows with missing ALT')
   .option('--out <file>', 'CSV path', `cms-alt-${Date.now()}.csv`)
   .option('--max-compress <n>', 'cap compression to N images', '0')

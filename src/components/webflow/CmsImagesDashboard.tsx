@@ -59,6 +59,7 @@ interface CliActions {
   ai: boolean;
   compress: boolean;
   publish: boolean;
+  cleanup: boolean;
 }
 
 function buildContextualCommand(args: CliCommandArgs, actions: CliActions, fields?: string[]): string {
@@ -74,6 +75,8 @@ function buildContextualCommand(args: CliCommandArgs, actions: CliActions, field
   if (actions.ai) parts.push('--ai');
   if (actions.compress) parts.push('--compress');
   if (actions.publish) parts.push('--publish');
+  // Cleanup only makes sense alongside compress + publish.
+  if (actions.cleanup && actions.compress && actions.publish) parts.push('--cleanup');
   if (args.siteName) parts.push(`--site-name "${escapeCliArg(args.siteName)}"`);
   return parts.join(' ');
 }
@@ -346,6 +349,15 @@ function PlanPanel({
       detail: 'push live',
       eta: actions.publish ? '~4s' : '—',
     },
+    {
+      key: 'cleanup',
+      on: actions.cleanup && actions.compress && actions.publish,
+      label: 'cleanup',
+      detail: 'delete originals',
+      eta: actions.cleanup && actions.compress && actions.publish
+        ? `~${Math.max(5, Math.round(plan.imageCount * 0.3))}s`
+        : '—',
+    },
   ];
 
   return (
@@ -513,6 +525,26 @@ function ContextualCliBar({
         >
           Publish
         </button>
+        {/*
+          Cleanup is only meaningful after compress + publish — the originals
+          being deleted are the ones replaced by compressed uploads, and
+          deleting before publish would 404 the live site.
+        */}
+        <button
+          type="button"
+          className={toggleClass(actions.cleanup && actions.compress && actions.publish)}
+          onClick={() => onActionsChange({ ...actions, cleanup: !actions.cleanup })}
+          disabled={!actions.compress || !actions.publish}
+          title={
+            !actions.compress
+              ? 'Enable Compress first — cleanup deletes originals replaced by compressed versions'
+              : !actions.publish
+                ? 'Enable Publish first — deleting before publish would 404 the live site'
+                : 'Delete original Webflow assets that were replaced by compressed versions'
+          }
+        >
+          Delete originals
+        </button>
         {hint ? <span className="ml-auto text-[10px] text-muted-foreground">{hint}</span> : null}
       </div>
       <div className="flex items-center gap-2">
@@ -556,7 +588,7 @@ function ContextualCliBar({
   );
 }
 
-const DEFAULT_ACTIONS: CliActions = { ai: true, compress: true, publish: false };
+const DEFAULT_ACTIONS: CliActions = { ai: true, compress: true, publish: false, cleanup: false };
 
 export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
   const {
