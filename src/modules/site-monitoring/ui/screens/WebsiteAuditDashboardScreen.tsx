@@ -322,16 +322,38 @@ export function WebsiteAuditDashboard({
   // Only the owning tab should update/clear the persisted job document.
   const isImageScanOwnerRef = useRef(false)
 
+  // Tracks the last observed job snapshot so we can detect transitions
+  // (start → progress → terminal) and emit the right sonner toasts.
+  const lastImageScanJobRef = useRef<{ runId?: string; completed: number; resolvedCount: number } | null>(null)
+
   // Hydrate bulk-scan progress from the persisted job doc so the progress bar
   // survives page refresh and shows in every subscribed tab. Stale jobs (no
   // heartbeat > 2min) are ignored so a crashed orchestrator doesn't hang the UI.
   useEffect(() => {
+    const toastId = `image-scan-progress-${projectId}`
+
     if (!imageScanJob) {
-      if (!isImageScanOwnerRef.current) {
-        setIsScanningAllImages(false)
+      // Workflow finished (job doc cleared). Emit a summary toast if we had one.
+      if (lastImageScanJobRef.current) {
+        const { resolvedCount, completed } = lastImageScanJobRef.current
+        if (resolvedCount > 0) {
+          toast.success(
+            `Scan complete · Resolved ALT for ${resolvedCount} image${resolvedCount === 1 ? '' : 's'} across ${completed} page${completed === 1 ? '' : 's'}`,
+            { id: toastId }
+          )
+        } else if (completed > 0) {
+          toast.info(`Scan complete · No new ALT fixes detected across ${completed} page${completed === 1 ? '' : 's'}`, {
+            id: toastId,
+          })
+        } else {
+          toast.dismiss(toastId)
+        }
+        lastImageScanJobRef.current = null
       }
+      if (!isImageScanOwnerRef.current) setIsScanningAllImages(false)
       return
     }
+
     const staleAfterMs = 2 * 60 * 1000
     const lastBeat = new Date(imageScanJob.lastUpdatedAt).getTime()
     const isStale =
@@ -346,10 +368,38 @@ export function WebsiteAuditDashboard({
         total: imageScanJob.total,
         currentUrl: imageScanJob.currentUrl || "",
       })
+
+      // Sticky progress toast, updates in place as heartbeats come in.
+      const pct = imageScanJob.total > 0 ? Math.round((imageScanJob.completed / imageScanJob.total) * 100) : 0
+      toast.loading(
+        `Scanning images · ${imageScanJob.completed}/${imageScanJob.total} (${pct}%)${
+          imageScanJob.resolvedCount > 0 ? ` · ${imageScanJob.resolvedCount} ALT fixed` : ''
+        }`,
+        { id: toastId }
+      )
+
+      // Emit an info toast whenever the resolvedCount ticks up so the user
+      // gets immediate feedback when ALT text is actually resolved.
+      const prev = lastImageScanJobRef.current
+      if (prev && prev.runId === imageScanJob.runId) {
+        const delta = imageScanJob.resolvedCount - prev.resolvedCount
+        if (delta > 0) {
+          toast.info(`Resolved ALT for ${delta} image${delta === 1 ? '' : 's'}`)
+        }
+      }
+      lastImageScanJobRef.current = {
+        runId: imageScanJob.runId,
+        completed: imageScanJob.completed,
+        resolvedCount: imageScanJob.resolvedCount,
+      }
+    } else if (imageScanJob.status === 'failed') {
+      toast.error('Scan failed', { id: toastId })
+      lastImageScanJobRef.current = null
+      if (!isImageScanOwnerRef.current) setIsScanningAllImages(false)
     } else if (!isImageScanOwnerRef.current) {
       setIsScanningAllImages(false)
     }
-  }, [imageScanJob])
+  }, [imageScanJob, projectId])
 
   // Load persisted folder types
   useEffect(() => {
