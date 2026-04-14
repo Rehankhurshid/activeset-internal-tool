@@ -198,27 +198,47 @@ async function generateCmd(
     return;
   }
 
-  log(`Generating ALT for ${needAlt.length} row(s) via ${model} @ ${host}…`);
+  log(`Generating ALT for ${needAlt.length} row(s) via ${model} @ ${host}…\n`);
 
+  const startedAt = Date.now();
   const BATCH = 25;
   for (let i = 0; i < needAlt.length; i += BATCH) {
     const slice = needAlt.slice(i, i + BATCH);
     const entries = slice.map(r => byId.get(rowId(r))!).filter(Boolean);
+    const baseIndex = i;
     const suggestions = await generateAltForImages(entries, {
       host,
       model,
       siteName: opts.siteName,
+      onProgress: ({ entry, altText, durationMs, fallback, error }) => {
+        const globalIndex = baseIndex + (entries.findIndex(e => e.id === entry.id) + 1);
+        const pos = `[${String(globalIndex).padStart(String(needAlt.length).length, ' ')}/${needAlt.length}]`;
+        const tag = fallback ? (error ? '✗' : '•') : '✓';
+        const time = `${(durationMs / 1000).toFixed(1)}s`;
+        const preview = altText.length > 60 ? altText.slice(0, 57) + '…' : altText;
+        const context = `${entry.collectionName} › ${entry.itemName} · ${entry.fieldDisplayName}`;
+        log(`  ${pos} ${tag} ${time.padStart(5, ' ')} · ${context}`);
+        log(`         “${preview}”${error ? ` (err: ${error.slice(0, 80)})` : ''}`);
+
+        // Rolling ETA based on average time per image
+        const elapsed = (Date.now() - startedAt) / 1000;
+        const avg = elapsed / globalIndex;
+        const remaining = Math.round(avg * (needAlt.length - globalIndex));
+        if (globalIndex < needAlt.length && globalIndex % 5 === 0) {
+          log(`         ⏱  ~${remaining}s remaining (avg ${avg.toFixed(1)}s/img)`);
+        }
+      },
     });
     const sugMap = new Map(suggestions.map(s => [s.entryId, s.altText]));
     for (const r of slice) {
       const a = sugMap.get(rowId(r));
       if (a != null) r.new_alt = a;
     }
-    log(`  ${Math.min(i + BATCH, needAlt.length)} / ${needAlt.length}`);
+    // Flush after every batch so Ctrl+C loses at most 25 rows
+    await writeCsv(rows, csvPath);
   }
 
-  await writeCsv(rows, csvPath);
-  log(`→ Updated ${csvPath}`);
+  log(`\n→ Updated ${csvPath}`);
 }
 
 async function compressCmd(

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Database,
   Search,
@@ -11,6 +11,8 @@ import {
   Check,
   Copy,
   Terminal,
+  ChevronRight,
+  Activity,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -76,6 +78,149 @@ function buildContextualCommand(args: CliCommandArgs, actions: CliActions, field
   return parts.join(' ');
 }
 
+interface RunPlan {
+  siteLabel: string;
+  collectionLabel: string;
+  imageCount: number;
+  missingCount: number;
+  fieldCount: number;
+}
+
+function fmtDuration(totalSec: number): string {
+  if (totalSec <= 0) return '0s';
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function RunTicker({ startedAt }: { startedAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const elapsed = Math.floor((now - startedAt) / 1000);
+  const pulse = elapsed % 2 === 0 ? '●' : '○';
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-1.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
+      <span aria-hidden>{pulse}</span>
+      <span>run dispatched · elapsed {fmtDuration(elapsed)}</span>
+      <span className="ml-auto text-muted-foreground">
+        watch your terminal · Ctrl+C to abort
+      </span>
+    </div>
+  );
+}
+
+function PlanPanel({
+  plan,
+  actions,
+  open,
+  onToggle,
+}: {
+  plan: RunPlan;
+  actions: CliActions;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  // Rough ETA heuristics — per-image seconds on a mid-range laptop w/ Gemma 3 4B
+  const altSecPerImage = 8;
+  const compressSecPerImage = 2.5;
+
+  const altSubtotal = actions.ai ? Math.round(plan.missingCount * altSecPerImage) : 0;
+  const compressSubtotal = actions.compress
+    ? Math.round(plan.imageCount * compressSecPerImage)
+    : 0;
+  const publishOverhead = actions.publish ? 4 : 0;
+  const importOverhead = 3;
+  const totalSec = altSubtotal + compressSubtotal + publishOverhead + importOverhead;
+
+  const steps: Array<{ key: string; on: boolean; label: string; detail: string; eta: string }> = [
+    {
+      key: 'export',
+      on: true,
+      label: 'export',
+      detail: `${plan.imageCount} images · ${plan.fieldCount} fields`,
+      eta: '~2s',
+    },
+    {
+      key: 'generate',
+      on: actions.ai,
+      label: 'generate',
+      detail: `${plan.missingCount} missing ALT · gemma3:4b`,
+      eta: altSubtotal > 0 ? `~${fmtDuration(altSubtotal)}` : '—',
+    },
+    {
+      key: 'compress',
+      on: actions.compress,
+      label: 'compress',
+      detail: `${plan.imageCount} → lossless WebP`,
+      eta: compressSubtotal > 0 ? `~${fmtDuration(compressSubtotal)}` : '—',
+    },
+    {
+      key: 'import',
+      on: true,
+      label: 'import',
+      detail: 'PATCH Webflow CMS',
+      eta: '~3s',
+    },
+    {
+      key: 'publish',
+      on: actions.publish,
+      label: 'publish',
+      detail: 'push live',
+      eta: actions.publish ? '~4s' : '—',
+    },
+  ];
+
+  return (
+    <div className="rounded-md border bg-background/50">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs font-medium hover:bg-accent/50"
+      >
+        <ChevronRight
+          className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-90' : ''}`}
+        />
+        <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+        <span>execution plan</span>
+        <span className="ml-2 text-muted-foreground font-mono">
+          {plan.collectionLabel} · {plan.imageCount} img · ~{fmtDuration(totalSec)}
+        </span>
+      </button>
+      {open ? (
+        <div className="border-t bg-muted/30 px-3 py-2 font-mono text-[11px] leading-relaxed">
+          <div className="text-muted-foreground mb-1">
+            $ npx @activeset/cms-alt run · {plan.siteLabel}
+          </div>
+          {steps.map((s, i) => {
+            const prefix = i === steps.length - 1 ? '└─' : '├─';
+            const tag = s.on ? '▸' : '·';
+            const color = s.on ? 'text-foreground' : 'text-muted-foreground/60';
+            return (
+              <div key={s.key} className={`${color} tabular-nums`}>
+                <span className="text-muted-foreground">{prefix}</span>{' '}
+                <span className={s.on ? 'text-emerald-500' : 'text-muted-foreground/60'}>
+                  {tag}
+                </span>{' '}
+                <span className="w-16 inline-block">{s.label.padEnd(9, ' ')}</span>
+                <span className="text-muted-foreground">│</span>{' '}
+                <span className="w-48 inline-block">{s.detail}</span>
+                <span className="text-muted-foreground">│</span>{' '}
+                <span>{s.eta}</span>
+              </div>
+            );
+          })}
+          <div className="mt-1 pt-1 border-t border-dashed text-muted-foreground">
+            ≈ {fmtDuration(totalSec)} total · Ollama must be running locally
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ContextualCliBar({
   command,
   displayCommand,
@@ -83,6 +228,7 @@ function ContextualCliBar({
   actions,
   onActionsChange,
   hint,
+  plan,
 }: {
   command: string;
   displayCommand?: string;
@@ -90,15 +236,27 @@ function ContextualCliBar({
   actions: CliActions;
   onActionsChange: (next: CliActions) => void;
   hint?: string;
+  plan?: RunPlan;
 }) {
   const [copied, setCopied] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+    };
+  }, []);
 
   const handleCopy = () => {
     if (disabled) return;
     navigator.clipboard.writeText(command);
     setCopied(true);
-    toast.success('Command copied (with token)');
-    setTimeout(() => setCopied(false), 1500);
+    setRunStartedAt(Date.now());
+    toast.success('Command copied · paste into your terminal');
+    if (copyResetRef.current) clearTimeout(copyResetRef.current);
+    copyResetRef.current = setTimeout(() => setCopied(false), 1500);
   };
 
   const toggleClass = (on: boolean) =>
@@ -151,6 +309,27 @@ function ContextualCliBar({
           {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
         </Button>
       </div>
+      {plan && !disabled ? (
+        <PlanPanel
+          plan={plan}
+          actions={actions}
+          open={planOpen}
+          onToggle={() => setPlanOpen(o => !o)}
+        />
+      ) : null}
+      {runStartedAt != null && !disabled ? (
+        <div className="flex items-center gap-2">
+          <RunTicker startedAt={runStartedAt} />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-[10px]"
+            onClick={() => setRunStartedAt(null)}
+          >
+            reset
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -312,6 +491,43 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
     : cliCommand;
   const cliDisabled = !cliArgs.collectionIds || cliArgs.collectionIds.length === 0;
 
+  const runPlan: RunPlan | undefined = useMemo(() => {
+    const collectionIds = cliArgs.collectionIds ?? [];
+    if (collectionIds.length === 0) return undefined;
+
+    // Prefer concrete numbers from loaded images; fall back to collection metadata
+    if (images.length > 0) {
+      const scoped = statusFilter === 'missing' ? filteredImages : images;
+      const fieldSlugs = new Set(scoped.map(i => i.fieldSlug));
+      return {
+        siteLabel: webflowConfig.siteName || webflowConfig.siteId,
+        collectionLabel:
+          collectionIds.length === 1
+            ? images.find(i => i.collectionId === collectionIds[0])?.collectionName || collectionIds[0]
+            : `${collectionIds.length} collections`,
+        imageCount: scoped.length,
+        missingCount: scoped.filter(i => i.isMissingAlt).length,
+        fieldCount: fieldSlugs.size,
+      };
+    }
+
+    const selected = collections.filter(c => collectionIds.includes(c.id));
+    const imageCount = selected.reduce((acc, c) => acc + c.totalItems, 0);
+    const fieldCount = selected.reduce(
+      (acc, c) => acc + c.imageFields.length + c.richTextFields.length,
+      0
+    );
+    return {
+      siteLabel: webflowConfig.siteName || webflowConfig.siteId,
+      collectionLabel:
+        selected.length === 1 ? selected[0].displayName : `${selected.length} collections`,
+      imageCount,
+      // Pre-scan we don't know missing count yet; assume all as worst-case ETA
+      missingCount: imageCount,
+      fieldCount,
+    };
+  }, [cliArgs.collectionIds, images, filteredImages, collections, statusFilter, webflowConfig.siteId, webflowConfig.siteName]);
+
   // --- Discovery view ---
   if (collections.length === 0 && images.length === 0) {
     return (
@@ -364,6 +580,7 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
           disabled={cliDisabled}
           actions={actions}
           onActionsChange={setActions}
+          plan={runPlan}
           hint={
             selectedCollections.size > 0
               ? `${selectedCollections.size} collection${selectedCollections.size !== 1 ? 's' : ''} selected`
@@ -499,6 +716,7 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
         disabled={cliDisabled}
         actions={actions}
         onActionsChange={setActions}
+        plan={runPlan}
         hint={
           cliFields && cliFields.length > 0
             ? `${cliFields.length} field${cliFields.length !== 1 ? 's' : ''} · ${cliArgs.collectionIds?.length ?? 0} collection${(cliArgs.collectionIds?.length ?? 0) !== 1 ? 's' : ''}`
