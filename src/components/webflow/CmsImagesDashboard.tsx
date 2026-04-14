@@ -46,6 +46,7 @@ function escapeCliArg(v: string): string {
 interface CliCommandArgs {
   siteId: string;
   siteName?: string;
+  apiToken?: string;
   collectionIds?: string[];
   missingOnly?: boolean;
   csvPath?: string;
@@ -60,6 +61,7 @@ interface CliActions {
 
 function buildContextualCommand(args: CliCommandArgs, actions: CliActions, fields?: string[]): string {
   const parts = [`npx @activeset/cms-alt run --site ${args.siteId}`];
+  if (args.apiToken) parts.push(`--token ${args.apiToken}`);
   if (args.collectionIds && args.collectionIds.length > 0) {
     parts.push(`--collections ${args.collectionIds.join(',')}`);
   }
@@ -76,12 +78,14 @@ function buildContextualCommand(args: CliCommandArgs, actions: CliActions, field
 
 function ContextualCliBar({
   command,
+  displayCommand,
   disabled,
   actions,
   onActionsChange,
   hint,
 }: {
   command: string;
+  displayCommand?: string;
   disabled?: boolean;
   actions: CliActions;
   onActionsChange: (next: CliActions) => void;
@@ -93,7 +97,7 @@ function ContextualCliBar({
     if (disabled) return;
     navigator.clipboard.writeText(command);
     setCopied(true);
-    toast.success('Command copied');
+    toast.success('Command copied (with token)');
     setTimeout(() => setCopied(false), 1500);
   };
 
@@ -134,7 +138,7 @@ function ContextualCliBar({
       </div>
       <div className="flex items-center gap-2">
         <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap rounded bg-muted px-2.5 py-1.5 font-mono text-[11px]">
-          {disabled ? '— pick a collection to build a command —' : command}
+          {disabled ? '— pick a collection to build a command —' : (displayCommand ?? command)}
         </code>
         <Button
           variant="ghost"
@@ -284,6 +288,7 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
   const cliArgs: CliCommandArgs = {
     siteId: webflowConfig.siteId,
     siteName: webflowConfig.siteName,
+    apiToken: webflowConfig.apiToken,
     collectionIds: cliCollectionIds,
     missingOnly: statusFilter === 'missing',
   };
@@ -302,6 +307,9 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
   }, [selectedFields, filteredImages, images]);
 
   const cliCommand = buildContextualCommand(cliArgs, actions, cliFields);
+  const cliDisplayCommand = webflowConfig.apiToken
+    ? cliCommand.replace(`--token ${webflowConfig.apiToken}`, '--token ••••••••')
+    : cliCommand;
   const cliDisabled = !cliArgs.collectionIds || cliArgs.collectionIds.length === 0;
 
   // --- Discovery view ---
@@ -352,6 +360,7 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
       <div className="space-y-4">
         <ContextualCliBar
           command={cliCommand}
+        displayCommand={cliDisplayCommand}
           disabled={cliDisabled}
           actions={actions}
           onActionsChange={setActions}
@@ -486,6 +495,7 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
     <div className="space-y-4">
       <ContextualCliBar
         command={cliCommand}
+        displayCommand={cliDisplayCommand}
         disabled={cliDisabled}
         actions={actions}
         onActionsChange={setActions}
