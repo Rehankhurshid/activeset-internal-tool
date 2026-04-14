@@ -1890,27 +1890,34 @@ export function WebsiteAuditDashboard({
     const link = links.find((item) => item.id === pageId)
     if (!link?.url) return
 
+    const pageLabel = link.title || getCompactUrl(link.url)
+    const toastId = `image-scan:${pageId}`
+    toast.loading(`Scanning images on ${pageLabel}…`, { id: toastId })
+
     setScanningImagePageIds((prev) => new Set(prev).add(pageId))
     try {
       const delta = await runImageScanForLink(link)
       if (delta) {
         const resolved = Math.max(0, delta.before - delta.after)
-        const pageLabel = link.title || getCompactUrl(link.url)
         if (resolved > 0) {
           toast.success(
-            `Resolved ALT text for ${resolved} image${resolved === 1 ? '' : 's'} on ${pageLabel}`
+            `Resolved ALT text for ${resolved} image${resolved === 1 ? '' : 's'} on ${pageLabel}`,
+            { id: toastId }
           )
         } else if (delta.after === 0) {
-          toast.success(`No missing ALT text on ${pageLabel}`)
+          toast.success(`No missing ALT text on ${pageLabel}`, { id: toastId })
         } else {
           toast.info(
-            `${delta.after} image${delta.after === 1 ? '' : 's'} still missing ALT on ${pageLabel}`
+            `${delta.after} image${delta.after === 1 ? '' : 's'} still missing ALT on ${pageLabel}`,
+            { id: toastId }
           )
         }
+      } else {
+        toast.dismiss(toastId)
       }
     } catch (error) {
       console.error('[ImageScan] Failed page image scan:', error)
-      toast.error(error instanceof Error ? error.message : 'Image scan failed')
+      toast.error(error instanceof Error ? error.message : 'Image scan failed', { id: toastId })
     } finally {
       setScanningImagePageIds((prev) => {
         const next = new Set(prev)
@@ -1925,10 +1932,16 @@ export function WebsiteAuditDashboard({
 
     // Only rescan pages that already have missing ALT recorded. If no prior data
     // exists (first pass), fall back to all links so we can discover offenders.
+    // Order pages by impact (repeated > main-content > occurrences > recency)
+    // using the already-sorted missingAltPageGroups. So the most impactful
+    // pages get scanned first, matching the UI's default sort.
+    const linksById = new Map(links.map((link) => [link.id, link]))
     const pageIdsWithMissingAlt = new Set(missingAltIssues.map((issue) => issue.pageId))
-    const pagesToScan =
+    const pagesToScan: ProjectLink[] =
       pageIdsWithMissingAlt.size > 0
-        ? links.filter((link) => !!link.url && pageIdsWithMissingAlt.has(link.id))
+        ? missingAltPageGroups
+            .map((group) => linksById.get(group.pageId))
+            .filter((link): link is ProjectLink => !!link?.url)
         : links.filter((link) => !!link.url)
 
     if (pagesToScan.length === 0) return
@@ -2064,7 +2077,7 @@ export function WebsiteAuditDashboard({
         )
       }
     }
-  }, [isReadOnly, isScanningAllImages, links, missingAltIssues, projectId, runImageScanForLink])
+  }, [isReadOnly, isScanningAllImages, links, missingAltIssues, missingAltPageGroups, projectId, runImageScanForLink])
 
   const hasMissingAltFilters =
     !!missingAltSearch.trim() ||
