@@ -321,6 +321,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             folderPageTypes={project.folderPageTypes}
                             detectedLocales={project.detectedLocales}
                             pathToLocaleMap={project.pathToLocaleMap}
+                            imageScanJob={project.imageScanJob}
                         />
                     </TabsContent>
 

@@ -17,7 +17,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Project, ProjectLink, ProjectStatus, ProjectTag, CreateProjectLinkInput, UpdateProjectLinkInput, AuditResult } from '@/types';
+import { Project, ProjectLink, ProjectStatus, ProjectTag, CreateProjectLinkInput, UpdateProjectLinkInput, AuditResult, ImageScanJob } from '@/types';
 import { WebflowConfig } from '@/types/webflow';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
@@ -322,6 +322,21 @@ export const projectsService = {
   async deleteProject(projectId: string): Promise<void> {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await deleteDoc(projectRef);
+  },
+
+  // Image-scan job lifecycle — persisted on the project doc so bulk-scan
+  // progress survives refreshes and is visible to every subscribed tab.
+  async setImageScanJob(projectId: string, job: ImageScanJob | null): Promise<void> {
+    try {
+      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+      await updateDoc(projectRef, {
+        imageScanJob: job === null ? deleteField() : job,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'setImageScanJob');
+      throw new DatabaseError('Failed to update image scan job');
+    }
   },
 
   // Update project links — audit results go to subcollection, link metadata to project doc

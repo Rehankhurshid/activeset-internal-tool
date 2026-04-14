@@ -337,6 +337,19 @@ export interface Project {
   // Embedded widget display flags
   disableAuditBadge?: boolean; // Hide the floating score badge on the right
   disableDropdown?: boolean; // Hide the bottom-right project-links dropdown
+  // Persisted bulk image-scan job so progress survives page refresh.
+  imageScanJob?: ImageScanJob;
+}
+
+export interface ImageScanJob {
+  status: 'running' | 'completed' | 'failed';
+  startedAt: string; // ISO
+  lastUpdatedAt: string; // ISO — used to detect stale jobs
+  total: number;
+  completed: number;
+  currentUrl?: string;
+  resolvedCount: number;
+  failedCount: number;
 }
 
 export interface WebsiteTextCheckTarget {

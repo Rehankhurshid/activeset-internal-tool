@@ -3,6 +3,8 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import NextLink from "next/link"
 import { type ProjectLink, type FolderPageTypes } from "@/modules/site-monitoring"
+import type { ImageScanJob } from "@/types"
+import { projectsService } from "@/services/database"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -61,6 +63,7 @@ interface WebsiteAuditDashboardProps {
   detectedLocales?: string[];  // Canonical locales from sitemap hreflang
   pathToLocaleMap?: Record<string, string>;  // Path prefix to locale mapping
   isReadOnly?: boolean;
+  imageScanJob?: ImageScanJob;
 }
 
 interface AuditPageRow {
@@ -276,13 +279,14 @@ const getRepeatedUsageLabel = (issue: MissingAltImageIssue): string => {
   return `Repeated on ${issue.repeatedPageCount} pages • ${issue.repeatedTotalOccurrences} total occurrences`
 }
 
-export function WebsiteAuditDashboard({ 
-  links, 
-  projectId, 
+export function WebsiteAuditDashboard({
+  links,
+  projectId,
   folderPageTypes: initialFolderPageTypes = {},
   detectedLocales = [],
   pathToLocaleMap = {},
   isReadOnly = false,
+  imageScanJob,
 }: WebsiteAuditDashboardProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -314,6 +318,39 @@ export function WebsiteAuditDashboard({
   const [missingAltViewMode, setMissingAltViewMode] = useState<MissingAltViewMode>("page")
   const [collapsedMissingAltPages, setCollapsedMissingAltPages] = useState<Set<string>>(new Set())
   const [missingAltPreviewErrors, setMissingAltPreviewErrors] = useState<Set<string>>(new Set())
+
+  // Tracks whether this tab is the one actively orchestrating the bulk scan.
+  // Only the owning tab should update/clear the persisted job document.
+  const isImageScanOwnerRef = useRef(false)
+
+  // Hydrate bulk-scan progress from the persisted job doc so the progress bar
+  // survives page refresh and shows in every subscribed tab. Stale jobs (no
+  // heartbeat > 2min) are ignored so a crashed orchestrator doesn't hang the UI.
+  useEffect(() => {
+    if (!imageScanJob) {
+      if (!isImageScanOwnerRef.current) {
+        setIsScanningAllImages(false)
+      }
+      return
+    }
+    const staleAfterMs = 2 * 60 * 1000
+    const lastBeat = new Date(imageScanJob.lastUpdatedAt).getTime()
+    const isStale =
+      imageScanJob.status === 'running' &&
+      Number.isFinite(lastBeat) &&
+      Date.now() - lastBeat > staleAfterMs
+
+    if (imageScanJob.status === 'running' && !isStale) {
+      if (!isImageScanOwnerRef.current) setIsScanningAllImages(true)
+      setImageScanProgress({
+        current: imageScanJob.completed,
+        total: imageScanJob.total,
+        currentUrl: imageScanJob.currentUrl || "",
+      })
+    } else if (!isImageScanOwnerRef.current) {
+      setIsScanningAllImages(false)
+    }
+  }, [imageScanJob])
 
   // Load persisted folder types
   useEffect(() => {
@@ -1903,6 +1940,24 @@ export function WebsiteAuditDashboard({
       currentUrl: "",
     })
 
+    isImageScanOwnerRef.current = true
+    const nowIso = () => new Date().toISOString()
+    // Persist the job so progress survives page refreshes.
+    try {
+      await projectsService.setImageScanJob(projectId, {
+        status: 'running',
+        startedAt: nowIso(),
+        lastUpdatedAt: nowIso(),
+        total: pagesToScan.length,
+        completed: 0,
+        currentUrl: "",
+        resolvedCount: 0,
+        failedCount: 0,
+      })
+    } catch (error) {
+      console.error('[ImageScan] Failed to persist scan job start:', error)
+    }
+
     // Scan block-by-block: process a fixed-size batch, then move on. This keeps
     // pressure on Firestore/fetch predictable and makes progress visible.
     const blockSize = 5
@@ -1946,11 +2001,28 @@ export function WebsiteAuditDashboard({
           })
         })
 
+        const completedNow = Math.min(start + block.length, pagesToScan.length)
         setImageScanProgress((prev) => ({
           ...prev,
-          current: Math.min(start + block.length, pagesToScan.length),
+          current: completedNow,
           total: pagesToScan.length,
         }))
+
+        // Heartbeat the job doc so other tabs see progress and stale detection works.
+        try {
+          await projectsService.setImageScanJob(projectId, {
+            status: 'running',
+            startedAt: nowIso(),
+            lastUpdatedAt: nowIso(),
+            total: pagesToScan.length,
+            completed: completedNow,
+            currentUrl: block[block.length - 1]?.url || "",
+            resolvedCount: totalResolved,
+            failedCount: failedPages,
+          })
+        } catch (error) {
+          console.error('[ImageScan] Failed to heartbeat scan job:', error)
+        }
       }
     } finally {
       setIsScanningAllImages(false)
@@ -1959,6 +2031,14 @@ export function WebsiteAuditDashboard({
         current: prev.total,
         currentUrl: "",
       }))
+
+      // Clear the persisted job — scan is done (or failed).
+      try {
+        await projectsService.setImageScanJob(projectId, null)
+      } catch (error) {
+        console.error('[ImageScan] Failed to clear scan job:', error)
+      }
+      isImageScanOwnerRef.current = false
 
       if (totalResolved > 0) {
         toast.success(
@@ -1984,7 +2064,7 @@ export function WebsiteAuditDashboard({
         )
       }
     }
-  }, [isReadOnly, isScanningAllImages, links, missingAltIssues, runImageScanForLink])
+  }, [isReadOnly, isScanningAllImages, links, missingAltIssues, projectId, runImageScanForLink])
 
   const hasMissingAltFilters =
     !!missingAltSearch.trim() ||
