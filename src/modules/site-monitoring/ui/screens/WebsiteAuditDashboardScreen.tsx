@@ -4,7 +4,6 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import NextLink from "next/link"
 import { type ProjectLink, type FolderPageTypes } from "@/modules/site-monitoring"
 import type { ImageScanJob } from "@/types"
-import { projectsService } from "@/services/database"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -1946,6 +1945,8 @@ export function WebsiteAuditDashboard({
 
     if (pagesToScan.length === 0) return
 
+    // Optimistic UI — the Firestore subscription on `imageScanJob` will take
+    // over and drive progress as the workflow heartbeats.
     setIsScanningAllImages(true)
     setImageScanProgress({
       current: 0,
@@ -1953,131 +1954,64 @@ export function WebsiteAuditDashboard({
       currentUrl: "",
     })
 
-    isImageScanOwnerRef.current = true
-    const nowIso = () => new Date().toISOString()
-    // Persist the job so progress survives page refreshes.
+    const payload = pagesToScan.map((link) => ({ linkId: link.id, url: link.url }))
+    const startToastId = `image-scan-start-${projectId}`
+    toast.loading(`Starting durable scan of ${payload.length} page${payload.length === 1 ? '' : 's'}…`, {
+      id: startToastId,
+    })
+
     try {
-      await projectsService.setImageScanJob(projectId, {
-        status: 'running',
-        startedAt: nowIso(),
-        lastUpdatedAt: nowIso(),
-        total: pagesToScan.length,
-        completed: 0,
-        currentUrl: "",
-        resolvedCount: 0,
-        failedCount: 0,
+      const response = await fetch('/api/image-scan/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, pages: payload }),
       })
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string
+          alreadyRunning?: boolean
+        }
+        if (data.alreadyRunning) {
+          toast.info('A scan is already running for this project — progress will resume below.', {
+            id: startToastId,
+          })
+          return
+        }
+        throw new Error(data.error || `Failed to start scan (${response.status})`)
+      }
+
+      const data = (await response.json()) as { runId: string; total: number }
+      toast.success(
+        `Scan running in the background · ${data.total} page${data.total === 1 ? '' : 's'} queued`,
+        { id: startToastId }
+      )
     } catch (error) {
-      console.error('[ImageScan] Failed to persist scan job start:', error)
-    }
-
-    // Scan block-by-block: process a fixed-size batch, then move on. This keeps
-    // pressure on Firestore/fetch predictable and makes progress visible.
-    const blockSize = 5
-    let totalResolved = 0
-    let pagesFullyResolved = 0
-    let pagesStillMissing = 0
-    let failedPages = 0
-
-    try {
-      for (let start = 0; start < pagesToScan.length; start += blockSize) {
-        const block = pagesToScan.slice(start, start + blockSize)
-
-        for (const page of block) {
-          setImageScanProgress((prev) => ({
-            ...prev,
-            total: pagesToScan.length,
-            currentUrl: page.url,
-          }))
-          setScanningImagePageIds((prev) => new Set(prev).add(page.id))
-        }
-
-        const results = await Promise.allSettled(block.map((page) => runImageScanForLink(page)))
-
-        results.forEach((outcome, idx) => {
-          const page = block[idx]
-          if (outcome.status === 'fulfilled' && outcome.value) {
-            const { before, after } = outcome.value
-            const resolved = Math.max(0, before - after)
-            totalResolved += resolved
-            if (after === 0 && before > 0) pagesFullyResolved += 1
-            if (after > 0) pagesStillMissing += 1
-          } else if (outcome.status === 'rejected') {
-            failedPages += 1
-            console.error(`[ImageScan] Failed image scan for ${page.url}:`, outcome.reason)
-          }
-
-          setScanningImagePageIds((prev) => {
-            const next = new Set(prev)
-            next.delete(page.id)
-            return next
-          })
-        })
-
-        const completedNow = Math.min(start + block.length, pagesToScan.length)
-        setImageScanProgress((prev) => ({
-          ...prev,
-          current: completedNow,
-          total: pagesToScan.length,
-        }))
-
-        // Heartbeat the job doc so other tabs see progress and stale detection works.
-        try {
-          await projectsService.setImageScanJob(projectId, {
-            status: 'running',
-            startedAt: nowIso(),
-            lastUpdatedAt: nowIso(),
-            total: pagesToScan.length,
-            completed: completedNow,
-            currentUrl: block[block.length - 1]?.url || "",
-            resolvedCount: totalResolved,
-            failedCount: failedPages,
-          })
-        } catch (error) {
-          console.error('[ImageScan] Failed to heartbeat scan job:', error)
-        }
-      }
-    } finally {
+      console.error('[ImageScan] Failed to start workflow:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to start scan', { id: startToastId })
       setIsScanningAllImages(false)
-      setImageScanProgress((prev) => ({
-        ...prev,
-        current: prev.total,
-        currentUrl: "",
-      }))
-
-      // Clear the persisted job — scan is done (or failed).
-      try {
-        await projectsService.setImageScanJob(projectId, null)
-      } catch (error) {
-        console.error('[ImageScan] Failed to clear scan job:', error)
-      }
-      isImageScanOwnerRef.current = false
-
-      if (totalResolved > 0) {
-        toast.success(
-          `Resolved ALT text for ${totalResolved} image${totalResolved === 1 ? '' : 's'}` +
-            (pagesFullyResolved > 0
-              ? ` across ${pagesFullyResolved} page${pagesFullyResolved === 1 ? '' : 's'}`
-              : '') +
-            (pagesStillMissing > 0
-              ? ` · ${pagesStillMissing} page${pagesStillMissing === 1 ? '' : 's'} still have missing ALT`
-              : '')
-        )
-      } else if (pagesStillMissing === 0 && failedPages === 0) {
-        toast.success('All scanned pages have complete ALT text')
-      } else if (pagesStillMissing > 0) {
-        toast.info(
-          `No new ALT fixes detected · ${pagesStillMissing} page${pagesStillMissing === 1 ? '' : 's'} still missing ALT`
-        )
-      }
-
-      if (failedPages > 0) {
-        toast.error(
-          `Failed to scan ${failedPages} page${failedPages === 1 ? '' : 's'}. Check console for details.`
-        )
-      }
     }
-  }, [isReadOnly, isScanningAllImages, links, missingAltIssues, missingAltPageGroups, projectId, runImageScanForLink])
+  }, [isReadOnly, isScanningAllImages, links, missingAltIssues, missingAltPageGroups, projectId])
+
+  const handleCancelBulkImageScan = useCallback(async () => {
+    if (!imageScanJob?.runId) return
+    const toastId = `image-scan-cancel-${projectId}`
+    toast.loading('Cancelling scan…', { id: toastId })
+    try {
+      const response = await fetch('/api/image-scan/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, runId: imageScanJob.runId }),
+      })
+      if (!response.ok) {
+        throw new Error(`Cancel failed (${response.status})`)
+      }
+      toast.success('Scan cancelled', { id: toastId })
+    } catch (error) {
+      console.error('[ImageScan] Cancel failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Cancel failed', { id: toastId })
+    }
+  }, [imageScanJob?.runId, projectId])
 
   const hasMissingAltFilters =
     !!missingAltSearch.trim() ||
@@ -2852,16 +2786,29 @@ export function WebsiteAuditDashboard({
             <CardContent className="p-4 space-y-4">
               {!isReadOnly && isScanningAllImages && (
                 <div className="space-y-2 rounded-md border p-3">
-                  <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center justify-between text-sm gap-2">
                     <span className="font-medium">
                       Scanning images {imageScanProgress.current} of {imageScanProgress.total} pages
                     </span>
-                    <span className="text-muted-foreground">
-                      {imageScanProgress.total > 0
-                        ? Math.round((imageScanProgress.current / imageScanProgress.total) * 100)
-                        : 0}
-                      %
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">
+                        {imageScanProgress.total > 0
+                          ? Math.round((imageScanProgress.current / imageScanProgress.total) * 100)
+                          : 0}
+                        %
+                      </span>
+                      {imageScanJob?.runId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={handleCancelBulkImageScan}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <Progress
                     value={
@@ -2876,6 +2823,9 @@ export function WebsiteAuditDashboard({
                       Current: {imageScanProgress.currentUrl}
                     </div>
                   )}
+                  <div className="text-[11px] text-muted-foreground">
+                    Scan runs on the server — it keeps going if you close or refresh this tab.
+                  </div>
                 </div>
               )}
 

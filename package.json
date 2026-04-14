@@ -72,6 +72,7 @@
     "@types/react-signature-canvas": "^1.0.7",
     "@vercel/analytics": "^1.6.1",
     "@vercel/functions": "^3.4.3",
+    "@workflow/next": "^4.0.3",
     "cheerio": "^1.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -105,6 +106,7 @@
     "sharp": "^0.34.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
+    "workflow": "^4.2.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {

@@ -350,6 +350,8 @@ export interface ImageScanJob {
   currentUrl?: string;
   resolvedCount: number;
   failedCount: number;
+  /** Vercel Workflow run ID — set when a durable workflow is driving the scan. */
+  runId?: string;
 }
 
 export interface WebsiteTextCheckTarget {
