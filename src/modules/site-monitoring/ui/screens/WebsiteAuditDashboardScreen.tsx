@@ -1667,6 +1667,27 @@ export function WebsiteAuditDashboard({
       })
   }, [filteredMissingAltIssues, missingAltSortMode])
 
+  // Default new page groups to collapsed. Rendering every group's image table at
+  // once can OOM the renderer on sites with hundreds of pages and thousands of
+  // missing-ALT rows (Chrome "Aw, Snap!" / Error code 5).
+  const seenMissingAltPageIdsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (missingAltPageGroups.length === 0) return
+    const newIds: string[] = []
+    for (const group of missingAltPageGroups) {
+      if (!seenMissingAltPageIdsRef.current.has(group.pageId)) {
+        seenMissingAltPageIdsRef.current.add(group.pageId)
+        newIds.push(group.pageId)
+      }
+    }
+    if (newIds.length === 0) return
+    setCollapsedMissingAltPages((prev) => {
+      const next = new Set(prev)
+      for (const id of newIds) next.add(id)
+      return next
+    })
+  }, [missingAltPageGroups])
+
   const areAllMissingAltPagesCollapsed = useMemo(
     () =>
       missingAltPageGroups.length > 0 &&
