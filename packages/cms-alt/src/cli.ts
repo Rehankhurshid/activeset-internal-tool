@@ -26,6 +26,7 @@ import {
   listItems,
   patchItems,
   publishItems as publishItemsApi,
+  deleteAsset,
 } from './webflow-client';
 import { extractAllImages } from './extract';
 import { groupUpdatesByItem } from './patch';
@@ -571,6 +572,128 @@ async function publishCmd(csvPath: string, opts: { token?: string }) {
   }
 }
 
+// ─── cleanup ────────────────────────────────────────────────────────────────
+
+/**
+ * Webflow-hosted asset URLs embed the asset ID before an underscore, e.g.
+ *   https://cdn.prod.website-files.com/<siteId>/<assetId>_<filename>
+ * Return the 24-char hex asset ID, or null for externally-hosted images.
+ */
+export function extractWebflowAssetId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (!/webflow|website-files|uploads-ssl\.webflow/.test(u.hostname)) return null;
+    const last = (u.pathname.split('/').pop() || '').split('?')[0];
+    const m = last.match(/^([a-f0-9]{24})_/i);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+async function cleanupCmd(
+  csvPath: string,
+  opts: { token?: string; yes?: boolean; concurrency: string }
+) {
+  const token = requireToken(opts);
+  const rows = parseCsv(await fs.readFile(csvPath, 'utf8'));
+
+  // Candidates: rows where we uploaded a compressed replacement AND the
+  // original was a Webflow-hosted asset (external URLs obviously aren't ours
+  // to delete). Dedup — the same asset often appears across many CMS items.
+  const seen = new Map<string, { url: string; itemCount: number }>();
+  for (const r of rows) {
+    if (!r.compressed_url) continue;
+    const origId = extractWebflowAssetId(r.image_url);
+    if (!origId) continue;
+    // Guard: don't delete the asset we just uploaded.
+    const newId = extractWebflowAssetId(r.compressed_url);
+    if (newId && newId === origId) continue;
+    const existing = seen.get(origId);
+    if (existing) existing.itemCount++;
+    else seen.set(origId, { url: r.image_url, itemCount: 1 });
+  }
+
+  if (seen.size === 0) {
+    log('No orphaned Webflow assets to clean up.');
+    log('(cleanup only runs against rows that have a compressed_url in the CSV.)');
+    return;
+  }
+
+  log(`${seen.size} original Webflow asset(s) were replaced by compressed versions.`);
+  log('');
+  log('⚠  These assets may still be referenced elsewhere on your site');
+  log('   (other collections, static pages, templates). The Webflow API');
+  log('   does NOT report back-references — deleting an asset that is still');
+  log('   used will break the page/item that referenced it.');
+  log('');
+  log('Recommended: open the Webflow Assets panel, sort by date, and delete');
+  log('manually. Or pass --yes to proceed with bulk delete (you own the risk).');
+  log('');
+
+  // Always dry-run first
+  const preview = [...seen.entries()].slice(0, 10);
+  for (const [id, info] of preview) {
+    const shortUrl = info.url.split('/').pop()?.slice(0, 60) ?? id;
+    log(`  ${id}  · ${info.itemCount} CMS row(s) · ${shortUrl}`);
+  }
+  if (seen.size > preview.length) log(`  …and ${seen.size - preview.length} more`);
+
+  if (!opts.yes) {
+    log('');
+    log(`→ dry run. Re-run with --yes to delete ${seen.size} asset(s).`);
+    return;
+  }
+
+  log('');
+  log(`Deleting ${seen.size} asset(s)…`);
+  emit({
+    step: 'done',
+    level: 'info',
+    message: `Cleanup: deleting ${seen.size} original asset(s)`,
+    total: seen.size,
+    current: 0,
+  });
+
+  const ids = [...seen.keys()];
+  const concurrency = Math.max(1, Math.min(4, parseInt(opts.concurrency, 10) || 2));
+  let done = 0, ok = 0, notFound = 0, failed = 0;
+  let cursor = 0;
+  async function worker() {
+    for (;;) {
+      const idx = cursor++;
+      if (idx >= ids.length) return;
+      const id = ids[idx];
+      const res = await deleteAsset(id, token);
+      done++;
+      if (res.ok || res.status === 204) {
+        ok++;
+        process.stdout.write(`  ✓ ${id} (${done}/${ids.length})\n`);
+      } else if (res.status === 404) {
+        notFound++;
+        process.stdout.write(`  · ${id} already gone (${done}/${ids.length})\n`);
+      } else {
+        failed++;
+        process.stdout.write(`  ✗ ${id} → ${res.status} ${res.text.slice(0, 120)}\n`);
+      }
+      // gentle pacing — Webflow rate-limits assets around 60 req/min
+      await sleep(250);
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+  log('');
+  log(`Cleanup complete: ${ok} deleted, ${notFound} already gone, ${failed} failed.`);
+  emit({
+    step: 'done',
+    level: failed > 0 ? 'warn' : 'success',
+    message: `Cleanup complete · ${ok} deleted · ${notFound} already gone · ${failed} failed`,
+    current: seen.size,
+    total: seen.size,
+  });
+}
+
 async function runCmd(opts: {
   site?: string;
   token?: string;
@@ -642,6 +765,22 @@ async function runCmd(opts: {
     if (opts.publish) {
       log('\n═══ step 5: publish ═══');
       await publishCmd(opts.out, { token: opts.token });
+    }
+
+    // Post-run hint: if we compressed anything, the originals are now
+    // orphaned in the Assets library. Don't auto-delete (they may be used
+    // elsewhere on the site) — point the user at the opt-in cleanup.
+    if (opts.compress) {
+      const postRows = parseCsv(await fs.readFile(opts.out, 'utf8'));
+      const candidates = postRows.filter(r => r.compressed_url && extractWebflowAssetId(r.image_url)).length;
+      if (candidates > 0) {
+        log('');
+        log(`ⓘ  ${candidates} original Webflow asset(s) were replaced by compressed versions`);
+        log(`   and now sit unused in your Assets library. Review and (optionally) delete:`);
+        log(`     cms-alt cleanup ${opts.out} --token <token>            # dry run`);
+        log(`     cms-alt cleanup ${opts.out} --token <token> --yes      # actually delete`);
+        log(`   ⚠  Deletion is irreversible and assets may be referenced on static pages.`);
+      }
     }
 
     emit({ step: 'done', level: 'success', message: 'Pipeline complete' });
@@ -737,6 +876,15 @@ program
   .argument('<csv>', 'CSV file')
   .option('-t, --token <token>', 'Webflow API token')
   .action(publishCmd);
+
+program
+  .command('cleanup')
+  .description('delete the original Webflow assets that were replaced by compressed versions (reads CSV)')
+  .argument('<csv>', 'CSV file from a prior run/compress')
+  .option('-t, --token <token>', 'Webflow API token')
+  .option('-y, --yes', 'actually delete (default is dry-run)')
+  .option('--concurrency <n>', 'parallel delete workers (max 4)', '2')
+  .action(cleanupCmd);
 
 program
   .command('run')

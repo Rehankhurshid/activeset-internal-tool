@@ -85,6 +85,25 @@ export async function patchItems(
   return { ok: res.ok, status: res.status, text };
 }
 
+export async function getAsset(
+  assetId: string,
+  token: string
+): Promise<{ ok: boolean; status: number; data?: { id: string; hostedUrl?: string; fileName?: string } }> {
+  const res = await wfFetch(`/assets/${assetId}`, token);
+  if (!res.ok) return { ok: false, status: res.status };
+  const data = (await res.json()) as { id: string; hostedUrl?: string; fileName?: string };
+  return { ok: true, status: res.status, data };
+}
+
+export async function deleteAsset(
+  assetId: string,
+  token: string
+): Promise<{ ok: boolean; status: number; text: string }> {
+  const res = await wfFetch(`/assets/${assetId}`, token, { method: 'DELETE' });
+  const text = await res.text();
+  return { ok: res.ok, status: res.status, text };
+}
+
 export async function publishItems(
   collectionId: string,
   token: string,
