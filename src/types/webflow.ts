@@ -174,3 +174,71 @@ export interface WebflowAssetAltSuggestion {
   altText: string;
   reason?: string;
 }
+
+// --- CMS Image ALT Text Pipeline Types ---
+
+export interface CmsCollectionSummary {
+  id: string;
+  displayName: string;
+  slug: string;
+  singularName: string;
+  imageFields: CollectionField[];
+  richTextFields: CollectionField[];
+  totalItems: number;
+}
+
+export interface CmsImageEntry {
+  /** Composite key: `${collectionId}::${itemId}::${fieldSlug}::${imageIndex}` */
+  id: string;
+  collectionId: string;
+  collectionName: string;
+  itemId: string;
+  itemName: string;
+  fieldSlug: string;
+  fieldDisplayName: string;
+  fieldType: 'Image' | 'MultiImage' | 'RichText';
+  imageUrl: string;
+  currentAlt: string;
+  isMissingAlt: boolean;
+  imageIndex: number;
+  /** Original field value needed for writeback */
+  rawFieldValue: unknown;
+}
+
+export interface CmsDiscoverResult {
+  collections: CmsCollectionSummary[];
+  totalImages: number;
+  totalMissingAlt: number;
+}
+
+export interface CmsItemsResult {
+  images: CmsImageEntry[];
+  hasMore: boolean;
+  nextOffset: number;
+  total: number;
+}
+
+export interface CmsUpdatePayload {
+  collectionId: string;
+  itemId: string;
+  fieldSlug: string;
+  fieldType: 'Image' | 'MultiImage' | 'RichText';
+  newAlt: string;
+  newUrl?: string;
+  imageIndex: number;
+  rawFieldValue: unknown;
+}
+
+export interface CmsCompressResult {
+  originalUrl: string;
+  compressedUrl: string;
+  originalSize: number;
+  compressedSize: number;
+  savings: number;
+}
+
+export interface CmsAltSuggestion {
+  entryId: string;
+  altText: string;
+  reason?: string;
+}

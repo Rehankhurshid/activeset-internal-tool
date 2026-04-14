@@ -20,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   RefreshCw,
   Search,
@@ -39,6 +40,7 @@ import {
   EyeOff,
   Rocket,
   ArchiveRestore,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   Table,
@@ -56,6 +58,7 @@ import { WebflowSEOEditor } from './WebflowSEOEditor';
 import { WebflowBulkSEOEditor } from './WebflowBulkSEOEditor';
 import { WebflowCredentialsDialog } from './WebflowCredentialsDialog';
 import { WebflowAssetsDashboard } from './WebflowAssetsDashboard';
+import { CmsImagesDashboard } from './CmsImagesDashboard';
 import { webflowService } from '@/services/WebflowService';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -407,6 +410,44 @@ export function WebflowPagesDashboard({
         </Alert>
       )}
 
+      {/* Section Tabs (Pages / Image Assets / CMS Images) */}
+      <Tabs
+        defaultValue="pages"
+        orientation="vertical"
+        className="flex flex-row gap-6 items-start"
+      >
+        <TabsList
+          className="sticky top-4 flex flex-col h-auto w-52 shrink-0 items-stretch bg-muted p-1.5 gap-1"
+        >
+          <TabsTrigger
+            value="pages"
+            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
+          >
+            <FileText className="h-4 w-4" />
+            Pages
+          </TabsTrigger>
+          <TabsTrigger
+            value="assets"
+            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
+          >
+            <ImageIcon className="h-4 w-4" />
+            Image Assets
+          </TabsTrigger>
+          <TabsTrigger
+            value="cms"
+            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
+          >
+            <Database className="h-4 w-4" />
+            CMS Images
+          </TabsTrigger>
+        </TabsList>
+
+        <div className="flex-1 min-w-0">
+          <TabsContent
+            value="pages"
+            forceMount
+            className="mt-0 data-[state=inactive]:hidden"
+          >
       {/* Pages Section */}
       <Card>
         <CardHeader className="pb-4">
@@ -693,10 +734,30 @@ export function WebflowPagesDashboard({
         </CardContent>
       </Card>
 
-      <WebflowAssetsDashboard
-        webflowConfig={webflowConfig}
-        pages={pages}
-      />
+          </TabsContent>
+
+          <TabsContent
+            value="assets"
+            forceMount
+            className="mt-0 data-[state=inactive]:hidden"
+          >
+            <WebflowAssetsDashboard
+              webflowConfig={webflowConfig}
+              pages={pages}
+            />
+          </TabsContent>
+
+          <TabsContent
+            value="cms"
+            forceMount
+            className="mt-0 data-[state=inactive]:hidden"
+          >
+            {webflowConfig && (
+              <CmsImagesDashboard webflowConfig={webflowConfig} />
+            )}
+          </TabsContent>
+        </div>
+      </Tabs>
 
       {/* SEO Editor Sheet */}
       <WebflowSEOEditor

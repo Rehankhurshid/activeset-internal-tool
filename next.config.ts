@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['puppeteer'],
+  serverExternalPackages: ['puppeteer', 'sharp'],
   output: 'standalone',
   images: {
     remotePatterns: [

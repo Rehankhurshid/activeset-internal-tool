@@ -1,0 +1,47 @@
+{
+  "name": "@activeset/cms-alt",
+  "version": "0.1.0",
+  "description": "Webflow CMS ALT text & lossless WebP compression pipeline powered by local Ollama (Gemma 3 4B by default).",
+  "keywords": [
+    "webflow",
+    "cms",
+    "alt-text",
+    "accessibility",
+    "ollama",
+    "gemma",
+    "webp",
+    "image-compression",
+    "sharp"
+  ],
+  "license": "MIT",
+  "author": "ActiveSet",
+  "type": "commonjs",
+  "bin": {
+    "cms-alt": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "typescript": "^5.5.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
