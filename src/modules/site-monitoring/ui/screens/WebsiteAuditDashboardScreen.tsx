@@ -1839,7 +1839,14 @@ export function WebsiteAuditDashboard({
   const handleScanAllImagesAcrossSite = useCallback(async () => {
     if (isReadOnly || isScanningAllImages) return
 
-    const pagesToScan = links.filter((link) => !!link.url)
+    // Only rescan pages that already have missing ALT recorded. If no prior data
+    // exists (first pass), fall back to all links so we can discover offenders.
+    const pageIdsWithMissingAlt = new Set(missingAltIssues.map((issue) => issue.pageId))
+    const pagesToScan =
+      pageIdsWithMissingAlt.size > 0
+        ? links.filter((link) => !!link.url && pageIdsWithMissingAlt.has(link.id))
+        : links.filter((link) => !!link.url)
+
     if (pagesToScan.length === 0) return
 
     setIsScanningAllImages(true)
@@ -1849,29 +1856,48 @@ export function WebsiteAuditDashboard({
       currentUrl: "",
     })
 
-    try {
-      for (let i = 0; i < pagesToScan.length; i += 1) {
+    // Parallelize with a small concurrency pool for ultra-fast scanning.
+    const concurrency = Math.min(6, pagesToScan.length)
+    let cursor = 0
+    let completed = 0
+
+    const worker = async () => {
+      while (true) {
+        const i = cursor
+        cursor += 1
+        if (i >= pagesToScan.length) return
         const page = pagesToScan[i]
 
-        setImageScanProgress({
-          current: i + 1,
+        setImageScanProgress((prev) => ({
+          ...prev,
           total: pagesToScan.length,
           currentUrl: page.url,
-        })
-
+        }))
         setScanningImagePageIds((prev) => new Set(prev).add(page.id))
+
         try {
           await runImageScanForLink(page)
         } catch (error) {
           console.error(`[ImageScan] Failed image scan for ${page.url}:`, error)
         } finally {
+          completed += 1
+          const currentCompleted = completed
           setScanningImagePageIds((prev) => {
             const next = new Set(prev)
             next.delete(page.id)
             return next
           })
+          setImageScanProgress((prev) => ({
+            ...prev,
+            current: currentCompleted,
+            total: pagesToScan.length,
+          }))
         }
       }
+    }
+
+    try {
+      await Promise.all(Array.from({ length: concurrency }, () => worker()))
     } finally {
       setIsScanningAllImages(false)
       setImageScanProgress((prev) => ({
@@ -1880,7 +1906,7 @@ export function WebsiteAuditDashboard({
         currentUrl: "",
       }))
     }
-  }, [isReadOnly, isScanningAllImages, links, runImageScanForLink])
+  }, [isReadOnly, isScanningAllImages, links, missingAltIssues, runImageScanForLink])
 
   const hasMissingAltFilters =
     !!missingAltSearch.trim() ||
