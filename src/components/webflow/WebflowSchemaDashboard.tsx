@@ -47,8 +47,15 @@ import {
   collection as fsCollection,
   doc as fsDoc,
   writeBatch,
+  onSnapshot,
+  query as fsQuery,
+  where as fsWhere,
 } from 'firebase/firestore';
 import { db as fsDb } from '@/lib/firebase';
+import type {
+  SchemaAnalysisDoc,
+  SchemaRecommendation,
+} from '@/types/schema-markup';
 
 interface WebflowSchemaDashboardProps {
   projectId: string;
@@ -562,6 +569,201 @@ function CliBar({
   );
 }
 
+// ─── Results list — reads schema_analyses from Firestore ──────────────────
+
+function confidenceColor(c: string): string {
+  if (c === 'high') return 'bg-green-500/15 text-green-700 dark:text-green-300';
+  if (c === 'low') return 'bg-amber-500/15 text-amber-700 dark:text-amber-300';
+  return 'bg-blue-500/15 text-blue-700 dark:text-blue-300';
+}
+
+function RecommendationCard({ rec }: { rec: SchemaRecommendation }) {
+  const [copied, setCopied] = useState(false);
+  const scriptTag = useMemo(
+    () =>
+      `<script type="application/ld+json">\n${JSON.stringify(rec.jsonLd, null, 2)}\n</script>`,
+    [rec.jsonLd]
+  );
+  const copy = async () => {
+    await navigator.clipboard.writeText(scriptTag);
+    setCopied(true);
+    toast.success(`Copied ${rec.type} JSON-LD`);
+    setTimeout(() => setCopied(false), 1200);
+  };
+  return (
+    <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Badge variant="secondary" className="font-mono text-[10px]">
+            {rec.type}
+          </Badge>
+          <span
+            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${confidenceColor(rec.confidence)}`}
+          >
+            {rec.confidence}
+          </span>
+        </div>
+        <Button size="sm" variant="outline" onClick={copy} className="h-7 text-xs">
+          {copied ? (
+            <Check className="h-3 w-3 mr-1" />
+          ) : (
+            <Copy className="h-3 w-3 mr-1" />
+          )}
+          {copied ? 'Copied' : 'Copy <script>'}
+        </Button>
+      </div>
+      {rec.reason ? (
+        <p className="text-xs text-muted-foreground">{rec.reason}</p>
+      ) : null}
+      <pre className="text-[11px] leading-relaxed bg-background rounded border p-2 overflow-x-auto max-h-48">
+        {scriptTag}
+      </pre>
+    </div>
+  );
+}
+
+function ResultRow({
+  analysis,
+  pageTitle,
+}: {
+  analysis: SchemaAnalysisDoc;
+  pageTitle: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const recs = analysis.result.recommended ?? [];
+  return (
+    <div className="rounded-md border">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/40 transition-colors"
+      >
+        <ChevronRight
+          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate">{pageTitle}</div>
+          <div className="text-xs text-muted-foreground truncate">
+            {analysis.url}
+          </div>
+        </div>
+        <Badge variant="outline" className="text-[10px] font-mono">
+          {analysis.result.pageType}
+        </Badge>
+        <Badge variant="secondary" className="text-[10px]">
+          {recs.length} rec{recs.length === 1 ? '' : 's'}
+        </Badge>
+      </button>
+      {open ? (
+        <div className="border-t p-3 space-y-2 bg-background/50">
+          {analysis.result.summary ? (
+            <p className="text-xs text-muted-foreground italic">
+              {analysis.result.summary}
+            </p>
+          ) : null}
+          {recs.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No recommendations for this page.
+            </p>
+          ) : (
+            recs.map((r, i) => <RecommendationCard key={i} rec={r} />)
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ResultsList({
+  projectId,
+  pages,
+}: {
+  projectId: string;
+  pages: WebflowPageWithQC[];
+}) {
+  const [analyses, setAnalyses] = useState<SchemaAnalysisDoc[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = fsQuery(
+      fsCollection(fsDb, 'schema_analyses'),
+      fsWhere('projectId', '==', projectId)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const rows = snap.docs.map((d) => d.data() as SchemaAnalysisDoc);
+        // Keep latest per pageId
+        const byPage = new Map<string, SchemaAnalysisDoc>();
+        for (const r of rows) {
+          const prev = byPage.get(r.pageId);
+          if (!prev || (r.createdAt ?? 0) > (prev.createdAt ?? 0)) {
+            byPage.set(r.pageId, r);
+          }
+        }
+        const latest = Array.from(byPage.values()).sort(
+          (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)
+        );
+        setAnalyses(latest);
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
+    return () => unsub();
+  }, [projectId]);
+
+  const pageTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of pages) m.set(p.id, p.title || p.slug || p.id);
+    return m;
+  }, [pages]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Loading analyses…
+      </div>
+    );
+  }
+
+  if (analyses.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+        No schema analyses yet. Run the CLI above or import a{' '}
+        <code>schema-output.json</code> file.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium flex items-center gap-2">
+          <FileText className="h-4 w-4" />
+          Results
+          <Badge variant="secondary" className="text-[10px]">
+            {analyses.length}
+          </Badge>
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          Click a row to view recommendations · paste script tags into Webflow →
+          Page Settings → Custom Code (head)
+        </div>
+      </div>
+      <div className="space-y-2">
+        {analyses.map((a) => (
+          <ResultRow
+            key={`${a.pageId}_${a.contentHash}`}
+            analysis={a}
+            pageTitle={pageTitleById.get(a.pageId) ?? a.pageId}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main dashboard ─────────────────────────────────────────────────────────
 
 export function WebflowSchemaDashboard({
@@ -758,6 +960,8 @@ export function WebflowSchemaDashboard({
             startPayload={startPayload}
             hint="Ollama must be running: `ollama serve`"
           />
+
+          <ResultsList projectId={projectId} pages={pages} />
 
           <div className="rounded-md bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
             <div className="font-medium text-foreground mb-1">Prerequisites</div>
