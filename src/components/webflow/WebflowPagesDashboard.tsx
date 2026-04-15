@@ -41,6 +41,7 @@ import {
   Rocket,
   ArchiveRestore,
   Image as ImageIcon,
+  Sparkles,
 } from 'lucide-react';
 import {
   Table,
@@ -59,6 +60,7 @@ import { WebflowBulkSEOEditor } from './WebflowBulkSEOEditor';
 import { WebflowCredentialsDialog } from './WebflowCredentialsDialog';
 import { WebflowAssetsDashboard } from './WebflowAssetsDashboard';
 import { CmsImagesDashboard } from './CmsImagesDashboard';
+import { WebflowSchemaPanel } from './WebflowSchemaPanel';
 import { webflowService } from '@/services/WebflowService';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -110,6 +112,8 @@ export function WebflowPagesDashboard({
   const [showDraftPages, setShowDraftPages] = useState(false);
   const [selectedPage, setSelectedPage] = useState<WebflowPageWithQC | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [schemaPage, setSchemaPage] = useState<WebflowPageWithQC | null>(null);
+  const [schemaPanelOpen, setSchemaPanelOpen] = useState(false);
   const [bulkEditorOpen, setBulkEditorOpen] = useState(false);
 
   // Locale state
@@ -201,6 +205,17 @@ export function WebflowPagesDashboard({
     setSelectedPage(page);
     setEditorOpen(true);
   };
+
+  const handleOpenSchema = (page: WebflowPageWithQC) => {
+    setSchemaPage(page);
+    setSchemaPanelOpen(true);
+  };
+
+  const schemaLiveUrl = useMemo(() => {
+    if (!schemaPage || !webflowConfig?.customDomain) return null;
+    const path = schemaPage.publishedPath || `/${schemaPage.slug}`;
+    return `https://${webflowConfig.customDomain}${path}`;
+  }, [schemaPage, webflowConfig?.customDomain]);
 
   const handleSaveSEO = async (pageId: string, updates: UpdateWebflowPageSEO) => {
     return await updatePageSEO(pageId, updates);
@@ -673,6 +688,7 @@ export function WebflowPagesDashboard({
                                 webflowConfig={webflowConfig}
                                 handleEditPage={handleEditPage}
                                 handleCopyDOM={handleCopyDOM}
+                                handleOpenSchema={handleOpenSchema}
                                 copyingPageId={copyingPageId}
                                 updatingPageStateId={updatingPageStateId}
                                 handleToggleDraft={handleToggleDraft}
@@ -695,6 +711,7 @@ export function WebflowPagesDashboard({
                                 webflowConfig={webflowConfig}
                                 handleEditPage={handleEditPage}
                                 handleCopyDOM={handleCopyDOM}
+                                handleOpenSchema={handleOpenSchema}
                                 copyingPageId={copyingPageId}
                                 updatingPageStateId={updatingPageStateId}
                                 handleToggleDraft={handleToggleDraft}
@@ -712,6 +729,7 @@ export function WebflowPagesDashboard({
                           webflowConfig={webflowConfig}
                           handleEditPage={handleEditPage}
                           handleCopyDOM={handleCopyDOM}
+                          handleOpenSchema={handleOpenSchema}
                           copyingPageId={copyingPageId}
                           updatingPageStateId={updatingPageStateId}
                           handleToggleDraft={handleToggleDraft}
@@ -770,6 +788,16 @@ export function WebflowPagesDashboard({
         onGenerateSEO={generatePageSEO}
       />
 
+      {/* Schema Markup Panel */}
+      <WebflowSchemaPanel
+        open={schemaPanelOpen}
+        onOpenChange={setSchemaPanelOpen}
+        projectId={projectId}
+        pageId={schemaPage?.id ?? ''}
+        pageTitle={schemaPage?.title ?? ''}
+        liveUrl={schemaLiveUrl}
+      />
+
       {/* Bulk SEO Editor */}
       <WebflowBulkSEOEditor
         localeId={selectedLocaleId}
@@ -788,6 +816,7 @@ function PageRow({
   webflowConfig,
   handleEditPage,
   handleCopyDOM,
+  handleOpenSchema,
   copyingPageId,
   updatingPageStateId,
   handleToggleDraft,
@@ -797,6 +826,7 @@ function PageRow({
   webflowConfig: WebflowConfig;
   handleEditPage: (page: WebflowPageWithQC) => void;
   handleCopyDOM: (pageId: string) => void;
+  handleOpenSchema: (page: WebflowPageWithQC) => void;
   copyingPageId: string | null;
   updatingPageStateId: string | null;
   handleToggleDraft: (page: WebflowPageWithQC) => Promise<void>;
@@ -1069,6 +1099,19 @@ function PageRow({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Copy DOM Details</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    onClick={() => handleOpenSchema(page)}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Schema Markup Recommendations</TooltipContent>
               </Tooltip>
             </>
           )}
