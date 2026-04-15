@@ -199,9 +199,12 @@ export async function analyzeWithOllama(
   signals: SchemaPageSignals,
   opts: AnalyzeOptions = {}
 ): Promise<SchemaAnalysisResult> {
+  // Use 127.0.0.1 instead of localhost — Node's fetch resolves localhost to
+  // IPv6 ::1 first, but Ollama only binds to IPv4 127.0.0.1 by default,
+  // which produces a misleading "fetch failed" error.
   const baseUrl =
-    opts.baseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-  const model = opts.model || process.env.OLLAMA_MODEL || 'gemma3:latest';
+    opts.baseUrl || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+  const model = opts.model || process.env.OLLAMA_MODEL || 'gemma4:e4b';
 
   const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/generate`, {
     method: 'POST',
