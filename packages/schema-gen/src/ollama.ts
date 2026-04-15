@@ -88,7 +88,14 @@ export async function runOllama(
         prompt: buildPrompt(signals),
         stream: false,
         format: 'json',
-        options: { temperature: 0.2 },
+        options: {
+          temperature: 0.2,
+          // Ollama defaults: num_ctx=2048, num_predict=-1 (but effectively
+          // small for some model/runtime combos). Long pages blow past both,
+          // which produces truncated JSON that fails to parse.
+          num_ctx: 8192,
+          num_predict: 4096,
+        },
       }),
     });
   } catch (err) {
@@ -109,13 +116,75 @@ export async function runOllama(
   const raw = payload.response?.trim() ?? '';
   if (!raw) throw new Error('Ollama returned an empty response');
 
+  const stripped = raw
+    .replace(/^```(?:json)?/i, '')
+    .replace(/```$/, '')
+    .trim();
+
+  // 1. Straight parse.
   try {
-    return normalizeResult(JSON.parse(raw));
-  } catch {
-    const stripped = raw
-      .replace(/^```(?:json)?/i, '')
-      .replace(/```$/, '')
-      .trim();
     return normalizeResult(JSON.parse(stripped));
+  } catch {}
+
+  // 2. Best-effort repair: model ran out of tokens mid-object, so close
+  //    unterminated strings and balance the brace/bracket stack.
+  try {
+    return normalizeResult(JSON.parse(repairTruncatedJson(stripped)));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const preview = stripped.length > 200 ? stripped.slice(0, 200) + '…' : stripped;
+    throw new Error(
+      `Ollama returned malformed JSON (${msg}). ` +
+        `This usually means the output was truncated mid-object — try a smaller page ` +
+        `or a smaller model, or increase num_predict in ollama.ts. Preview: ${preview}`
+    );
   }
+}
+
+/**
+ * Close unterminated strings/arrays/objects so a partially-generated JSON
+ * blob parses. Drops trailing commas. Best-effort only — the repaired output
+ * may still be semantically incomplete, but normalizeResult tolerates
+ * missing fields.
+ */
+function repairTruncatedJson(s: string): string {
+  const stack: string[] = [];
+  let inString = false;
+  let escape = false;
+  let lastNonWs = -1;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+    } else if (!inString) {
+      if (ch === '{' || ch === '[') stack.push(ch);
+      else if (ch === '}' && stack[stack.length - 1] === '{') stack.pop();
+      else if (ch === ']' && stack[stack.length - 1] === '[') stack.pop();
+      if (!/\s/.test(ch)) lastNonWs = i;
+    } else {
+      if (!/\s/.test(ch)) lastNonWs = i;
+    }
+  }
+
+  let out = s;
+  if (inString) out += '"';
+  // Strip trailing `,` before we start closing — e.g. `[1, 2,` → `[1, 2`.
+  if (lastNonWs >= 0 && out[lastNonWs] === ',') {
+    out = out.slice(0, lastNonWs) + out.slice(lastNonWs + 1);
+  }
+  // Close remaining open containers in LIFO order.
+  while (stack.length) {
+    const open = stack.pop();
+    out += open === '{' ? '}' : ']';
+  }
+  return out;
 }

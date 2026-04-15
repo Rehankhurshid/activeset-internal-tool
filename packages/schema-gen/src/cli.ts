@@ -41,7 +41,7 @@ import {
 } from './ui';
 import type { SchemaExportEntry, SchemaExportFile } from './types';
 
-const PKG_VERSION = '0.3.0';
+const PKG_VERSION = '0.4.0';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
