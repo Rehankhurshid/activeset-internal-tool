@@ -27,7 +27,21 @@ import { scrapePageSignals } from './scrape';
 import { computeContentHash } from './hash';
 import { runOllama } from './ollama';
 import { configureReporter, emit, flush } from './progress';
+import {
+  banner,
+  recap,
+  logSuccess,
+  logError,
+  logWarn,
+  logInfo,
+  spinner,
+  summary,
+  c,
+  gradient,
+} from './ui';
 import type { SchemaExportEntry, SchemaExportFile } from './types';
+
+const PKG_VERSION = '0.3.0';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -35,7 +49,7 @@ dotenv.config();
 function requireEnv(opts: Record<string, string | undefined>, key: string, envName: string): string {
   const v = opts[key] || process.env[envName];
   if (!v) {
-    console.error(`Missing --${key} or ${envName}`);
+    logError(`Missing --${key}`, `or set ${envName} in .env / .env.local`);
     process.exit(1);
   }
   return v;
@@ -46,7 +60,7 @@ const program = new Command();
 program
   .name('schema-gen')
   .description('Generate Schema.org JSON-LD recommendations for Webflow static pages using local Ollama')
-  .version('0.1.0');
+  .version(PKG_VERSION);
 
 program
   .command('list')
@@ -55,11 +69,21 @@ program
   .option('--token <t>', 'Webflow API token (or env WEBFLOW_API_TOKEN)')
   .action(async (opts: { site: string; token?: string }) => {
     const token = requireEnv(opts, 'token', 'WEBFLOW_API_TOKEN');
+    process.stdout.write(banner(PKG_VERSION));
+    const sp = spinner(`Fetching pages for site ${c.cyan(opts.site)}…`);
     const pages = await fetchAllStaticPages(opts.site, token);
-    console.log(`Found ${pages.length} published static page(s):\n`);
+    sp.stop();
+    logSuccess(
+      `Discovered ${pages.length} published static page${pages.length === 1 ? '' : 's'}`
+    );
+    process.stdout.write('\n');
     for (const p of pages) {
-      console.log(`  ${p.id}  ${p.publishedPath || '/' + p.slug}  — ${p.title}`);
+      const route = p.publishedPath || '/' + p.slug;
+      process.stdout.write(
+        `  ${c.dim(p.id)}  ${c.cyan(route.padEnd(32))}  ${c.gray('·')}  ${p.title}\n`
+      );
     }
+    process.stdout.write('\n');
   });
 
 program
@@ -92,6 +116,9 @@ program
     progressUrl?: string;
   }) => {
     const token = requireEnv(opts, 'token', 'WEBFLOW_API_TOKEN');
+    const tStart = Date.now();
+
+    process.stdout.write(banner(PKG_VERSION));
 
     // Wire optional backchannel so the dashboard can render a live terminal.
     if (opts.runId && opts.runSecret && opts.progressUrl) {
@@ -105,36 +132,67 @@ program
         level: 'success',
         message: `CLI attached to dashboard run ${opts.runId.slice(0, 8)}`,
       });
+      logInfo(
+        `Streaming progress to dashboard · run ${c.cyan(opts.runId.slice(0, 8))}`
+      );
+      process.stdout.write('\n');
     }
 
-    console.log(`Fetching pages for site ${opts.site}…`);
+    const concurrencyNum = Math.max(1, parseInt(opts.concurrency, 10) || 1);
+    process.stdout.write(
+      recap([
+        ['site', `${c.cyan(opts.site)}${opts.siteName ? `  ${c.dim('· ' + opts.siteName)}` : ''}`],
+        ['domain', c.cyan(opts.domain)],
+        ['model', `${c.cyan(opts.model)}  ${c.dim('@ ' + opts.ollamaHost)}`],
+        ['concurrency', `${concurrencyNum}×`],
+        ['output', c.cyan(opts.out)],
+      ]) + '\n\n'
+    );
+
+    const sp1 = spinner(`Fetching pages for site ${c.cyan(opts.site)}…`);
     emit({ step: 'fetch', message: `Fetching pages for site ${opts.site}` });
     let targets = await fetchAllStaticPages(opts.site, token);
+    sp1.stop();
 
     if (opts.only) {
       const filter = new Set(opts.only.split(',').map((s) => s.trim()).filter(Boolean));
+      const before = targets.length;
       targets = targets.filter((p) => filter.has(p.slug) || filter.has(p.publishedPath ?? ''));
+      logInfo(
+        `--only filter: ${c.cyan(opts.only)}  ${c.dim(`(${targets.length}/${before} pages)`)}`
+      );
     }
 
     if (targets.length === 0) {
-      console.log('No static pages to process.');
+      logWarn('No static pages to process.');
       emit({ step: 'done', level: 'warn', message: 'No static pages to process' });
       await flush();
       return;
     }
 
-    console.log(`Processing ${targets.length} page(s) with model '${opts.model}' at ${opts.ollamaHost}\n`);
+    logSuccess(
+      `Discovered ${targets.length} static page${targets.length === 1 ? '' : 's'}`
+    );
     emit({
       step: 'fetch',
       level: 'success',
       message: `Discovered ${targets.length} static page${targets.length === 1 ? '' : 's'}`,
       total: targets.length,
     });
+    process.stdout.write('\n');
+    process.stdout.write(
+      `  ${c.dim('─'.repeat(8))} ${gradient('analyzing')} ${c.dim('─'.repeat(8))}\n\n`
+    );
 
-    const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 1);
+    const concurrency = concurrencyNum;
     const entries: SchemaExportEntry[] = [];
     let processed = 0;
     let failed = 0;
+
+    // Single-worker mode gets a live spinner that updates as each stage
+    // starts; multi-worker mode just logs colored lines per completion
+    // (a single spinner would be ambiguous across parallel pages).
+    const singleWorker = concurrency === 1;
 
     const queue = [...targets];
     async function worker(): Promise<void> {
@@ -143,9 +201,14 @@ program
         if (!page) return;
         const url = buildLiveUrl(opts.domain, page);
         const index = ++processed;
-        const label = `[${index}/${targets.length}] ${page.title}`;
+        const progressTag = c.dim(`[${index}/${targets.length}]`);
+        const pageLabel = `${progressTag} ${c.bold(page.title)}`;
+
+        const sp = singleWorker
+          ? spinner(`${pageLabel}  ${c.dim('scraping')}  ${c.gray(url)}`)
+          : null;
+
         try {
-          console.log(`${label} → scrape ${url}`);
           const tScrape = Date.now();
           const signals = await scrapePageSignals(url);
           const contentHash = computeContentHash(signals);
@@ -158,7 +221,10 @@ program
             durationMs: Date.now() - tScrape,
           });
 
-          console.log(`${label} → ollama (${opts.model})`);
+          sp?.update(
+            `${pageLabel}  ${c.dim('analyzing via')} ${c.cyan(opts.model)}`
+          );
+
           const tAnalyze = Date.now();
           const result = await runOllama(signals, {
             baseUrl: opts.ollamaHost,
@@ -173,8 +239,12 @@ program
             result,
           });
 
-          console.log(
-            `${label} ✓ ${result.recommended.length} rec(s), pageType=${result.pageType}`
+          const totalMs = Date.now() - tScrape;
+          sp?.stop();
+          logSuccess(
+            `${progressTag} ${page.title}`,
+            `${c.magenta(result.pageType)} · ${result.recommended.length} rec${result.recommended.length === 1 ? '' : 's'}`,
+            totalMs
           );
           emit({
             step: 'analyze',
@@ -186,8 +256,9 @@ program
           });
         } catch (err) {
           failed++;
+          sp?.stop();
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`${label} ✗ ${msg}`);
+          logError(`${progressTag} ${page.title}`, msg);
           emit({
             step: 'analyze',
             level: 'error',
@@ -221,9 +292,13 @@ program
       detail: outPath,
     });
 
-    console.log(
-      `\nDone. wrote=${entries.length} failed=${failed} → ${outPath}\n` +
-        `Upload via the dashboard's "Import schema-output.json" button (Webflow → Schema tab).`
+    process.stdout.write(
+      summary({
+        wrote: entries.length,
+        failed,
+        outPath,
+        elapsedMs: Date.now() - tStart,
+      })
     );
     emit({
       step: 'done',
