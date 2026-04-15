@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +42,7 @@ import {
   ArchiveRestore,
   Image as ImageIcon,
   Sparkles,
+  Upload,
 } from 'lucide-react';
 import {
   Table,
@@ -61,6 +62,8 @@ import { WebflowCredentialsDialog } from './WebflowCredentialsDialog';
 import { WebflowAssetsDashboard } from './WebflowAssetsDashboard';
 import { CmsImagesDashboard } from './CmsImagesDashboard';
 import { WebflowSchemaPanel } from './WebflowSchemaPanel';
+import { collection as fsCollection, doc as fsDoc, writeBatch } from 'firebase/firestore';
+import { db as fsDb } from '@/lib/firebase';
 import { webflowService } from '@/services/WebflowService';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -114,6 +117,8 @@ export function WebflowPagesDashboard({
   const [editorOpen, setEditorOpen] = useState(false);
   const [schemaPage, setSchemaPage] = useState<WebflowPageWithQC | null>(null);
   const [schemaPanelOpen, setSchemaPanelOpen] = useState(false);
+  const [importingSchema, setImportingSchema] = useState(false);
+  const schemaImportInputRef = useRef<HTMLInputElement>(null);
   const [bulkEditorOpen, setBulkEditorOpen] = useState(false);
 
   // Locale state
@@ -209,6 +214,66 @@ export function WebflowPagesDashboard({
   const handleOpenSchema = (page: WebflowPageWithQC) => {
     setSchemaPage(page);
     setSchemaPanelOpen(true);
+  };
+
+  const handleImportSchemaFile = async (file: File) => {
+    setImportingSchema(true);
+    try {
+      const text = await file.text();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        toast.error('File is not valid JSON');
+        return;
+      }
+      const root = parsed as { version?: number; entries?: unknown };
+      if (root?.version !== 1 || !Array.isArray(root.entries)) {
+        toast.error('Unrecognized file. Expected output from @activeset/schema-gen v1.');
+        return;
+      }
+      const entries = root.entries as Array<{
+        pageId?: string;
+        url?: string;
+        contentHash?: string;
+        result?: unknown;
+      }>;
+
+      const batch = writeBatch(fsDb);
+      let queued = 0;
+      for (const e of entries) {
+        if (!e.pageId || !e.contentHash || !e.result) continue;
+        const ref = fsDoc(
+          fsCollection(fsDb, 'schema_analyses'),
+          `${e.pageId}_${e.contentHash}`
+        );
+        batch.set(ref, {
+          pageId: e.pageId,
+          projectId,
+          contentHash: e.contentHash,
+          url: e.url ?? '',
+          result: e.result,
+          model: 'imported',
+          source: 'cli-import',
+          createdAt: Date.now(),
+        });
+        queued++;
+      }
+
+      if (queued === 0) {
+        toast.warning('No valid entries found in the file.');
+        return;
+      }
+
+      await batch.commit();
+      toast.success(`Imported ${queued} schema analysis result(s).`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Import failed';
+      toast.error(msg);
+    } finally {
+      setImportingSchema(false);
+      if (schemaImportInputRef.current) schemaImportInputRef.current.value = '';
+    }
   };
 
   const schemaLiveUrl = useMemo(() => {
@@ -515,6 +580,32 @@ export function WebflowPagesDashboard({
                 <ListChecks className="h-4 w-4 mr-2" />
                 Bulk Edit
               </Button>
+              <input
+                ref={schemaImportInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleImportSchemaFile(file);
+                }}
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => schemaImportInputRef.current?.click()}
+                    disabled={importingSchema}
+                  >
+                    <Upload className={`h-4 w-4 mr-2 ${importingSchema ? 'animate-pulse' : ''}`} />
+                    Import Schema
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Upload schema-output.json from <code>@activeset/schema-gen</code>
+                </TooltipContent>
+              </Tooltip>
               <WebflowCredentialsDialog
                 currentConfig={webflowConfig}
                 onSave={onSaveConfig}

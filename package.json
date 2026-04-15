@@ -16,6 +16,8 @@
     "schema:gen": "tsx scripts/schema-gen.ts",
     "capture:pkg:build": "npm --prefix packages/activeset-capture run build",
     "capture:pkg:pack": "npm --prefix packages/activeset-capture pack",
+    "schema-gen:pkg:build": "npm --prefix packages/schema-gen run build",
+    "schema-gen:pkg:pack": "npm --prefix packages/schema-gen pack",
     "test:local-capture": "tsx --test src/local-capture/*.test.ts",
     "verify:ui": "npx tsx scripts/verify-ui.ts",
     "verify:ui:staged": "npx tsx scripts/verify-ui.ts"
