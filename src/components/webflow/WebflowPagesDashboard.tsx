@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,7 +42,6 @@ import {
   ArchiveRestore,
   Image as ImageIcon,
   Sparkles,
-  Upload,
 } from 'lucide-react';
 import {
   Table,
@@ -61,9 +60,7 @@ import { WebflowBulkSEOEditor } from './WebflowBulkSEOEditor';
 import { WebflowCredentialsDialog } from './WebflowCredentialsDialog';
 import { WebflowAssetsDashboard } from './WebflowAssetsDashboard';
 import { CmsImagesDashboard } from './CmsImagesDashboard';
-import { WebflowSchemaPanel } from './WebflowSchemaPanel';
-import { collection as fsCollection, doc as fsDoc, writeBatch } from 'firebase/firestore';
-import { db as fsDb } from '@/lib/firebase';
+import { WebflowSchemaDashboard } from './WebflowSchemaDashboard';
 import { webflowService } from '@/services/WebflowService';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -115,10 +112,6 @@ export function WebflowPagesDashboard({
   const [showDraftPages, setShowDraftPages] = useState(false);
   const [selectedPage, setSelectedPage] = useState<WebflowPageWithQC | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [schemaPage, setSchemaPage] = useState<WebflowPageWithQC | null>(null);
-  const [schemaPanelOpen, setSchemaPanelOpen] = useState(false);
-  const [importingSchema, setImportingSchema] = useState(false);
-  const schemaImportInputRef = useRef<HTMLInputElement>(null);
   const [bulkEditorOpen, setBulkEditorOpen] = useState(false);
 
   // Locale state
@@ -210,77 +203,6 @@ export function WebflowPagesDashboard({
     setSelectedPage(page);
     setEditorOpen(true);
   };
-
-  const handleOpenSchema = (page: WebflowPageWithQC) => {
-    setSchemaPage(page);
-    setSchemaPanelOpen(true);
-  };
-
-  const handleImportSchemaFile = async (file: File) => {
-    setImportingSchema(true);
-    try {
-      const text = await file.text();
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        toast.error('File is not valid JSON');
-        return;
-      }
-      const root = parsed as { version?: number; entries?: unknown };
-      if (root?.version !== 1 || !Array.isArray(root.entries)) {
-        toast.error('Unrecognized file. Expected output from @activeset/schema-gen v1.');
-        return;
-      }
-      const entries = root.entries as Array<{
-        pageId?: string;
-        url?: string;
-        contentHash?: string;
-        result?: unknown;
-      }>;
-
-      const batch = writeBatch(fsDb);
-      let queued = 0;
-      for (const e of entries) {
-        if (!e.pageId || !e.contentHash || !e.result) continue;
-        const ref = fsDoc(
-          fsCollection(fsDb, 'schema_analyses'),
-          `${e.pageId}_${e.contentHash}`
-        );
-        batch.set(ref, {
-          pageId: e.pageId,
-          projectId,
-          contentHash: e.contentHash,
-          url: e.url ?? '',
-          result: e.result,
-          model: 'imported',
-          source: 'cli-import',
-          createdAt: Date.now(),
-        });
-        queued++;
-      }
-
-      if (queued === 0) {
-        toast.warning('No valid entries found in the file.');
-        return;
-      }
-
-      await batch.commit();
-      toast.success(`Imported ${queued} schema analysis result(s).`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Import failed';
-      toast.error(msg);
-    } finally {
-      setImportingSchema(false);
-      if (schemaImportInputRef.current) schemaImportInputRef.current.value = '';
-    }
-  };
-
-  const schemaLiveUrl = useMemo(() => {
-    if (!schemaPage || !webflowConfig?.customDomain) return null;
-    const path = schemaPage.publishedPath || `/${schemaPage.slug}`;
-    return `https://${webflowConfig.customDomain}${path}`;
-  }, [schemaPage, webflowConfig?.customDomain]);
 
   const handleSaveSEO = async (pageId: string, updates: UpdateWebflowPageSEO) => {
     return await updatePageSEO(pageId, updates);
@@ -520,6 +442,13 @@ export function WebflowPagesDashboard({
             <Database className="h-4 w-4" />
             CMS Images
           </TabsTrigger>
+          <TabsTrigger
+            value="schema"
+            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
+          >
+            <Sparkles className="h-4 w-4" />
+            Schema
+          </TabsTrigger>
         </TabsList>
 
         <div className="flex-1 min-w-0">
@@ -580,32 +509,6 @@ export function WebflowPagesDashboard({
                 <ListChecks className="h-4 w-4 mr-2" />
                 Bulk Edit
               </Button>
-              <input
-                ref={schemaImportInputRef}
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void handleImportSchemaFile(file);
-                }}
-              />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => schemaImportInputRef.current?.click()}
-                    disabled={importingSchema}
-                  >
-                    <Upload className={`h-4 w-4 mr-2 ${importingSchema ? 'animate-pulse' : ''}`} />
-                    Import Schema
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Upload schema-output.json from <code>@activeset/schema-gen</code>
-                </TooltipContent>
-              </Tooltip>
               <WebflowCredentialsDialog
                 currentConfig={webflowConfig}
                 onSave={onSaveConfig}
@@ -779,7 +682,6 @@ export function WebflowPagesDashboard({
                                 webflowConfig={webflowConfig}
                                 handleEditPage={handleEditPage}
                                 handleCopyDOM={handleCopyDOM}
-                                handleOpenSchema={handleOpenSchema}
                                 copyingPageId={copyingPageId}
                                 updatingPageStateId={updatingPageStateId}
                                 handleToggleDraft={handleToggleDraft}
@@ -802,7 +704,6 @@ export function WebflowPagesDashboard({
                                 webflowConfig={webflowConfig}
                                 handleEditPage={handleEditPage}
                                 handleCopyDOM={handleCopyDOM}
-                                handleOpenSchema={handleOpenSchema}
                                 copyingPageId={copyingPageId}
                                 updatingPageStateId={updatingPageStateId}
                                 handleToggleDraft={handleToggleDraft}
@@ -820,7 +721,6 @@ export function WebflowPagesDashboard({
                           webflowConfig={webflowConfig}
                           handleEditPage={handleEditPage}
                           handleCopyDOM={handleCopyDOM}
-                          handleOpenSchema={handleOpenSchema}
                           copyingPageId={copyingPageId}
                           updatingPageStateId={updatingPageStateId}
                           handleToggleDraft={handleToggleDraft}
@@ -865,6 +765,20 @@ export function WebflowPagesDashboard({
               <CmsImagesDashboard webflowConfig={webflowConfig} />
             )}
           </TabsContent>
+
+          <TabsContent
+            value="schema"
+            forceMount
+            className="mt-0 data-[state=inactive]:hidden"
+          >
+            {webflowConfig && (
+              <WebflowSchemaDashboard
+                projectId={projectId}
+                webflowConfig={webflowConfig}
+                pages={pages}
+              />
+            )}
+          </TabsContent>
         </div>
       </Tabs>
 
@@ -877,16 +791,6 @@ export function WebflowPagesDashboard({
         onOpenChange={setEditorOpen}
         onSave={handleSaveSEO}
         onGenerateSEO={generatePageSEO}
-      />
-
-      {/* Schema Markup Panel */}
-      <WebflowSchemaPanel
-        open={schemaPanelOpen}
-        onOpenChange={setSchemaPanelOpen}
-        projectId={projectId}
-        pageId={schemaPage?.id ?? ''}
-        pageTitle={schemaPage?.title ?? ''}
-        liveUrl={schemaLiveUrl}
       />
 
       {/* Bulk SEO Editor */}
@@ -907,7 +811,6 @@ function PageRow({
   webflowConfig,
   handleEditPage,
   handleCopyDOM,
-  handleOpenSchema,
   copyingPageId,
   updatingPageStateId,
   handleToggleDraft,
@@ -917,7 +820,6 @@ function PageRow({
   webflowConfig: WebflowConfig;
   handleEditPage: (page: WebflowPageWithQC) => void;
   handleCopyDOM: (pageId: string) => void;
-  handleOpenSchema: (page: WebflowPageWithQC) => void;
   copyingPageId: string | null;
   updatingPageStateId: string | null;
   handleToggleDraft: (page: WebflowPageWithQC) => Promise<void>;
@@ -1190,19 +1092,6 @@ function PageRow({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Copy DOM Details</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                    onClick={() => handleOpenSchema(page)}
-                  >
-                    <Sparkles className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Schema Markup Recommendations</TooltipContent>
               </Tooltip>
             </>
           )}

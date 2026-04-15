@@ -1,6 +1,6 @@
 {
   "name": "@activeset/schema-gen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Generate Schema.org JSON-LD recommendations for Webflow static pages using a local Ollama model (Gemma by default). Output is a portable JSON file you can import into the ActiveSet dashboard.",
   "keywords": [
     "schema-org",

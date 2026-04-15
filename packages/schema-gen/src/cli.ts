@@ -26,6 +26,7 @@ import { fetchAllStaticPages, buildLiveUrl } from './webflow';
 import { scrapePageSignals } from './scrape';
 import { computeContentHash } from './hash';
 import { runOllama } from './ollama';
+import { configureReporter, emit, flush } from './progress';
 import type { SchemaExportEntry, SchemaExportFile } from './types';
 
 dotenv.config({ path: '.env.local' });
@@ -72,6 +73,10 @@ program
   .option('--model <m>', 'Ollama model', process.env.OLLAMA_MODEL || 'gemma4:e4b')
   .option('--ollama-host <url>', 'Ollama base URL', process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434')
   .option('--concurrency <n>', 'Pages analyzed in parallel (single-GPU: keep low)', '1')
+  .option('--site-name <name>', 'Human-readable site label (for progress UI)')
+  .option('--run-id <id>', 'live-progress run ID (from the dashboard)')
+  .option('--run-secret <secret>', 'live-progress auth secret')
+  .option('--progress-url <url>', 'live-progress POST endpoint')
   .action(async (opts: {
     site: string;
     domain: string;
@@ -81,10 +86,29 @@ program
     model: string;
     ollamaHost: string;
     concurrency: string;
+    siteName?: string;
+    runId?: string;
+    runSecret?: string;
+    progressUrl?: string;
   }) => {
     const token = requireEnv(opts, 'token', 'WEBFLOW_API_TOKEN');
 
+    // Wire optional backchannel so the dashboard can render a live terminal.
+    if (opts.runId && opts.runSecret && opts.progressUrl) {
+      configureReporter({
+        runId: opts.runId,
+        secret: opts.runSecret,
+        url: opts.progressUrl,
+      });
+      emit({
+        step: 'connect',
+        level: 'success',
+        message: `CLI attached to dashboard run ${opts.runId.slice(0, 8)}`,
+      });
+    }
+
     console.log(`Fetching pages for site ${opts.site}…`);
+    emit({ step: 'fetch', message: `Fetching pages for site ${opts.site}` });
     let targets = await fetchAllStaticPages(opts.site, token);
 
     if (opts.only) {
@@ -94,10 +118,18 @@ program
 
     if (targets.length === 0) {
       console.log('No static pages to process.');
+      emit({ step: 'done', level: 'warn', message: 'No static pages to process' });
+      await flush();
       return;
     }
 
     console.log(`Processing ${targets.length} page(s) with model '${opts.model}' at ${opts.ollamaHost}\n`);
+    emit({
+      step: 'fetch',
+      level: 'success',
+      message: `Discovered ${targets.length} static page${targets.length === 1 ? '' : 's'}`,
+      total: targets.length,
+    });
 
     const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 1);
     const entries: SchemaExportEntry[] = [];
@@ -110,13 +142,24 @@ program
         const page = queue.shift();
         if (!page) return;
         const url = buildLiveUrl(opts.domain, page);
-        const label = `[${++processed}/${targets.length}] ${page.title}`;
+        const index = ++processed;
+        const label = `[${index}/${targets.length}] ${page.title}`;
         try {
           console.log(`${label} → scrape ${url}`);
+          const tScrape = Date.now();
           const signals = await scrapePageSignals(url);
           const contentHash = computeContentHash(signals);
+          emit({
+            step: 'scrape',
+            message: `Scraped ${page.title}`,
+            detail: url,
+            current: index,
+            total: targets.length,
+            durationMs: Date.now() - tScrape,
+          });
 
           console.log(`${label} → ollama (${opts.model})`);
+          const tAnalyze = Date.now();
           const result = await runOllama(signals, {
             baseUrl: opts.ollamaHost,
             model: opts.model,
@@ -133,10 +176,26 @@ program
           console.log(
             `${label} ✓ ${result.recommended.length} rec(s), pageType=${result.pageType}`
           );
+          emit({
+            step: 'analyze',
+            level: 'success',
+            message: `${page.title} → ${result.recommended.length} rec(s) · ${result.pageType}`,
+            current: index,
+            total: targets.length,
+            durationMs: Date.now() - tAnalyze,
+          });
         } catch (err) {
           failed++;
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`${label} ✗ ${msg}`);
+          emit({
+            step: 'analyze',
+            level: 'error',
+            message: `${page.title} failed`,
+            detail: msg,
+            current: index,
+            total: targets.length,
+          });
         }
       }
     }
@@ -155,11 +214,23 @@ program
 
     const outPath = path.resolve(process.cwd(), opts.out);
     await fs.writeFile(outPath, JSON.stringify(file, null, 2), 'utf8');
+    emit({
+      step: 'write',
+      level: 'success',
+      message: `Wrote ${entries.length} result(s) to ${opts.out}`,
+      detail: outPath,
+    });
 
     console.log(
       `\nDone. wrote=${entries.length} failed=${failed} → ${outPath}\n` +
-        `Upload via the dashboard's "Import schema analyses" button (Webflow Pages tab).`
+        `Upload via the dashboard's "Import schema-output.json" button (Webflow → Schema tab).`
     );
+    emit({
+      step: 'done',
+      level: failed > 0 ? 'warn' : 'success',
+      message: `Complete · ${entries.length} succeeded${failed > 0 ? ` · ${failed} failed` : ''}`,
+    });
+    await flush();
   });
 
 program.parseAsync(process.argv).catch((err) => {
