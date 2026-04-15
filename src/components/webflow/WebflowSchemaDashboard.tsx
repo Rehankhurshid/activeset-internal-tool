@@ -401,6 +401,7 @@ function PlanPanel({
 // ─── Contextual CLI bar ─────────────────────────────────────────────────────
 
 interface StartPayload {
+  projectId: string;
   siteId: string;
   siteLabel: string;
   domain: string;
@@ -469,7 +470,10 @@ function CliBar({
           if (res.ok) {
             const data = (await res.json()) as { runId: string; secret: string };
             const origin = typeof window !== 'undefined' ? window.location.origin : '';
-            runSuffix = ` --run-id ${data.runId} --run-secret ${data.secret} --progress-url ${origin}/api/webflow/schema/progress/event`;
+            runSuffix =
+              ` --run-id ${data.runId} --run-secret ${data.secret}` +
+              ` --progress-url ${origin}/api/webflow/schema/progress/event` +
+              ` --upload-url ${origin}/api/webflow/schema/progress/upload`;
             newRun = { runId: data.runId, secret: data.secret, startedAt: Date.now() };
           } else {
             toast.warning('Live terminal unavailable — command still copied');
@@ -817,6 +821,7 @@ export function WebflowSchemaDashboard({
 
   const startPayload: StartPayload | undefined = canBuild
     ? {
+        projectId,
         siteId: webflowConfig.siteId,
         siteLabel: webflowConfig.siteName || webflowConfig.siteId,
         domain: webflowConfig.customDomain ?? '',

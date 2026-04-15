@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
+      projectId,
       siteId,
       siteLabel,
       domain,
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
       concurrency,
       only,
     } = body as {
+      projectId?: string;
       siteId?: string;
       siteLabel?: string;
       domain?: string;
@@ -49,6 +51,7 @@ export async function POST(request: NextRequest) {
     await db.collection('schemaRuns').doc(runId).set({
       runId,
       secret,
+      projectId: projectId ?? null,
       siteId,
       siteLabel: siteLabel || siteId,
       domain,

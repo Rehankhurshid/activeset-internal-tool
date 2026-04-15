@@ -41,7 +41,7 @@ import {
 } from './ui';
 import type { SchemaExportEntry, SchemaExportFile } from './types';
 
-const PKG_VERSION = '0.4.0';
+const PKG_VERSION = '0.5.0';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -101,6 +101,7 @@ program
   .option('--run-id <id>', 'live-progress run ID (from the dashboard)')
   .option('--run-secret <secret>', 'live-progress auth secret')
   .option('--progress-url <url>', 'live-progress POST endpoint')
+  .option('--upload-url <url>', 'auto-upload entries to dashboard after run')
   .action(async (opts: {
     site: string;
     domain: string;
@@ -114,6 +115,7 @@ program
     runId?: string;
     runSecret?: string;
     progressUrl?: string;
+    uploadUrl?: string;
   }) => {
     const token = requireEnv(opts, 'token', 'WEBFLOW_API_TOKEN');
     const tStart = Date.now();
@@ -291,6 +293,50 @@ program
       message: `Wrote ${entries.length} result(s) to ${opts.out}`,
       detail: outPath,
     });
+
+    // Auto-upload to the dashboard if wired up, so the user never has to run
+    // the manual "Import schema-output.json" step.
+    let uploaded = 0;
+    if (opts.uploadUrl && opts.runId && opts.runSecret && entries.length > 0) {
+      const sp2 = spinner(`Uploading ${entries.length} result(s) to dashboard…`);
+      try {
+        const res = await fetch(opts.uploadUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            runId: opts.runId,
+            secret: opts.runSecret,
+            model: opts.model,
+            entries,
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status}${body ? ` · ${body.slice(0, 200)}` : ''}`);
+        }
+        const data = (await res.json().catch(() => ({}))) as { written?: number };
+        uploaded = data.written ?? entries.length;
+        sp2.stop();
+        logSuccess(
+          `Uploaded to dashboard`,
+          `${uploaded} result${uploaded === 1 ? '' : 's'}`
+        );
+        emit({
+          step: 'upload',
+          level: 'success',
+          message: `Uploaded ${uploaded} result(s) to dashboard`,
+        });
+      } catch (err) {
+        sp2.stop();
+        const msg = err instanceof Error ? err.message : String(err);
+        logWarn(`Auto-upload failed: ${msg} — use "Import schema-output.json" manually`);
+        emit({
+          step: 'upload',
+          level: 'warn',
+          message: `Auto-upload failed: ${msg}`,
+        });
+      }
+    }
 
     process.stdout.write(
       summary({

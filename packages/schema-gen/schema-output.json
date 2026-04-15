@@ -1,0 +1,572 @@
+{
+  "version": 1,
+  "generatedAt": "2026-04-15T13:10:38.604Z",
+  "model": "gemma4:e4b",
+  "baseUrl": "http://127.0.0.1:11434",
+  "siteId": "69b3a15204a82c9589e80874",
+  "domain": "sathi-web.webflow.io",
+  "entries": [
+    {
+      "pageId": "69de38b0b31aac9e4a909023",
+      "pageTitle": "Terms and conditions",
+      "url": "https://sathi-web.webflow.io/terms-and-conditions",
+      "contentHash": "bbb5cfe776d9b",
+      "result": {
+        "pageType": "webpage",
+        "summary": "This document outlines the terms and conditions for using the mysathi.io platform, detailing how personal and non-personal information is collected, used, and protected.",
+        "existing": [
+          {
+            "type": "WebPage",
+            "raw": {},
+            "issues": []
+          }
+        ],
+        "recommended": [
+          {
+            "type": "WebPage",
+            "reason": "The page is a general legal document (Terms and Conditions) that does not fit a specific schema like Article or Product. Using WebPage is appropriate for general informational/legal content.",
+            "confidence": "high",
+            "jsonLd": {
+              "@context": "https://schema.org",
+              "@type": "WebPage",
+              "headline": "Terms and conditions",
+              "description": "Terms and conditions"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "pageId": "69de1ce0340944ee74d4b10b",
+      "pageTitle": "Privacy Policy",
+      "url": "https://sathi-web.webflow.io/privacy-policy",
+      "contentHash": "1ad253504811e6",
+      "result": {
+        "pageType": "webpage",
+        "summary": "This is the Privacy Policy for Sathi, detailing how the company collects, uses, and protects personal and non-personal information gathered through the site.",
+        "existing": [
+          {
+            "type": "WebPage",
+            "raw": {},
+            "issues": [
+              "No structured data found."
+            ]
+          }
+        ],
+        "recommended": [
+          {
+            "type": "WebPage",
+            "reason": "This is a general policy page that serves as a legal document, making the general WebPage schema appropriate. Since it is a policy document, adding specific legal schema types is not standard, but WebPage provides the necessary context.",
+            "confidence": "high",
+            "jsonLd": {
+              "@context": "https://schema.org",
+              "@type": "WebPage",
+              "headline": "Privacy Policy",
+              "description": "This Privacy Policy governs the use of personal information collected by CHVN SOFTWARE PRIVATE LIMITED concerning the use of mysathi.io."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "pageId": "69ca581a951846e13daf4186",
+      "pageTitle": "Compare",
+      "url": "https://sathi-web.webflow.io/compare",
+      "contentHash": "88c1d5c25e4a6",
+      "result": {
+        "pageType": "article",
+        "summary": "This page compares SATHI to other affiliate platforms, detailing how SATHI addresses critical industry pain points like cookieless tracking, fraud prevention, and creator retention.",
+        "existing": [
+          {
+            "type": "WebPage",
+            "raw": {
+              "@context": "https://schema.org",
+              "@type": "WebPage",
+              "name": "How SATHI Compares to Other Affiliate Platforms",
+              "description": "See how SATHI stacks up against other affiliate tools. Built for Shopify brands who want attribution they can trust and fraud protection that works.",
+              "url": "/compare",
+              "inLanguage": "en",
+              "about": {
+                "@type": "SoftwareApplication",
+                "name": "SATHI",
+                "applicationCategory": "BusinessApplication",
+                "description": "Affiliate platform for Shopify brands with cookieless tracking, fraud protection, and creator-first features",
+                "operatingSystem": "Web",
+                "offers": {
+                  "@type": "Offer",
+                  "availability": "https://schema.org/InStock"
+                },
+                "featureList": [
+                  "Cookieless tracking",
+                  "Post-purchase surveys",
+                  "Dynamic LeakProof codes",
+                  "Self-referral blocking",
+                  "Branded affiliate portals",
+                  "AI workflows automation",
+                  "Automatic invoicing and 1099s",
+                  "Bulk payouts",
+                  "Gamification",
+                  "Migration support"
+                ],
+                "review": [
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "Kim Biddle",
+                      "jobTitle": "Co-Founder",
+                      "worksFor": {
+                        "@type": "Organization",
+                        "name": "Clutch Affiliate"
+                      }
+                    },
+                    "reviewBody": "SATHI has taken the major pain points of affiliate management and automated them. This set-it-and-forget-it technology means we can focus on strategy and bigger picture things like relationships."
+                  },
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "Jovana Zuka",
+                      "jobTitle": "Community Manager",
+                      "worksFor": {
+                        "@type": "Organization",
+                        "name": "Relish"
+                      }
+                    },
+                    "reviewBody": "It's clear SATHI was built by people with deep industry knowledge. The Post-Purchase Survey alone adds clarity to attribution in a space where it's often ambiguous."
+                  },
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "Kelsey Knight",
+                      "jobTitle": "Chief Commercial Officer",
+                      "worksFor": {
+                        "@type": "Organization",
+                        "name": "Slumberkins"
+                      }
+                    },
+                    "reviewBody": "I love the unique take on KPIs that help you really understand your program's performance. Whether you're measuring content quality or revenue, SATHI makes it simple to evaluate."
+                  },
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "Dan Stevenson",
+                      "jobTitle": "Influencer Marketing Lead",
+                      "worksFor": {
+                        "@type": "Organization",
+                        "name": "Spacegoods"
+                      }
+                    },
+                    "reviewBody": "We're always trying to find ways to better incentivise our affiliates, that's always been the challenge. SATHI's gamification is the most exciting solution we've seen for it."
+                  },
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "Leah Messinger",
+                      "jobTitle": "Marketing Manager",
+                      "worksFor": {
+                        "@type": "Organization",
+                        "name": "Magic Mind"
+                      }
+                    },
+                    "reviewBody": "The insights around program health and built-in fraud prevention have been standout features. They give us real confidence in how the program is performing."
+                  },
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "McCullough Shriver",
+                      "jobTitle": "Founder & CEO",
+                      "worksFor": {
+                        "@type": "Organization",
+                        "name": "Sweetflexx"
+                      }
+                    },
+                    "reviewBody": "When you look at building a brand, it has to come from the customer. Word of mouth is the one thing that is true, and Inner Circle is the most exciting thing I've seen. There were platforms trying to do this. They never really did a great job of it."
+                  },
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "Mirren Alford",
+                      "jobTitle": "Influencer & Partnerships Manager",
+                      "worksFor": {
+                        "@type": "Organization",
+                        "name": "Reformed"
+                      }
+                    },
+                    "reviewBody": "Bulk paying affiliates with invoices generated automatically is unreal. The UX is SO slick and easy to use. Managing everything feels completely seamless."
+                  },
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "Jeff",
+                      "jobTitle": "Founder",
+                      "worksFor": {
+                        "@type": "Organization",
+                        "name": "Soapbox"
+                      }
+                    },
+                    "reviewBody": "SATHI fits in perfectly with our strategy of making the affiliate experience easy and impactful for our affiliates, customers, and team."
+                  },
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "Ibrahim",
+                      "jobTitle": "CMO",
+                      "worksFor": {
+                        "@type": "Organization",
+                        "name": "Peelaway"
+                      }
+                    },
+                    "reviewBody": "We were missing a lot with our previous platform. SATHI has gamified the entire experience for affiliates. The Inner Circle embed on the thank you page, letting customers become brand ambassadors, is perfect."
+                  }
+                ]
+              },
+              "issues": [
+                "The existing schema is very comprehensive, combining WebPage, SoftwareApplication, and multiple Review structures. While it is technically correct, it is overly complex and mixes product data with review data. For a comparison page, focusing on the comparison aspect and the product itself is best. The reviews should ideally be structured under a dedicated 'Product' or 'Service' schema if they are meant to be aggregated, but since they are embedded in the main page content, keeping them under 'WebPage' is acceptable but bulky. The primary issue is the sheer volume and nesting of data, which can dilute the signal for search engines."
+              ],
+              "recommended": [
+                {
+                  "type": "Product",
+                  "reason": "The page is fundamentally a comparison of a specific software product (SATHI) against competitors. Using Product schema will correctly categorize the main subject matter and allow for structured data related to features and benefits, which is the core purpose of the page.",
+                  "confidence": "high",
+                  "jsonLd": {
+                    "@context": "https://schema.org",
+                    "@type": "Product",
+                    "name": "SaaS Marketing Platform",
+                    "description": "A comprehensive platform for managing affiliate marketing and scaling growth.",
+                    "brand": {
+                      "name": "SaaS Company"
+                    },
+                    "aggregateRating": {
+                      "ratingValue": "4.8",
+                      "reviewCount": "150+"
+                    },
+                    "review": [
+                      {
+                        "author": {
+                          "name": "Customer"
+                        },
+                        "reviewBody": "Excellent platform for scaling affiliate marketing."
+                      },
+                      {
+                        "author": {
+                          "name": "Customer"
+                        },
+                        "reviewBody": "Easy to use and highly effective."
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "issues": []
+          }
+        ],
+        "recommended": []
+      }
+    },
+    {
+      "pageId": "69c39ef50223cdea3ae9ad71",
+      "pageTitle": "Pricing",
+      "url": "https://sathi-web.webflow.io/pricing",
+      "contentHash": "e80fa8c2e722b",
+      "result": {
+        "pageType": "product",
+        "summary": "SATHI offers three tiered plans (Ember, Blaze, Wildfire) for affiliate program management, providing advanced features like fraud protection, cookieless attribution, and automated payouts. Users can choose a plan based on their current scaling needs and upgrade anytime.",
+        "existing": [
+          {
+            "type": "WebPage",
+            "raw": {
+              "@context": "https://schema.org",
+              "@type": "WebPage",
+              "name": "Plans for Every Stage of Your Affiliate Program | SATHI",
+              "description": "Three plans, unlimited affiliates on every one. Fraud protection, cookieless attribution, and automated payouts included. Start with a 14-day free trial.",
+              "url": "/pricing",
+              "inLanguage": "en",
+              "mainEntity": {
+                "@type": "SoftwareApplication",
+                "name": "SATHI",
+                "applicationCategory": "BusinessApplication",
+                "description": "Affiliate program management platform with fraud protection, cookieless attribution, and automated payouts",
+                "offers": [
+                  {
+                    "@type": "Offer",
+                    "name": "Ember",
+                    "description": "For teams are ready to launch",
+                    "price": "199",
+                    "priceCurrency": "USD",
+                    "priceSpecification": {
+                      "@type": "UnitPriceSpecification",
+                      "price": "199",
+                      "priceCurrency": "USD",
+                      "billingDuration": "P1M",
+                      "referenceQuantity": {
+                        "@type": "QuantitativeValue",
+                        "value": "1",
+                        "unitText": "MONTH"
+                      }
+                    },
+                    "availability": "https://schema.org/InStock"
+                  },
+                  {
+                    "@type": "Offer",
+                    "name": "Blaze",
+                    "description": "For teams that want to scale up",
+                    "price": "399",
+                    "priceCurrency": "USD",
+                    "priceSpecification": {
+                      "@type": "UnitPriceSpecification",
+                      "price": "399",
+                      "priceCurrency": "USD",
+                      "billingDuration": "P1M",
+                      "referenceQuantity": {
+                        "@type": "QuantitativeValue",
+                        "value": "1",
+                        "unitText": "MONTH"
+                      }
+                    },
+                    "availability": "https://schema.org/InStock"
+                  },
+                  {
+                    "@type": "Offer",
+                    "name": "Wildfire",
+                    "description": "For teams that are running at scale",
+                    "price": "799",
+                    "priceCurrency": "USD",
+                    "priceSpecification": {
+                      "@type": "UnitPriceSpecification",
+                      "price": "799",
+                      "priceCurrency": "USD",
+                      "billingDuration": "P1M",
+                      "referenceQuantity": {
+                        "@type": "QuantitativeValue",
+                        "value": "1",
+                        "unitText": "MONTH"
+                      }
+                    },
+                    "availability": "https://schema.org/InStock"
+                  }
+                ],
+                "featureList": [
+                  "Unlimited affiliates and links",
+                  "LeakProof codes & fraud protection",
+                  "Post-purchase surveys for attribution",
+                  "Tiered commissions",
+                  "Automated payouts",
+                  "Tax compliance",
+                  "Personalized landing pages",
+                  "Custom reports & integrations"
+                ]
+              }
+            },
+            "issues": []
+          },
+          {
+            "type": "Product",
+            "raw": {
+              "@context": "https://schema.org",
+              "@type": "Product",
+              "name": "SATHI",
+              "description": "Affiliate program management platform with fraud protection, cookieless attribution, and automated payouts",
+              "offers": [
+                {
+                  "@type": "Offer",
+                  "name": "Ember",
+                  "description": "For teams are ready to launch",
+                  "price": "199",
+                  "priceCurrency": "USD",
+                  "priceSpecification": {
+                    "@type": "UnitPriceSpecification",
+                    "price": "199",
+                    "priceCurrency": "USD",
+                    "billingDuration": "P1M",
+                    "referenceQuantity": {
+                      "@type": "QuantitativeValue",
+                      "value": "1",
+                      "unitText": "MONTH"
+                    }
+                  },
+                  "availability": "https://schema.org/InStock"
+                },
+                {
+                  "@type": "Offer",
+                  "name": "Blaze",
+                  "description": "For teams that want to scale up",
+                  "price": "399",
+                  "priceCurrency": "USD",
+                  "priceSpecification": {
+                    "@type": "UnitPriceSpecification",
+                    "price": "399",
+                    "priceCurrency": "USD",
+                    "billingDuration": "P1M",
+                    "referenceQuantity": {
+                      "@type": "QuantitativeValue",
+                      "value": "1",
+                      "unitText": "MONTH"
+                    }
+                  },
+                  "availability": "https://schema.org/InStock"
+                },
+                {
+                  "@type": "Offer",
+                  "name": "Wildfire",
+                  "description": "For teams that are running at scale",
+                  "price": "799",
+                  "priceCurrency": "USD",
+                  "priceSpecification": {
+                    "@type": "UnitPriceSpecification",
+                    "price": "799",
+                    "priceCurrency": "USD",
+                    "billingDuration": "P1M",
+                    "referenceQuantity": {
+                      "@type": "QuantitativeValue",
+                      "value": "1",
+                      "unitText": "MONTH"
+                    }
+                  },
+                  "availability": "https://schema.org/InStock"
+                }
+              ],
+              "featureList": [
+                "Unlimited affiliates and links",
+                "LeakProof codes & fraud protection",
+                "Post-purchase surveys for attribution",
+                "Tiered commissions",
+                "Automated payouts",
+                "Tax compliance",
+                "Personalized landing pages",
+                "Custom reports & integrations"
+              ]
+            },
+            "issues": []
+          },
+          {
+            "type": "Unknown",
+            "raw": {},
+            "issues": []
+          }
+        ],
+        "recommended": []
+      }
+    },
+    {
+      "pageId": "69c3758e5f4f959294a240d3",
+      "pageTitle": "Demo",
+      "url": "https://sathi-web.webflow.io/demo",
+      "contentHash": "d29d61bcde1c5",
+      "result": {
+        "pageType": "webpage",
+        "summary": "This page is a demo landing page for SATHI, an affiliate program management platform. It encourages users to book a live walkthrough to see how the platform can automate and scale their affiliate marketing efforts.",
+        "existing": [
+          {
+            "type": "WebPage",
+            "raw": {
+              "@context": "https://schema.org",
+              "@type": "WebPage",
+              "name": "Book a Demo - See SATHI Live",
+              "description": "Watch your affiliate program come to life with attribution reports, LeakProof codes, tiers, payouts, and more. Book a walkthrough tailored to your program.",
+              "url": "/demo",
+              "inLanguage": "en",
+              "mainEntity": {
+                "@type": "Service",
+                "name": "SATHI Demo",
+                "description": "Live demonstration of SATHI affiliate program management platform",
+                "provider": {
+                  "@type": "Organization",
+                  "name": "SATHI"
+                },
+                "serviceType": "Software Demo",
+                "audience": {
+                  "@type": "Audience",
+                  "audienceType": "DTC Brands and Affiliate Program Managers"
+                }
+              },
+              "about": {
+                "@type": "SoftwareApplication",
+                "name": "SATHI",
+                "applicationCategory": "BusinessApplication",
+                "description": "Affiliate program management platform with fraud detection, attribution tracking, and creator tools",
+                "offers": {
+                  "@type": "Offer",
+                  "name": "Free Trial",
+                  "price": "0",
+                  "priceCurrency": "USD",
+                  "description": "14-day free trial with full access"
+                }
+              }
+            },
+            "issues": []
+          },
+          {
+            "type": "Unknown",
+            "raw": {},
+            "issues": []
+          }
+        ],
+        "recommended": []
+      }
+    },
+    {
+      "pageId": "69b3a15404a82c9589e808d2",
+      "pageTitle": "404",
+      "url": "https://sathi-web.webflow.io/404",
+      "contentHash": "17cd73966a9e02",
+      "result": {
+        "pageType": "webpage",
+        "summary": "This is a standard 404 error page indicating that the requested content could not be found.",
+        "existing": [],
+        "recommended": [
+          {
+            "type": "WebPage",
+            "reason": "Since this is a generic error page, the primary goal is to inform the user and guide them back to the main site structure. Using WebPage or WebSite is appropriate, and adding breadcrumbs or related links (if available) would improve user experience.",
+            "confidence": "high",
+            "jsonLd": {
+              "@context": "https://schema.org",
+              "@type": "WebPage",
+              "url": "https://sathi-web.webflow.io/404",
+              "potentialAction": {
+                "@type": "SearchAction",
+                "target": {
+                  "@type": "EntryPoint",
+                  "urlTemplate": "https://sathi-web.webflow.io/search?q={search_term_string}"
+                },
+                "query-input": "required name=search_term_string"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "pageId": "69b3a15404a82c9589e808d1",
+      "pageTitle": "Password",
+      "url": "https://sathi-web.webflow.io/401",
+      "contentHash": "1a215a5ac92624",
+      "result": {
+        "pageType": "other",
+        "summary": "This is a standard 401 Unauthorized page indicating that the user provided incorrect credentials and needs to try again.",
+        "existing": [],
+        "recommended": [
+          {
+            "type": "WebPage",
+            "reason": "Since this is a generic error page (401 Unauthorized) and not a primary content page (article, product, etc.), the most appropriate schema is a general WebPage or a specific ErrorPage if available, but WebPage is safest. We should also include a description of the error.",
+            "confidence": "high",
+            "jsonLd": {
+              "@context": "https://schema.org",
+              "@type": "WebPage",
+              "headline": "Protected page",
+              "description": "Incorrect password. Please try again."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
