@@ -8,11 +8,14 @@ import { generateHealthReport } from '@/services/HealthReportGenerator';
 import { sendAlertNotifications, sendHealthReportNotifications } from '@/services/NotificationService';
 import { ProjectLink } from '@/types';
 
-const SCAN_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes per project
+export const maxDuration = 800;
+
+const JOB_BUDGET_MS = 12 * 60 * 1000; // 12 minutes shared across all project scans
 const POLL_INTERVAL_MS = 5000; // 5 seconds
+const SCAN_CONCURRENCY = 4;
 
 /**
- * Daily cron job to scan all projects with sitemaps,
+ * Daily cron job to scan all current projects,
  * then run anomaly detection and send alerts.
  */
 export async function GET(request: NextRequest) {
@@ -24,16 +27,24 @@ export async function GET(request: NextRequest) {
 
     try {
         const allProjects = await projectsService.getAllProjects();
-        const projectsWithSitemap = allProjects.filter(
-            p => p.sitemapUrl && (p.status || 'current') === 'current'
+        const currentProjectsToScan = allProjects.filter(
+            p => (p.status || 'current') === 'current' && p.links?.some(l => l.source === 'auto')
         );
 
-        console.log(`[daily-scan] Found ${projectsWithSitemap.length} current projects with sitemaps`);
+        console.log(`[daily-scan] Found ${currentProjectsToScan.length} current projects to scan`);
 
-        const results = [];
+        const results: Array<{
+            projectId: string;
+            projectName: string;
+            success: boolean;
+            error?: string;
+            scannedPages?: number;
+            anomalies: number;
+        }> = [];
         const baseUrl = getBaseUrl(request);
+        const deadline = Date.now() + JOB_BUDGET_MS;
 
-        for (const project of projectsWithSitemap) {
+        const scanProject = async (project: typeof currentProjectsToScan[number]) => {
             try {
                 console.log(`[daily-scan] Scanning project: ${project.name} (${project.id})`);
 
@@ -62,13 +73,24 @@ export async function GET(request: NextRequest) {
                         error: scanData?.error || 'Failed to start scan',
                         anomalies: 0,
                     });
-                    continue;
+                    return;
                 }
 
                 const scanId = scanData.scanId;
 
-                // Wait for scan to complete
-                const scanCompleted = await pollScanCompletion(baseUrl, scanId);
+                if (!scanId) {
+                    results.push({
+                        projectId: project.id,
+                        projectName: project.name,
+                        success: true,
+                        scannedPages: 0,
+                        anomalies: 0,
+                    });
+                    return;
+                }
+
+                // Wait for scan to complete, bounded by the shared job deadline
+                const scanCompleted = await pollScanCompletion(baseUrl, scanId, deadline);
 
                 if (!scanCompleted) {
                     console.warn(`[daily-scan] Scan timed out for project ${project.name}`);
@@ -79,7 +101,7 @@ export async function GET(request: NextRequest) {
                         error: 'Scan timed out',
                         anomalies: 0,
                     });
-                    continue;
+                    return;
                 }
 
                 // Fetch updated project from Firestore
@@ -91,7 +113,7 @@ export async function GET(request: NextRequest) {
                         success: true,
                         anomalies: 0,
                     });
-                    continue;
+                    return;
                 }
 
                 const currentLinks = updatedProject.links.filter(l => l.source === 'auto');
@@ -136,9 +158,22 @@ export async function GET(request: NextRequest) {
                     anomalies: 0,
                 });
             }
+        };
 
-            // Delay between projects to avoid rate limits
-            await new Promise(resolve => setTimeout(resolve, 2000));
+        // Run scans with bounded concurrency so one slow project can't starve the rest
+        const queue = [...currentProjectsToScan];
+        const workers = Array.from({ length: Math.min(SCAN_CONCURRENCY, queue.length) }, async () => {
+            while (queue.length > 0 && Date.now() < deadline) {
+                const project = queue.shift();
+                if (!project) break;
+                await scanProject(project);
+            }
+        });
+        await Promise.all(workers);
+
+        const skipped = queue.length;
+        if (skipped > 0) {
+            console.warn(`[daily-scan] Budget exhausted; ${skipped} project(s) skipped this run`);
         }
 
         const totalAnomalies = results.reduce((sum, r) => sum + (r.anomalies || 0), 0);
@@ -167,7 +202,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             success: true,
             timestamp: new Date().toISOString(),
-            projectsScanned: projectsWithSitemap.length,
+            projectsScanned: results.length,
+            projectsSkipped: skipped,
             totalAnomalies,
             results
         });
@@ -184,10 +220,8 @@ export async function GET(request: NextRequest) {
 /**
  * Poll scan-bulk/status until completed or timeout.
  */
-async function pollScanCompletion(baseUrl: string, scanId: string): Promise<boolean> {
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < SCAN_TIMEOUT_MS) {
+async function pollScanCompletion(baseUrl: string, scanId: string, deadline: number): Promise<boolean> {
+    while (Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
 
         try {
