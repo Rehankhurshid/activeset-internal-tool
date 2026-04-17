@@ -83,7 +83,7 @@ const SCAN_JOBS_COLLECTION = COLLECTIONS.SCAN_JOBS;
 const ACTIVE_SCAN_JOB_STATUSES: ScanJobStatus[] = ['queued', 'running'];
 const PAGES_PER_BATCH = 10;
 const PARALLEL_CONCURRENCY = 5;
-const PROCESSING_LOCK_MS = 4 * 60 * 1000;
+const PROCESSING_LOCK_MS = 8 * 60 * 1000;
 
 function getCollectionRef() {
   return collection(db, SCAN_JOBS_COLLECTION);
@@ -526,6 +526,10 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
         return { linkId, status: 'SCAN_FAILED' as ChangeStatus };
       }
 
+      // Per-page heartbeat so slow pages don't let the processing lock expire
+      // and trigger a concurrent re-claim from the scan-jobs cron.
+      await heartbeatScanJob(scanId, link.url || '').catch(() => {});
+
       try {
         const { changeStatus, updatedLink, pendingWrite } = await scanSinglePage(
           project.id,
@@ -599,21 +603,35 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
       const chunk = remainingTargetIds.slice(i, i + PARALLEL_CONCURRENCY);
       const results = await Promise.allSettled(chunk.map(processPage));
 
+      const chunkCompletedLinkIds: string[] = [];
       for (const result of results) {
         if (result.status === 'fulfilled') {
           completedBatchLinkIds.push(result.value.linkId);
+          chunkCompletedLinkIds.push(result.value.linkId);
           summary = updateSummaryForChange(summary, result.value.status);
         } else {
           summary = { ...summary, failed: summary.failed + 1 };
         }
       }
+
+      // Persist per-chunk so progress survives a mid-batch function timeout.
+      if (shouldPersistProjectLinks) {
+        try {
+          await projectsService.updateProjectLinks(project.id, projectLinks);
+          shouldPersistProjectLinks = false;
+        } catch (error) {
+          console.error(`[scan-jobs] Failed to persist project links for ${scanId} (chunk ${i}):`, error);
+        }
+      }
+      if (chunkCompletedLinkIds.length > 0) {
+        await recordCompletedLinks(scanId, chunkCompletedLinkIds, summary).catch((error) => {
+          console.error(`[scan-jobs] Failed to record completed chunk links for ${scanId}:`, error);
+        });
+      }
     }
 
     if (shouldPersistProjectLinks) {
       await projectsService.updateProjectLinks(project.id, projectLinks);
-    }
-    if (completedBatchLinkIds.length > 0) {
-      await recordCompletedLinks(scanId, completedBatchLinkIds, summary);
     }
 
     const finalJob = await releaseScanJobAfterBatch(scanId, summary);
