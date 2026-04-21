@@ -3,6 +3,13 @@ import { withWorkflow } from "workflow/next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['puppeteer', 'puppeteer-core', '@sparticuz/chromium', 'sharp'],
+  // Force the Next.js file tracer to include the chromium binary (brotli
+  // archive under bin/) which it otherwise skips because it's not a .js
+  // import. Without this the Vercel function ships without the binary and
+  // @sparticuz/chromium errors with 'input directory does not exist'.
+  outputFileTracingIncludes: {
+    '/api/generate-pdf/**/*': ['./node_modules/@sparticuz/chromium/**/*'],
+  },
   output: 'standalone',
   images: {
     remotePatterns: [
