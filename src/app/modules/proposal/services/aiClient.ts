@@ -3,9 +3,12 @@
 // works in production without the server ever needing network access to
 // the model. Requires `OLLAMA_ORIGINS='*' ollama serve` on the user's machine.
 
+// Use 127.0.0.1 (not localhost) — on many machines localhost resolves to IPv6
+// ::1 first, while Ollama only binds to IPv4. Matches the schema/alt-text
+// features which have been working on prod for a while.
 const DEFAULT_BASE_URL =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_OLLAMA_BASE_URL) ||
-  'http://localhost:11434';
+  'http://127.0.0.1:11434';
 
 const DEFAULT_MODEL =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_OLLAMA_MODEL) ||
