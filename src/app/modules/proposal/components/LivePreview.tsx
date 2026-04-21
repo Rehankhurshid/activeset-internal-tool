@@ -7,7 +7,7 @@ interface LivePreviewProps {
 }
 
 const DEFAULT_HERO = '/default-hero.png';
-const FONT_TITLE = "'Funnel Display', system-ui, sans-serif";
+const FONT_TITLE = "var(--font-funnel-display), 'Funnel Display', system-ui, sans-serif";
 
 export default function LivePreview({ proposal }: LivePreviewProps) {
     const heroImage = proposal.heroImage || DEFAULT_HERO;

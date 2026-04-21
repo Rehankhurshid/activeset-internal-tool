@@ -14,8 +14,13 @@ const SignatureSection = dynamic(() => import("./SignatureSection"), { ssr: fals
 const CommentSidebar = dynamic(() => import("./CommentSidebar"));
 
 // Font family constants
-const FONT_TITLE = "'Funnel Display', system-ui, sans-serif";
-const FONT_BODY = "'Funnel Sans', system-ui, sans-serif";
+// Use CSS variables emitted by next/font (declared in layout.tsx).
+// next/font generates hashed family names (e.g. __Funnel_Display_xxxxxx);
+// referencing them via the CSS variable is the only way to match the
+// actual @font-face declaration. A plain 'Funnel Display' string matches
+// nothing and silently falls back to system-ui.
+const FONT_TITLE = "var(--font-funnel-display), 'Funnel Display', system-ui, sans-serif";
+const FONT_BODY = "var(--font-funnel-sans), 'Funnel Sans', system-ui, sans-serif";
 
 // Convert plain text bullets (•) to proper HTML lists
 const convertBulletsToHtmlLists = (html: string): string => {
