@@ -9,8 +9,20 @@ export async function downloadProposalPDF(proposalId: string, filename: string =
         const response = await fetch(`/api/generate-pdf?proposalId=${proposalId}`);
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to generate PDF');
+            // Read as text first — the response may be an HTML error page
+            // (e.g. Vercel 500) rather than JSON, which would make .json() throw
+            // a misleading "Unexpected token '<'" error.
+            const text = await response.text();
+            let message = `PDF generation failed (HTTP ${response.status})`;
+            try {
+                const parsed = JSON.parse(text);
+                message = parsed.error || parsed.details || message;
+                if (parsed.details && parsed.error) message = `${parsed.error}: ${parsed.details}`;
+            } catch {
+                const snippet = text.replace(/<[^>]*>/g, ' ').trim().slice(0, 200);
+                if (snippet) message = `${message} — ${snippet}`;
+            }
+            throw new Error(message);
         }
 
         const blob = await response.blob();
