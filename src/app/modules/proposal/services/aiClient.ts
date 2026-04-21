@@ -2,10 +2,15 @@
 // Calls the user's local Ollama directly from the browser so the feature
 // works in production without the server ever needing network access to
 // the model. Requires `OLLAMA_ORIGINS='*' ollama serve` on the user's machine.
+//
+// For the initial draft we split the work into three focused parallel
+// calls (basics, pricing, timeline) instead of one massive JSON schema.
+// Small models like gemma4:e4b handle narrow tasks with examples much
+// better than a single 10-field mega-prompt. We also fetch the client
+// website server-side first and feed distilled signals into the basics
+// prompt so the client description, services, and deliverable are
+// grounded in reality rather than guessed from the company name.
 
-// Use 127.0.0.1 (not localhost) — on many machines localhost resolves to IPv6
-// ::1 first, while Ollama only binds to IPv4. Matches the schema/alt-text
-// features which have been working on prod for a while.
 const DEFAULT_BASE_URL =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_OLLAMA_BASE_URL) ||
   'http://127.0.0.1:11434';
@@ -62,6 +67,18 @@ export interface AIBlockResult {
   finalDeliverable?: string;
 }
 
+interface SiteContext {
+  url: string;
+  title: string;
+  description: string;
+  headings: { h1: string[]; h2: string[] };
+  bodyExcerpt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Low-level Ollama wrapper
+// ---------------------------------------------------------------------------
+
 async function callOllama(prompt: string, signal?: AbortSignal): Promise<string> {
   const base = DEFAULT_BASE_URL.replace(/\/$/, '');
   let res: Response;
@@ -75,7 +92,7 @@ async function callOllama(prompt: string, signal?: AbortSignal): Promise<string>
         prompt,
         stream: false,
         format: 'json',
-        options: { temperature: 0.3, num_ctx: 8192 },
+        options: { temperature: 0.25, num_ctx: 8192 },
       }),
     });
   } catch (err) {
@@ -112,50 +129,264 @@ function parseJson<T>(raw: string): T {
   }
 }
 
-function buildDraftPrompt(input: AIDraftInput): string {
-  const { meetingNotes, clientName, agencyName, clientWebsite, projectDeadline, projectBudget } = input;
-  return `You are an expert proposal writer for a web design agency. Based on the meeting notes provided, generate professional proposal content.
+// ---------------------------------------------------------------------------
+// Web context
+// ---------------------------------------------------------------------------
 
-Extract and generate the following in JSON format:
-{
-  "title": "Select one of the following exact titles: 'Website Proposal', 'Website Design & Development Proposal', 'Webflow Development Proposal', 'Copy, Branding, Website Design & Development Proposal', 'Website Development Proposal (Client-First)', 'Webflow Website Proposal', 'Web Design, Copy, and SEO Proposal'. Do not invent a new title.",
-  "clientName": "Deduce client/company name from transcript/notes if not explicitly provided.",
-  "overview": "A 2-3 paragraph professional project overview summarizing the scope, goals, and approach.",
-  "clientDescription": "A professional description of the client. If clientWebsite (${clientWebsite || 'none'}) is provided, use it to infer details. Otherwise deduce from transcript.",
-  "serviceKeys": ["Select from these exact keys: 'webflow-dev', 'website-design', 'branding-design', 'copy', 'strategy-copy', 'webflow-migration', 'brochure-design', 'full-webflow'"],
-  "finalDeliverable": "Select one of these exact texts or a custom one: 'The final deliverable for this project will be a fully functional, responsive website. It will be built on Webflow in a stable and secure environment.' OR 'The final deliverable for this project will be a visually compelling, responsive website with a cohesive brand identity. Designed with a focus on aesthetics, usability, and consistency, the site will effectively communicate your brand and engage your audience across all devices.'",
-  "aboutUsTemplateId": "Select 'activeset', 'standard', 'modern', 'corporate', or 'creative' based on tone.",
-  "pricingItems": [
-    {
-      "name": "Select ONLY from these titles: 'Strategy & Copy', 'Branding', 'Website Design', 'Webflow Development'",
-      "description": "Fill details via Transcript.",
-      "price": "Formatted price (e.g., $1,500). If Project Budget (${projectBudget || 'Not provided'}) is set, distribute it logically across items so the sum equals the budget."
-    }
-  ],
-  "pricingTotal": "The sum of all pricing items (e.g., '$3,000'). Must equal Project Budget if provided.",
-  "timelinePhases": [
-    { "title": "Phase name", "description": "What happens", "duration": "e.g., '2 weeks'", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD" }
-  ],
-  "projectType": "Type of project"
+async function fetchSiteContext(url: string): Promise<SiteContext | null> {
+  try {
+    const res = await fetch(`/api/site-context?url=${encodeURIComponent(url)}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { context?: SiteContext };
+    return data.context || null;
+  } catch {
+    return null;
+  }
 }
 
-Guidelines:
-- Be professional and concise.
-- If Project Budget is provided (${projectBudget || ''}), detect the currency and distribute the total so item prices sum to it.
-- If Project Deadline is provided (${projectDeadline || 'Not provided'}), all phases fit within today and the deadline.
-- Use realistic dates starting from today.
+function formatContext(ctx: SiteContext | null): string {
+  if (!ctx) return '(no website provided or fetch failed)';
+  return [
+    `URL: ${ctx.url}`,
+    `Title: ${ctx.title || '-'}`,
+    `Meta: ${ctx.description || '-'}`,
+    `H1: ${ctx.headings.h1.slice(0, 3).join(' | ') || '-'}`,
+    `H2: ${ctx.headings.h2.slice(0, 5).join(' | ') || '-'}`,
+    `Body excerpt: ${ctx.bodyExcerpt.slice(0, 1400) || '-'}`,
+  ].join('\n');
+}
 
-Meeting Notes:
-${meetingNotes}
+// ---------------------------------------------------------------------------
+// Sub-prompts
+// ---------------------------------------------------------------------------
 
-${clientName ? `Client Name: ${clientName}` : ''}
-${agencyName ? `Agency Name: ${agencyName}` : ''}
-${clientWebsite ? `Client Website: ${clientWebsite}` : ''}
-${projectDeadline ? `Project Deadline: ${projectDeadline}` : ''}
-${projectBudget ? `Project Budget: ${projectBudget}` : ''}
+const ALLOWED_TITLES = [
+  'Website Proposal',
+  'Website Design & Development Proposal',
+  'Webflow Development Proposal',
+  'Copy, Branding, Website Design & Development Proposal',
+  'Website Development Proposal (Client-First)',
+  'Webflow Website Proposal',
+  'Web Design, Copy, and SEO Proposal',
+] as const;
+
+const ALLOWED_SERVICE_KEYS = [
+  'webflow-dev',
+  'website-design',
+  'branding-design',
+  'copy',
+  'strategy-copy',
+  'webflow-migration',
+  'brochure-design',
+  'full-webflow',
+] as const;
+
+const ALLOWED_ABOUT_US_IDS = ['activeset', 'standard', 'modern', 'corporate', 'creative'] as const;
+
+const ALLOWED_PRICING_NAMES = [
+  'Strategy & Copy',
+  'Branding',
+  'Website Design',
+  'Webflow Development',
+] as const;
+
+const DELIVERABLE_A =
+  'The final deliverable for this project will be a fully functional, responsive website. It will be built on Webflow in a stable and secure environment.';
+const DELIVERABLE_B =
+  'The final deliverable for this project will be a visually compelling, responsive website with a cohesive brand identity. Designed with a focus on aesthetics, usability, and consistency, the site will effectively communicate your brand and engage your audience across all devices.';
+
+function basicsPrompt(input: AIDraftInput, ctx: SiteContext | null): string {
+  return `You are a senior proposal writer at a web design agency. Produce the "basics" section of a proposal as strict JSON.
+
+OUTPUT SHAPE:
+{
+  "title": string,            // one of: ${ALLOWED_TITLES.map((t) => `"${t}"`).join(', ')}
+  "clientName": string,       // the client company name (deduce from website/notes if not provided)
+  "clientDescription": string, // 2-3 professional sentences, third person. Must be grounded in the website context below — include industry, what they do, mission/value prop.
+  "serviceKeys": string[],    // 2-5 items from: ${ALLOWED_SERVICE_KEYS.map((k) => `"${k}"`).join(', ')}
+  "aboutUsTemplateId": string, // one of: ${ALLOWED_ABOUT_US_IDS.map((k) => `"${k}"`).join(', ')}
+  "finalDeliverable": string, // a short paragraph describing what the client will receive. Prefer one of the two templates below unless the project clearly needs custom wording.
+  "overview": string          // 2-3 paragraph project overview tying the client's goals to the scope.
+}
+
+DELIVERABLE TEMPLATES (prefer these exact strings):
+A) "${DELIVERABLE_A}"
+B) "${DELIVERABLE_B}"
+
+SERVICE SELECTION RULES:
+- If the brief mentions copy or strategy → include "strategy-copy" or "copy".
+- If the brief mentions brand or logo → include "branding-design".
+- If the project is a new build on Webflow → include "website-design" AND "webflow-dev".
+- If migrating an existing site to Webflow → include "webflow-migration".
+- Always include at least "website-design" and "webflow-dev" for website projects.
+- Pick 2-5 services. Never return an empty array.
+
+ABOUT-US TEMPLATE RULES:
+- "activeset" = default agency voice (use if unsure).
+- "modern" = tech/SaaS clients.
+- "corporate" = B2B, enterprise, finance, legal.
+- "creative" = design, media, arts.
+- "standard" = generic fallback.
+
+CLIENT CONTEXT (authoritative — use this to ground clientDescription and infer services):
+${formatContext(ctx)}
+
+MEETING NOTES / BRIEF:
+${input.meetingNotes}
+
+${input.clientName ? `Declared client name: ${input.clientName}` : ''}
+${input.agencyName ? `Agency: ${input.agencyName}` : ''}
+${input.clientWebsite ? `Website: ${input.clientWebsite}` : ''}
+
+Respond with valid JSON only. No markdown fences.`;
+}
+
+function pricingPrompt(input: AIDraftInput): string {
+  const budget = input.projectBudget?.trim();
+  return `You generate a pricing section for a web design proposal as strict JSON.
+
+OUTPUT SHAPE:
+{
+  "pricingItems": [
+    { "name": string, "description": string, "price": string }
+  ],
+  "pricingTotal": string
+}
+
+RULES:
+- "name" MUST be one of: ${ALLOWED_PRICING_NAMES.map((n) => `"${n}"`).join(', ')}. Never invent names.
+- Return 3 or 4 items.
+- "description" = one clear sentence about what's included.
+- "price" = formatted currency string, e.g. "$3,500" or "€2,000".
+- Detect currency from the provided budget if set; otherwise use USD.
+${budget ? `- BUDGET CONSTRAINT: the sum of prices MUST equal exactly ${budget}. Distribute proportionally: Strategy & Copy ≈ 15%, Branding ≈ 20%, Website Design ≈ 30%, Webflow Development ≈ 35%. Adjust if a category isn't included.` : '- No budget provided. Use realistic numbers: total between $4,000 and $12,000.'}
+- "pricingTotal" must equal the sum of pricingItems prices.
+
+BRIEF:
+${input.meetingNotes}
+
+${input.clientName ? `Client: ${input.clientName}` : ''}
+${budget ? `Budget: ${budget}` : 'Budget: not provided'}
 
 Respond with valid JSON only.`;
 }
+
+function timelinePrompt(input: AIDraftInput): string {
+  const deadline = input.projectDeadline?.trim();
+  const today = new Date().toISOString().slice(0, 10);
+  return `You generate a realistic project timeline for a web design proposal as strict JSON.
+
+OUTPUT SHAPE:
+{
+  "timelinePhases": [
+    {
+      "title": string,
+      "description": string,
+      "duration": string,        // e.g. "2 weeks"
+      "startDate": "YYYY-MM-DD",
+      "endDate": "YYYY-MM-DD"
+    }
+  ]
+}
+
+RULES:
+- Produce 3 to 5 sequential phases. Typical sequence:
+  1) Discovery & Strategy (1-2 weeks)
+  2) Design (2-3 weeks)
+  3) Development (3-4 weeks)
+  4) QA & Launch (1 week)
+- Start the first phase on ${today}.
+- Each phase's startDate equals the previous phase's endDate (or +1 day).
+${deadline ? `- DEADLINE: the last endDate MUST be on or before ${deadline}. Compress durations proportionally if needed.` : '- No deadline provided. Plan for a realistic 6-10 week total.'}
+- "description" = one sentence about what happens in that phase.
+
+BRIEF:
+${input.meetingNotes}
+
+Respond with valid JSON only.`;
+}
+
+// ---------------------------------------------------------------------------
+// Orchestration
+// ---------------------------------------------------------------------------
+
+export async function generateProposalDraft(
+  input: AIDraftInput,
+  signal?: AbortSignal
+): Promise<AIDraftResult> {
+  if (!input.meetingNotes?.trim()) throw new Error('Meeting notes are required');
+
+  const ctx = input.clientWebsite ? await fetchSiteContext(input.clientWebsite) : null;
+
+  // Three focused calls in parallel. Each is small enough that a 4-8B local
+  // model can reliably produce correct JSON. Failures degrade gracefully —
+  // if pricing or timeline misfires we still return basics and the user can
+  // regenerate those blocks individually.
+  const [basicsRaw, pricingRaw, timelineRaw] = await Promise.allSettled([
+    callOllama(basicsPrompt(input, ctx), signal),
+    callOllama(pricingPrompt(input), signal),
+    callOllama(timelinePrompt(input), signal),
+  ]);
+
+  const result: AIDraftResult = {};
+
+  if (basicsRaw.status === 'fulfilled') {
+    try {
+      const basics = parseJson<AIDraftResult>(basicsRaw.value);
+      Object.assign(result, basics);
+    } catch (err) {
+      console.warn('[aiClient] basics parse failed:', err);
+    }
+  } else {
+    // If basics failed entirely, that's the critical path — surface it.
+    throw basicsRaw.reason instanceof Error
+      ? basicsRaw.reason
+      : new Error(String(basicsRaw.reason));
+  }
+
+  if (pricingRaw.status === 'fulfilled') {
+    try {
+      const pricing = parseJson<AIDraftResult>(pricingRaw.value);
+      if (pricing.pricingItems) result.pricingItems = pricing.pricingItems;
+      if (pricing.pricingTotal) result.pricingTotal = pricing.pricingTotal;
+    } catch (err) {
+      console.warn('[aiClient] pricing parse failed:', err);
+    }
+  }
+
+  if (timelineRaw.status === 'fulfilled') {
+    try {
+      const timeline = parseJson<AIDraftResult>(timelineRaw.value);
+      if (timeline.timelinePhases) result.timelinePhases = timeline.timelinePhases;
+    } catch (err) {
+      console.warn('[aiClient] timeline parse failed:', err);
+    }
+  }
+
+  // Sanity: force serviceKeys to the allowed set.
+  if (result.serviceKeys) {
+    result.serviceKeys = result.serviceKeys.filter((k) =>
+      (ALLOWED_SERVICE_KEYS as readonly string[]).includes(k)
+    );
+    if (result.serviceKeys.length === 0) {
+      result.serviceKeys = ['website-design', 'webflow-dev'];
+    }
+  }
+
+  // Sanity: force aboutUsTemplateId to the allowed set.
+  if (
+    result.aboutUsTemplateId &&
+    !(ALLOWED_ABOUT_US_IDS as readonly string[]).includes(result.aboutUsTemplateId)
+  ) {
+    result.aboutUsTemplateId = 'activeset';
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Block edits (unchanged shape — still a single focused call per block)
+// ---------------------------------------------------------------------------
 
 function buildBlockPrompt(input: AIBlockInput): string {
   const { blockType, notes, clientName, agencyName, clientWebsite, projectDeadline, projectBudget, currentData } = input;
@@ -243,20 +474,20 @@ ${currentData?.finalDeliverable ? `Current: ${currentData.finalDeliverable}` : '
 Respond with valid JSON only.`;
 }
 
-export async function generateProposalDraft(
-  input: AIDraftInput,
-  signal?: AbortSignal
-): Promise<AIDraftResult> {
-  if (!input.meetingNotes?.trim()) throw new Error('Meeting notes are required');
-  const raw = await callOllama(buildDraftPrompt(input), signal);
-  return parseJson<AIDraftResult>(raw);
-}
-
 export async function generateProposalBlock(
   input: AIBlockInput,
   signal?: AbortSignal
 ): Promise<AIBlockResult> {
   if (!input.notes?.trim()) throw new Error('Notes are required');
-  const raw = await callOllama(buildBlockPrompt(input), signal);
+
+  // If editing clientDescription and a website is provided, fetch context
+  // so the rewrite stays grounded — same treatment as the initial draft.
+  let prompt = buildBlockPrompt(input);
+  if (input.blockType === 'clientDescription' && input.clientWebsite) {
+    const ctx = await fetchSiteContext(input.clientWebsite);
+    if (ctx) prompt += `\n\nWEBSITE CONTEXT:\n${formatContext(ctx)}`;
+  }
+
+  const raw = await callOllama(prompt, signal);
   return parseJson<AIBlockResult>(raw);
 }
