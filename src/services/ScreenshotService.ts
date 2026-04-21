@@ -169,34 +169,71 @@ export class ScreenshotService {
         const page = await browser.newPage();
 
         try {
-            // Set viewport
-            await page.setViewport({ width, height });
+            await page.setViewport({ width, height, deviceScaleFactor: 2 });
 
-            // Navigate to the page
+            // Emulate print BEFORE navigating so the page hydrates with print
+            // styles active and next/font CSS is requested for print-safe faces.
+            await page.emulateMediaType('print');
+
             await page.goto(url, {
                 waitUntil: 'networkidle2',
-                timeout: 60000
+                timeout: 60000,
             });
 
-            // Wait for page to be fully loaded
-            await page.waitForFunction(() => document.readyState === 'complete', { timeout: 10000 });
+            // 1) Wait for DOM to be complete.
+            await page.waitForFunction(() => document.readyState === 'complete', {
+                timeout: 15000,
+            });
 
-            // Wait for any specific selectors if needed (can be added to options)
+            // 2) Wait for Next.js font loading to finish. next/font writes
+            //    CSS variables + @font-face rules; the browser promise
+            //    document.fonts.ready resolves once all are downloaded and
+            //    rendered. Without this, the PDF ships before Funnel Sans
+            //    arrives and falls back to serif.
+            await page
+                .evaluate(
+                    () =>
+                        new Promise<void>((resolve) => {
+                            const done = () => resolve();
+                            if ('fonts' in document) {
+                                (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready
+                                    .then(done)
+                                    .catch(done);
+                            } else {
+                                done();
+                            }
+                        })
+                )
+                .catch(() => undefined);
 
-            // Add extra wait for fonts and images to settle
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // 3) Wait for all <img> tags to finish loading (or error out).
+            await page
+                .evaluate(
+                    () =>
+                        Promise.all(
+                            Array.from(document.images).map((img) =>
+                                img.complete && img.naturalHeight !== 0
+                                    ? Promise.resolve()
+                                    : new Promise<void>((resolve) => {
+                                          img.addEventListener('load', () => resolve(), { once: true });
+                                          img.addEventListener('error', () => resolve(), { once: true });
+                                      })
+                            )
+                        )
+                )
+                .catch(() => undefined);
 
-            // Generate PDF
-            await page.emulateMediaType('print');
+            // 4) Give layout one more frame to settle after late fonts.
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
             const pdfBuffer = await page.pdf({
-                format: format as any,
+                format: format as 'A4' | 'Letter',
                 margin,
                 printBackground,
-                preferCSSPageSize: true
+                preferCSSPageSize: true,
             });
 
             return Buffer.from(pdfBuffer);
-
         } finally {
             await page.close();
         }

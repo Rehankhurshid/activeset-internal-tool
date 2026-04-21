@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Share2, Mail, X, Copy, ExternalLink, PenLine, MessageSquare, FileDown } from "lucide-react";
 import { Proposal, ProposalSectionId } from "../types/Proposal";
 import { proposalService } from "../services/ProposalService";
+import { downloadProposalPDF } from "../utils/pdfGenerator";
+import { toast } from "sonner";
 
 const DEFAULT_HERO = '/default-hero.png';
 const SignatureSection = dynamic(() => import("./SignatureSection"), { ssr: false });
@@ -314,19 +316,21 @@ ${proposal.agencyName}`;
   };
 
   const handleDownloadPDF = async () => {
-    // Use native browser print-to-PDF so fonts match the view page exactly
-    // and the download is instant. The browser print dialog uses
-    // document.title as the default filename — swap it temporarily.
-    const originalTitle = document.title;
-    const filename = `proposal-${proposal.clientName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}`;
-    document.title = filename;
+    if (isDownloading) return;
+    setIsDownloading(true);
+    const toastId = toast.loading('Generating your PDF…', {
+      description: 'Matching fonts and layout — about 20 seconds.',
+    });
     try {
-      window.print();
+      const filename = `proposal-${proposal.clientName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`;
+      await downloadProposalPDF(currentProposal.id, filename);
+      toast.success('Downloaded', { id: toastId, description: filename });
+    } catch (error) {
+      console.error('Download failed:', error);
+      const message = error instanceof Error ? error.message : 'Failed to download PDF. Please try again.';
+      toast.error('PDF download failed', { id: toastId, description: message });
     } finally {
-      // Restore on the next tick so the print dialog captures the new title.
-      setTimeout(() => {
-        document.title = originalTitle;
-      }, 0);
+      setIsDownloading(false);
     }
   };
 
