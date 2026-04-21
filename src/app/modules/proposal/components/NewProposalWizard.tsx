@@ -8,12 +8,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
-import { Loader2, Sparkles, ArrowLeft, ArrowRight, RotateCw, Check } from 'lucide-react';
+import { Sparkles, ArrowLeft, ArrowRight, RotateCw, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfigurations } from '@/hooks/useConfigurations';
 import { Proposal } from '../types/Proposal';
 import LivePreview from './LivePreview';
 import { generateProposalDraft } from '../services/aiClient';
+import TerminalLoader, { type TerminalStep } from './TerminalLoader';
 
 interface NewProposalWizardProps {
   open: boolean;
@@ -22,6 +23,46 @@ interface NewProposalWizardProps {
 }
 
 type Step = 1 | 2 | 3;
+
+function buildSteps(args: {
+  clientName: string;
+  website?: string;
+  budget?: string;
+  deadline?: string;
+}): TerminalStep[] {
+  const host = (args.website || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const steps: TerminalStep[] = [
+    {
+      kind: 'cmd',
+      text: `activeset-ai draft --client "${args.clientName}"${args.website ? ` --site ${host}` : ''}${args.budget ? ` --budget "${args.budget}"` : ''}${args.deadline ? ` --deadline ${args.deadline}` : ''}`,
+      delay: 250,
+    },
+    { kind: 'info', text: `connecting to ollama @ 127.0.0.1:11434 · model gemma4:e4b`, delay: 600 },
+    { kind: 'ok', text: `connected · context window 8192`, delay: 500 },
+  ];
+
+  if (args.website) {
+    steps.push(
+      { kind: 'task', text: `fetching ${host} ...`, delay: 500 },
+      { kind: 'ok', text: `site fetched · parsing title · meta · H1 · H2 · body`, delay: 1600 }
+    );
+  } else {
+    steps.push({ kind: 'info', text: `no website provided · skipping context fetch`, delay: 400 });
+  }
+
+  steps.push(
+    { kind: 'task', text: `analyzing brief · extracting intents ...`, delay: 1400 },
+    { kind: 'ok', text: `extracted: industry hints · scope · tone`, delay: 1100 },
+    { kind: 'task', text: `generating client description ...`, delay: 1200 },
+    { kind: 'task', text: `selecting services from 8 candidates ...`, delay: 1300 },
+    { kind: 'task', text: `picking about-us template ...`, delay: 1200 },
+    { kind: 'task', text: `distributing budget across phases ...`, delay: 1500 },
+    { kind: 'task', text: `calculating timeline · start → deadline ...`, delay: 1500 },
+    { kind: 'task', text: `composing overview paragraphs ...`, delay: 1400 }
+  );
+
+  return steps;
+}
 
 const BLANK_PROPOSAL = (): Proposal => ({
   id: '',
@@ -243,13 +284,17 @@ export default function NewProposalWizard({ open, onOpenChange, onCreate }: NewP
           {step === 3 && (
             <div className="space-y-3">
               {generating && (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
-                  <p className="text-sm font-medium">Drafting your proposal with local AI...</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Running gemma4 on your machine. This takes ~10-30s.
-                  </p>
-                </div>
+                <TerminalLoader
+                  active={generating}
+                  title={`activeset.ai — draft · ${clientName || 'proposal'}`}
+                  loopLabel="Composing proposal draft"
+                  steps={buildSteps({
+                    clientName: clientName || 'client',
+                    website: clientWebsite,
+                    budget: projectBudget,
+                    deadline: projectDeadline,
+                  })}
+                />
               )}
 
               {!generating && aiError && (
