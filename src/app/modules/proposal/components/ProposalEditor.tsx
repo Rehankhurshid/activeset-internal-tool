@@ -18,6 +18,7 @@ import { AppNavigation } from "@/components/navigation/AppNavigation";
 import { Proposal, ProposalTemplate } from "../types/Proposal";
 import LivePreview from "./LivePreview";
 import RichTextEditor from "./RichTextEditor";
+import { generateProposalDraft, generateProposalBlock } from "../services/aiClient";
 import { DatePicker } from "@/components/ui/date-picker";
 import HistoryPanel from "./HistoryPanel";
 import { Badge } from "@/components/ui/badge";
@@ -503,26 +504,14 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
     setAiError(null);
 
     try {
-      const response = await fetch('/api/ai-gen', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          meetingNotes,
-          clientName: formData.clientName,
-          agencyName: formData.agencyName,
-          clientWebsite,
-          projectDeadline,
-          projectBudget
-        })
+      const data = await generateProposalDraft({
+        meetingNotes,
+        clientName: formData.clientName,
+        agencyName: formData.agencyName,
+        clientWebsite,
+        projectDeadline,
+        projectBudget
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to generate content');
-      }
-
-      const { data } = result;
 
       // Auto-fill form with AI-generated content
       setFormData(prev => ({
@@ -543,8 +532,8 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
             : prev.data.aboutUs,
           pricing: {
             ...prev.data.pricing,
-            items: data.pricingItems?.length > 0
-              ? data.pricingItems.map((item: { name: string; description?: string; price: string }) => ({
+            items: data.pricingItems && data.pricingItems.length > 0
+              ? data.pricingItems.map((item) => ({
                 name: item.name,
                 description: item.description || '',
                 price: item.price
@@ -554,8 +543,8 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
           },
           timeline: {
             ...prev.data.timeline,
-            phases: data.timelinePhases?.length > 0
-              ? data.timelinePhases.map((phase: { title: string; description: string; duration: string; startDate?: string; endDate?: string }) => ({
+            phases: data.timelinePhases && data.timelinePhases.length > 0
+              ? data.timelinePhases.map((phase) => ({
                 title: phase.title,
                 description: phase.description,
                 duration: phase.duration,
@@ -603,43 +592,32 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
     setBlockAiError(null);
 
     try {
-      const response = await fetch('/api/ai-gen-block', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          blockType,
-          notes: blockAiNotes,
-          clientName: formData.clientName,
-          agencyName: formData.agencyName,
-          clientWebsite,
-          projectDeadline,
-          projectBudget,
-          currentData: {
-            timeline: formData.data.timeline,
-            pricing: formData.data.pricing,
-            clientDescription: formData.data.overviewDetails?.clientDescription || '',
-            finalDeliverable: formData.data.overviewDetails?.finalDeliverable || '',
-          }
-        })
+      const data = await generateProposalBlock({
+        blockType,
+        notes: blockAiNotes,
+        clientName: formData.clientName,
+        agencyName: formData.agencyName,
+        clientWebsite,
+        projectDeadline,
+        projectBudget,
+        currentData: {
+          timeline: formData.data.timeline,
+          pricing: formData.data.pricing,
+          clientDescription: formData.data.overviewDetails?.clientDescription || '',
+          finalDeliverable: formData.data.overviewDetails?.finalDeliverable || '',
+        }
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to generate content');
-      }
-
-      const { data } = result;
 
       // Update the specific block based on type
       if (blockType === 'timeline' && data.timelinePhases) {
+        const phases = data.timelinePhases;
         setFormData(prev => ({
           ...prev,
           data: {
             ...prev.data,
             timeline: {
               ...prev.data.timeline,
-              phases: data.timelinePhases.map((phase: { title: string; description: string; duration: string; startDate?: string; endDate?: string }) => ({
+              phases: phases.map((phase) => ({
                 title: phase.title,
                 description: phase.description,
                 duration: phase.duration,
@@ -650,25 +628,28 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
           }
         }));
       } else if (blockType === 'pricing' && data.pricingItems) {
+        const items = data.pricingItems;
+        const total = data.pricingTotal;
         setFormData(prev => ({
           ...prev,
           data: {
             ...prev.data,
             pricing: {
               ...prev.data.pricing,
-              items: data.pricingItems.map((item: { name: string; description?: string; price: string }) => ({
+              items: items.map((item) => ({
                 name: item.name,
                 description: item.description || '',
                 price: item.price
               })),
-              total: data.pricingTotal || prev.data.pricing.total
+              total: total || prev.data.pricing.total
             }
           }
         }));
       } else if (blockType === 'clientDescription' && data.clientDescription) {
+        const clientDescription = data.clientDescription;
         setFormData(prev => {
           const currentDetails = prev.data.overviewDetails || { clientDescription: '', services: [], finalDeliverable: '' };
-          const newDetails = { ...currentDetails, clientDescription: data.clientDescription };
+          const newDetails = { ...currentDetails, clientDescription };
           
           const parts = [];
           if (newDetails.clientDescription) parts.push(newDetails.clientDescription);
@@ -685,9 +666,10 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
           };
         });
       } else if (blockType === 'finalDeliverable' && data.finalDeliverable) {
+        const finalDeliverable = data.finalDeliverable;
         setFormData(prev => {
           const currentDetails = prev.data.overviewDetails || { clientDescription: '', services: [], finalDeliverable: '' };
-          const newDetails = { ...currentDetails, finalDeliverable: data.finalDeliverable };
+          const newDetails = { ...currentDetails, finalDeliverable };
           
           const parts = [];
           if (newDetails.clientDescription) parts.push(newDetails.clientDescription);

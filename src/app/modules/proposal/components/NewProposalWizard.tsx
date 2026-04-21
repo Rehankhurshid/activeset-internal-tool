@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { useConfigurations } from '@/hooks/useConfigurations';
 import { Proposal } from '../types/Proposal';
 import LivePreview from './LivePreview';
+import { generateProposalDraft } from '../services/aiClient';
 
 interface NewProposalWizardProps {
   open: boolean;
@@ -83,23 +84,15 @@ export default function NewProposalWizard({ open, onOpenChange, onCreate }: NewP
     setGenerating(true);
     setAiError(null);
     try {
-      const res = await fetch('/api/ai-gen', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          meetingNotes,
-          clientName,
-          agencyName,
-          clientWebsite,
-          projectDeadline,
-          projectBudget,
-        }),
+      const data = await generateProposalDraft({
+        meetingNotes,
+        clientName,
+        agencyName,
+        clientWebsite,
+        projectDeadline,
+        projectBudget,
       });
-      const result = await res.json();
-      if (!res.ok || !result.success) {
-        throw new Error(result.error || 'Failed to generate proposal');
-      }
-      setDraft(buildProposalFromAI(result.data, {
+      setDraft(buildProposalFromAI(data as Record<string, unknown>, {
         clientName,
         agencyName,
         agencyEmail: selectedAgency?.email || '',
