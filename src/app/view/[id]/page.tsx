@@ -27,11 +27,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     plain.length > 200 ? plain.slice(0, 197) + '…' : plain ||
     `Proposal from ${proposal.agencyName} for ${proposal.clientName}.`;
 
-  // Only use hero if it's a public URL — data URLs and relative paths
-  // don't work as Open Graph images.
-  const hero = proposal.heroImage;
-  const images = hero && /^https?:\/\//i.test(hero) ? [{ url: hero, width: 1200, height: 630 }] : undefined;
-
+  // The opengraph-image.tsx colocated with this route is auto-injected by
+  // Next into openGraph.images and twitter.images, so we don't set them here.
   return {
     title,
     description,
@@ -40,13 +37,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       description,
       type: 'article',
       siteName: proposal.agencyName,
-      images,
     },
     twitter: {
-      card: images ? 'summary_large_image' : 'summary',
+      card: 'summary_large_image',
       title,
       description,
-      images: images?.map((i) => i.url),
     },
   };
 }
