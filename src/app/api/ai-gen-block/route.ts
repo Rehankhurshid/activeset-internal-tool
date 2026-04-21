@@ -1,17 +1,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:e4b';
 
 export async function POST(request: NextRequest) {
     try {
-        if (!GEMINI_API_KEY) {
-            return NextResponse.json(
-                { error: 'Gemini API key not configured.' },
-                { status: 500 }
-            );
-        }
-
         const body = await request.json();
         const { blockType, notes, clientName, agencyName, clientWebsite, projectDeadline, projectBudget, currentData } = body;
 
@@ -153,27 +147,32 @@ Generate an optimized final deliverable description based on this information.`
             );
         }
 
-        // Initialize Google GenAI
-        const { GoogleGenAI } = await import("@google/genai");
-        const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-flash-latest',
-            contents: [
-                {
-                    role: 'user',
-                    parts: [
-                        { text: prompt.system },
-                        { text: prompt.user }
-                    ]
-                }
-            ],
-            config: {
-                responseMimeType: 'application/json',
-            }
+        const ollamaRes = await fetch(`${OLLAMA_BASE_URL.replace(/\/$/, '')}/api/generate`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                model: OLLAMA_MODEL,
+                prompt: `${prompt.system}\n\n${prompt.user}\n\nRespond with valid JSON only.`,
+                stream: false,
+                format: 'json',
+                options: { temperature: 0.3 },
+            }),
+        }).catch((err: unknown) => {
+            throw new Error(
+                `Cannot reach Ollama at ${OLLAMA_BASE_URL} (${err instanceof Error ? err.message : String(err)}). Start it with: ollama serve`
+            );
         });
 
-        const generatedText = response.text;
+        if (!ollamaRes.ok) {
+            const errBody = await ollamaRes.text().catch(() => '');
+            return NextResponse.json(
+                { error: `Ollama request failed (${ollamaRes.status}): ${errBody || ollamaRes.statusText}` },
+                { status: 500 }
+            );
+        }
+
+        const payload = (await ollamaRes.json()) as { response?: string };
+        const generatedText = payload.response?.trim() ?? '';
 
         if (!generatedText) {
             return NextResponse.json(
@@ -185,15 +184,17 @@ Generate an optimized final deliverable description based on this information.`
         let blockContent;
         try {
             blockContent = JSON.parse(generatedText);
-        } catch (err) {
-            const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
+        } catch {
+            const stripped = generatedText.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+            const jsonMatch = stripped.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-                blockContent = JSON.parse(jsonMatch[0]);
+                try {
+                    blockContent = JSON.parse(jsonMatch[0]);
+                } catch {
+                    return NextResponse.json({ error: 'Failed to parse AI response.' }, { status: 500 });
+                }
             } else {
-                return NextResponse.json(
-                    { error: 'Failed to parse AI response.' },
-                    { status: 500 }
-                );
+                return NextResponse.json({ error: 'Failed to parse AI response.' }, { status: 500 });
             }
         }
 
