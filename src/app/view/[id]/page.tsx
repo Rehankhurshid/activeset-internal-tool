@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { unstable_cache } from 'next/cache';
 import { doc as clientDoc, getDoc as getClientDoc } from 'firebase/firestore';
 import { db as adminDb } from '@/lib/firebase-admin';
@@ -7,6 +8,47 @@ import ProposalViewer from '@/app/modules/proposal/components/ProposalViewer';
 
 interface PageProps {
   params: Promise<{ id: string }>;
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params;
+  const proposal = await getPublicProposalCached(id);
+
+  if (!proposal) {
+    return {
+      title: 'Proposal not found',
+      description: 'This proposal is no longer available.',
+    };
+  }
+
+  const title = `${proposal.clientName} · ${proposal.title}`;
+  const plain = (proposal.data.overview || '').replace(/\s+/g, ' ').trim();
+  const description =
+    plain.length > 200 ? plain.slice(0, 197) + '…' : plain ||
+    `Proposal from ${proposal.agencyName} for ${proposal.clientName}.`;
+
+  // Only use hero if it's a public URL — data URLs and relative paths
+  // don't work as Open Graph images.
+  const hero = proposal.heroImage;
+  const images = hero && /^https?:\/\//i.test(hero) ? [{ url: hero, width: 1200, height: 630 }] : undefined;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: 'article',
+      siteName: proposal.agencyName,
+      images,
+    },
+    twitter: {
+      card: images ? 'summary_large_image' : 'summary',
+      title,
+      description,
+      images: images?.map((i) => i.url),
+    },
+  };
 }
 
 const getPublicProposalCached = unstable_cache(
