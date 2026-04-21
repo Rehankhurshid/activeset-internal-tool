@@ -6,6 +6,7 @@ import Dashboard from '@/app/modules/proposal/components/Dashboard';
 import ProposalEditor from '@/app/modules/proposal/components/ProposalEditor';
 import ProposalViewer from '@/app/modules/proposal/components/ProposalViewer';
 import LoadingScreen from '@/app/modules/proposal/components/LoadingScreen';
+import NewProposalWizard from '@/app/modules/proposal/components/NewProposalWizard';
 import { proposalService } from '@/app/modules/proposal/services/ProposalService';
 import { templateService } from '@/app/modules/proposal/services/TemplateService';
 import { Proposal, ProposalTemplate, ViewType } from '@/app/modules/proposal/types/Proposal';
@@ -26,6 +27,7 @@ export default function ProposalPage() {
     const [editingTemplate, setEditingTemplate] = useState<ProposalTemplate | null>(null);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [wizardOpen, setWizardOpen] = useState(false);
 
     // All useEffect hooks must be called before any early returns
     useEffect(() => {
@@ -116,7 +118,11 @@ export default function ProposalPage() {
     }
 
     const handleCreateProposal = () => {
-        setSelectedProposal(null);
+        setWizardOpen(true);
+    };
+
+    const handleWizardCreate = (draft: Proposal) => {
+        setSelectedProposal(draft);
         setCurrentView('editor');
     };
 
@@ -368,6 +374,11 @@ export default function ProposalPage() {
                 onShareProposal={shareProposal}
                 onDeleteProposal={handleDeleteProposal}
                 onStatusChange={handleStatusChange}
+            />
+            <NewProposalWizard
+                open={wizardOpen}
+                onOpenChange={setWizardOpen}
+                onCreate={handleWizardCreate}
             />
             <Toaster />
         </>

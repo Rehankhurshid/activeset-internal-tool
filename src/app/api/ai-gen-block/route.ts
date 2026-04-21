@@ -1,8 +1,28 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:e4b';
+
+async function ollamaFetch(path: string, init: RequestInit): Promise<Response> {
+    const candidates = [OLLAMA_BASE_URL, 'http://localhost:11434', 'http://[::1]:11434'];
+    const tried = new Set<string>();
+    let lastErr: unknown = null;
+    for (const base of candidates) {
+        if (tried.has(base)) continue;
+        tried.add(base);
+        try {
+            return await fetch(`${base.replace(/\/$/, '')}${path}`, init);
+        } catch (err) {
+            lastErr = err;
+            console.warn(`[ollama] fetch failed for ${base}:`, err instanceof Error ? err.message : err);
+        }
+    }
+    throw lastErr ?? new Error('All Ollama hosts unreachable');
+}
 
 export async function POST(request: NextRequest) {
     try {
@@ -147,21 +167,26 @@ Generate an optimized final deliverable description based on this information.`
             );
         }
 
-        const ollamaRes = await fetch(`${OLLAMA_BASE_URL.replace(/\/$/, '')}/api/generate`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-                model: OLLAMA_MODEL,
-                prompt: `${prompt.system}\n\n${prompt.user}\n\nRespond with valid JSON only.`,
-                stream: false,
-                format: 'json',
-                options: { temperature: 0.3 },
-            }),
-        }).catch((err: unknown) => {
-            throw new Error(
-                `Cannot reach Ollama at ${OLLAMA_BASE_URL} (${err instanceof Error ? err.message : String(err)}). Start it with: ollama serve`
+        let ollamaRes: Response;
+        try {
+            ollamaRes = await ollamaFetch('/api/generate', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    model: OLLAMA_MODEL,
+                    prompt: `${prompt.system}\n\n${prompt.user}\n\nRespond with valid JSON only.`,
+                    stream: false,
+                    format: 'json',
+                    options: { temperature: 0.3 },
+                }),
+            });
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            return NextResponse.json(
+                { error: `Cannot reach Ollama (${msg}). Ensure 'ollama serve' is running and '${OLLAMA_MODEL}' is pulled.` },
+                { status: 500 }
             );
-        });
+        }
 
         if (!ollamaRes.ok) {
             const errBody = await ollamaRes.text().catch(() => '');
