@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Share2, Mail, X, Copy, ExternalLink, PenLine, MessageSquare, FileDown } from "lucide-react";
 import { Proposal, ProposalSectionId } from "../types/Proposal";
 import { proposalService } from "../services/ProposalService";
-import { downloadProposalPDF } from "../utils/pdfGenerator";
 
 const DEFAULT_HERO = '/default-hero.png';
 const SignatureSection = dynamic(() => import("./SignatureSection"), { ssr: false });
@@ -315,16 +314,19 @@ ${proposal.agencyName}`;
   };
 
   const handleDownloadPDF = async () => {
-    setIsDownloading(true);
+    // Use native browser print-to-PDF so fonts match the view page exactly
+    // and the download is instant. The browser print dialog uses
+    // document.title as the default filename — swap it temporarily.
+    const originalTitle = document.title;
+    const filename = `proposal-${proposal.clientName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}`;
+    document.title = filename;
     try {
-      const filename = `proposal-${proposal.clientName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`;
-      await downloadProposalPDF(currentProposal.id, filename);
-    } catch (error) {
-      console.error('Download failed:', error);
-      const message = error instanceof Error ? error.message : 'Failed to download PDF. Please try again.';
-      alert(message);
+      window.print();
     } finally {
-      setIsDownloading(false);
+      // Restore on the next tick so the print dialog captures the new title.
+      setTimeout(() => {
+        document.title = originalTitle;
+      }, 0);
     }
   };
 
