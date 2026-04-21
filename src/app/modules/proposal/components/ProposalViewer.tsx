@@ -321,7 +321,8 @@ ${proposal.agencyName}`;
       await downloadProposalPDF(currentProposal.id, filename);
     } catch (error) {
       console.error('Download failed:', error);
-      alert('Failed to download PDF. Please try again.');
+      const message = error instanceof Error ? error.message : 'Failed to download PDF. Please try again.';
+      alert(message);
     } finally {
       setIsDownloading(false);
     }
