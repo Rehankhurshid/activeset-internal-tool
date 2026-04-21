@@ -1,27 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
-
-export const runtime = 'nodejs';
-export const maxDuration = 30;
+export interface SiteContext {
+    url: string;
+    title: string;
+    description: string;
+    headings: { h1: string[]; h2: string[] };
+    bodyExcerpt: string;
+}
 
 /**
- * Fetch a client website and return distilled text signals — title, meta
- * description, headings, and a body-text excerpt — so the proposal AI has
- * real ground truth instead of guessing from the company name alone.
- *
- * Runs server-side to bypass CORS. Intentionally lightweight: no JS
- * rendering, no headless browser, no AI. Just HTML → text.
+ * Fetch a client website and distil to the signals the AI actually needs.
+ * Server-side only (no CORS), no JS rendering, no headless browser.
  */
-export async function GET(request: NextRequest) {
-    const url = request.nextUrl.searchParams.get('url');
-    if (!url) {
-        return NextResponse.json({ error: 'url required' }, { status: 400 });
-    }
-
+export async function fetchSiteContext(rawUrl: string): Promise<SiteContext | null> {
     let target: URL;
     try {
-        target = new URL(url.startsWith('http') ? url : `https://${url}`);
+        target = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`);
     } catch {
-        return NextResponse.json({ error: 'invalid url' }, { status: 400 });
+        return null;
     }
 
     try {
@@ -31,32 +25,16 @@ export async function GET(request: NextRequest) {
                     'Mozilla/5.0 (compatible; ActiveSetBot/1.0; +https://app.activeset.co)',
                 Accept: 'text/html,application/xhtml+xml',
             },
-            signal: AbortSignal.timeout(12_000),
+            signal: AbortSignal.timeout(10_000),
             redirect: 'follow',
         });
-
-        if (!res.ok) {
-            return NextResponse.json(
-                { error: `Site returned ${res.status}` },
-                { status: 502 }
-            );
-        }
+        if (!res.ok) return null;
 
         const html = await res.text();
-        const context = extractSignals(html, target);
-        return NextResponse.json({ context });
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return NextResponse.json({ error: message }, { status: 502 });
+        return extractSignals(html, target);
+    } catch {
+        return null;
     }
-}
-
-interface SiteContext {
-    url: string;
-    title: string;
-    description: string;
-    headings: { h1: string[]; h2: string[] };
-    bodyExcerpt: string;
 }
 
 function extractSignals(html: string, url: URL): SiteContext {
@@ -75,7 +53,6 @@ function extractSignals(html: string, url: URL): SiteContext {
     const h1 = allMatches(html, /<h1[^>]*>([\s\S]*?)<\/h1>/gi, 5);
     const h2 = allMatches(html, /<h2[^>]*>([\s\S]*?)<\/h2>/gi, 10);
 
-    // Strip scripts/styles and tags, keep only visible text.
     const stripped = html
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
@@ -100,6 +77,18 @@ function extractSignals(html: string, url: URL): SiteContext {
         },
         bodyExcerpt: stripped.slice(0, 2400),
     };
+}
+
+export function formatContextForPrompt(ctx: SiteContext | null): string {
+    if (!ctx) return '(no website provided or fetch failed)';
+    return [
+        `URL: ${ctx.url}`,
+        `Title: ${ctx.title || '-'}`,
+        `Meta: ${ctx.description || '-'}`,
+        `H1: ${ctx.headings.h1.slice(0, 3).join(' | ') || '-'}`,
+        `H2: ${ctx.headings.h2.slice(0, 5).join(' | ') || '-'}`,
+        `Body excerpt: ${ctx.bodyExcerpt.slice(0, 1400) || '-'}`,
+    ].join('\n');
 }
 
 function firstMatch(s: string, re: RegExp): string | null {

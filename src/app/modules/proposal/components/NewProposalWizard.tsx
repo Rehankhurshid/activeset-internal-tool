@@ -38,29 +38,45 @@ function linesFromEvents(
       state: 'done',
       text: `activeset-ai draft --client "${args.clientName}"${args.website ? ` --site ${host}` : ''}${args.budget ? ` --budget "${args.budget}"` : ''}${args.deadline ? ` --deadline ${args.deadline}` : ''}`,
     },
-    { kind: 'info', state: 'done', text: `connecting to ollama · model gemma4:e4b` },
+    { kind: 'info', state: 'done', text: `routing through vercel ai gateway` },
   ];
 
   for (const ev of events) {
     switch (ev.stage) {
+      case 'gateway-start':
+        lines.push({
+          kind: 'task',
+          state: 'active',
+          text: `drafting proposal · scraping site · reasoning · schema-validating ...`,
+        });
+        break;
+      case 'gateway-done':
+        markLast(lines, 'done');
+        lines.push({
+          kind: 'info',
+          state: 'done',
+          text:
+            ev.detail === 'site-context'
+              ? `site context used · output validated against zod schema`
+              : `no site context · output validated against zod schema`,
+        });
+        break;
+      case 'gateway-failed':
+        markLast(lines, 'failed');
+        lines.push({ kind: 'warn', state: 'failed', text: ev.detail || 'gateway request failed' });
+        break;
+      // Ollama fallback stages
       case 'fetch-site':
         lines.push({ kind: 'task', state: 'active', text: `fetching ${host} for context ...` });
         break;
       case 'site-fetched':
         markLast(lines, ev.detail === 'ok' ? 'done' : 'failed');
-        if (ev.detail !== 'ok') {
-          lines.push({ kind: 'warn', state: 'done', text: `site fetch failed · continuing without context` });
-        }
         break;
       case 'site-skipped':
-        lines.push({ kind: 'info', state: 'done', text: `no website provided · skipping context fetch` });
+        lines.push({ kind: 'info', state: 'done', text: `no website provided` });
         break;
       case 'basics-start':
-        lines.push({
-          kind: 'task',
-          state: 'active',
-          text: `basics · client description · services · deliverable · overview ...`,
-        });
+        lines.push({ kind: 'task', state: 'active', text: `local ollama · generating draft ...` });
         break;
       case 'basics-done':
         markLast(lines, 'done');
@@ -70,24 +86,12 @@ function linesFromEvents(
         lines.push({ kind: 'warn', state: 'failed', text: ev.detail || 'basics failed' });
         break;
       case 'pricing-start':
-        lines.push({ kind: 'task', state: 'active', text: `pricing · distributing budget across phases ...` });
-        break;
       case 'pricing-done':
-        markLast(lines, 'done');
-        break;
       case 'pricing-failed':
-        markLast(lines, 'failed');
-        lines.push({ kind: 'warn', state: 'done', text: `pricing failed · you can regenerate it in the editor` });
-        break;
       case 'timeline-start':
-        lines.push({ kind: 'task', state: 'active', text: `timeline · scheduling phases from today → deadline ...` });
-        break;
       case 'timeline-done':
-        markLast(lines, 'done');
-        break;
       case 'timeline-failed':
-        markLast(lines, 'failed');
-        lines.push({ kind: 'warn', state: 'done', text: `timeline failed · you can regenerate it in the editor` });
+        // no-op in gateway mode; single call covers everything
         break;
     }
   }
