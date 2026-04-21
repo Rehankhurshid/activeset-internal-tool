@@ -13,34 +13,40 @@ const INK = '#111111';
 const MUTED = '#5A5A5A';
 const ACCENT = '#2D2D2D';
 
+// fontsource via jsdelivr serves TTF files directly — more reliable with
+// Satori than scraping Google Fonts CSS (which returns woff2 URLs that
+// older Satori builds can't parse).
+const FONT_URLS = {
+  funnelDisplay800:
+    'https://cdn.jsdelivr.net/fontsource/fonts/funnel-display@latest/latin-800-normal.ttf',
+  funnelSans400:
+    'https://cdn.jsdelivr.net/fontsource/fonts/funnel-sans@latest/latin-400-normal.ttf',
+  funnelSans500:
+    'https://cdn.jsdelivr.net/fontsource/fonts/funnel-sans@latest/latin-500-normal.ttf',
+  jetbrainsMono500:
+    'https://cdn.jsdelivr.net/fontsource/fonts/jetbrains-mono@latest/latin-500-normal.ttf',
+};
+
+async function loadFont(url: string): Promise<ArrayBuffer | null> {
+  try {
+    const res = await fetch(url, { cache: 'force-cache' });
+    if (!res.ok) {
+      console.error(`[og-image] font ${res.status}: ${url}`);
+      return null;
+    }
+    return await res.arrayBuffer();
+  } catch (err) {
+    console.error(`[og-image] font fetch error ${url}:`, err);
+    return null;
+  }
+}
+
 async function fetchProposal(id: string): Promise<Partial<Proposal> | null> {
   try {
     const snap = await getDoc(doc(db, 'shared_proposals', id));
     return snap.exists() ? (snap.data() as Proposal) : null;
   } catch (err) {
     console.error('[og-image] proposal fetch failed:', err);
-    return null;
-  }
-}
-
-// Fetch a Google Font file as an ArrayBuffer. We hit the CSS endpoint
-// with a Chromium-ish UA so Google returns a woff2 URL, then download it.
-async function loadGoogleFont(family: string, weight: number): Promise<ArrayBuffer | null> {
-  try {
-    const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(
-      family
-    )}:wght@${weight}&display=swap`;
-    const css = await fetch(cssUrl, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-      },
-    }).then((r) => r.text());
-    const match = css.match(/url\((https:\/\/[^)]+)\)\s*format\(['"]?(?:woff2|truetype)['"]?\)/);
-    if (!match) return null;
-    return await fetch(match[1]).then((r) => r.arrayBuffer());
-  } catch (err) {
-    console.error(`[og-image] font load failed (${family} ${weight}):`, err);
     return null;
   }
 }
@@ -65,23 +71,18 @@ export default async function Image({ params }: { params: Promise<{ id: string }
   }
 
   const [displayBold, sansRegular, sansMedium, mono] = await Promise.all([
-    loadGoogleFont('Funnel Display', 800),
-    loadGoogleFont('Funnel Sans', 400),
-    loadGoogleFont('Funnel Sans', 500),
-    loadGoogleFont('JetBrains Mono', 500),
+    loadFont(FONT_URLS.funnelDisplay800),
+    loadFont(FONT_URLS.funnelSans400),
+    loadFont(FONT_URLS.funnelSans500),
+    loadFont(FONT_URLS.jetbrainsMono500),
   ]);
 
-  const fonts = [
-    displayBold && { name: 'Funnel Display', data: displayBold, weight: 800 as const, style: 'normal' as const },
-    sansRegular && { name: 'Funnel Sans', data: sansRegular, weight: 400 as const, style: 'normal' as const },
-    sansMedium && { name: 'Funnel Sans', data: sansMedium, weight: 500 as const, style: 'normal' as const },
-    mono && { name: 'JetBrains Mono', data: mono, weight: 500 as const, style: 'normal' as const },
-  ].filter(Boolean) as Array<{
-    name: string;
-    data: ArrayBuffer;
-    weight: 400 | 500 | 800;
-    style: 'normal';
-  }>;
+  type FontEntry = { name: string; data: ArrayBuffer; weight: 400 | 500 | 800; style: 'normal' };
+  const fonts: FontEntry[] = [];
+  if (displayBold) fonts.push({ name: 'Funnel Display', data: displayBold, weight: 800, style: 'normal' });
+  if (sansRegular) fonts.push({ name: 'Funnel Sans', data: sansRegular, weight: 400, style: 'normal' });
+  if (sansMedium) fonts.push({ name: 'Funnel Sans', data: sansMedium, weight: 500, style: 'normal' });
+  if (mono) fonts.push({ name: 'JetBrains Mono', data: mono, weight: 500, style: 'normal' });
 
   const agencyInitial = (agencyName[0] || 'A').toUpperCase();
   const servicePills = services.length ? services : ['Strategy', 'Design', 'Development'];
@@ -99,47 +100,8 @@ export default async function Image({ params }: { params: Promise<{ id: string }
             color: INK,
             fontFamily: 'Funnel Sans, system-ui, sans-serif',
             padding: '60px 64px',
-            position: 'relative',
           }}
         >
-          {/* Plus-mark grid background */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              padding: '240px 64px 90px',
-              pointerEvents: 'none',
-            }}
-          >
-            {[0, 1, 2].map((row) => (
-              <div
-                key={row}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: MUTED,
-                  fontSize: '18px',
-                  opacity: 0.35,
-                }}
-              >
-                <span style={{ display: 'flex' }}>+</span>
-                <span style={{ display: 'flex' }}>+</span>
-                <span style={{ display: 'flex' }}>+</span>
-                <span style={{ display: 'flex' }}>+</span>
-                <span style={{ display: 'flex' }}>+</span>
-                <span style={{ display: 'flex' }}>+</span>
-                <span style={{ display: 'flex' }}>+</span>
-                <span style={{ display: 'flex' }}>+</span>
-              </div>
-            ))}
-          </div>
-
           {/* Top label row */}
           <div
             style={{
@@ -164,7 +126,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
               display: 'flex',
               marginTop: '48px',
               fontFamily: 'Funnel Display, Funnel Sans, system-ui, sans-serif',
-              fontSize: clientName.length > 16 ? '140px' : '176px',
+              fontSize: clientName.length > 16 ? '136px' : '172px',
               fontWeight: 800,
               lineHeight: 0.95,
               letterSpacing: '-5px',
@@ -179,9 +141,8 @@ export default async function Image({ params }: { params: Promise<{ id: string }
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: '20px',
               marginTop: '40px',
-              maxWidth: '780px',
+              maxWidth: '820px',
             }}
           >
             <div
@@ -193,9 +154,9 @@ export default async function Image({ params }: { params: Promise<{ id: string }
                 fontWeight: 500,
               }}
             >
-              {truncate(title, 72)}
+              {truncate(title, 80)}
             </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
               {servicePills.slice(0, 4).map((label, i) => (
                 <div
                   key={i}
@@ -209,7 +170,6 @@ export default async function Image({ params }: { params: Promise<{ id: string }
                     textTransform: 'uppercase',
                     letterSpacing: '1px',
                     color: INK,
-                    background: 'transparent',
                   }}
                 >
                   {truncate(label, 18)}
@@ -275,7 +235,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
       { ...size, fonts: fonts.length ? fonts : undefined }
     );
   } catch (err) {
-    console.error('[og-image] render failed:', err);
+    console.error('[og-image] render failed, using fallback:', err);
     return new ImageResponse(
       (
         <div
@@ -283,15 +243,31 @@ export default async function Image({ params }: { params: Promise<{ id: string }
             width: '100%',
             height: '100%',
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: 'column',
             justifyContent: 'center',
+            alignItems: 'center',
             background: CREAM,
             color: INK,
-            fontSize: '80px',
             fontFamily: 'system-ui, sans-serif',
+            padding: '60px',
           }}
         >
-          Proposal
+          <div style={{ display: 'flex', fontSize: '30px', color: MUTED, marginBottom: '20px' }}>
+            / PROPOSAL
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              fontSize: '96px',
+              fontWeight: 800,
+              textAlign: 'center',
+            }}
+          >
+            {truncate(clientName, 24)}
+          </div>
+          <div style={{ display: 'flex', fontSize: '28px', marginTop: '20px', color: ACCENT }}>
+            {truncate(title, 60)}
+          </div>
         </div>
       ),
       size
