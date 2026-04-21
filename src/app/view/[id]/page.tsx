@@ -10,6 +10,23 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+// Strip HTML tags and decode common entities so overview copy — which is
+// rich-text from the editor — renders as plain text in link previews.
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
   const proposal = await getPublicProposalCached(id);
@@ -22,10 +39,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   const title = `${proposal.clientName} · ${proposal.title}`;
-  const plain = (proposal.data.overview || '').replace(/\s+/g, ' ').trim();
+  const plain = stripHtml(proposal.data.overview || '');
   const description =
-    plain.length > 200 ? plain.slice(0, 197) + '…' : plain ||
-    `Proposal from ${proposal.agencyName} for ${proposal.clientName}.`;
+    plain.length > 200
+      ? plain.slice(0, 197).trimEnd() + '…'
+      : plain || `Proposal from ${proposal.agencyName} for ${proposal.clientName}.`;
 
   // The opengraph-image.tsx colocated with this route is auto-injected by
   // Next into openGraph.images and twitter.images, so we don't set them here.
