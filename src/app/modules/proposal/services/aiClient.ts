@@ -67,6 +67,25 @@ export interface AIBlockResult {
   finalDeliverable?: string;
 }
 
+export type DraftStage =
+  | 'fetch-site'
+  | 'site-fetched'
+  | 'site-skipped'
+  | 'basics-start'
+  | 'basics-done'
+  | 'basics-failed'
+  | 'pricing-start'
+  | 'pricing-done'
+  | 'pricing-failed'
+  | 'timeline-start'
+  | 'timeline-done'
+  | 'timeline-failed';
+
+export interface DraftProgressEvent {
+  stage: DraftStage;
+  detail?: string;
+}
+
 interface SiteContext {
   url: string;
   title: string;
@@ -79,29 +98,57 @@ interface SiteContext {
 // Low-level Ollama wrapper
 // ---------------------------------------------------------------------------
 
-async function callOllama(prompt: string, signal?: AbortSignal): Promise<string> {
+interface CallOpts {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  numCtx?: number;
+}
+
+async function callOllama(prompt: string, opts: CallOpts = {}): Promise<string> {
   const base = DEFAULT_BASE_URL.replace(/\/$/, '');
+  const timeoutMs = opts.timeoutMs ?? 90_000;
+  const numCtx = opts.numCtx ?? 6144;
+
+  // Chain the caller's signal with our own timeout so we abort on either.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), timeoutMs);
+  const onParentAbort = () => controller.abort(opts.signal?.reason);
+  if (opts.signal) {
+    if (opts.signal.aborted) controller.abort(opts.signal.reason);
+    else opts.signal.addEventListener('abort', onParentAbort, { once: true });
+  }
+
   let res: Response;
   try {
     res = await fetch(`${base}/api/generate`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      signal,
+      signal: controller.signal,
       body: JSON.stringify({
         model: DEFAULT_MODEL,
         prompt,
         stream: false,
         format: 'json',
-        options: { temperature: 0.25, num_ctx: 8192 },
+        options: { temperature: 0.25, num_ctx: numCtx },
       }),
     });
   } catch (err) {
+    clearTimeout(timeoutId);
+    opts.signal?.removeEventListener('abort', onParentAbort);
+    if (err instanceof Error && (err.name === 'AbortError' || err.message === 'timeout')) {
+      throw new Error(
+        `Ollama timed out after ${Math.round(timeoutMs / 1000)}s. ` +
+          `The model may be thrashing — try a smaller context, close other apps, or use a bigger model (gpt-oss:20b).`
+      );
+    }
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
       `Cannot reach Ollama at ${base} (${msg}). ` +
-        `Start it on your machine with:  OLLAMA_ORIGINS='*' ollama serve  ` +
-        `and ensure '${DEFAULT_MODEL}' is pulled (ollama pull ${DEFAULT_MODEL}).`
+        `Start it with: OLLAMA_ORIGINS='*' ollama serve · ensure '${DEFAULT_MODEL}' is pulled.`
     );
+  } finally {
+    clearTimeout(timeoutId);
+    opts.signal?.removeEventListener('abort', onParentAbort);
   }
 
   if (!res.ok) {
@@ -310,57 +357,77 @@ Respond with valid JSON only.`;
 // Orchestration
 // ---------------------------------------------------------------------------
 
+export interface GenerateDraftOpts {
+  signal?: AbortSignal;
+  onProgress?: (event: DraftProgressEvent) => void;
+}
+
 export async function generateProposalDraft(
   input: AIDraftInput,
-  signal?: AbortSignal
+  opts: GenerateDraftOpts = {}
 ): Promise<AIDraftResult> {
   if (!input.meetingNotes?.trim()) throw new Error('Meeting notes are required');
 
-  const ctx = input.clientWebsite ? await fetchSiteContext(input.clientWebsite) : null;
-
-  // Three focused calls in parallel. Each is small enough that a 4-8B local
-  // model can reliably produce correct JSON. Failures degrade gracefully —
-  // if pricing or timeline misfires we still return basics and the user can
-  // regenerate those blocks individually.
-  const [basicsRaw, pricingRaw, timelineRaw] = await Promise.allSettled([
-    callOllama(basicsPrompt(input, ctx), signal),
-    callOllama(pricingPrompt(input), signal),
-    callOllama(timelinePrompt(input), signal),
-  ]);
-
+  const emit = (stage: DraftStage, detail?: string) => opts.onProgress?.({ stage, detail });
   const result: AIDraftResult = {};
 
-  if (basicsRaw.status === 'fulfilled') {
-    try {
-      const basics = parseJson<AIDraftResult>(basicsRaw.value);
-      Object.assign(result, basics);
-    } catch (err) {
-      console.warn('[aiClient] basics parse failed:', err);
-    }
+  // ---- Step 1: fetch website context (not AI, fast)
+  let ctx: SiteContext | null = null;
+  if (input.clientWebsite) {
+    emit('fetch-site', input.clientWebsite);
+    ctx = await fetchSiteContext(input.clientWebsite);
+    emit('site-fetched', ctx ? 'ok' : 'failed');
   } else {
-    // If basics failed entirely, that's the critical path — surface it.
-    throw basicsRaw.reason instanceof Error
-      ? basicsRaw.reason
-      : new Error(String(basicsRaw.reason));
+    emit('site-skipped');
   }
 
-  if (pricingRaw.status === 'fulfilled') {
-    try {
-      const pricing = parseJson<AIDraftResult>(pricingRaw.value);
-      if (pricing.pricingItems) result.pricingItems = pricing.pricingItems;
-      if (pricing.pricingTotal) result.pricingTotal = pricing.pricingTotal;
-    } catch (err) {
-      console.warn('[aiClient] pricing parse failed:', err);
-    }
+  // ---- Step 2: basics (critical path — throws if it fails)
+  emit('basics-start');
+  try {
+    const raw = await callOllama(basicsPrompt(input, ctx), {
+      signal: opts.signal,
+      timeoutMs: 120_000, // basics is the biggest prompt
+      numCtx: 6144,
+    });
+    Object.assign(result, parseJson<AIDraftResult>(raw));
+    emit('basics-done');
+  } catch (err) {
+    emit('basics-failed', err instanceof Error ? err.message : String(err));
+    throw err instanceof Error ? err : new Error(String(err));
   }
 
-  if (timelineRaw.status === 'fulfilled') {
-    try {
-      const timeline = parseJson<AIDraftResult>(timelineRaw.value);
-      if (timeline.timelinePhases) result.timelinePhases = timeline.timelinePhases;
-    } catch (err) {
-      console.warn('[aiClient] timeline parse failed:', err);
-    }
+  // ---- Step 3: pricing (non-critical — partial results still useful)
+  emit('pricing-start');
+  try {
+    const raw = await callOllama(pricingPrompt(input), {
+      signal: opts.signal,
+      timeoutMs: 60_000,
+      numCtx: 3072,
+    });
+    const pricing = parseJson<AIDraftResult>(raw);
+    if (pricing.pricingItems) result.pricingItems = pricing.pricingItems;
+    if (pricing.pricingTotal) result.pricingTotal = pricing.pricingTotal;
+    emit('pricing-done');
+  } catch (err) {
+    console.warn('[aiClient] pricing failed:', err);
+    emit('pricing-failed', err instanceof Error ? err.message : String(err));
+    // continue — user can regenerate the pricing block in the editor
+  }
+
+  // ---- Step 4: timeline (non-critical)
+  emit('timeline-start');
+  try {
+    const raw = await callOllama(timelinePrompt(input), {
+      signal: opts.signal,
+      timeoutMs: 60_000,
+      numCtx: 3072,
+    });
+    const timeline = parseJson<AIDraftResult>(raw);
+    if (timeline.timelinePhases) result.timelinePhases = timeline.timelinePhases;
+    emit('timeline-done');
+  } catch (err) {
+    console.warn('[aiClient] timeline failed:', err);
+    emit('timeline-failed', err instanceof Error ? err.message : String(err));
   }
 
   // Sanity: force serviceKeys to the allowed set.
@@ -488,6 +555,6 @@ export async function generateProposalBlock(
     if (ctx) prompt += `\n\nWEBSITE CONTEXT:\n${formatContext(ctx)}`;
   }
 
-  const raw = await callOllama(prompt, signal);
+  const raw = await callOllama(prompt, { signal, timeoutMs: 90_000 });
   return parseJson<AIBlockResult>(raw);
 }

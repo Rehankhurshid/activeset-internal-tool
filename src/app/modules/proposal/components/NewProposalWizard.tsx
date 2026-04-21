@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,13 +8,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
-import { Sparkles, ArrowLeft, ArrowRight, RotateCw, Check } from 'lucide-react';
+import { Sparkles, ArrowLeft, ArrowRight, RotateCw, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfigurations } from '@/hooks/useConfigurations';
 import { Proposal } from '../types/Proposal';
 import LivePreview from './LivePreview';
-import { generateProposalDraft } from '../services/aiClient';
-import TerminalLoader, { type TerminalStep } from './TerminalLoader';
+import { generateProposalDraft, type DraftProgressEvent } from '../services/aiClient';
+import TerminalLoader, { type TerminalLine } from './TerminalLoader';
 
 interface NewProposalWizardProps {
   open: boolean;
@@ -24,44 +24,84 @@ interface NewProposalWizardProps {
 
 type Step = 1 | 2 | 3;
 
-function buildSteps(args: {
-  clientName: string;
-  website?: string;
-  budget?: string;
-  deadline?: string;
-}): TerminalStep[] {
+// Build the terminal log from a list of real progress events. Each event
+// either appends a new line or flips the previous 'active' line to
+// 'done' or 'failed'. No fake timers — what you see is what's happening.
+function linesFromEvents(
+  events: DraftProgressEvent[],
+  args: { clientName: string; website?: string; budget?: string; deadline?: string }
+): TerminalLine[] {
   const host = (args.website || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-  const steps: TerminalStep[] = [
+  const lines: TerminalLine[] = [
     {
       kind: 'cmd',
+      state: 'done',
       text: `activeset-ai draft --client "${args.clientName}"${args.website ? ` --site ${host}` : ''}${args.budget ? ` --budget "${args.budget}"` : ''}${args.deadline ? ` --deadline ${args.deadline}` : ''}`,
-      delay: 250,
     },
-    { kind: 'info', text: `connecting to ollama @ 127.0.0.1:11434 · model gemma4:e4b`, delay: 600 },
-    { kind: 'ok', text: `connected · context window 8192`, delay: 500 },
+    { kind: 'info', state: 'done', text: `connecting to ollama · model gemma4:e4b` },
   ];
 
-  if (args.website) {
-    steps.push(
-      { kind: 'task', text: `fetching ${host} ...`, delay: 500 },
-      { kind: 'ok', text: `site fetched · parsing title · meta · H1 · H2 · body`, delay: 1600 }
-    );
-  } else {
-    steps.push({ kind: 'info', text: `no website provided · skipping context fetch`, delay: 400 });
+  for (const ev of events) {
+    switch (ev.stage) {
+      case 'fetch-site':
+        lines.push({ kind: 'task', state: 'active', text: `fetching ${host} for context ...` });
+        break;
+      case 'site-fetched':
+        markLast(lines, ev.detail === 'ok' ? 'done' : 'failed');
+        if (ev.detail !== 'ok') {
+          lines.push({ kind: 'warn', state: 'done', text: `site fetch failed · continuing without context` });
+        }
+        break;
+      case 'site-skipped':
+        lines.push({ kind: 'info', state: 'done', text: `no website provided · skipping context fetch` });
+        break;
+      case 'basics-start':
+        lines.push({
+          kind: 'task',
+          state: 'active',
+          text: `basics · client description · services · deliverable · overview ...`,
+        });
+        break;
+      case 'basics-done':
+        markLast(lines, 'done');
+        break;
+      case 'basics-failed':
+        markLast(lines, 'failed');
+        lines.push({ kind: 'warn', state: 'failed', text: ev.detail || 'basics failed' });
+        break;
+      case 'pricing-start':
+        lines.push({ kind: 'task', state: 'active', text: `pricing · distributing budget across phases ...` });
+        break;
+      case 'pricing-done':
+        markLast(lines, 'done');
+        break;
+      case 'pricing-failed':
+        markLast(lines, 'failed');
+        lines.push({ kind: 'warn', state: 'done', text: `pricing failed · you can regenerate it in the editor` });
+        break;
+      case 'timeline-start':
+        lines.push({ kind: 'task', state: 'active', text: `timeline · scheduling phases from today → deadline ...` });
+        break;
+      case 'timeline-done':
+        markLast(lines, 'done');
+        break;
+      case 'timeline-failed':
+        markLast(lines, 'failed');
+        lines.push({ kind: 'warn', state: 'done', text: `timeline failed · you can regenerate it in the editor` });
+        break;
+    }
   }
 
-  steps.push(
-    { kind: 'task', text: `analyzing brief · extracting intents ...`, delay: 1400 },
-    { kind: 'ok', text: `extracted: industry hints · scope · tone`, delay: 1100 },
-    { kind: 'task', text: `generating client description ...`, delay: 1200 },
-    { kind: 'task', text: `selecting services from 8 candidates ...`, delay: 1300 },
-    { kind: 'task', text: `picking about-us template ...`, delay: 1200 },
-    { kind: 'task', text: `distributing budget across phases ...`, delay: 1500 },
-    { kind: 'task', text: `calculating timeline · start → deadline ...`, delay: 1500 },
-    { kind: 'task', text: `composing overview paragraphs ...`, delay: 1400 }
-  );
+  return lines;
+}
 
-  return steps;
+function markLast(lines: TerminalLine[], state: 'done' | 'failed') {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].state === 'active') {
+      lines[i] = { ...lines[i], state };
+      return;
+    }
+  }
 }
 
 const BLANK_PROPOSAL = (): Proposal => ({
@@ -99,6 +139,8 @@ export default function NewProposalWizard({ open, onOpenChange, onCreate }: NewP
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState<Proposal | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [progressEvents, setProgressEvents] = useState<DraftProgressEvent[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
   const selectedAgency = agencies.find((a) => a.id === agencyId) || agencies[0];
   const agencyName = selectedAgency?.name || 'ActiveSet';
@@ -124,30 +166,50 @@ export default function NewProposalWizard({ open, onOpenChange, onCreate }: NewP
   const generate = async () => {
     setGenerating(true);
     setAiError(null);
+    setProgressEvents([]);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const data = await generateProposalDraft({
-        meetingNotes,
-        clientName,
-        agencyName,
-        clientWebsite,
-        projectDeadline,
-        projectBudget,
-      });
-      setDraft(buildProposalFromAI(data as Record<string, unknown>, {
-        clientName,
-        agencyName,
-        agencyEmail: selectedAgency?.email || '',
-        serviceSnippets,
-        aboutUs: aboutUs.map((a) => ({ id: a.id, text: a.text })),
-        terms: terms.map((t) => ({ id: t.id, text: t.text })),
-      }));
+      const data = await generateProposalDraft(
+        {
+          meetingNotes,
+          clientName,
+          agencyName,
+          clientWebsite,
+          projectDeadline,
+          projectBudget,
+        },
+        {
+          signal: controller.signal,
+          onProgress: (event) => setProgressEvents((prev) => [...prev, event]),
+        }
+      );
+      setDraft(
+        buildProposalFromAI(data as Record<string, unknown>, {
+          clientName,
+          agencyName,
+          agencyEmail: selectedAgency?.email || '',
+          serviceSnippets,
+          aboutUs: aboutUs.map((a) => ({ id: a.id, text: a.text })),
+          terms: terms.map((t) => ({ id: t.id, text: t.text })),
+        })
+      );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to generate proposal';
-      setAiError(msg);
-      toast.error(msg);
+      if (controller.signal.aborted) {
+        setAiError('Cancelled');
+      } else {
+        const msg = err instanceof Error ? err.message : 'Failed to generate proposal';
+        setAiError(msg);
+        toast.error(msg);
+      }
     } finally {
       setGenerating(false);
+      abortRef.current = null;
     }
+  };
+
+  const cancelGeneration = () => {
+    abortRef.current?.abort(new DOMException('Cancelled by user', 'AbortError'));
   };
 
   const handleNext = async () => {
@@ -284,17 +346,23 @@ export default function NewProposalWizard({ open, onOpenChange, onCreate }: NewP
           {step === 3 && (
             <div className="space-y-3">
               {generating && (
-                <TerminalLoader
-                  active={generating}
-                  title={`activeset.ai — draft · ${clientName || 'proposal'}`}
-                  loopLabel="Composing proposal draft"
-                  steps={buildSteps({
-                    clientName: clientName || 'client',
-                    website: clientWebsite,
-                    budget: projectBudget,
-                    deadline: projectDeadline,
-                  })}
-                />
+                <div className="space-y-2">
+                  <TerminalLoader
+                    active={generating}
+                    title={`activeset.ai — draft · ${clientName || 'proposal'}`}
+                    lines={linesFromEvents(progressEvents, {
+                      clientName: clientName || 'client',
+                      website: clientWebsite,
+                      budget: projectBudget,
+                      deadline: projectDeadline,
+                    })}
+                  />
+                  <div className="flex justify-end">
+                    <Button size="sm" variant="ghost" onClick={cancelGeneration}>
+                      <X className="w-3 h-3 mr-1" /> Cancel
+                    </Button>
+                  </div>
+                </div>
               )}
 
               {!generating && aiError && (
