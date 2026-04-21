@@ -1,4 +1,39 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import type { Browser, Page } from 'puppeteer-core';
+
+// Use puppeteer-core + @sparticuz/chromium in production (Vercel serverless
+// can't run the full puppeteer package — bundled Chromium exceeds function
+// limits and misses system libs). Locally, fall back to regular puppeteer so
+// `npm run dev` still works without pulling down a separate Chromium.
+const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+async function launchBrowser(): Promise<Browser> {
+    if (isServerless) {
+        const [{ default: chromium }, puppeteerCore] = await Promise.all([
+            import('@sparticuz/chromium'),
+            import('puppeteer-core'),
+        ]);
+        return puppeteerCore.default.launch({
+            args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+            defaultViewport: { width: 1280, height: 800 },
+            executablePath: await chromium.executablePath(),
+            headless: true,
+        }) as unknown as Browser;
+    }
+
+    const puppeteer = (await import('puppeteer')).default;
+    return puppeteer.launch({
+        headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process',
+        ],
+    }) as unknown as Browser;
+}
 
 export interface ScreenshotResult {
     screenshot: string; // Base64 encoded WebP
@@ -25,19 +60,8 @@ export class ScreenshotService {
     private browser: Browser | null = null;
 
     private async getBrowser(): Promise<Browser> {
-        if (!this.browser) {
-            this.browser = await puppeteer.launch({
-                headless: true,
-                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process'
-                ]
-            });
+        if (!this.browser || !this.browser.connected) {
+            this.browser = await launchBrowser();
         }
         return this.browser;
     }

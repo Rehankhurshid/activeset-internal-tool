@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import { withWorkflow } from "workflow/next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['puppeteer', 'sharp'],
+  serverExternalPackages: ['puppeteer', 'puppeteer-core', '@sparticuz/chromium', 'sharp'],
   output: 'standalone',
   images: {
     remotePatterns: [
