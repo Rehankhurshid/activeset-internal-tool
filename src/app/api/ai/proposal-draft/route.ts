@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateObject } from 'ai';
-import { proposalDraftSchema } from '@/lib/proposal-ai/schemas';
+import { proposalDraftSchema, normalizeDraft } from '@/lib/proposal-ai/schemas';
 import { fetchSiteContext, formatContextForPrompt } from '@/lib/proposal-ai/site-context';
 
 export const runtime = 'nodejs';
@@ -68,7 +68,8 @@ ${body.clientWebsite ? `Website: ${body.clientWebsite}` : ''}`;
       prompt,
       temperature: 0.3,
     });
-    return NextResponse.json({ success: true, data: object, siteContextFetched: !!ctx });
+    const normalized = normalizeDraft(object);
+    return NextResponse.json({ success: true, data: normalized, siteContextFetched: !!ctx });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[proposal-draft] generateObject failed:', message);
