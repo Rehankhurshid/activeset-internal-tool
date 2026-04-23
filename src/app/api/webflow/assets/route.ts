@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveWebflowToken } from '@/lib/webflow-token-resolver';
 
 const WEBFLOW_API_BASE = 'https://api.webflow.com/v2';
 
@@ -24,7 +25,6 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const siteId = searchParams.get('siteId');
-    const apiToken = request.headers.get('x-webflow-token');
     const folderId = searchParams.get('folderId');
     const limit = searchParams.get('limit') || '100';
     const offset = searchParams.get('offset') || '0';
@@ -34,12 +34,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing siteId parameter' }, { status: 400 });
     }
 
-    if (!apiToken) {
-      return NextResponse.json(
-        { error: 'Missing API token in x-webflow-token header' },
-        { status: 400 }
-      );
-    }
+    const resolved = await resolveWebflowToken(request);
+    if (resolved instanceof NextResponse) return resolved;
+    const { apiToken } = resolved;
 
     const assetsUrl = new URL(`${WEBFLOW_API_BASE}/sites/${siteId}/assets`);
     assetsUrl.searchParams.set('limit', limit);

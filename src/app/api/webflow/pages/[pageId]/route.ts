@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveWebflowToken } from '@/lib/webflow-token-resolver';
 
 const WEBFLOW_API_BASE = 'https://api.webflow.com/v2';
 
@@ -10,14 +11,10 @@ export async function GET(
   const { pageId } = await params;
   const { searchParams } = new URL(request.url);
   const localeId = searchParams.get('localeId');
-  const apiToken = request.headers.get('x-webflow-token');
 
-  if (!apiToken) {
-    return NextResponse.json(
-      { error: 'Missing API token in x-webflow-token header' },
-      { status: 400 }
-    );
-  }
+  const resolved = await resolveWebflowToken(request);
+  if (resolved instanceof NextResponse) return resolved;
+  const { apiToken } = resolved;
 
   try {
     const url = new URL(`${WEBFLOW_API_BASE}/pages/${pageId}`);
@@ -66,23 +63,17 @@ export async function PUT(
   { params }: { params: Promise<{ pageId: string }> }
 ) {
   const { pageId } = await params;
-  const apiToken = request.headers.get('x-webflow-token');
 
-  if (!apiToken) {
-    return NextResponse.json(
-      { error: 'Missing API token in x-webflow-token header' },
-      { status: 400 }
-    );
-  }
+  const resolved = await resolveWebflowToken(request);
+  if (resolved instanceof NextResponse) return resolved;
+  const { apiToken } = resolved;
 
   try {
     const body = await request.json();
     const { title, slug, seo, openGraph, localeId, draft, archived } = body;
 
-    // Build the update payload with only provided fields
     const updatePayload: Record<string, unknown> = {};
     if (title !== undefined) updatePayload.title = title;
-    // Slug updates are typically restricted on secondary locales or specific page types
     if (slug !== undefined) updatePayload.slug = slug;
     if (seo !== undefined) updatePayload.seo = seo;
     if (openGraph !== undefined) updatePayload.openGraph = openGraph;

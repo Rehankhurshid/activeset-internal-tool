@@ -52,8 +52,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { WebflowConfig, WebflowPageWithQC, UpdateWebflowPageSEO } from '@/types/webflow';
+import { WebflowConfig, WebflowConfigInput, WebflowPageWithQC, UpdateWebflowPageSEO } from '@/types/webflow';
 import { useWebflowPages } from '@/hooks/useWebflowPages';
+import { fetchForProject } from '@/lib/api-client';
 import { WebflowSEOHealthBadge } from './WebflowSEOHealthBadge';
 import { WebflowSEOEditor } from './WebflowSEOEditor';
 import { WebflowBulkSEOEditor } from './WebflowBulkSEOEditor';
@@ -70,7 +71,7 @@ import { SEOVariableRenderer } from './SEOVariableRenderer';
 interface WebflowPagesDashboardProps {
   projectId: string;
   webflowConfig?: WebflowConfig;
-  onSaveConfig: (config: WebflowConfig) => Promise<void>;
+  onSaveConfig: (config: WebflowConfigInput) => Promise<void>;
   onRemoveConfig: () => Promise<void>;
 }
 
@@ -104,7 +105,7 @@ export function WebflowPagesDashboard({
     bulkUpdatePagesSEO,
     generatePageSEO,
   } =
-    useWebflowPages(webflowConfig);
+    useWebflowPages(projectId, webflowConfig);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterOption>('all');
@@ -123,7 +124,7 @@ export function WebflowPagesDashboard({
 
   // Fetch pages when config is available
   useEffect(() => {
-    if (webflowConfig?.siteId && webflowConfig?.apiToken) {
+    if (webflowConfig?.siteId && webflowConfig?.hasApiToken) {
       // If selectedLocaleId changes, we refetch
       fetchPages(selectedLocaleId || undefined);
     }
@@ -268,19 +269,14 @@ export function WebflowPagesDashboard({
 
   // No config state
   const handleCopyDOM = async (pageId: string) => {
-    if (!webflowConfig?.apiToken) {
+    if (!webflowConfig?.hasApiToken) {
       toast.error("Missing API Token");
       return;
     }
 
     setCopyingPageId(pageId);
     try {
-      // Use existing API route
-      const response = await fetch(`/api/webflow/pages/${pageId}/content`, {
-        headers: {
-          'x-webflow-token': webflowConfig.apiToken,
-        },
-      });
+      const response = await fetchForProject(projectId, `/api/webflow/pages/${pageId}/content`);
 
       if (!response.ok) {
         throw new Error("Failed to fetch page content");
@@ -750,10 +746,13 @@ export function WebflowPagesDashboard({
             forceMount
             className="mt-0 data-[state=inactive]:hidden"
           >
-            <WebflowAssetsDashboard
-              webflowConfig={webflowConfig}
-              pages={pages}
-            />
+            {webflowConfig && (
+              <WebflowAssetsDashboard
+                projectId={projectId}
+                webflowConfig={webflowConfig}
+                pages={pages}
+              />
+            )}
           </TabsContent>
 
           <TabsContent
@@ -762,7 +761,7 @@ export function WebflowPagesDashboard({
             className="mt-0 data-[state=inactive]:hidden"
           >
             {webflowConfig && (
-              <CmsImagesDashboard webflowConfig={webflowConfig} />
+              <CmsImagesDashboard projectId={projectId} webflowConfig={webflowConfig} />
             )}
           </TabsContent>
 
@@ -786,7 +785,8 @@ export function WebflowPagesDashboard({
       <WebflowSEOEditor
         page={selectedPage}
         locales={locales}
-        apiToken={webflowConfig?.apiToken}
+        projectId={projectId}
+        hasApiToken={Boolean(webflowConfig?.hasApiToken)}
         open={editorOpen}
         onOpenChange={setEditorOpen}
         onSave={handleSaveSEO}

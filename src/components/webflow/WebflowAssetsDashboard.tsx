@@ -28,15 +28,16 @@ import { useWebflowAssets } from '@/hooks/useWebflowAssets';
 import { WebflowConfig, WebflowPage } from '@/types/webflow';
 
 interface WebflowAssetsDashboardProps {
+  projectId: string;
   webflowConfig: WebflowConfig;
   pages: WebflowPage[];
 }
 
 type AssetFilter = 'all' | 'missing-alt' | 'has-alt';
 
-export function WebflowAssetsDashboard({ webflowConfig, pages }: WebflowAssetsDashboardProps) {
+export function WebflowAssetsDashboard({ projectId, webflowConfig, pages }: WebflowAssetsDashboardProps) {
   const { assets, folders, loading, error, fetchAssets, bulkUpdateAssets, generateAltSuggestions } =
-    useWebflowAssets(webflowConfig);
+    useWebflowAssets(projectId, webflowConfig);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [folderId, setFolderId] = useState('all');

@@ -31,13 +31,17 @@ import {
 
 import { useCmsImages } from '@/hooks/useCmsImages';
 import type { WebflowConfig, CmsCollectionSummary, CmsImageEntry } from '@/types/webflow';
+import { fetchForProject } from '@/lib/api-client';
 
 type StatusFilter = 'all' | 'missing' | 'has-alt';
 type FieldTypeFilter = 'all' | 'Image' | 'RichText';
 
 interface CmsImagesDashboardProps {
+  projectId: string;
   webflowConfig: WebflowConfig;
 }
+
+const TOKEN_PLACEHOLDER = '__WEBFLOW_TOKEN__';
 
 // ─── CLI command builders ───────────────────────────────────────────────────
 
@@ -48,7 +52,10 @@ function escapeCliArg(v: string): string {
 interface CliCommandArgs {
   siteId: string;
   siteName?: string;
-  apiToken?: string;
+  /** When true the command is built with a token placeholder that is
+   *  replaced with the real token at copy time (fetched via the reveal
+   *  endpoint). When false, no --token flag is added. */
+  includeTokenPlaceholder?: boolean;
   collectionIds?: string[];
   missingOnly?: boolean;
   csvPath?: string;
@@ -64,7 +71,7 @@ interface CliActions {
 
 function buildContextualCommand(args: CliCommandArgs, actions: CliActions, fields?: string[]): string {
   const parts = [`npx @activeset/cms-alt run --site ${args.siteId}`];
-  if (args.apiToken) parts.push(`--token ${args.apiToken}`);
+  if (args.includeTokenPlaceholder) parts.push(`--token ${TOKEN_PLACEHOLDER}`);
   if (args.collectionIds && args.collectionIds.length > 0) {
     parts.push(`--collections ${args.collectionIds.join(',')}`);
   }
@@ -426,6 +433,8 @@ interface ActiveRun {
 function ContextualCliBar({
   command,
   displayCommand,
+  projectId,
+  needsToken,
   disabled,
   actions,
   onActionsChange,
@@ -435,6 +444,8 @@ function ContextualCliBar({
 }: {
   command: string;
   displayCommand?: string;
+  projectId: string;
+  needsToken: boolean;
   disabled?: boolean;
   actions: CliActions;
   onActionsChange: (next: CliActions) => void;
@@ -458,6 +469,33 @@ function ContextualCliBar({
     if (disabled || copying) return;
     setCopying(true);
     try {
+      // Fetch the Webflow API token on-demand. We never keep the token in
+      // memory beyond the moment of copy, and we never render it.
+      let resolvedCommand = command;
+      if (needsToken) {
+        try {
+          const tokenRes = await fetchForProject(projectId, '/api/webflow/config/reveal-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId }),
+          });
+          if (!tokenRes.ok) {
+            const err = await tokenRes.json().catch(() => ({}));
+            toast.error(err.error || 'Unable to read Webflow token');
+            return;
+          }
+          const { apiToken } = (await tokenRes.json()) as { apiToken?: string };
+          if (!apiToken) {
+            toast.error('No Webflow API token is configured');
+            return;
+          }
+          resolvedCommand = command.split(TOKEN_PLACEHOLDER).join(apiToken);
+        } catch {
+          toast.error('Unable to read Webflow token');
+          return;
+        }
+      }
+
       // Provision a real run so the CLI can stream events back to this page.
       let runSuffix = '';
       let newRun: ActiveRun | null = null;
@@ -480,7 +518,7 @@ function ContextualCliBar({
           toast.warning('Live terminal unavailable — command still copied');
         }
       }
-      const finalCommand = command + runSuffix;
+      const finalCommand = resolvedCommand + runSuffix;
       await navigator.clipboard.writeText(finalCommand);
       setCopied(true);
       if (newRun) setActiveRun(newRun);
@@ -590,7 +628,7 @@ function ContextualCliBar({
 
 const DEFAULT_ACTIONS: CliActions = { ai: true, compress: true, publish: false, cleanup: false };
 
-export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
+export function CmsImagesDashboard({ projectId, webflowConfig }: CmsImagesDashboardProps) {
   const {
     collections,
     discoveryLoading,
@@ -607,7 +645,7 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
     error,
     clearError,
     reset,
-  } = useCmsImages(webflowConfig);
+  } = useCmsImages(projectId, webflowConfig);
 
   // Local UI state
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(new Set());
@@ -725,7 +763,7 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
   const cliArgs: CliCommandArgs = {
     siteId: webflowConfig.siteId,
     siteName: webflowConfig.siteName,
-    apiToken: webflowConfig.apiToken,
+    includeTokenPlaceholder: Boolean(webflowConfig.hasApiToken),
     collectionIds: cliCollectionIds,
     missingOnly: statusFilter === 'missing',
   };
@@ -744,8 +782,8 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
   }, [selectedFields, filteredImages, images]);
 
   const cliCommand = buildContextualCommand(cliArgs, actions, cliFields);
-  const cliDisplayCommand = webflowConfig.apiToken
-    ? cliCommand.replace(`--token ${webflowConfig.apiToken}`, '--token ••••••••')
+  const cliDisplayCommand = cliArgs.includeTokenPlaceholder
+    ? cliCommand.replace(`--token ${TOKEN_PLACEHOLDER}`, '--token ••••••••')
     : cliCommand;
   const cliDisabled = !cliArgs.collectionIds || cliArgs.collectionIds.length === 0;
 
@@ -845,7 +883,9 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
       <div className="space-y-4">
         <ContextualCliBar
           command={cliCommand}
-        displayCommand={cliDisplayCommand}
+          displayCommand={cliDisplayCommand}
+          projectId={projectId}
+          needsToken={Boolean(cliArgs.includeTokenPlaceholder)}
           disabled={cliDisabled}
           actions={actions}
           onActionsChange={setActions}
@@ -1064,6 +1104,8 @@ export function CmsImagesDashboard({ webflowConfig }: CmsImagesDashboardProps) {
       <ContextualCliBar
         command={cliCommand}
         displayCommand={cliDisplayCommand}
+        projectId={projectId}
+        needsToken={Boolean(cliArgs.includeTokenPlaceholder)}
         disabled={cliDisabled}
         actions={actions}
         onActionsChange={setActions}

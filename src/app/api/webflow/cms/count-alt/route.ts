@@ -5,6 +5,7 @@ import type {
 } from '@/types/webflow';
 import { getCollection, listItems } from '@/lib/cms/webflow-client';
 import { extractAllImages } from '@/lib/cms/extract';
+import { resolveWebflowToken } from '@/lib/webflow-token-resolver';
 
 /**
  * Count CMS images with/without ALT text for a single collection.
@@ -16,17 +17,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const collectionId = searchParams.get('collectionId');
-    const apiToken = request.headers.get('x-webflow-token');
 
     if (!collectionId) {
       return NextResponse.json({ error: 'Missing collectionId parameter' }, { status: 400 });
     }
-    if (!apiToken) {
-      return NextResponse.json(
-        { error: 'Missing API token in x-webflow-token header' },
-        { status: 400 }
-      );
-    }
+
+    const resolved = await resolveWebflowToken(request);
+    if (resolved instanceof NextResponse) return resolved;
+    const { apiToken } = resolved;
 
     const schema = await getCollection(collectionId, apiToken);
     const allFields: CollectionField[] = (schema.fields || []) as CollectionField[];

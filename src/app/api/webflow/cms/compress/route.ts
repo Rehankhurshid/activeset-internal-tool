@@ -3,14 +3,10 @@ import * as admin from 'firebase-admin';
 import '@/lib/firebase-admin'; // ensure admin is initialized
 import type { CmsCompressResult } from '@/types/webflow';
 import { compressBuffer, downloadImage, extFromUrl, extFromContentType } from '@/lib/cms/compress';
+import { ApiAuthError, apiAuthErrorResponse, requireProjectAccess } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const apiToken = request.headers.get('x-webflow-token');
-    if (!apiToken) {
-      return NextResponse.json({ error: 'Missing API token' }, { status: 400 });
-    }
-
     const body = await request.json();
     const { imageUrl, projectId, collectionId, itemId, fieldSlug } = body as {
       imageUrl: string;
@@ -22,6 +18,13 @@ export async function POST(request: NextRequest) {
 
     if (!imageUrl || !projectId || !collectionId || !itemId || !fieldSlug) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    try {
+      await requireProjectAccess(request, projectId);
+    } catch (err) {
+      if (err instanceof ApiAuthError) return apiAuthErrorResponse(err);
+      throw err;
     }
 
     // 1. Download

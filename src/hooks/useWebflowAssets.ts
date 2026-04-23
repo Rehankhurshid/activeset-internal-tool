@@ -9,6 +9,7 @@ import {
   WebflowPage,
   UpdateWebflowAssetInput,
 } from '@/types/webflow';
+import { fetchForProject } from '@/lib/api-client';
 
 interface UseWebflowAssetsReturn {
   assets: WebflowAsset[];
@@ -26,6 +27,7 @@ interface UseWebflowAssetsReturn {
 }
 
 export function useWebflowAssets(
+  projectId: string | undefined,
   webflowConfig: WebflowConfig | undefined
 ): UseWebflowAssetsReturn {
   const [assets, setAssets] = useState<WebflowAsset[]>([]);
@@ -33,9 +35,11 @@ export function useWebflowAssets(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isReady = Boolean(projectId && webflowConfig?.siteId && webflowConfig?.hasApiToken);
+
   const fetchAssets = useCallback(
     async (folderId?: string) => {
-      if (!webflowConfig?.siteId || !webflowConfig?.apiToken) {
+      if (!isReady || !projectId || !webflowConfig?.siteId) {
         setError('Webflow configuration is missing');
         return;
       }
@@ -51,11 +55,7 @@ export function useWebflowAssets(
           url.searchParams.set('folderId', folderId);
         }
 
-        const response = await fetch(url.toString(), {
-          headers: {
-            'x-webflow-token': webflowConfig.apiToken,
-          },
-        });
+        const response = await fetchForProject(projectId, url.toString());
 
         const result = await response.json();
 
@@ -73,23 +73,20 @@ export function useWebflowAssets(
         setLoading(false);
       }
     },
-    [webflowConfig]
+    [isReady, projectId, webflowConfig?.siteId]
   );
 
   const updateAsset = useCallback(
     async (assetId: string, updates: UpdateWebflowAssetInput): Promise<boolean> => {
-      if (!webflowConfig?.apiToken) {
+      if (!isReady || !projectId) {
         setError('Webflow configuration is missing');
         return false;
       }
 
       try {
-        const response = await fetch(`/api/webflow/assets/${assetId}`, {
+        const response = await fetchForProject(projectId, `/api/webflow/assets/${assetId}`, {
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-webflow-token': webflowConfig.apiToken,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updates),
         });
 
@@ -108,7 +105,7 @@ export function useWebflowAssets(
         return false;
       }
     },
-    [webflowConfig]
+    [isReady, projectId]
   );
 
   const bulkUpdateAssets = useCallback(

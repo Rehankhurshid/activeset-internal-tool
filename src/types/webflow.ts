@@ -110,12 +110,29 @@ export interface AISEOGeneratedData {
   reasoning?: string;
 }
 
+/**
+ * Webflow config as STORED on the project doc (client-readable).
+ *
+ * SECURITY: apiToken must never be stored here. It lives in the server-only
+ * `project_secrets/{projectId}` collection and is looked up on the server
+ * by authenticated API routes. Use `hasApiToken` to know whether a token is
+ * configured.
+ */
 export interface WebflowConfig {
   siteId: string;
-  apiToken: string;
   siteName?: string;
   customDomain?: string;
   lastSyncedAt?: string;
+  hasApiToken?: boolean;
+}
+
+/**
+ * Webflow config as submitted by the credential form. Includes the raw token
+ * which is sent ONLY to the `/api/webflow/config` writer route, never stored
+ * on the client-readable project doc.
+ */
+export interface WebflowConfigInput extends WebflowConfig {
+  apiToken: string;
 }
 
 export interface CollectionField {

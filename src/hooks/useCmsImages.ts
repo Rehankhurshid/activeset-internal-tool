@@ -10,6 +10,7 @@ import type {
   CmsCompressResult,
   CmsAltSuggestion,
 } from '@/types/webflow';
+import { fetchForProject } from '@/lib/api-client';
 
 export interface UseCmsImagesReturn {
   // Discovery
@@ -40,7 +41,7 @@ export interface UseCmsImagesReturn {
   isGenerating: boolean;
 
   // Compression
-  compressImage: (entry: CmsImageEntry, projectId: string) => Promise<CmsCompressResult | null>;
+  compressImage: (entry: CmsImageEntry) => Promise<CmsCompressResult | null>;
   compressedUrls: Record<string, string>;
   isCompressing: Set<string>;
 
@@ -55,7 +56,11 @@ export interface UseCmsImagesReturn {
   reset: () => void;
 }
 
-export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsImagesReturn {
+export function useCmsImages(
+  projectId: string | undefined,
+  webflowConfig: WebflowConfig | undefined
+): UseCmsImagesReturn {
+  const canCall = Boolean(projectId && webflowConfig?.hasApiToken);
   const [collections, setCollections] = useState<CmsCollectionSummary[]>([]);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [altScanLoading, setAltScanLoading] = useState(false);
@@ -87,7 +92,7 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
 
   // --- Discovery ---
   const discoverCollections = useCallback(async () => {
-    if (!webflowConfig?.siteId || !webflowConfig?.apiToken) {
+    if (!canCall || !projectId || !webflowConfig?.siteId) {
       setError('Webflow configuration is missing');
       return;
     }
@@ -99,9 +104,7 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
       const url = new URL('/api/webflow/cms/discover', window.location.origin);
       url.searchParams.set('siteId', webflowConfig.siteId);
 
-      const res = await fetch(url.toString(), {
-        headers: { 'x-webflow-token': webflowConfig.apiToken },
-      });
+      const res = await fetchForProject(projectId, url.toString());
       const result = await res.json();
 
       if (!res.ok || !result.success) {
@@ -115,12 +118,12 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
     } finally {
       setDiscoveryLoading(false);
     }
-  }, [webflowConfig]);
+  }, [canCall, projectId, webflowConfig?.siteId]);
 
   // --- Missing-ALT scan (counts only — no full image list) ---
   const scanAltCounts = useCallback(
     async (collectionIds?: string[]) => {
-      if (!webflowConfig?.apiToken) {
+      if (!canCall || !projectId) {
         setError('Webflow configuration is missing');
         return;
       }
@@ -160,9 +163,7 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
           try {
             const url = new URL('/api/webflow/cms/count-alt', window.location.origin);
             url.searchParams.set('collectionId', collectionId);
-            const res = await fetch(url.toString(), {
-              headers: { 'x-webflow-token': webflowConfig.apiToken! },
-            });
+            const res = await fetchForProject(projectId, url.toString());
             const result = await res.json();
             if (res.ok && result.success) {
               const scan = result.data as CmsAltScanCollectionResult;
@@ -189,12 +190,12 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
         setAltScanLoading(false);
       }
     },
-    [webflowConfig]
+    [canCall, projectId]
   );
 
   // --- Fetch images for a single collection ---
   const fetchImages = useCallback(async (collectionId: string, offset = 0) => {
-    if (!webflowConfig?.apiToken) return;
+    if (!canCall || !projectId) return;
 
     setImagesLoading(true);
     setError(null);
@@ -205,9 +206,7 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
       url.searchParams.set('offset', String(offset));
       url.searchParams.set('limit', '100');
 
-      const res = await fetch(url.toString(), {
-        headers: { 'x-webflow-token': webflowConfig.apiToken },
-      });
+      const res = await fetchForProject(projectId, url.toString());
       const result = await res.json();
 
       if (!res.ok || !result.success) {
@@ -238,11 +237,11 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
     } finally {
       setImagesLoading(false);
     }
-  }, [webflowConfig]);
+  }, [canCall, projectId]);
 
   // --- Fetch images from multiple collections ---
   const fetchAllImages = useCallback(async (collectionIds: string[]) => {
-    if (!webflowConfig?.apiToken) return;
+    if (!canCall || !projectId) return;
 
     setImagesLoading(true);
     setError(null);
@@ -262,9 +261,7 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
           url.searchParams.set('offset', String(offset));
           url.searchParams.set('limit', '100');
 
-          const res = await fetch(url.toString(), {
-            headers: { 'x-webflow-token': webflowConfig.apiToken },
-          });
+          const res = await fetchForProject(projectId, url.toString());
           const result = await res.json();
 
           if (!res.ok || !result.success) {
@@ -290,7 +287,7 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
     } finally {
       setImagesLoading(false);
     }
-  }, [webflowConfig]);
+  }, [canCall, projectId]);
 
   // --- Draft management ---
   const setDraft = useCallback((entryId: string, value: string) => {
@@ -400,20 +397,16 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
 
   // --- Compression ---
   const compressImage = useCallback(async (
-    entry: CmsImageEntry,
-    projectId: string
+    entry: CmsImageEntry
   ): Promise<CmsCompressResult | null> => {
-    if (!webflowConfig?.apiToken) return null;
+    if (!canCall || !projectId) return null;
 
     setIsCompressing(prev => new Set(prev).add(entry.id));
 
     try {
-      const res = await fetch('/api/webflow/cms/compress', {
+      const res = await fetchForProject(projectId, '/api/webflow/cms/compress', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-webflow-token': webflowConfig.apiToken,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageUrl: entry.imageUrl,
           projectId,
@@ -444,13 +437,13 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
         return next;
       });
     }
-  }, [webflowConfig]);
+  }, [canCall, projectId]);
 
   // --- Save changes ---
   const saveChanges = useCallback(async (
     entries: CmsImageEntry[]
   ): Promise<{ updated: number; failed: number }> => {
-    if (!webflowConfig?.apiToken) return { updated: 0, failed: 0 };
+    if (!canCall || !projectId) return { updated: 0, failed: 0 };
 
     setIsSaving(true);
 
@@ -473,12 +466,9 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
 
       if (updates.length === 0) return { updated: 0, failed: 0 };
 
-      const res = await fetch('/api/webflow/cms/update', {
+      const res = await fetchForProject(projectId, '/api/webflow/cms/update', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-webflow-token': webflowConfig.apiToken,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updates }),
       });
 
@@ -507,19 +497,16 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
     } finally {
       setIsSaving(false);
     }
-  }, [webflowConfig, altDrafts, compressedUrls]);
+  }, [canCall, projectId, altDrafts, compressedUrls]);
 
   // --- Publish ---
   const publishItems = useCallback(async (collectionId: string, itemIds: string[]): Promise<boolean> => {
-    if (!webflowConfig?.apiToken) return false;
+    if (!canCall || !projectId) return false;
 
     try {
-      const res = await fetch('/api/webflow/cms/publish', {
+      const res = await fetchForProject(projectId, '/api/webflow/cms/publish', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-webflow-token': webflowConfig.apiToken,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ collectionId, itemIds }),
       });
 
@@ -528,7 +515,7 @@ export function useCmsImages(webflowConfig: WebflowConfig | undefined): UseCmsIm
     } catch {
       return false;
     }
-  }, [webflowConfig]);
+  }, [canCall, projectId]);
 
   // Aggregate counts across collections that have been scanned.
   let aggTotalImages = 0;

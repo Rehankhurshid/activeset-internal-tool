@@ -18,7 +18,6 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Project, ProjectLink, ProjectStatus, ProjectTag, CreateProjectLinkInput, UpdateProjectLinkInput, AuditResult, ImageScanJob } from '@/types';
-import { WebflowConfig } from '@/types/webflow';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
 import { compactAuditResult } from '@/lib/scan-utils';
@@ -34,6 +33,25 @@ const generatePublicShareToken = (): string => {
 
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
 };
+
+/**
+ * Belt-and-braces: scrub any legacy apiToken that predates the server-side
+ * secrets collection. Newly written docs never include it, but old projects
+ * may still carry one on `webflowConfig.apiToken`. Always call this before
+ * returning a project to the client.
+ */
+function sanitizeProjectData<T extends Record<string, unknown>>(data: T): T {
+  const cfg = (data as { webflowConfig?: Record<string, unknown> }).webflowConfig;
+  if (cfg && typeof cfg === 'object' && 'apiToken' in cfg) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { apiToken, ...rest } = cfg as { apiToken?: unknown };
+    (data as { webflowConfig?: Record<string, unknown> }).webflowConfig = {
+      ...rest,
+      hasApiToken: Boolean(apiToken),
+    };
+  }
+  return data;
+}
 
 /** Recursively strip undefined values from objects/arrays — Firestore rejects them. */
 function stripUndefined<T>(obj: T): T {
@@ -176,7 +194,7 @@ export const projectsService = {
   async getAllProjects(): Promise<Project[]> {
     try {
       const querySnapshot = await getDocs(collection(db, PROJECTS_COLLECTION));
-      const projects = querySnapshot.docs.map(d => ({
+      const projects = querySnapshot.docs.map(d => sanitizeProjectData({
         id: d.id,
         ...d.data(),
         createdAt: d.data().createdAt.toDate(),
@@ -204,7 +222,7 @@ export const projectsService = {
         where('userId', '==', userId)
       );
       const querySnapshot = await getDocs(q);
-      const projects = querySnapshot.docs.map(d => ({
+      const projects = querySnapshot.docs.map(d => sanitizeProjectData({
         id: d.id,
         ...d.data(),
         createdAt: d.data().createdAt.toDate(),
@@ -231,12 +249,12 @@ export const projectsService = {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      const project = {
+      const project = sanitizeProjectData({
         id: docSnap.id,
         ...data,
         createdAt: data.createdAt.toDate(),
         updatedAt: data.updatedAt.toDate(),
-      } as Project;
+      }) as Project;
       // Merge audit results from subcollection
       project.links = await mergeAuditResults(projectId, project.links);
       return project;
@@ -518,7 +536,7 @@ export const projectsService = {
     );
 
     return onSnapshot(q, async (snapshot) => {
-      const projects = snapshot.docs.map(d => ({
+      const projects = snapshot.docs.map(d => sanitizeProjectData({
         id: d.id,
         ...d.data(),
         createdAt: d.data().createdAt.toDate(),
@@ -543,12 +561,12 @@ export const projectsService = {
     return onSnapshot(q, async (snapshot) => {
       const projects = snapshot.docs.map(d => {
         const data = d.data();
-        return {
+        return sanitizeProjectData({
           id: d.id,
           ...data,
           createdAt: data.createdAt.toDate(),
           updatedAt: data.updatedAt.toDate(),
-        } as Project;
+        }) as Project;
       });
 
       // Merge audit results from subcollections
@@ -570,12 +588,12 @@ export const projectsService = {
     return onSnapshot(docRef, async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const project: Project = {
+        const project: Project = sanitizeProjectData({
           id: docSnap.id,
           ...data,
           createdAt: data.createdAt.toDate(),
           updatedAt: data.updatedAt.toDate(),
-        } as Project;
+        }) as Project;
         // Merge audit results from subcollection
         project.links = await mergeAuditResults(projectId, project.links);
         callback(project);
@@ -585,33 +603,11 @@ export const projectsService = {
     });
   },
 
-  // Update Webflow configuration for a project
-  async updateWebflowConfig(projectId: string, config: WebflowConfig): Promise<void> {
-    try {
-      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
-      await updateDoc(projectRef, {
-        webflowConfig: config,
-        updatedAt: Timestamp.now(),
-      });
-    } catch (error) {
-      logError(error, 'updateWebflowConfig');
-      throw new DatabaseError('Failed to update Webflow configuration');
-    }
-  },
-
-  // Remove Webflow configuration from a project
-  async removeWebflowConfig(projectId: string): Promise<void> {
-    try {
-      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
-      await updateDoc(projectRef, {
-        webflowConfig: null,
-        updatedAt: Timestamp.now(),
-      });
-    } catch (error) {
-      logError(error, 'removeWebflowConfig');
-      throw new DatabaseError('Failed to remove Webflow configuration');
-    }
-  },
+  // NOTE: Webflow config writes are intentionally NOT exposed here. The token
+  // must never land on the client-readable project document. Use the
+  // authenticated `/api/webflow/config` route (see webflowConfigRepository),
+  // which stores the token in the server-only `project_secrets` collection
+  // and writes only non-secret metadata back onto the project doc.
 
   // Update folder page types for a project
   async updateProjectFolderPageTypes(projectId: string, folderPageTypes: import('@/types').FolderPageTypes): Promise<void> {

@@ -8,7 +8,8 @@ import type { Project } from '@/modules/project-links';
 import { ChecklistOverview } from '@/modules/checklists';
 import { ProjectTimelineOverview } from '@/modules/timeline';
 import { ProjectTextCheckCard, WebsiteAuditDashboardScreen } from '@/modules/site-monitoring';
-import { WebflowPagesDashboard, webflowConfigRepository, type WebflowConfig } from '@/modules/webflow';
+import { WebflowPagesDashboard, webflowConfigRepository } from '@/modules/webflow';
+import type { WebflowConfigInput } from '@/types/webflow';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -53,7 +54,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         return () => unsubscribe();
     }, [user, id]);
 
-    const hasWebflowSync = Boolean(project?.webflowConfig?.siteId && project?.webflowConfig?.apiToken);
+    const hasWebflowSync = Boolean(project?.webflowConfig?.siteId && project?.webflowConfig?.hasApiToken);
     const canSyncProject = Boolean(project?.sitemapUrl || hasWebflowSync);
     const syncButtonLabel = project?.sitemapUrl ? 'Sync Sitemap' : hasWebflowSync ? 'Sync Webflow' : 'Sync';
     const syncButtonTitle = project?.sitemapUrl
@@ -78,7 +79,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         }
     };
 
-    const handleSaveWebflowConfig = async (config: WebflowConfig) => {
+    const handleSaveWebflowConfig = async (config: WebflowConfigInput) => {
         if (!project) return;
         try {
             await webflowConfigRepository.updateWebflowConfig(project.id, config);

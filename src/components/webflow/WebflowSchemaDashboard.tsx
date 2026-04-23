@@ -52,6 +52,7 @@ import {
   where as fsWhere,
 } from 'firebase/firestore';
 import { db as fsDb } from '@/lib/firebase';
+import { fetchForProject } from '@/lib/api-client';
 import type {
   SchemaAnalysisDoc,
   SchemaRecommendation,
@@ -69,10 +70,12 @@ function escapeCliArg(v: string): string {
   return v.replace(/"/g, '\\"');
 }
 
+const TOKEN_PLACEHOLDER = '__WEBFLOW_TOKEN__';
+
 interface CliArgs {
   siteId: string;
   siteName?: string;
-  apiToken?: string;
+  includeTokenPlaceholder?: boolean;
   domain: string;
   model: string;
   concurrency: number;
@@ -81,7 +84,7 @@ interface CliArgs {
 
 function buildCommand(args: CliArgs): string {
   const parts = [`npx @activeset/schema-gen@latest generate --site ${args.siteId}`];
-  if (args.apiToken) parts.push(`--token ${args.apiToken}`);
+  if (args.includeTokenPlaceholder) parts.push(`--token ${TOKEN_PLACEHOLDER}`);
   parts.push(`--domain ${args.domain}`);
   if (args.model) parts.push(`--model ${args.model}`);
   if (args.concurrency > 1) parts.push(`--concurrency ${args.concurrency}`);
@@ -419,6 +422,8 @@ interface ActiveRun {
 
 function CliBar({
   command,
+  projectId,
+  needsToken,
   disabled,
   model,
   onModelChange,
@@ -431,6 +436,8 @@ function CliBar({
   startPayload,
 }: {
   command: string;
+  projectId: string;
+  needsToken: boolean;
   disabled?: boolean;
   model: string;
   onModelChange: (v: string) => void;
@@ -458,6 +465,31 @@ function CliBar({
     if (disabled || copying) return;
     setCopying(true);
     try {
+      let resolvedCommand = command;
+      if (needsToken) {
+        try {
+          const tokenRes = await fetchForProject(projectId, '/api/webflow/config/reveal-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId }),
+          });
+          if (!tokenRes.ok) {
+            const err = await tokenRes.json().catch(() => ({}));
+            toast.error(err.error || 'Unable to read Webflow token');
+            return;
+          }
+          const { apiToken } = (await tokenRes.json()) as { apiToken?: string };
+          if (!apiToken) {
+            toast.error('No Webflow API token is configured');
+            return;
+          }
+          resolvedCommand = command.split(TOKEN_PLACEHOLDER).join(apiToken);
+        } catch {
+          toast.error('Unable to read Webflow token');
+          return;
+        }
+      }
+
       let runSuffix = '';
       let newRun: ActiveRun | null = null;
       if (startPayload) {
@@ -482,7 +514,7 @@ function CliBar({
           toast.warning('Live terminal unavailable — command still copied');
         }
       }
-      const finalCommand = command + runSuffix;
+      const finalCommand = resolvedCommand + runSuffix;
       await navigator.clipboard.writeText(finalCommand);
       setCopied(true);
       if (newRun) setActiveRun(newRun);
@@ -533,7 +565,9 @@ function CliBar({
       </div>
       <div className="flex items-center gap-2">
         <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap rounded bg-muted px-2.5 py-1.5 font-mono text-[11px]">
-          {disabled ? '— need siteId + custom domain to build command —' : command}
+          {disabled
+            ? '— need siteId + custom domain to build command —'
+            : command.split(TOKEN_PLACEHOLDER).join('••••••••')}
         </code>
         <Button
           variant="ghost"
@@ -811,7 +845,7 @@ export function WebflowSchemaDashboard({
     ? buildCommand({
         siteId: webflowConfig.siteId,
         siteName: webflowConfig.siteName,
-        apiToken: webflowConfig.apiToken,
+        includeTokenPlaceholder: Boolean(webflowConfig.hasApiToken),
         domain: webflowConfig.customDomain ?? '',
         model,
         concurrency,
@@ -954,6 +988,8 @@ export function WebflowSchemaDashboard({
 
           <CliBar
             command={command}
+            projectId={projectId}
+            needsToken={Boolean(webflowConfig.hasApiToken)}
             disabled={!canBuild}
             model={model}
             onModelChange={setModel}

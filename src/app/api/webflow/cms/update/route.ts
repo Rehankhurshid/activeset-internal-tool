@@ -2,16 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { CmsUpdatePayload } from '@/types/webflow';
 import { patchItems } from '@/lib/cms/webflow-client';
 import { groupUpdatesByItem } from '@/lib/cms/patch';
+import { resolveWebflowToken } from '@/lib/webflow-token-resolver';
 
 export async function PATCH(request: NextRequest) {
   try {
-    const apiToken = request.headers.get('x-webflow-token');
-    if (!apiToken) {
-      return NextResponse.json(
-        { error: 'Missing API token in x-webflow-token header' },
-        { status: 400 }
-      );
-    }
+    const resolved = await resolveWebflowToken(request);
+    if (resolved instanceof NextResponse) return resolved;
+    const { apiToken } = resolved;
 
     const body = await request.json();
     const updates: CmsUpdatePayload[] = body.updates;

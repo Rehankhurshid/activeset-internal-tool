@@ -36,6 +36,7 @@ import {
 } from '@/types/webflow';
 import { cn } from '@/lib/utils';
 import { formatForDisplay } from '@/lib/webflow-utils';
+import { fetchForProject } from '@/lib/api-client';
 import {
   Select,
   SelectContent,
@@ -49,7 +50,8 @@ import {
 interface WebflowSEOEditorProps {
   page: WebflowPageWithQC | null;
   locales: WebflowLocale[];
-  apiToken?: string;
+  projectId: string;
+  hasApiToken: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (pageId: string, updates: UpdateWebflowPageSEO) => Promise<boolean>;
@@ -87,7 +89,8 @@ function CharCount({
 export function WebflowSEOEditor({
   page,
   locales,
-  apiToken,
+  projectId,
+  hasApiToken,
   open,
   onOpenChange,
   onSave,
@@ -184,7 +187,7 @@ export function WebflowSEOEditor({
         return;
       }
 
-      if (!apiToken) {
+      if (!hasApiToken) {
         setError("Missing API Token available to fetch localized data.");
         return;
       }
@@ -199,11 +202,7 @@ export function WebflowSEOEditor({
           url.searchParams.set('localeId', selectedLocaleId);
         }
 
-        const response = await fetch(url.toString(), {
-          headers: {
-            'x-webflow-token': apiToken,
-          },
-        });
+        const response = await fetchForProject(projectId, url.toString());
 
         const result = await response.json();
 
@@ -229,7 +228,7 @@ export function WebflowSEOEditor({
     return () => {
       active = false;
     };
-  }, [selectedLocaleId, page, open, apiToken, updateFormFields]);
+  }, [selectedLocaleId, page, open, hasApiToken, projectId, updateFormFields, fetchingLocale]);
 
   // Check if this is an index/home page (slug is empty or home)
   const isIndexPage = !slug || slug === '' || slug === 'home';
@@ -260,18 +259,14 @@ export function WebflowSEOEditor({
 
   // Fetch CMS Fields if it's a CMS page
   useEffect(() => {
-    if (!page?.collectionId || !open || !apiToken) return;
+    if (!page?.collectionId || !open || !hasApiToken) return;
 
     const fetchFields = async () => {
       setLoadingFields(true);
       try {
-        const res = await fetch(`/api/webflow/collections/${page.collectionId}`, {
-          headers: { 'x-webflow-token': apiToken }
-        });
+        const res = await fetchForProject(projectId, `/api/webflow/collections/${page.collectionId}`);
         const json = await res.json();
         if (json.success && json.data.fields) {
-          // Filter for text-compatible fields
-          // valid types: PlainText, RichText, Number, Email, Phone, Link, Color, Option, Date
           const compatibleTypes = ['PlainText', 'RichText', 'Number', 'Email', 'Phone', 'Color', 'Option', 'DateTime'];
           const fields = json.data.fields.filter((f: CollectionField) => compatibleTypes.includes(f.type));
           setCollectionFields(fields);
@@ -283,7 +278,7 @@ export function WebflowSEOEditor({
       }
     };
     fetchFields();
-  }, [page?.collectionId, open, apiToken]);
+  }, [page?.collectionId, open, hasApiToken, projectId]);
 
 
   const insertVariable = (fieldSlug: string, target: 'seoTitle' | 'seoDescription') => {

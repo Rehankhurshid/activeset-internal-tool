@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveWebflowToken } from '@/lib/webflow-token-resolver';
 
 const WEBFLOW_API_BASE = 'https://api.webflow.com/v2';
 
@@ -18,14 +19,10 @@ export async function PATCH(
   { params }: { params: Promise<{ assetId: string }> }
 ) {
   const { assetId } = await params;
-  const apiToken = request.headers.get('x-webflow-token');
 
-  if (!apiToken) {
-    return NextResponse.json(
-      { error: 'Missing API token in x-webflow-token header' },
-      { status: 400 }
-    );
-  }
+  const resolved = await resolveWebflowToken(request);
+  if (resolved instanceof NextResponse) return resolved;
+  const { apiToken } = resolved;
 
   try {
     const body = await request.json();

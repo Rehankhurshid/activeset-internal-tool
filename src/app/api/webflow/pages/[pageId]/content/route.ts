@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveWebflowToken } from '@/lib/webflow-token-resolver';
 
 const WEBFLOW_API_BASE = 'https://api.webflow.com/v2';
 
@@ -8,14 +9,10 @@ export async function GET(
     { params }: { params: Promise<{ pageId: string }> }
 ) {
     const { pageId } = await params;
-    const apiToken = request.headers.get('x-webflow-token');
 
-    if (!apiToken) {
-        return NextResponse.json(
-            { error: 'Missing API token in x-webflow-token header' },
-            { status: 400 }
-        );
-    }
+    const resolved = await resolveWebflowToken(request);
+    if (resolved instanceof NextResponse) return resolved;
+    const { apiToken } = resolved;
 
     try {
         const response = await fetch(`${WEBFLOW_API_BASE}/pages/${pageId}/dom?limit=100`, {

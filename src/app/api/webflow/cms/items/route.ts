@@ -2,21 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { CmsImageEntry, CmsItemsResult, CollectionField } from '@/types/webflow';
 import { getCollection, listItems } from '@/lib/cms/webflow-client';
 import { extractAllImages } from '@/lib/cms/extract';
+import { resolveWebflowToken } from '@/lib/webflow-token-resolver';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const collectionId = searchParams.get('collectionId');
-    const apiToken = request.headers.get('x-webflow-token');
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     const limit = parseInt(searchParams.get('limit') || '100', 10);
 
     if (!collectionId) {
       return NextResponse.json({ error: 'Missing collectionId parameter' }, { status: 400 });
     }
-    if (!apiToken) {
-      return NextResponse.json({ error: 'Missing API token in x-webflow-token header' }, { status: 400 });
-    }
+
+    const resolved = await resolveWebflowToken(request);
+    if (resolved instanceof NextResponse) return resolved;
+    const { apiToken } = resolved;
 
     const schema = await getCollection(collectionId, apiToken);
     const allFields: CollectionField[] = (schema.fields || []) as CollectionField[];

@@ -4,6 +4,7 @@ import { projectsService } from '@/services/database';
 import { ProjectLink } from '@/types';
 import { auditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
+import { getWebflowToken } from '@/services/projectSecrets';
 
 interface SitemapEntry {
     url: string;
@@ -25,6 +26,7 @@ interface WebflowSyncData {
     typeMaps: WebflowTypeMaps;
     mergedFolderPageTypes: Record<string, 'collection' | 'static'>;
     baseUrl?: string;
+    hasApiToken?: boolean;
 }
 
 interface DomainMapping {
@@ -319,12 +321,17 @@ async function fetchWebflowSyncData(project: Awaited<ReturnType<typeof projectsS
     };
     let mergedFolderPageTypes: Record<string, 'collection' | 'static'> = { ...(project?.folderPageTypes || {}) };
 
-    if (!project?.webflowConfig?.siteId || !project.webflowConfig.apiToken) {
-        return { entries: [], typeMaps, mergedFolderPageTypes };
+    if (!project?.webflowConfig?.siteId) {
+        return { entries: [], typeMaps, mergedFolderPageTypes, hasApiToken: false };
+    }
+
+    const apiToken = await getWebflowToken(project.id);
+    if (!apiToken) {
+        return { entries: [], typeMaps, mergedFolderPageTypes, hasApiToken: false };
     }
 
     const headers = {
-        Authorization: `Bearer ${project.webflowConfig.apiToken}`,
+        Authorization: `Bearer ${apiToken}`,
         accept: 'application/json',
     };
 
@@ -410,7 +417,7 @@ async function fetchWebflowSyncData(project: Awaited<ReturnType<typeof projectsS
         ...typeMaps.folderTypeMap
     };
 
-    return { entries, typeMaps, mergedFolderPageTypes, baseUrl: baseUrl || undefined };
+    return { entries, typeMaps, mergedFolderPageTypes, baseUrl: baseUrl || undefined, hasApiToken: true };
 }
 
 /**
@@ -486,6 +493,7 @@ export async function POST(request: NextRequest) {
                     folderTypeMap: {}
                 },
                 mergedFolderPageTypes: { ...(project.folderPageTypes || {}) },
+                hasApiToken: false,
             } satisfies WebflowSyncData;
         });
 
@@ -701,7 +709,7 @@ export async function POST(request: NextRequest) {
         // Persist auto-derived folder mapping from Webflow categories when Webflow is configured
         if (
             project.webflowConfig?.siteId &&
-            project.webflowConfig?.apiToken &&
+            webflowSyncData.hasApiToken &&
             Object.keys(webflowTypeMaps.folderTypeMap).length > 0
         ) {
             await projectsService.updateProjectFolderPageTypes(projectId, mergedFolderPageTypes);

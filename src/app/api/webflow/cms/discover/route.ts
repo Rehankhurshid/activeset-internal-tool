@@ -6,6 +6,7 @@ import {
   listCollections,
   getCollection,
 } from '@/lib/cms/webflow-client';
+import { resolveWebflowToken } from '@/lib/webflow-token-resolver';
 
 const IMAGE_FIELD_TYPES = new Set(['Image', 'MultiImage']);
 const RICHTEXT_FIELD_TYPES = new Set(['RichText']);
@@ -14,17 +15,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const siteId = searchParams.get('siteId');
-    const apiToken = request.headers.get('x-webflow-token');
 
     if (!siteId) {
       return NextResponse.json({ error: 'Missing siteId parameter' }, { status: 400 });
     }
-    if (!apiToken) {
-      return NextResponse.json(
-        { error: 'Missing API token in x-webflow-token header' },
-        { status: 400 }
-      );
-    }
+
+    const resolved = await resolveWebflowToken(request);
+    if (resolved instanceof NextResponse) return resolved;
+    const { apiToken } = resolved;
 
     const collections = await listCollections(siteId, apiToken);
     const summaries: CmsCollectionSummary[] = [];

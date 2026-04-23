@@ -15,11 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, CheckCircle2, XCircle, Settings, ExternalLink } from 'lucide-react';
-import { WebflowConfig } from '@/types/webflow';
+import { WebflowConfig, WebflowConfigInput } from '@/types/webflow';
 
 interface WebflowCredentialsDialogProps {
   currentConfig?: WebflowConfig;
-  onSave: (config: WebflowConfig) => Promise<void>;
+  onSave: (config: WebflowConfigInput) => Promise<void>;
   onRemove?: () => Promise<void>;
   trigger?: React.ReactNode;
 }
@@ -34,7 +34,7 @@ export function WebflowCredentialsDialog({
 }: WebflowCredentialsDialogProps) {
   const [open, setOpen] = useState(false);
   const [siteId, setSiteId] = useState(currentConfig?.siteId || '');
-  const [apiToken, setApiToken] = useState(currentConfig?.apiToken || '');
+  const [apiToken, setApiToken] = useState('');
   const [siteName, setSiteName] = useState(currentConfig?.siteName || '');
   const [customDomain, setCustomDomain] = useState(currentConfig?.customDomain || '');
   const [validationState, setValidationState] = useState<ValidationState>('idle');
