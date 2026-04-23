@@ -102,6 +102,9 @@ function initAdmin() {
   if (!sa) {
     throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is set but could not be parsed.');
   }
+  if (!sa.privateKey) {
+    throw new Error('parsed service account is missing privateKey');
+  }
   admin.initializeApp({
     credential: admin.credential.cert({
       ...sa,

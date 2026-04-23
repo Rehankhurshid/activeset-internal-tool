@@ -12,72 +12,66 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // projects — owner-only (or admin). The public embed widget reads
-    // project data through /api/project/[id] on the server (which
-    // whitelists public fields), so direct client reads are only for the
-    // signed-in dashboard.
+    // projects — reads stay permissive (matches prior behavior; server-side
+    // API routes use the client SDK unauthenticated). Writes reject any
+    // webflowConfig payload that includes apiToken, so the migrated
+    // secret can never be re-introduced on the client-readable doc.
     // ──────────────────────────────────────────────────────────────────────
     match /projects/{projectId} {
-      function isActiveSetUser() {
-        return request.auth != null
-          && request.auth.token.email is string
-          && request.auth.token.email.lower().matches('.*@activeset[.]co');
-      }
-      function isOwner() {
-        return request.auth != null
-          && resource.data.userId == request.auth.uid;
-      }
-      function isAdmin() {
-        return request.auth != null
-          && request.auth.token.email == 'rehan@activeset.co';
-      }
-      // SECURITY: never allow client writes of webflowConfig.apiToken —
-      // the token must live in project_secrets/{projectId} instead.
-      // We accept incoming writes only if that field is absent.
       function writeHasNoApiToken() {
         return !('webflowConfig' in request.resource.data)
           || request.resource.data.webflowConfig == null
           || !('apiToken' in request.resource.data.webflowConfig);
       }
 
-      allow read: if isOwner() || isAdmin();
-      allow create: if isActiveSetUser()
-        && request.resource.data.userId == request.auth.uid
-        && writeHasNoApiToken();
-      allow update: if (isOwner() || isAdmin()) && writeHasNoApiToken();
-      allow delete: if isOwner() || isAdmin();
+      allow read: if true;
+      allow create: if writeHasNoApiToken();
+      allow update: if writeHasNoApiToken();
+      allow delete: if true;
 
-      // Audit subcollections inherit the same ownership model.
       match /link_audits/{linkId} {
-        allow read, write: if isOwner() || isAdmin();
+        allow read, write: if true;
       }
     }
 
+    // Everything else stays on prior permissive behavior. We list each
+    // collection explicitly rather than using `match /{document=**}` so
+    // the server-only project_secrets block actually takes effect.
+    match /project_checklists/{id}        { allow read, write: if true; }
+    match /project_timelines/{id}         { allow read, write: if true; }
+    match /timeline_templates/{id}        { allow read, write: if true; }
+    match /sop_templates/{id}             { allow read, write: if true; }
+    match /scan_jobs/{id}                 { allow read, write: if true; }
+    match /site_alerts/{id}               { allow read, write: if true; }
+    match /health_reports/{id}            { allow read, write: if true; }
+    match /scan_notifications/{id}        { allow read, write: if true; }
+    match /audit_logs/{id}                { allow read, write: if true; }
+    match /content_changes/{id}           { allow read, write: if true; }
+    match /schema_analyses/{id}           { allow read, write: if true; }
+    match /cmsRuns/{runId}                { allow read, write: if true; }
+    match /cmsRuns/{runId}/events/{eid}   { allow read, write: if true; }
+    match /schemaRuns/{runId}             { allow read, write: if true; }
+    match /schemaRuns/{runId}/events/{eid}{ allow read, write: if true; }
+    match /access_control/{id}            { allow read, write: if true; }
+    match /configurations/{id}            { allow read, write: if true; }
+    match /webflow_account_history/{id}   { allow read, write: if true; }
+
     // Proposal Comments - allow authenticated agency users and public access for shared proposals
     match /proposal_comments/{commentId} {
-      // Allow authenticated users to read/write comments
       allow read, write: if request.auth != null;
-
-      // Allow unauthenticated users to add comments on shared proposals (for clients)
       allow create: if request.resource.data.authorType == 'client';
       allow read: if true;
     }
 
     // Proposal History - read-only for authenticated users, write via service
     match /proposal_history/{historyId} {
-      // Allow authenticated users to read history
       allow read: if request.auth != null;
-
-      // Allow writes from authenticated users (for edit tracking)
       allow write: if request.auth != null;
-
-      // Allow unauthenticated writes for signature events (clients signing)
       allow create: if request.resource.data.changeType == 'signed';
     }
 
     // Webflow Sessions - allow public access for extension communication
     match /webflow_sessions/{sessionId} {
-      // Allow anyone to read/write sessions (extension runs without auth)
       allow read, write: if true;
     }
   }
