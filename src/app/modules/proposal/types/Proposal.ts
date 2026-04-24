@@ -43,6 +43,17 @@ export interface ProposalEdit {
     changes?: FieldChange[]; // Detailed list of what changed (optional for backwards compat)
 }
 
+export interface ProposalView {
+    id: string;
+    proposalId: string;
+    viewedAt: string;
+    ipHash?: string;
+    userAgent?: string;
+    referrer?: string;
+    country?: string;
+    city?: string;
+}
+
 export interface Proposal {
     id: string;
     createdBy?: {
@@ -57,6 +68,10 @@ export interface Proposal {
     status: 'draft' | 'sent' | 'approved' | 'rejected' | 'lost';
     createdAt: string;
     updatedAt: string;
+    // Public-share analytics (written by /api/proposals/[id]/view)
+    viewCount?: number;
+    firstViewedAt?: string;
+    lastViewedAt?: string;
     // Edit locking - prevents changes after signature
     isLocked?: boolean;
     lockedAt?: string;

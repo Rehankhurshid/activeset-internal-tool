@@ -12,25 +12,55 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // projects — reads stay permissive (matches prior behavior; server-side
-    // API routes use the client SDK unauthenticated). Writes reject any
-    // webflowConfig payload that includes apiToken, so the migrated
+    // projects — never publicly readable. Public widget data must go through
+    // /api/project/{id}, which allow-lists fields with firebase-admin. Writes
+    // reject any webflowConfig payload that includes apiToken, so the migrated
     // secret can never be re-introduced on the client-readable doc.
     // ──────────────────────────────────────────────────────────────────────
     match /projects/{projectId} {
+      function isAdmin() {
+        return request.auth != null
+          && request.auth.token.email == 'rehan@activeset.co';
+      }
+
+      function isOwner() {
+        return request.auth != null
+          && resource.data.userId == request.auth.uid;
+      }
+
+      function isNewOwner() {
+        return request.auth != null
+          && request.resource.data.userId == request.auth.uid;
+      }
+
+      function isProjectOwnerById() {
+        return request.auth != null
+          && get(/databases/$(database)/documents/projects/$(projectId)).data.userId == request.auth.uid;
+      }
+
+      function canAccessProject() {
+        return isAdmin() || isOwner();
+      }
+
+      function canAccessProjectById() {
+        return isAdmin() || isProjectOwnerById();
+      }
+
       function writeHasNoApiToken() {
         return !('webflowConfig' in request.resource.data)
           || request.resource.data.webflowConfig == null
           || !('apiToken' in request.resource.data.webflowConfig);
       }
 
-      allow read: if true;
-      allow create: if writeHasNoApiToken();
-      allow update: if writeHasNoApiToken();
-      allow delete: if true;
+      allow read: if canAccessProject();
+      allow create: if (isAdmin() || isNewOwner()) && writeHasNoApiToken();
+      allow update: if canAccessProject()
+        && request.resource.data.userId == resource.data.userId
+        && writeHasNoApiToken();
+      allow delete: if canAccessProject();
 
       match /link_audits/{linkId} {
-        allow read, write: if true;
+        allow read, write: if canAccessProjectById();
       }
     }
 
@@ -56,6 +86,30 @@ service cloud.firestore {
     match /configurations/{id}            { allow read, write: if true; }
     match /webflow_account_history/{id}   { allow read, write: if true; }
 
+    // Proposals - authenticated agency users only (contains pricing/internal notes)
+    match /proposals/{proposalId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Shared Proposals - public read for client-facing share URLs, writes via
+    // ProposalService (which runs authenticated on the agency side)
+    match /shared_proposals/{proposalId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Proposal Templates - authenticated agency users
+    match /templates/{templateId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Proposal Views - server-only. /api/proposals/[id]/view writes through
+    // firebase-admin; agency dashboard reads the aggregate counters off the
+    // proposal doc, not this collection. Deny direct client access.
+    match /proposal_views/{viewId} {
+      allow read, write: if false;
+    }
+
     // Proposal Comments - allow authenticated agency users and public access for shared proposals
     match /proposal_comments/{commentId} {
       allow read, write: if request.auth != null;
@@ -72,6 +126,11 @@ service cloud.firestore {
 
     // Webflow Sessions - allow public access for extension communication
     match /webflow_sessions/{sessionId} {
+      allow read, write: if true;
+    }
+
+    // Webflow Pings - teammate-to-teammate "are you still using this?" pings
+    match /webflow_pings/{pingId} {
       allow read, write: if true;
     }
   }

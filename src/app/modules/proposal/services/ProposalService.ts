@@ -106,15 +106,27 @@ class ProposalService {
                 updatedAt: new Date().toISOString(),
             };
 
-            // Save to Firestore
-            await setDoc(docRef, updatedProposal);
+            // Write only the caller-supplied fields so analytics counters
+            // (viewCount, firstViewedAt, lastViewedAt) owned by
+            // /api/proposals/[id]/view are never overwritten by a concurrent
+            // edit. id is fixed; drop it from the payload to avoid a no-op write.
+            const { id: _omitId, ...writableChanges } = proposalData;
+            void _omitId;
+            const writePayload = {
+                ...writableChanges,
+                updatedAt: updatedProposal.updatedAt,
+            };
+
+            // setDoc(..., {merge: true}) does a field-level merge and creates
+            // the shared_proposals doc if it doesn't yet exist (older proposals).
+            await setDoc(docRef, writePayload, { merge: true });
 
             // Also sync to shared_proposals for public access
             const sharedDocRef = doc(db, this.SHARED_COLLECTION, id);
             await setDoc(sharedDocRef, {
-                ...updatedProposal,
-                sharedAt: new Date().toISOString()
-            });
+                ...writePayload,
+                sharedAt: new Date().toISOString(),
+            }, { merge: true });
 
             // Record update in history (fire and forget)
             // Detect detailed field-level changes

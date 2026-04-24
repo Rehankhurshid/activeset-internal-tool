@@ -5,6 +5,7 @@ import { db as adminDb } from '@/lib/firebase-admin';
 import { db as clientDb } from '@/lib/firebase';
 import { Proposal } from '@/app/modules/proposal/types/Proposal';
 import ProposalViewer from '@/app/modules/proposal/components/ProposalViewer';
+import TrackProposalView from '@/app/modules/proposal/components/TrackProposalView';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -106,9 +107,12 @@ export default async function PublicProposalView({ params }: PageProps) {
   }
 
   return (
-    <ProposalViewer
-      proposal={proposal}
-      isPublic
-    />
+    <>
+      <TrackProposalView proposalId={proposal.id} />
+      <ProposalViewer
+        proposal={proposal}
+        isPublic
+      />
+    </>
   );
 }

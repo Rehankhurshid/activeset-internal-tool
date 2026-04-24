@@ -40,6 +40,20 @@ export default function ProposalCard({
         });
     };
 
+    const formatRelative = (dateStr: string) => {
+        const diffMs = Date.now() - new Date(dateStr).getTime();
+        const mins = Math.floor(diffMs / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        if (days < 7) return `${days}d ago`;
+        return formatDate(dateStr);
+    };
+
+    const viewCount = proposal.viewCount ?? 0;
+
     return (
         <Card className="group bg-card hover:shadow-lg transition-all duration-200 border-border/50 hover:border-border overflow-hidden">
             <CardContent className="p-4">
@@ -66,11 +80,25 @@ export default function ProposalCard({
 
                 {/* Created By */}
                 {proposal.createdBy && (
-                    <p className="text-xs text-muted-foreground/70 truncate mb-4">
+                    <p className="text-xs text-muted-foreground/70 truncate">
                         Created by {proposal.createdBy.displayName || proposal.createdBy.email}
                     </p>
                 )}
-                {!proposal.createdBy && <div className="mb-4" />}
+
+                {/* Share-link views */}
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground/80 mt-2 mb-4">
+                    <Eye className="w-3 h-3" />
+                    {viewCount === 0 ? (
+                        <span>Not viewed yet</span>
+                    ) : (
+                        <span>
+                            {viewCount} view{viewCount === 1 ? '' : 's'}
+                            {proposal.lastViewedAt && (
+                                <span className="text-muted-foreground/60"> · last {formatRelative(proposal.lastViewedAt)}</span>
+                            )}
+                        </span>
+                    )}
+                </div>
 
                 {/* Action Buttons - Always Visible */}
                 <div className="flex items-center gap-1 pt-3 border-t border-border/50">
