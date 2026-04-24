@@ -54,6 +54,16 @@ export interface ProposalView {
     city?: string;
 }
 
+export interface SignatureAudit {
+    method: 'drawn' | 'typed';
+    country?: string; // ISO-2
+    city?: string;
+    ipHash?: string;
+    userAgent?: string;
+    browser?: string;
+    os?: string;
+}
+
 export interface Proposal {
     id: string;
     createdBy?: {
@@ -99,6 +109,7 @@ export interface Proposal {
                 signatureData?: string;  // Base64 data URL of signature image
                 signedAt?: string;       // ISO timestamp when signed
                 signedDocUrl?: string;   // URL to signed PDF (DocuSeal)
+                signatureAudit?: SignatureAudit;
             };
         };
     };

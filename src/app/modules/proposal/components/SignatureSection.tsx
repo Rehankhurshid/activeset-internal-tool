@@ -7,6 +7,7 @@ import { Check, PenLine, Keyboard, Eraser } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { SignatureAudit } from '../types/Proposal';
 import '@fontsource/dancing-script';
 import '@fontsource/great-vibes';
 import '@fontsource/allura';
@@ -19,9 +20,90 @@ interface SignatureSectionProps {
     signedDocUrl?: string; // New prop for signed PDF link
     signedAt?: string;
     isPublic?: boolean;
+    signatureAudit?: SignatureAudit;
 
     // DocuSeal Props
-    onSign?: (signatureData: string) => Promise<void>;
+    onSign?: (signatureData: string, method: SignatureAudit['method']) => Promise<void>;
+}
+
+function formatLocation(audit?: SignatureAudit): string | undefined {
+    if (!audit) return undefined;
+    const parts = [audit.city, audit.country].filter(Boolean);
+    return parts.length ? parts.join(', ') : undefined;
+}
+
+function formatDevice(audit?: SignatureAudit): string | undefined {
+    if (!audit) return undefined;
+    const parts = [audit.browser, audit.os].filter(Boolean);
+    return parts.length ? parts.join(' on ') : undefined;
+}
+
+function SignatureAuditBlock({
+    signedAt,
+    clientName,
+    audit,
+}: { signedAt?: string; clientName: string; audit?: SignatureAudit }) {
+    if (!signedAt) return null;
+
+    const location = formatLocation(audit);
+    const device = formatDevice(audit);
+    const method = audit?.method === 'typed' ? 'Typed' : audit?.method === 'drawn' ? 'Drawn' : undefined;
+    const signedDate = new Date(signedAt);
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    const rows: Array<[string, string]> = [
+        ['Signed by', clientName],
+        ['Signed at', `${signedDate.toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZoneName: 'short',
+        })} (${timeZone})`],
+    ];
+    if (location) rows.push(['Location', location]);
+    if (device) rows.push(['Device', device]);
+    if (method) rows.push(['Method', method]);
+    if (audit?.ipHash) rows.push(['IP (hashed)', audit.ipHash]);
+
+    return (
+        <div style={{
+            marginTop: '16px',
+            padding: '14px 16px',
+            backgroundColor: 'white',
+            border: '1px solid #bbf7d0',
+            borderRadius: '8px',
+            maxWidth: '560px',
+        }}>
+            <p style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: '#15803d',
+                margin: '0 0 10px',
+            }}>
+                Certificate of signature
+            </p>
+            <dl style={{
+                display: 'grid',
+                gridTemplateColumns: 'auto 1fr',
+                columnGap: '16px',
+                rowGap: '4px',
+                fontSize: '12px',
+                margin: 0,
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            }}>
+                {rows.map(([label, value]) => (
+                    <div key={label} style={{ display: 'contents' }}>
+                        <dt style={{ color: '#6b7280' }}>{label}</dt>
+                        <dd style={{ color: '#111827', margin: 0, wordBreak: 'break-word' }}>{value}</dd>
+                    </div>
+                ))}
+            </dl>
+        </div>
+    );
 }
 
 const SIGNATURE_FONTS = [
@@ -38,6 +120,7 @@ export default function SignatureSection({
     signedDocUrl,
     signedAt,
     isPublic = false,
+    signatureAudit,
     onSign
 }: SignatureSectionProps) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -136,7 +219,7 @@ export default function SignatureSection({
             }
 
             if (onSign && signatureData) {
-                await onSign(signatureData);
+                await onSign(signatureData, activeTab === 'draw' ? 'drawn' : 'typed');
             }
         } catch (error) {
             console.error(error);
@@ -202,6 +285,12 @@ export default function SignatureSection({
                         />
                     </div>
                 )}
+
+                <SignatureAuditBlock
+                    signedAt={signedAt}
+                    clientName={clientName}
+                    audit={signatureAudit}
+                />
             </div>
         );
     }

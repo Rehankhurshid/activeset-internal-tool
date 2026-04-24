@@ -1231,13 +1231,27 @@ ${proposal.agencyName}`;
                 existingSignature={currentProposal.data.signatures.client.signatureData}
                 signedDocUrl={currentProposal.data.signatures.client.signedDocUrl}
                 signedAt={currentProposal.data.signatures.client.signedAt}
+                signatureAudit={currentProposal.data.signatures.client.signatureAudit}
                 isPublic={isPublic}
-                onSign={async (signatureData) => {
+                onSign={async (signatureData, method) => {
                   try {
-                    await proposalService.signProposal(currentProposal.id, signatureData);
+                    if (isPublic) {
+                      const res = await fetch(`/api/proposals/${currentProposal.id}/sign`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ signatureData, method }),
+                      });
+                      if (!res.ok) {
+                        const { error } = await res.json().catch(() => ({ error: 'Failed to save signature' }));
+                        throw new Error(error || 'Failed to save signature');
+                      }
+                    } else {
+                      await proposalService.signProposal(currentProposal.id, signatureData);
+                    }
                     alert('Proposal signed successfully!');
-                    // Refresh proposal data
-                    const updated = await proposalService.getProposalById(currentProposal.id);
+                    const updated = isPublic
+                      ? await proposalService.getSharedProposal(currentProposal.id)
+                      : await proposalService.getProposalById(currentProposal.id);
                     if (updated) setCurrentProposal(updated);
                   } catch (error) {
                     console.error('Error signing proposal:', error);
