@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Proposal } from "../types/Proposal";
 import { getStatusColor } from "../utils/proposalUtils";
+import ProposalViewsPopover from "./ProposalViewsPopover";
 
 interface ProposalCardProps {
     proposal: Proposal;
@@ -86,25 +87,27 @@ export default function ProposalCard({
                 )}
 
                 {/* Share-link views */}
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground/80 mt-2 mb-4">
-                    <Eye className="w-3 h-3" />
-                    {viewCount === 0 ? (
-                        <span>Not viewed yet</span>
-                    ) : (
-                        <span className="truncate">
-                            {viewCount} view{viewCount === 1 ? '' : 's'}
-                            {proposal.lastViewedAt && (
-                                <span className="text-muted-foreground/60"> · last {formatRelative(proposal.lastViewedAt)}</span>
-                            )}
-                            {(proposal.lastViewCity || proposal.lastViewCountry) && (
-                                <span className="text-muted-foreground/60">
-                                    {' from '}
-                                    {[proposal.lastViewCity, proposal.lastViewCountry].filter(Boolean).join(', ')}
-                                </span>
-                            )}
-                        </span>
-                    )}
-                </div>
+                <ProposalViewsPopover proposalId={proposal.id} viewCount={viewCount}>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground/80 mt-2 mb-4">
+                        <Eye className="w-3 h-3" />
+                        {viewCount === 0 ? (
+                            <span>Not viewed yet</span>
+                        ) : (
+                            <span className="truncate">
+                                Opened {viewCount} time{viewCount === 1 ? '' : 's'}
+                                {proposal.lastViewedAt && (
+                                    <span className="text-muted-foreground/60"> · {formatRelative(proposal.lastViewedAt)}</span>
+                                )}
+                                {(proposal.lastViewCity || proposal.lastViewCountry) && (
+                                    <span className="text-muted-foreground/60">
+                                        {' · '}
+                                        {[proposal.lastViewCity, proposal.lastViewCountry].filter(Boolean).join(', ')}
+                                    </span>
+                                )}
+                            </span>
+                        )}
+                    </div>
+                </ProposalViewsPopover>
 
                 {/* Action Buttons - Always Visible */}
                 <div className="flex items-center gap-1 pt-3 border-t border-border/50">
