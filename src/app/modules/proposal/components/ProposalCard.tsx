@@ -91,10 +91,16 @@ export default function ProposalCard({
                     {viewCount === 0 ? (
                         <span>Not viewed yet</span>
                     ) : (
-                        <span>
+                        <span className="truncate">
                             {viewCount} view{viewCount === 1 ? '' : 's'}
                             {proposal.lastViewedAt && (
                                 <span className="text-muted-foreground/60"> · last {formatRelative(proposal.lastViewedAt)}</span>
+                            )}
+                            {(proposal.lastViewCity || proposal.lastViewCountry) && (
+                                <span className="text-muted-foreground/60">
+                                    {' from '}
+                                    {[proposal.lastViewCity, proposal.lastViewCountry].filter(Boolean).join(', ')}
+                                </span>
                             )}
                         </span>
                     )}

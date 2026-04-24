@@ -74,6 +74,8 @@ export async function POST(
       lastViewedAt: nowIso,
     };
     if (!existing?.firstViewedAt) counterUpdate.firstViewedAt = nowIso;
+    if (country) counterUpdate.lastViewCountry = country;
+    if (city) counterUpdate.lastViewCity = decodeURIComponent(city);
 
     await Promise.all([
       db.collection('proposals').doc(id).set(counterUpdate, { merge: true }),

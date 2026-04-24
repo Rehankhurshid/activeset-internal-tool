@@ -72,6 +72,8 @@ export interface Proposal {
     viewCount?: number;
     firstViewedAt?: string;
     lastViewedAt?: string;
+    lastViewCountry?: string; // ISO-2 country code
+    lastViewCity?: string;
     // Edit locking - prevents changes after signature
     isLocked?: boolean;
     lockedAt?: string;
