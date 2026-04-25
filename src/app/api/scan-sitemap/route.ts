@@ -741,6 +741,11 @@ export async function POST(request: NextRequest) {
 
     } catch (error) {
         console.error('Sitemap scan failed:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const message = error instanceof Error ? error.message : 'Sitemap scan failed';
+        const stage = error instanceof Error && error.stack ? error.stack.split('\n')[1]?.trim() : undefined;
+        return NextResponse.json({
+            error: message,
+            stage,
+        }, { status: 500 });
     }
 }
