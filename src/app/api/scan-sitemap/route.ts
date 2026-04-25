@@ -1,10 +1,46 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { projectsService } from '@/services/database';
-import { ProjectLink } from '@/types';
+import { Timestamp } from 'firebase-admin/firestore';
+import { db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
+import type { Project, ProjectLink } from '@/types';
 import { auditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
 import { getWebflowToken } from '@/services/projectSecrets';
+
+export const runtime = 'nodejs';
+
+const PROJECTS_COLLECTION = 'projects';
+
+/** Recursively strip undefined values — Firestore rejects them. */
+function stripUndefined<T>(obj: T): T {
+    if (Array.isArray(obj)) {
+        return obj.map(stripUndefined) as T;
+    }
+    if (obj !== null && typeof obj === 'object') {
+        return Object.fromEntries(
+            Object.entries(obj as Record<string, unknown>)
+                .filter(([, v]) => v !== undefined)
+                .map(([k, v]) => [k, stripUndefined(v)])
+        ) as T;
+    }
+    return obj;
+}
+
+/** Strip auditResult so the project doc stays under Firestore's 1MB limit. */
+function stripAuditResultsFromLinks(links: ProjectLink[]): ProjectLink[] {
+    return links.map(link => {
+        if (!link.auditResult) return link;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { auditResult, ...rest } = link;
+        return rest;
+    });
+}
+
+async function loadProjectAdmin(projectId: string): Promise<Project | null> {
+    const snap = await adminDb.collection(PROJECTS_COLLECTION).doc(projectId).get();
+    if (!snap.exists) return null;
+    return { id: snap.id, ...(snap.data() as Omit<Project, 'id'>) } as Project;
+}
 
 interface SitemapEntry {
     url: string;
@@ -57,7 +93,7 @@ function resolveLinkByTitle(links: ProjectLink[], pattern: RegExp): ProjectLink 
     return links.find((link) => pattern.test(link.title) && !!link.url?.trim());
 }
 
-function resolveDomainMapping(project: Awaited<ReturnType<typeof projectsService.getProject>>, sitemapUrl?: string): DomainMapping | null {
+function resolveDomainMapping(project: Project | null, sitemapUrl?: string): DomainMapping | null {
     if (!project) return null;
 
     const stagingLink = resolveLinkByTitle(project.links, /\bstag(?:e|ing|nging)\b/i);
@@ -314,7 +350,7 @@ function getFolderPatternFromPath(pathname: string): string | null {
     return `/${pathParts[0].toLowerCase()}/*`;
 }
 
-async function fetchWebflowSyncData(project: Awaited<ReturnType<typeof projectsService.getProject>>): Promise<WebflowSyncData> {
+async function fetchWebflowSyncData(project: Project | null): Promise<WebflowSyncData> {
     const typeMaps: WebflowTypeMaps = {
         pageTypeMap: new Map<string, 'collection' | 'static'>(),
         folderTypeMap: {}
@@ -474,7 +510,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
         }
 
-        const project = await projectsService.getProject(projectId);
+        if (!hasFirebaseAdminCredentials) {
+            return NextResponse.json({ error: 'Server not configured (firebase-admin)' }, { status: 503 });
+        }
+
+        const project = await loadProjectAdmin(projectId);
         if (!project) {
             return NextResponse.json({ error: 'Project not found' }, { status: 404 });
         }
@@ -699,33 +739,36 @@ export async function POST(request: NextRequest) {
         });
 
         const updatedLinks = [...processedManualLinks, ...processedKeptAutoLinks, ...newLinks];
-        await projectsService.updateProjectLinks(projectId, updatedLinks);
 
-        // Save sitemap URL for daily scans
+        // Build a single admin update payload — Firestore rules block server-side
+        // client-SDK writes (no auth context), so we go through firebase-admin.
+        const projectUpdate: Record<string, unknown> = {
+            links: stripUndefined(stripAuditResultsFromLinks(updatedLinks)),
+            updatedAt: Timestamp.now(),
+        };
+
         if (normalizedSitemapUrl && source === 'sitemap') {
-            await projectsService.updateProjectSitemap(projectId, normalizedSitemapUrl);
+            projectUpdate.sitemapUrl = normalizedSitemapUrl;
         }
 
-        // Persist auto-derived folder mapping from Webflow categories when Webflow is configured
         if (
             project.webflowConfig?.siteId &&
             webflowSyncData.hasApiToken &&
             Object.keys(webflowTypeMaps.folderTypeMap).length > 0
         ) {
-            await projectsService.updateProjectFolderPageTypes(projectId, mergedFolderPageTypes);
+            projectUpdate.folderPageTypes = mergedFolderPageTypes;
             console.log(
                 `[scan-sitemap] Saved folderPageTypes from Webflow categories (${Object.keys(webflowTypeMaps.folderTypeMap).length} folders)`
             );
         }
 
-        // Save locale data extracted from sitemap hreflang
         if (localeMapping.detectedLocales.length > 0) {
-            await projectsService.updateProjectLocaleData(projectId, {
-                detectedLocales: localeMapping.detectedLocales,
-                pathToLocaleMap: Object.fromEntries(localeMapping.pathToLocale)
-            });
+            projectUpdate.detectedLocales = localeMapping.detectedLocales;
+            projectUpdate.pathToLocaleMap = Object.fromEntries(localeMapping.pathToLocale);
             console.log(`[scan-sitemap] Saved locale data: ${localeMapping.detectedLocales.join(', ')}`);
         }
+
+        await adminDb.collection(PROJECTS_COLLECTION).doc(projectId).update(projectUpdate);
 
         return NextResponse.json({
             count: newLinks.length,
