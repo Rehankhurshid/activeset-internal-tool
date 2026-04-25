@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import { projectsService } from '@/services/database';
+import { hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import {
   calculateScanPercentage,
   createScanJob,
   getActiveScanJobsForProject,
+  loadProjectAdmin,
   shouldKickScanJob,
 } from '@/services/ScanJobService';
 import { getRequestBaseUrl, triggerScanJobProcessing } from '@/lib/scan-job-dispatch';
+
+export const runtime = 'nodejs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,6 +35,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Missing projectId' },
         { status: 400, headers: corsHeaders }
+      );
+    }
+
+    if (!hasFirebaseAdminCredentials) {
+      return NextResponse.json(
+        { error: 'Server not configured (firebase-admin)' },
+        { status: 503, headers: corsHeaders }
       );
     }
 
@@ -65,7 +75,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const project = await projectsService.getProject(projectId);
+    const project = await loadProjectAdmin(projectId);
     if (!project) {
       return NextResponse.json(
         { error: 'Project not found' },

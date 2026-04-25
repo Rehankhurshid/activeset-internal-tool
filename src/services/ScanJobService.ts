@@ -9,9 +9,10 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore';
+import { Timestamp as AdminTimestamp } from 'firebase-admin/firestore';
 import { db } from '@/lib/firebase';
+import { db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
-import { projectsService } from '@/services/database';
 import { pageScanner } from '@/services/PageScanner';
 import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditLogEntry, AuditService } from '@/services/AuditService';
@@ -84,6 +85,82 @@ const ACTIVE_SCAN_JOB_STATUSES: ScanJobStatus[] = ['queued', 'running'];
 const PAGES_PER_BATCH = 10;
 const PARALLEL_CONCURRENCY = 5;
 const PROCESSING_LOCK_MS = 8 * 60 * 1000;
+
+const PROJECTS_COLLECTION_NAME = 'projects';
+const LINK_AUDITS_SUBCOLLECTION_NAME = 'link_audits';
+const ADMIN_BATCH_SIZE = 450;
+
+function stripUndefinedAdmin<T>(obj: T): T {
+  if (Array.isArray(obj)) {
+    return obj.map(stripUndefinedAdmin) as T;
+  }
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefinedAdmin(v)])
+    ) as T;
+  }
+  return obj;
+}
+
+function stripAuditResultsFromLinksAdmin(links: ProjectLink[]): ProjectLink[] {
+  return links.map((link) => {
+    if (!link.auditResult) return link;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { auditResult, ...rest } = link;
+    return rest;
+  });
+}
+
+export async function loadProjectAdmin(projectId: string): Promise<Project | null> {
+  if (!hasFirebaseAdminCredentials) return null;
+  const ref = adminDb.collection(PROJECTS_COLLECTION_NAME).doc(projectId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+
+  const project = { id: snap.id, ...(snap.data() as Omit<Project, 'id'>) } as Project;
+
+  try {
+    const auditSnap = await ref.collection(LINK_AUDITS_SUBCOLLECTION_NAME).get();
+    if (!auditSnap.empty) {
+      const auditMap = new Map<string, AuditResult>();
+      auditSnap.docs.forEach((d) => auditMap.set(d.id, d.data() as AuditResult));
+      project.links = (project.links || []).map((link) => {
+        const audit = auditMap.get(link.id);
+        return audit ? { ...link, auditResult: audit } : link;
+      });
+    }
+  } catch (error) {
+    console.error(`[scan-jobs] Failed to load link audits for ${projectId}:`, error);
+  }
+
+  return project;
+}
+
+async function updateProjectLinksAdmin(projectId: string, links: ProjectLink[]): Promise<void> {
+  const ref = adminDb.collection(PROJECTS_COLLECTION_NAME).doc(projectId);
+
+  const linksWithAudit = links.filter((l) => l.auditResult);
+  for (let i = 0; i < linksWithAudit.length; i += ADMIN_BATCH_SIZE) {
+    const batch = adminDb.batch();
+    const chunk = linksWithAudit.slice(i, i + ADMIN_BATCH_SIZE);
+    for (const link of chunk) {
+      const compacted = compactAuditResult(link.auditResult!, 'standard');
+      batch.set(
+        ref.collection(LINK_AUDITS_SUBCOLLECTION_NAME).doc(link.id),
+        stripUndefinedAdmin(compacted)
+      );
+    }
+    await batch.commit();
+  }
+
+  const stripped = stripAuditResultsFromLinksAdmin(links);
+  await ref.update({
+    links: stripUndefinedAdmin(stripped),
+    updatedAt: AdminTimestamp.now(),
+  });
+}
 
 function getCollectionRef() {
   return collection(db, SCAN_JOBS_COLLECTION);
@@ -480,7 +557,7 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
   }
 
   try {
-    const project = await projectsService.getProject(claimedJob.projectId);
+    const project = await loadProjectAdmin(claimedJob.projectId);
     if (!project) {
       throw new Error(`Project not found: ${claimedJob.projectId}`);
     }
@@ -584,7 +661,7 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
         const latestJob = await getScanJob(scanId);
         if (!latestJob || latestJob.status === 'cancelled' || latestJob.cancelRequested) {
           if (shouldPersistProjectLinks) {
-            await projectsService.updateProjectLinks(project.id, projectLinks);
+            await updateProjectLinksAdmin(project.id, projectLinks);
           }
           if (completedBatchLinkIds.length > 0) {
             await recordCompletedLinks(scanId, completedBatchLinkIds, summary);
@@ -617,7 +694,7 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
       // Persist per-chunk so progress survives a mid-batch function timeout.
       if (shouldPersistProjectLinks) {
         try {
-          await projectsService.updateProjectLinks(project.id, projectLinks);
+          await updateProjectLinksAdmin(project.id, projectLinks);
           shouldPersistProjectLinks = false;
         } catch (error) {
           console.error(`[scan-jobs] Failed to persist project links for ${scanId} (chunk ${i}):`, error);
@@ -631,7 +708,7 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
     }
 
     if (shouldPersistProjectLinks) {
-      await projectsService.updateProjectLinks(project.id, projectLinks);
+      await updateProjectLinksAdmin(project.id, projectLinks);
     }
 
     const finalJob = await releaseScanJobAfterBatch(scanId, summary);
