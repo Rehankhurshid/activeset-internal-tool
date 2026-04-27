@@ -29,7 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { AppNavigation } from '@/shared/ui';
 
-type StatusFilter = 'all' | ProjectStatus;
+type StatusFilter = 'all' | 'maintenance' | 'active' | 'past';
 
 const TAG_FILTER_COLORS: Record<ProjectTag, string> = {
   retainer: 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20',
@@ -40,6 +40,8 @@ const TAG_FILTER_COLORS: Record<ProjectTag, string> = {
 };
 
 const ALL_TAGS: ProjectTag[] = ['retainer', 'one_time', 'subscription', 'maintenance', 'consulting'];
+const MAINTENANCE_TAGS: ProjectTag[] = ['retainer', 'maintenance', 'subscription'];
+const ACTIVE_TAGS: ProjectTag[] = ['one_time', 'consulting'];
 
 export function ProjectLinksDashboardScreen() {
   const { user } = useAuth();
@@ -50,7 +52,7 @@ export function ProjectLinksDashboardScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [groupByClient, setGroupByClient] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('current');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('maintenance');
   const [activeTags, setActiveTags] = useState<ProjectTag[]>([]);
   const { isLoading: isCreatingProject, execute: executeCreateProject } = useAsyncOperation();
 
@@ -100,7 +102,14 @@ export function ProjectLinksDashboardScreen() {
       // Status filter
       if (statusFilter !== 'all') {
         const projectStatus = project.status || 'current';
-        if (projectStatus !== statusFilter) return false;
+        if (statusFilter === 'past') {
+          if (projectStatus !== 'past') return false;
+        } else {
+          if (projectStatus !== 'current') return false;
+          const bucketTags = statusFilter === 'maintenance' ? MAINTENANCE_TAGS : ACTIVE_TAGS;
+          const projectTags = project.tags || [];
+          if (!bucketTags.some(tag => projectTags.includes(tag))) return false;
+        }
       }
       // Tag filter — project must have ALL active tags
       if (activeTags.length > 0) {
@@ -139,7 +148,18 @@ export function ProjectLinksDashboardScreen() {
   }, [filteredProjects]);
 
   // Counts
-  const currentCount = projects.filter(p => (p.status || 'current') === 'current').length;
+  const maintenanceCount = projects.filter(p => {
+    const status = p.status || 'current';
+    if (status !== 'current') return false;
+    const tags = p.tags || [];
+    return MAINTENANCE_TAGS.some(t => tags.includes(t));
+  }).length;
+  const activeCount = projects.filter(p => {
+    const status = p.status || 'current';
+    if (status !== 'current') return false;
+    const tags = p.tags || [];
+    return ACTIVE_TAGS.some(t => tags.includes(t));
+  }).length;
   const pastCount = projects.filter(p => p.status === 'past').length;
   const totalManualLinks = projects.reduce((acc, p) =>
     acc + (p.links?.filter(l => l.source !== 'auto').length || 0), 0
@@ -279,7 +299,8 @@ export function ProjectLinksDashboardScreen() {
                 <div className="flex items-center gap-1 bg-muted/50 p-0.5 rounded-lg border border-border/50">
                   {([
                     { value: 'all' as StatusFilter, label: 'All', count: projects.length },
-                    { value: 'current' as StatusFilter, label: 'Current', count: currentCount },
+                    { value: 'maintenance' as StatusFilter, label: 'Maintenance', count: maintenanceCount },
+                    { value: 'active' as StatusFilter, label: 'Active', count: activeCount },
                     { value: 'past' as StatusFilter, label: 'Past', count: pastCount },
                   ]).map(({ value, label, count }) => (
                     <button
