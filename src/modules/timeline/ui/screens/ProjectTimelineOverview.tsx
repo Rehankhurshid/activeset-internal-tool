@@ -39,6 +39,7 @@ import {
     Save,
     MoreHorizontal,
     Code2,
+    FileSignature,
 } from 'lucide-react';
 import type {
     TimelineItemStatus,
@@ -61,6 +62,7 @@ import {
     type MilestoneDraft,
 } from '../components/TimelineEditSheet';
 import { TimelineImportMarkdownDialog } from '../components/TimelineImportMarkdownDialog';
+import { TimelineImportProposalDialog } from '../components/TimelineImportProposalDialog';
 import { TimelineMarkdownEditorDialog } from '../components/TimelineMarkdownEditorDialog';
 import { SaveTimelineTemplateDialog } from '../components/SaveTimelineTemplateDialog';
 import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
@@ -84,6 +86,7 @@ export function ProjectTimelineOverview({
     const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
     const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
     const [importDialogOpen, setImportDialogOpen] = useState(false);
+    const [proposalImportOpen, setProposalImportOpen] = useState(false);
     const [mdEditorOpen, setMdEditorOpen] = useState(false);
     const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
     const [editingTemplate, setEditingTemplate] =
@@ -249,6 +252,28 @@ export function ProjectTimelineOverview({
         [projectId]
     );
 
+    const handleImportFromProposal = useCallback(
+        async (parsed: ParsedTimelineMarkdown, proposalTitle: string) => {
+            try {
+                const result = await timelineRepository.importParsed(
+                    projectId,
+                    {
+                        phases: parsed.phases,
+                        milestones: parsed.milestones,
+                    },
+                    parsed.referenceStart
+                );
+                toast.success(
+                    `Imported ${result.phaseCount} phase${result.phaseCount === 1 ? '' : 's'} from "${proposalTitle}"`
+                );
+            } catch {
+                toast.error('Failed to import proposal timeline');
+                throw new Error('proposal import failed');
+            }
+        },
+        [projectId]
+    );
+
     const handleReplaceFromMarkdown = useCallback(
         async (parsed: ParsedTimelineMarkdown) => {
             try {
@@ -388,6 +413,12 @@ export function ProjectTimelineOverview({
                                     Import markdown
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
+                                    onSelect={() => setProposalImportOpen(true)}
+                                >
+                                    <FileSignature className="h-4 w-4" />
+                                    Import from proposal
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                     onSelect={() => setMdEditorOpen(true)}
                                 >
                                     <Code2 className="h-4 w-4" />
@@ -417,6 +448,7 @@ export function ProjectTimelineOverview({
                 <EmptyState
                     onNew={openNew}
                     onImportMarkdown={() => setImportDialogOpen(true)}
+                    onImportProposal={() => setProposalImportOpen(true)}
                     onOpenTemplates={() => setTemplateDialogOpen(true)}
                 />
             ) : viewMode === 'timeline' ? (
@@ -461,6 +493,17 @@ export function ProjectTimelineOverview({
                 open={importDialogOpen}
                 onOpenChange={setImportDialogOpen}
                 onImport={handleImportMarkdown}
+            />
+
+            <TimelineImportProposalDialog
+                open={proposalImportOpen}
+                onOpenChange={setProposalImportOpen}
+                onImport={(parsed, proposal) =>
+                    handleImportFromProposal(
+                        parsed,
+                        proposal.title || 'Untitled proposal'
+                    )
+                }
             />
 
             {timeline && (
@@ -529,10 +572,12 @@ function ViewToggle({
 function EmptyState({
     onNew,
     onImportMarkdown,
+    onImportProposal,
     onOpenTemplates,
 }: {
     onNew: () => void;
     onImportMarkdown: () => void;
+    onImportProposal: () => void;
     onOpenTemplates: () => void;
 }) {
     return (
@@ -557,6 +602,10 @@ function EmptyState({
                 <Button variant="outline" className="gap-1.5" onClick={onImportMarkdown}>
                     <FileText className="h-4 w-4" />
                     Import Markdown
+                </Button>
+                <Button variant="outline" className="gap-1.5" onClick={onImportProposal}>
+                    <FileSignature className="h-4 w-4" />
+                    Import from Proposal
                 </Button>
             </div>
         </div>
