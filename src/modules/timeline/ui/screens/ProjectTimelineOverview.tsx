@@ -223,10 +223,14 @@ export function ProjectTimelineOverview({
     const handleImportMarkdown = useCallback(
         async (parsed: ParsedTimelineMarkdown) => {
             try {
-                const result = await timelineRepository.importParsed(projectId, {
-                    phases: parsed.phases,
-                    milestones: parsed.milestones,
-                });
+                const result = await timelineRepository.importParsed(
+                    projectId,
+                    {
+                        phases: parsed.phases,
+                        milestones: parsed.milestones,
+                    },
+                    parsed.referenceStart
+                );
                 const parts: string[] = [];
                 if (result.phaseCount > 0) {
                     parts.push(
@@ -250,10 +254,14 @@ export function ProjectTimelineOverview({
             try {
                 // Clear existing then import fresh
                 await timelineRepository.clearTimeline(projectId);
-                const result = await timelineRepository.importParsed(projectId, {
-                    phases: parsed.phases,
-                    milestones: parsed.milestones,
-                });
+                const result = await timelineRepository.importParsed(
+                    projectId,
+                    {
+                        phases: parsed.phases,
+                        milestones: parsed.milestones,
+                    },
+                    parsed.referenceStart
+                );
                 toast.success(
                     `Timeline replaced — ${result.phaseCount} phase${result.phaseCount === 1 ? '' : 's'}, ${result.milestoneCount} milestone${result.milestoneCount === 1 ? '' : 's'}`
                 );

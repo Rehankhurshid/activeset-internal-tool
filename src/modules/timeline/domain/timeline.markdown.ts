@@ -12,6 +12,7 @@ export interface ParsedTimelineMarkdown {
     phases: TimelineTemplatePhase[];
     milestones: TimelineTemplateMilestone[];
     warnings: string[];
+    referenceStart: string;
 }
 
 /**
@@ -197,7 +198,7 @@ export function parseTimelineMarkdown(
         });
     }
 
-    return { phases, milestones, warnings };
+    return { phases, milestones, warnings, referenceStart };
 }
 
 /**
