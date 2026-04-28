@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/scan-notifications",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/refrens-sync",
+      "schedule": "0 9 * * *"
     }
   ]
 }

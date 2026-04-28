@@ -679,3 +679,74 @@ async function sendScanCompletionEmail(
   console.log(`[notifications] Scan completion email sent for ${ctx.projectName}`);
   return 'sent';
 }
+
+interface InvoiceStatusEmailInput {
+  projectId: string;
+  projectName: string;
+  invoiceNumber: string | null;
+  oldStatus: string;
+  newStatus: string;
+  amount: number | null;
+  currency: string | null;
+  dueDate: string | null;
+  shareLink: string | null;
+  baseUrl: string;
+}
+
+/**
+ * Sends a single email when a Refrens invoice flips to a new status (PAID,
+ * OVERDUE, etc). Sent to NOTIFY_EMAIL — the project-level notify recipient.
+ * Returns 'skipped' when Gmail isn't configured so callers don't have to
+ * branch on env presence.
+ */
+export async function sendInvoiceStatusEmail(
+  input: InvoiceStatusEmailInput
+): Promise<'sent' | 'skipped'> {
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword || !email.notifyEmail) return 'skipped';
+
+  const amountLine =
+    input.amount != null
+      ? `${input.currency ?? 'INR'} ${input.amount.toLocaleString()}`
+      : '—';
+  const projectUrl = `${input.baseUrl}/modules/project-links/${input.projectId}`;
+  const subject = `Invoice #${input.invoiceNumber ?? '—'} — ${input.newStatus} (${input.projectName})`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:8px;">
+      <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${subject}</div>
+      <div style="font-size:14px;color:#94a3b8;margin-bottom:16px;">
+        Status flipped from <b>${input.oldStatus}</b> to <b>${input.newStatus}</b>.
+      </div>
+      <table style="width:100%;font-size:14px;color:#e2e8f0;">
+        <tr><td style="padding:4px 0;color:#94a3b8;">Project</td><td>${input.projectName}</td></tr>
+        <tr><td style="padding:4px 0;color:#94a3b8;">Amount</td><td>${amountLine}</td></tr>
+        <tr><td style="padding:4px 0;color:#94a3b8;">Due</td><td>${input.dueDate ?? '—'}</td></tr>
+      </table>
+      <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;">
+        ${
+          input.shareLink
+            ? `<a href="${input.shareLink}" style="display:inline-block;background:#3b82f6;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">Open in Refrens</a>`
+            : ''
+        }
+        <a href="${projectUrl}" style="display:inline-block;background:#1e293b;color:#e2e8f0;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">View Project</a>
+      </div>
+    </div>
+  `;
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
+  });
+
+  await transporter.sendMail({
+    from: `"ActiveSet Invoices" <${email.gmailUser}>`,
+    to: email.notifyEmail,
+    subject,
+    html,
+  });
+
+  console.log(
+    `[notifications] Invoice status email sent for ${input.projectName} #${input.invoiceNumber ?? '—'} ${input.oldStatus}→${input.newStatus}`
+  );
+  return 'sent';
+}

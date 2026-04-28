@@ -47,3 +47,20 @@ export async function fetchForProject(
   }
   return fetch(input, { ...init, headers });
 }
+
+/**
+ * fetch() wrapper for admin-only API routes that don't operate on a single
+ * project (e.g. `/api/refrens/*`). Attaches `Authorization: Bearer <firebase-id-token>`
+ * but no `x-project-id`. The server route enforces admin via {@link requireAdmin}.
+ */
+export async function fetchAuthed(
+  input: RequestInfo | URL,
+  init: ProjectApiInit = {}
+): Promise<Response> {
+  const idToken = await getIdToken();
+  const headers: Record<string, string> = { ...(init.headers || {}) };
+  if (idToken) {
+    headers['Authorization'] = `Bearer ${idToken}`;
+  }
+  return fetch(input, { ...init, headers });
+}

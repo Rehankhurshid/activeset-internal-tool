@@ -13,6 +13,12 @@ export const COLLECTIONS = {
   // from the client — access must go through firebase-admin and an authenticated
   // server route that verifies project ownership.
   PROJECT_SECRETS: 'project_secrets',
+  // Server-only: app-level (not per-project) third-party credentials. Single
+  // doc per integration, e.g. `app_secrets/refrens`. Same access rules as
+  // PROJECT_SECRETS — admin-only via firebase-admin.
+  APP_SECRETS: 'app_secrets',
+  // Per-project mirror of Refrens invoices. Admin-only at the API layer.
+  PROJECT_INVOICES: 'project_invoices',
 } as const;
 
 // UI constants

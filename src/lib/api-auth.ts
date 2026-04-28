@@ -65,6 +65,19 @@ export async function requireCaller(req: NextRequest): Promise<AuthedCaller> {
 }
 
 /**
+ * Verifies the caller (via {@link requireCaller}) AND that they are the admin.
+ * Used for app-level admin-only routes (e.g. Refrens credentials, invoice
+ * tracker) where the resource is not tied to a specific project.
+ */
+export async function requireAdmin(req: NextRequest): Promise<AuthedCaller> {
+  const caller = await requireCaller(req);
+  if (!caller.isAdmin) {
+    throw new ApiAuthError(403, 'Forbidden');
+  }
+  return caller;
+}
+
+/**
  * Verifies the caller (via {@link requireCaller}) AND that they own the given
  * project (or are admin). Returns the caller. Throws {@link ApiAuthError} on
  * any failure.

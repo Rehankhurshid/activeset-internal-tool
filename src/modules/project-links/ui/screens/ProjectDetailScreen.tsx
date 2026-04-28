@@ -9,12 +9,13 @@ import { ChecklistOverview } from '@/modules/checklists';
 import { ProjectTimelineOverview } from '@/modules/timeline';
 import { ProjectTextCheckCard, WebsiteAuditDashboardScreen } from '@/modules/site-monitoring';
 import { WebflowPagesDashboard, webflowConfigRepository } from '@/modules/webflow';
+import { InvoicesTab } from '@/modules/invoices';
 import type { WebflowConfigInput } from '@/types/webflow';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare } from 'lucide-react';
+import { Building2, Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare, Receipt } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
@@ -27,7 +28,7 @@ interface PageProps {
 
 export default function ProjectDetailPage({ params }: PageProps) {
     const { id } = use(params);
-    const { user, loading: authLoading, signInWithGoogle } = useAuth();
+    const { user, loading: authLoading, isAdmin, signInWithGoogle } = useAuth();
     const [project, setProject] = useState<Project | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
@@ -292,6 +293,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                 <span className="hidden sm:inline">Timeline</span>
                                 <span className="sm:hidden">Timeline</span>
                             </TabsTrigger>
+                            {isAdmin && (
+                                <TabsTrigger value="invoices" className="gap-2 flex-1 sm:flex-none">
+                                    <Receipt className="h-4 w-4" />
+                                    <span className="hidden sm:inline">Invoices</span>
+                                    <span className="sm:hidden">Invoices</span>
+                                </TabsTrigger>
+                            )}
                         </TabsList>
 
                         {/* Show Scan Sitemap when in audit tab */}
@@ -357,6 +365,15 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             userEmail={user?.email ?? undefined}
                         />
                     </TabsContent>
+
+                    {isAdmin && (
+                        <TabsContent value="invoices" className="mt-4 sm:mt-6">
+                            <InvoicesTab
+                                projectId={project.id}
+                                defaultClientName={project.client}
+                            />
+                        </TabsContent>
+                    )}
                 </Tabs>
 
                 <EmbedDialog

@@ -20,7 +20,10 @@
     "schema-gen:pkg:pack": "npm --prefix packages/schema-gen pack",
     "test:local-capture": "tsx --test src/local-capture/*.test.ts",
     "verify:ui": "npx tsx scripts/verify-ui.ts",
-    "verify:ui:staged": "npx tsx scripts/verify-ui.ts"
+    "verify:ui:staged": "npx tsx scripts/verify-ui.ts",
+    "security:migrate-webflow-tokens": "tsx scripts/migrate-webflow-tokens.ts",
+    "security:migrate-webflow-tokens:apply": "tsx scripts/migrate-webflow-tokens.ts --apply",
+    "security:deploy-firestore-rules": "tsx scripts/deploy-firestore-rules.ts"
   },
   "dependencies": {
     "@activeset/schema-gen": "^0.1.0",
@@ -90,6 +93,7 @@
     "firebase-admin": "^13.6.1",
     "html2canvas": "^1.4.1",
     "htmldiff-js": "^1.0.5",
+    "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.0.0",
     "lexical": "^0.39.0",
     "lucide-react": "^0.514.0",
@@ -120,6 +124,7 @@
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/glob": "^8.1.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/nodemailer": "^7.0.4",
     "@types/nspell": "^2.1.6",
