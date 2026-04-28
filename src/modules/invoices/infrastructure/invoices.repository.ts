@@ -153,6 +153,23 @@ export async function getInvoiceById(id: string): Promise<ProjectInvoice | null>
   return { id: snap.id, ...(snap.data() as Omit<ProjectInvoice, 'id'>) };
 }
 
+/**
+ * Returns the existing mirror for a given Refrens invoice id, or null.
+ * Used by the "map existing invoice" flow to detect collisions across
+ * projects — one Refrens invoice belongs to one project at a time.
+ */
+export async function findInvoiceByRefrensId(
+  refrensInvoiceId: string
+): Promise<ProjectInvoice | null> {
+  const snap = await invoicesCollection()
+    .where('refrensInvoiceId', '==', refrensInvoiceId)
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { id: doc.id, ...(doc.data() as Omit<ProjectInvoice, 'id'>) };
+}
+
 export async function setInvoiceNotifyEnabled(
   id: string,
   enabled: boolean

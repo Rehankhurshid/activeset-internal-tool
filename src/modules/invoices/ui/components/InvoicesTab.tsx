@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, RefreshCw, Settings, Receipt, AlertCircle } from 'lucide-react';
+import { Plus, RefreshCw, Settings, Receipt, AlertCircle, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchAuthed } from '@/lib/api-client';
 import { CreateInvoiceDialog } from './CreateInvoiceDialog';
+import { MapInvoiceDialog } from './MapInvoiceDialog';
 import { InvoiceCard } from './InvoiceCard';
 import type { ProjectInvoice } from '@/modules/invoices/domain/types';
 
@@ -27,6 +28,7 @@ export function InvoicesTab({ projectId, defaultClientName }: InvoicesTabProps) 
   const [invoices, setInvoices] = useState<ProjectInvoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -114,6 +116,10 @@ export function InvoicesTab({ projectId, defaultClientName }: InvoicesTabProps) 
             <RefreshCw className={`mr-2 h-4 w-4 ${invoicesLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setMapOpen(true)}>
+            <Link2 className="mr-2 h-4 w-4" />
+            Map existing
+          </Button>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Create invoice
@@ -146,6 +152,13 @@ export function InvoicesTab({ projectId, defaultClientName }: InvoicesTabProps) 
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={handleCreated}
+      />
+
+      <MapInvoiceDialog
+        projectId={projectId}
+        open={mapOpen}
+        onOpenChange={setMapOpen}
+        onMapped={handleCreated}
       />
     </div>
   );
