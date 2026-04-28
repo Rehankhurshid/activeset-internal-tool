@@ -10,7 +10,7 @@ import { getRefrensCredentials, type RefrensCredentials } from '@/services/appSe
  * Method 2) and cache it in-memory until shortly before it expires.
  */
 
-const DEFAULT_BASE_URL = 'https://www.refrens.com/api/v1';
+const DEFAULT_BASE_URL = 'https://api.refrens.com';
 const TOKEN_TTL_SECONDS = 60 * 60;        // 1 hour, max recommended by Refrens
 const TOKEN_REFRESH_SKEW_SECONDS = 60;    // refresh 60s before expiry
 
