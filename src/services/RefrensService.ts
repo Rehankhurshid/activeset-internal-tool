@@ -63,6 +63,21 @@ export function invalidateRefrensJwtCache(): void {
   cachedToken = null;
 }
 
+const INVOICE_LIST_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+interface CachedInvoiceList {
+  appId: string;
+  items: RefrensInvoiceSummary[];
+  total: number | null;
+  cachedAt: number;
+}
+
+let cachedInvoiceList: CachedInvoiceList | null = null;
+
+export function invalidateInvoiceListCache(): void {
+  cachedInvoiceList = null;
+}
+
 export class RefrensApiError extends Error {
   constructor(public status: number, message: string, public body?: unknown) {
     super(message);
@@ -175,6 +190,68 @@ export async function listInvoices(
     items: raw?.data ?? [],
     total: typeof raw?.total === 'number' ? raw.total : null,
   };
+}
+
+/**
+ * Cached fetch of the full Refrens invoice list (capped at maxItems). The
+ * cache key is the appId, so rotating credentials drops the cache. Use this
+ * for the Map dialog so opening it repeatedly doesn't fan out N pages of
+ * Refrens calls every time.
+ *
+ * Cache is in-memory and per-region on Vercel. Cold starts will refresh.
+ * Pass `forceRefresh: true` to bypass.
+ */
+export async function listAllInvoicesCached(options: {
+  maxItems?: number;
+  forceRefresh?: boolean;
+} = {}): Promise<{
+  items: RefrensInvoiceSummary[];
+  total: number | null;
+  cachedAt: number;
+  fromCache: boolean;
+}> {
+  const maxItems = options.maxItems ?? 500;
+  const creds = await loadCreds();
+  const now = Date.now();
+
+  if (
+    !options.forceRefresh &&
+    cachedInvoiceList &&
+    cachedInvoiceList.appId === creds.appId &&
+    now - cachedInvoiceList.cachedAt < INVOICE_LIST_CACHE_TTL_MS
+  ) {
+    return {
+      items: cachedInvoiceList.items,
+      total: cachedInvoiceList.total,
+      cachedAt: cachedInvoiceList.cachedAt,
+      fromCache: true,
+    };
+  }
+
+  const PAGE = 50;
+  const items: RefrensInvoiceSummary[] = [];
+  let total: number | null = null;
+
+  // Page 1 first to learn the total
+  const first = await listInvoices({ limit: PAGE, skip: 0 });
+  items.push(...first.items);
+  total = first.total;
+
+  if (first.items.length === PAGE && items.length < maxItems) {
+    // Compute remaining skips and fan out in parallel
+    const remainingTarget = total != null ? Math.min(total, maxItems) : maxItems;
+    const skips: number[] = [];
+    for (let s = PAGE; s < remainingTarget; s += PAGE) skips.push(s);
+    const results = await Promise.allSettled(
+      skips.map((s) => listInvoices({ limit: PAGE, skip: s }))
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled') items.push(...r.value.items);
+    }
+  }
+
+  cachedInvoiceList = { appId: creds.appId, items, total, cachedAt: now };
+  return { items, total, cachedAt: now, fromCache: false };
 }
 
 export interface CreateInvoiceItem {

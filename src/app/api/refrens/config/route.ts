@@ -5,7 +5,7 @@ import {
   getRefrensConfigStatus,
   setRefrensCredentials,
 } from '@/services/appSecrets';
-import { invalidateRefrensJwtCache } from '@/services/RefrensService';
+import { invalidateRefrensJwtCache, invalidateInvoiceListCache } from '@/services/RefrensService';
 
 export const runtime = 'nodejs';
 
@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
     }
     await setRefrensCredentials({ urlKey, appId, privateKey });
     invalidateRefrensJwtCache();
+    invalidateInvoiceListCache();
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof ApiAuthError) return apiAuthErrorResponse(err);
@@ -82,6 +83,7 @@ export async function DELETE(req: NextRequest) {
     await requireAdmin(req);
     await deleteRefrensCredentials();
     invalidateRefrensJwtCache();
+    invalidateInvoiceListCache();
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof ApiAuthError) return apiAuthErrorResponse(err);

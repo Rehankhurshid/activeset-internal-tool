@@ -4,6 +4,7 @@ import {
   RefrensApiError,
   RefrensNotConfiguredError,
   createInvoice,
+  invalidateInvoiceListCache,
   type CreateInvoiceItem,
 } from '@/services/RefrensService';
 import {
@@ -82,6 +83,7 @@ export async function POST(req: NextRequest) {
     });
 
     const result = await upsertInvoiceFromRefrens(projectId, created);
+    invalidateInvoiceListCache();
     return NextResponse.json({ invoice: result.invoice });
   } catch (err) {
     if (err instanceof ApiAuthError) return apiAuthErrorResponse(err);

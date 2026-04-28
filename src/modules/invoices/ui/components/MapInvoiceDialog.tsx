@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, Search, Check, ExternalLink } from 'lucide-react';
+import { Loader2, Search, Check, ExternalLink, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchAuthed } from '@/lib/api-client';
 import type { ProjectInvoice } from '@/modules/invoices/domain/types';
@@ -42,9 +42,6 @@ interface MapInvoiceDialogProps {
   onMapped: (invoice: ProjectInvoice) => void;
 }
 
-const PAGE_SIZE = 50;
-const MAX_ITEMS = 500;
-
 function formatAmount(amount: number | null, currency: string | null): string {
   if (amount == null) return '—';
   const code = currency || 'INR';
@@ -66,118 +63,76 @@ function formatDate(iso: string | null): string {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function sortByDateDesc(items: AvailableInvoiceItem[]): AvailableInvoiceItem[] {
-  return [...items].sort((a, b) => {
-    const aKey = a.invoiceDate ?? '';
-    const bKey = b.invoiceDate ?? '';
-    return bKey.localeCompare(aKey);
-  });
+function formatRelativeTime(iso: string | null): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return date.toLocaleString();
 }
 
 export function MapInvoiceDialog({ projectId, open, onOpenChange, onMapped }: MapInvoiceDialogProps) {
   const [items, setItems] = useState<AvailableInvoiceItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [total, setTotal] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [mappingId, setMappingId] = useState<string | null>(null);
-  const [capped, setCapped] = useState(false);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
+  const [total, setTotal] = useState<number | null>(null);
 
-  // Cancellation token for in-flight loads — flips when the dialog closes or
-  // re-opens, so stale page responses don't leak into the next session.
   const loadTokenRef = useRef(0);
 
-  const fetchPage = useCallback(
-    async (skip: number) => {
-      const params = new URLSearchParams({
-        projectId,
-        limit: String(PAGE_SIZE),
-        skip: String(skip),
-      });
-      const res = await fetchAuthed(`/api/refrens/invoices/available?${params.toString()}`);
-      const data = (await res.json()) as {
-        items?: AvailableInvoiceItem[];
-        total?: number | null;
-        error?: string;
-      };
-      if (!res.ok) {
-        throw new Error(data.error || `Failed (${res.status})`);
+  const load = useCallback(
+    async (forceRefresh: boolean) => {
+      const myToken = ++loadTokenRef.current;
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({ projectId });
+        if (forceRefresh) params.set('refresh', '1');
+        const res = await fetchAuthed(`/api/refrens/invoices/available?${params.toString()}`);
+        const data = (await res.json()) as {
+          items?: AvailableInvoiceItem[];
+          total?: number | null;
+          cachedAt?: string;
+          fromCache?: boolean;
+          error?: string;
+        };
+        if (loadTokenRef.current !== myToken) return;
+        if (!res.ok) {
+          throw new Error(data.error || `Failed (${res.status})`);
+        }
+        setItems(data.items ?? []);
+        setTotal(data.total ?? null);
+        setCachedAt(data.cachedAt ?? null);
+        setFromCache(Boolean(data.fromCache));
+        if (forceRefresh) toast.success('Refreshed from Refrens');
+      } catch (err) {
+        if (loadTokenRef.current === myToken) {
+          toast.error(err instanceof Error ? err.message : 'Failed to load invoices');
+        }
+      } finally {
+        if (loadTokenRef.current === myToken) {
+          setLoading(false);
+        }
       }
-      return { items: data.items ?? [], total: data.total ?? null };
     },
     [projectId]
   );
 
-  const loadAll = useCallback(async () => {
-    const myToken = ++loadTokenRef.current;
-    setLoading(true);
-    setItems([]);
-    setTotal(null);
-    setCapped(false);
-
-    try {
-      const first = await fetchPage(0);
-      if (loadTokenRef.current !== myToken) return;
-
-      setItems(sortByDateDesc(first.items));
-      setTotal(first.total);
-
-      // If first page didn't fill PAGE_SIZE, we have everything.
-      if (first.items.length < PAGE_SIZE) {
-        return;
-      }
-
-      // Compute remaining pages. Cap to MAX_ITEMS so a 5,000-invoice account
-      // doesn't try to slurp everything into the modal.
-      const totalToFetch =
-        first.total != null
-          ? Math.min(first.total, MAX_ITEMS)
-          : MAX_ITEMS;
-      const remainingSkips: number[] = [];
-      for (let skip = PAGE_SIZE; skip < totalToFetch; skip += PAGE_SIZE) {
-        remainingSkips.push(skip);
-      }
-      if (remainingSkips.length === 0) return;
-
-      // Fire remaining pages in parallel — each chunk merged in as it lands.
-      const results = await Promise.allSettled(remainingSkips.map(fetchPage));
-      if (loadTokenRef.current !== myToken) return;
-
-      const merged: AvailableInvoiceItem[] = [...first.items];
-      let firstError: Error | null = null;
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          merged.push(...result.value.items);
-        } else if (!firstError) {
-          firstError = result.reason instanceof Error ? result.reason : new Error(String(result.reason));
-        }
-      }
-      setItems(sortByDateDesc(merged));
-      if (first.total != null && first.total > MAX_ITEMS) {
-        setCapped(true);
-      }
-      if (firstError) {
-        toast.error(`Some pages failed to load: ${firstError.message}`);
-      }
-    } catch (err) {
-      if (loadTokenRef.current === myToken) {
-        toast.error(err instanceof Error ? err.message : 'Failed to load invoices');
-      }
-    } finally {
-      if (loadTokenRef.current === myToken) {
-        setLoading(false);
-      }
-    }
-  }, [fetchPage]);
-
   useEffect(() => {
     if (!open) {
-      // Cancel any in-flight load on close
       loadTokenRef.current++;
       return;
     }
     setSearch('');
-    void loadAll();
-  }, [open, loadAll]);
+    void load(false);
+  }, [open, load]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -222,13 +177,8 @@ export function MapInvoiceDialog({ projectId, open, onOpenChange, onMapped }: Ma
     }
   };
 
-  const countText = (() => {
-    if (loading && items.length === 0) return 'Loading…';
-    if (loading && total != null) return `Loaded ${items.length} of ${Math.min(total, MAX_ITEMS)}…`;
-    if (loading) return `Loaded ${items.length}…`;
-    if (capped && total != null) return `Showing first ${MAX_ITEMS} of ${total} invoices`;
-    return `${items.length} invoice${items.length === 1 ? '' : 's'}`;
-  })();
+  const showCount = items.length > 0 || !loading;
+  const cappedNotice = total != null && total > items.length ? `(showing ${items.length} of ${total})` : '';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -243,19 +193,43 @@ export function MapInvoiceDialog({ projectId, open, onOpenChange, onMapped }: Ma
 
         <div className="space-y-3">
           <div className="space-y-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by invoice #, client, or status…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by invoice #, client, or status…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => load(true)}
+                disabled={loading}
+                title="Refresh from Refrens"
+                aria-label="Refresh from Refrens"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {loading && <Loader2 className="h-3 w-3 animate-spin" />}
-              <span>{countText}</span>
-            </div>
+            {showCount && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  {items.length} invoice{items.length === 1 ? '' : 's'} {cappedNotice}
+                </span>
+                {cachedAt && (
+                  <span>
+                    · {fromCache ? 'cached' : 'fresh'} {formatRelativeTime(cachedAt)}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="max-h-[420px] overflow-y-auto space-y-2 -mx-1 px-1">

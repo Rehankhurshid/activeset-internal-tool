@@ -5,7 +5,7 @@ import { ApiAuthError, apiAuthErrorResponse, requireAdmin } from '@/lib/api-auth
 import {
   RefrensApiError,
   RefrensNotConfiguredError,
-  listInvoices,
+  listAllInvoicesCached,
 } from '@/services/RefrensService';
 import { listAllInvoices } from '@/modules/invoices/infrastructure/invoices.repository';
 
@@ -47,12 +47,15 @@ function pickAmount(raw: RefrensListItem): number | null {
 }
 
 /**
- * GET /api/refrens/invoices/available?projectId=<id>&limit=<n>&skip=<n>
+ * GET /api/refrens/invoices/available?projectId=<id>&refresh=1
  *
- * Admin-only. Lists invoices from Refrens, paginated, and annotates each one
- * with its mapping state relative to the current project. Used by the
- * "Map existing invoice" dialog so the user can see what's already mapped
- * (here vs. elsewhere) and what's free to attach.
+ * Admin-only. Returns the full Refrens invoice list (capped at 500, server-
+ * cached for 10 min) annotated with per-invoice mapping state relative to
+ * the current project. Mapping state is computed fresh from Firestore each
+ * call — only the Refrens-side payload is cached.
+ *
+ * Pass `refresh=1` to force a fresh Refrens fetch (e.g. user clicked the
+ * refresh button in the dialog).
  */
 export async function GET(req: NextRequest) {
   try {
@@ -62,18 +65,15 @@ export async function GET(req: NextRequest) {
     if (!projectId) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
     }
-    const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10), 1), 200);
-    const skip = Math.max(parseInt(url.searchParams.get('skip') || '0', 10), 0);
+    const forceRefresh = url.searchParams.get('refresh') === '1';
 
     const [refrens, mirrors] = await Promise.all([
-      listInvoices({ limit, skip }),
+      listAllInvoicesCached({ forceRefresh }),
       listAllInvoices(),
     ]);
 
-    // Build refrensInvoiceId -> mirror lookup
     const mirrorByRefrensId = new Map(mirrors.map((m) => [m.refrensInvoiceId, m]));
 
-    // Resolve project names for any "mapped to other project" entries
     const otherProjectIds = new Set<string>();
     for (const m of mirrors) {
       if (m.refrensInvoiceId && m.projectId !== projectId) otherProjectIds.add(m.projectId);
@@ -124,8 +124,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       items,
       total: refrens.total,
-      limit,
-      skip,
+      cachedAt: new Date(refrens.cachedAt).toISOString(),
+      fromCache: refrens.fromCache,
     });
   } catch (err) {
     if (err instanceof ApiAuthError) return apiAuthErrorResponse(err);
