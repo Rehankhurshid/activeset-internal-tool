@@ -138,6 +138,40 @@ export async function loadProjectAdmin(projectId: string): Promise<Project | nul
   return project;
 }
 
+export async function loadAllProjectsAdmin(): Promise<Project[]> {
+  if (!hasFirebaseAdminCredentials) return [];
+  const snap = await adminDb.collection(PROJECTS_COLLECTION_NAME).get();
+  if (snap.empty) return [];
+
+  const projects = snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<Project, 'id'>),
+  })) as Project[];
+
+  await Promise.all(
+    projects.map(async (project) => {
+      try {
+        const auditSnap = await adminDb
+          .collection(PROJECTS_COLLECTION_NAME)
+          .doc(project.id)
+          .collection(LINK_AUDITS_SUBCOLLECTION_NAME)
+          .get();
+        if (auditSnap.empty) return;
+        const auditMap = new Map<string, AuditResult>();
+        auditSnap.docs.forEach((d) => auditMap.set(d.id, d.data() as AuditResult));
+        project.links = (project.links || []).map((link) => {
+          const audit = auditMap.get(link.id);
+          return audit ? { ...link, auditResult: audit } : link;
+        });
+      } catch (error) {
+        console.error(`[scan-jobs] Failed to load link audits for ${project.id}:`, error);
+      }
+    })
+  );
+
+  return projects;
+}
+
 async function updateProjectLinksAdmin(projectId: string, links: ProjectLink[]): Promise<void> {
   const ref = adminDb.collection(PROJECTS_COLLECTION_NAME).doc(projectId);
 

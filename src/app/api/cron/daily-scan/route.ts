@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isCronAuthorized } from '@/lib/cron-auth';
-import { projectsService } from '@/services/database';
+import { hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
+import { loadAllProjectsAdmin, loadProjectAdmin } from '@/services/ScanJobService';
 import { detectAnomalies } from '@/services/AnomalyDetector';
 import { alertService } from '@/services/AlertService';
 import { healthReportService } from '@/services/HealthReportService';
@@ -8,6 +9,7 @@ import { generateHealthReport } from '@/services/HealthReportGenerator';
 import { sendAlertNotifications, sendHealthReportNotifications } from '@/services/NotificationService';
 import { ProjectLink } from '@/types';
 
+export const runtime = 'nodejs';
 export const maxDuration = 800;
 
 const JOB_BUDGET_MS = 12 * 60 * 1000; // 12 minutes shared across all project scans
@@ -23,10 +25,17 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    if (!hasFirebaseAdminCredentials) {
+        return NextResponse.json(
+            { error: 'Server not configured (firebase-admin)' },
+            { status: 503 }
+        );
+    }
+
     console.log('[daily-scan] Starting daily scan job at', new Date().toISOString());
 
     try {
-        const allProjects = await projectsService.getAllProjects();
+        const allProjects = await loadAllProjectsAdmin();
         const currentProjectsToScan = allProjects.filter(
             p => (p.status || 'current') === 'current' && p.links?.some(l => l.source === 'auto')
         );
@@ -105,7 +114,7 @@ export async function GET(request: NextRequest) {
                 }
 
                 // Fetch updated project from Firestore
-                const updatedProject = await projectsService.getProject(project.id);
+                const updatedProject = await loadProjectAdmin(project.id);
                 if (!updatedProject) {
                     results.push({
                         projectId: project.id,
@@ -186,7 +195,7 @@ export async function GET(request: NextRequest) {
             const freshProjects = await Promise.all(
                 currentProjects
                     .filter(p => p.links?.some(l => l.source === 'auto'))
-                    .map(p => projectsService.getProject(p.id))
+                    .map(p => loadProjectAdmin(p.id))
             );
             const validProjects = freshProjects.filter(Boolean) as typeof currentProjects;
 

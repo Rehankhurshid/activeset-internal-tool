@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLLECTIONS } from '@/lib/constants';
-import { projectsService } from '@/services/database';
+import { loadProjectAdmin } from '@/services/ScanJobService';
 import { generateHealthReport } from '@/services/HealthReportGenerator';
 import { sendScanCompletionNotification } from '@/services/NotificationService';
 
@@ -142,7 +142,7 @@ function getBaseUrl(): string {
 async function resolveProjectName(projectId: string, fallback?: string): Promise<string> {
   if (fallback?.trim()) return fallback;
 
-  const project = await projectsService.getProject(projectId);
+  const project = await loadProjectAdmin(projectId);
   return project?.name || projectId;
 }
 
@@ -293,7 +293,7 @@ export async function processQueuedScanNotification(
   console.log(`[scan-notify] Claimed ${scanId} for project ${claimedJob.projectName} (attempt ${claimedJob.attempts})`);
 
   try {
-    const project = await projectsService.getProject(claimedJob.projectId);
+    const project = await loadProjectAdmin(claimedJob.projectId);
     if (!project) {
       throw new Error(`Project not found for notification: ${claimedJob.projectId}`);
     }
