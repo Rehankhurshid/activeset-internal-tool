@@ -171,6 +171,57 @@ export async function createSlot(
   return hydrate(ref.id, doc);
 }
 
+/**
+ * Creates many slots at once on a project. Computes the next `order` value
+ * once (cheaper than re-querying for each slot) and assigns sequential
+ * orders to the new rows. Returns the created `ProjectInvoice`s in input
+ * order.
+ */
+export async function createSlotsBatch(
+  projectId: string,
+  inputs: CreateSlotInput[]
+): Promise<ProjectInvoice[]> {
+  if (inputs.length === 0) return [];
+  const col = invoicesCollection();
+  const existing = await col.where('projectId', '==', projectId).get();
+  const baseOrder = existing.docs.reduce((m, d) => {
+    const v = (d.data() as { order?: number }).order;
+    return typeof v === 'number' && v > m ? v : m;
+  }, -1);
+
+  const now = new Date().toISOString();
+  const docs = inputs.map((input, i) => ({
+    projectId,
+    label: input.label,
+    expectedAmount: input.expectedAmount ?? null,
+    expectedCurrency: input.expectedCurrency ?? null,
+    expectedDueDate: input.expectedDueDate ?? null,
+    notes: input.notes ?? null,
+    order: baseOrder + 1 + i,
+    refrensInvoiceId: null,
+    refrensUrlKey: null,
+    invoiceNumber: null,
+    status: 'PENDING' as InvoiceStatus,
+    lastKnownStatus: 'PENDING' as InvoiceStatus,
+    amount: null,
+    currency: null,
+    invoiceDate: null,
+    dueDate: null,
+    shareLink: null,
+    pdfLink: null,
+    billedToName: null,
+    billedToEmail: null,
+    emailNotifyEnabled: false,
+    lastSyncedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  // Fire all adds in parallel — Firestore handles the writes.
+  const refs = await Promise.all(docs.map((doc) => col.add(doc)));
+  return refs.map((ref, i) => hydrate(ref.id, docs[i]));
+}
+
 export async function updateSlotFields(id: string, patch: UpdateSlotInput): Promise<void> {
   const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if ('label' in patch && typeof patch.label === 'string') update.label = patch.label;

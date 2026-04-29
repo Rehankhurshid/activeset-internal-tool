@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, RefreshCw, Settings, Receipt, AlertCircle } from 'lucide-react';
+import { Plus, RefreshCw, Settings, Receipt, AlertCircle, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchAuthed } from '@/lib/api-client';
 import { SlotCard } from './SlotCard';
 import { SlotDialog } from './SlotDialog';
 import { MapInvoiceDialog } from './MapInvoiceDialog';
+import { ApplyTemplateDialog } from './ApplyTemplateDialog';
 import type { ProjectInvoice } from '@/modules/invoices/domain/types';
 
 interface InvoicesTabProps {
@@ -50,6 +51,8 @@ export function InvoicesTab({ projectId }: InvoicesTabProps) {
 
   const [mapDialogOpen, setMapDialogOpen] = useState(false);
   const [mapTargetSlot, setMapTargetSlot] = useState<ProjectInvoice | null>(null);
+
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -103,6 +106,19 @@ export function InvoicesTab({ projectId }: InvoicesTabProps) {
 
   const handleDeleted = (invoiceId: string) => {
     setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
+  };
+
+  const handleTemplateApplied = (newSlots: ProjectInvoice[]) => {
+    setInvoices((prev) => {
+      const byId = new Map(prev.map((i) => [i.id, i]));
+      for (const slot of newSlots) byId.set(slot.id, slot);
+      return Array.from(byId.values()).sort((a, b) => {
+        if (a.order !== b.order) return a.order - b.order;
+        const aKey = a.invoiceDate ?? a.createdAt;
+        const bKey = b.invoiceDate ?? b.createdAt;
+        return bKey.localeCompare(aKey);
+      });
+    });
   };
 
   const openMapForSlot = (invoice: ProjectInvoice) => {
@@ -160,6 +176,10 @@ export function InvoicesTab({ projectId }: InvoicesTabProps) {
             <RefreshCw className={`mr-2 h-4 w-4 ${invoicesLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setTemplateDialogOpen(true)}>
+            <Layers className="mr-2 h-4 w-4" />
+            Apply template
+          </Button>
           <Button size="sm" onClick={openAddSlot}>
             <Plus className="mr-2 h-4 w-4" />
             Add slot
@@ -215,6 +235,13 @@ export function InvoicesTab({ projectId }: InvoicesTabProps) {
           if (!o) setMapTargetSlot(null);
         }}
         onMapped={handleSaved}
+      />
+
+      <ApplyTemplateDialog
+        projectId={projectId}
+        open={templateDialogOpen}
+        onOpenChange={setTemplateDialogOpen}
+        onApplied={handleTemplateApplied}
       />
     </div>
   );
