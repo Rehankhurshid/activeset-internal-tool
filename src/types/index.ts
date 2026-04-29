@@ -324,6 +324,9 @@ export interface Project {
   updatedAt: Date;
   userId: string;
   client?: string; // Optional client/company name used to group projects together
+  /** Optional link to a proposal — drives "Import from proposal" on the
+   *  Invoices tab. Set via the project header's proposal picker. */
+  proposalId?: string;
   webflowConfig?: WebflowConfig;
   sitemapUrl?: string; // For daily scheduled scans
   folderPageTypes?: FolderPageTypes; // Simple folder → CMS/Static mapping

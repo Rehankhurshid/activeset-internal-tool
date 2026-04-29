@@ -1,3 +1,5 @@
+import type { PaymentTemplate } from '@/lib/payment-templates';
+
 // Section IDs for comments and history tracking
 export type ProposalSectionId =
     | 'overview'
@@ -97,6 +99,15 @@ export interface Proposal {
         };
         aboutUs: string;
         pricing: PricingSection;
+        // Structured payment terms — drives invoice slot generation when this
+        // proposal is linked to a project. Independent of `terms` (which stays
+        // as freeform legal copy).
+        paymentTerms?: {
+            template: PaymentTemplate;
+            totalAmount: number;
+            currency: string;
+            startDate: string; // ISO YYYY-MM-DD
+        };
         timeline: {
             phases: TimelinePhase[];
         };

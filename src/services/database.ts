@@ -281,6 +281,17 @@ export const projectsService = {
     });
   },
 
+  // Link/unlink a proposal to drive "Import from proposal" on the Invoices
+  // tab. Pass null/empty to clear the link.
+  async updateProjectProposalId(projectId: string, proposalId: string | null): Promise<void> {
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    const trimmed = (proposalId ?? '').trim();
+    await updateDoc(projectRef, {
+      proposalId: trimmed.length > 0 ? trimmed : deleteField(),
+      updatedAt: Timestamp.now(),
+    });
+  },
+
   // Update project status (current / past)
   async updateProjectStatus(projectId: string, status: ProjectStatus): Promise<void> {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);

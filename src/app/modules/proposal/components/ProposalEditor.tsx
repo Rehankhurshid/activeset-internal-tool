@@ -21,6 +21,7 @@ import RichTextEditor from "./RichTextEditor";
 import { generateProposalDraft, generateProposalBlock } from "../services/aiClient";
 import { DatePicker } from "@/components/ui/date-picker";
 import HistoryPanel from "./HistoryPanel";
+import { PaymentTermsCard } from "./PaymentTermsCard";
 import { Badge } from "@/components/ui/badge";
 
 // Constants removed - using dynamic configurations from useConfigurations hook
@@ -2036,6 +2037,14 @@ Example:
                 </CardContent>
               )}
             </Card>
+
+            {/* Payment Terms — drives invoice slot generation when proposal is linked */}
+            <PaymentTermsCard
+              data={formData.data}
+              onUpdate={(patch) => setFormData(prev => ({ ...prev, data: { ...prev.data, ...patch } }))}
+              collapsed={Boolean(collapsedSections['section-paymentTerms'])}
+              onToggleCollapse={() => toggleSection('section-paymentTerms')}
+            />
 
             {/* Timeline */}
             <Card id="section-timeline" className="border-border/50">

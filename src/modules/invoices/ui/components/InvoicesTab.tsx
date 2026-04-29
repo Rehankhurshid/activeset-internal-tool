@@ -5,17 +5,22 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, RefreshCw, Settings, Receipt, AlertCircle, Layers } from 'lucide-react';
+import { Plus, RefreshCw, Settings, Receipt, AlertCircle, Layers, FileText, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchAuthed } from '@/lib/api-client';
 import { SlotCard } from './SlotCard';
 import { SlotDialog } from './SlotDialog';
 import { MapInvoiceDialog } from './MapInvoiceDialog';
 import { ApplyTemplateDialog } from './ApplyTemplateDialog';
+import { LinkProposalDialog } from './LinkProposalDialog';
+import { proposalService } from '@/app/modules/proposal/services/ProposalService';
+import { describeTemplate } from '@/lib/payment-templates';
+import type { Proposal } from '@/app/modules/proposal/types/Proposal';
 import type { ProjectInvoice } from '@/modules/invoices/domain/types';
 
 interface InvoicesTabProps {
   projectId: string;
+  proposalId?: string;
 }
 
 interface ConfigStatus {
@@ -40,7 +45,7 @@ function summarize(invoices: ProjectInvoice[]): string {
   return parts.join(' · ');
 }
 
-export function InvoicesTab({ projectId }: InvoicesTabProps) {
+export function InvoicesTab({ projectId, proposalId }: InvoicesTabProps) {
   const [config, setConfig] = useState<ConfigStatus | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [invoices, setInvoices] = useState<ProjectInvoice[]>([]);
@@ -53,6 +58,11 @@ export function InvoicesTab({ projectId }: InvoicesTabProps) {
   const [mapTargetSlot, setMapTargetSlot] = useState<ProjectInvoice | null>(null);
 
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [proposalLoading, setProposalLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -91,6 +101,53 @@ export function InvoicesTab({ projectId }: InvoicesTabProps) {
     if (config?.configured) loadInvoices();
     else setInvoicesLoading(false);
   }, [config?.configured, loadInvoices]);
+
+  useEffect(() => {
+    if (!proposalId) {
+      setProposal(null);
+      return;
+    }
+    setProposalLoading(true);
+    proposalService
+      .getProposalById(proposalId)
+      .then((p) => setProposal(p))
+      .catch(() => setProposal(null))
+      .finally(() => setProposalLoading(false));
+  }, [proposalId]);
+
+  const handleImportFromProposal = async () => {
+    const terms = proposal?.data?.paymentTerms;
+    if (!terms) {
+      toast.error('Linked proposal has no payment terms set');
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await fetchAuthed('/api/refrens/invoices/template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          template: terms.template,
+          totalAmount: terms.totalAmount,
+          currency: terms.currency,
+          startDate: terms.startDate,
+        }),
+      });
+      const data = (await res.json()) as { invoices?: ProjectInvoice[]; error?: string };
+      if (!res.ok || !Array.isArray(data.invoices)) {
+        throw new Error(data.error || `Failed (${res.status})`);
+      }
+      handleTemplateApplied(data.invoices);
+      toast.success(
+        `Imported ${data.invoices.length} slot${data.invoices.length === 1 ? '' : 's'} from proposal`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to import');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const handleSaved = (invoice: ProjectInvoice) => {
     setInvoices((prev) => {
@@ -164,8 +221,69 @@ export function InvoicesTab({ projectId }: InvoicesTabProps) {
     );
   }
 
+  const proposalTerms = proposal?.data?.paymentTerms;
+
   return (
     <div className="space-y-4">
+      {/* Proposal link banner — drives "Import from proposal" */}
+      {proposalId ? (
+        <Card className="bg-muted/30">
+          <CardContent className="p-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 flex items-center gap-2 text-sm">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              {proposalLoading ? (
+                <Skeleton className="h-4 w-32" />
+              ) : proposal ? (
+                <>
+                  <span className="font-medium truncate">{proposal.title}</span>
+                  {proposalTerms ? (
+                    <span className="text-xs text-muted-foreground">
+                      · {describeTemplate(proposalTerms.template)} ·{' '}
+                      {proposalTerms.currency} {proposalTerms.totalAmount.toLocaleString()}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">· no payment terms set</span>
+                  )}
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">Linked proposal not found</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={handleImportFromProposal}
+                disabled={!proposalTerms || importing}
+                title={
+                  proposalTerms
+                    ? 'Generate slots from the proposal payment terms'
+                    : 'Set payment terms on the proposal first'
+                }
+              >
+                <Layers className="mr-1.5 h-3.5 w-3.5" />
+                Import to slots
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLinkDialogOpen(true)}>
+                Manage
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="bg-muted/30">
+          <CardContent className="p-3 flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div className="text-muted-foreground flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              No proposal linked yet — link one to import its payment template into slots.
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setLinkDialogOpen(true)}>
+              <Link2 className="mr-1.5 h-3.5 w-3.5" />
+              Link a proposal
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-muted-foreground flex items-center gap-1.5">
           <Receipt className="h-4 w-4" />
@@ -242,6 +360,18 @@ export function InvoicesTab({ projectId }: InvoicesTabProps) {
         open={templateDialogOpen}
         onOpenChange={setTemplateDialogOpen}
         onApplied={handleTemplateApplied}
+      />
+
+      <LinkProposalDialog
+        projectId={projectId}
+        currentProposalId={proposalId}
+        open={linkDialogOpen}
+        onOpenChange={setLinkDialogOpen}
+        onLinked={() => {
+          // Project subscription in the parent will propagate the new
+          // proposalId back here via props, which re-runs the proposal
+          // fetch effect. Nothing to do locally.
+        }}
       />
     </div>
   );
