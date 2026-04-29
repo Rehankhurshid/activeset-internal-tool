@@ -12,9 +12,8 @@ import {
   Code,
   AlertTriangle,
   Activity,
-  Clock,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { healthReportService } from '@/services/HealthReportService';
 import { DailyHealthReport } from '@/types/health-report';
@@ -25,17 +24,6 @@ interface IssueItem {
   count: number;
   icon: React.ReactNode;
   color: string;
-}
-
-function ScoreRing({ score }: { score: number }) {
-  const color = score >= 80 ? 'text-emerald-500' : score >= 60 ? 'text-amber-500' : 'text-red-500';
-  const bgColor = score >= 80 ? 'bg-emerald-500/10' : score >= 60 ? 'bg-amber-500/10' : 'bg-red-500/10';
-
-  return (
-    <div className={cn('flex items-center justify-center w-14 h-14 rounded-full', bgColor)}>
-      <span className={cn('text-xl font-bold', color)}>{score}</span>
-    </div>
-  );
 }
 
 interface DailyHealthPanelProps {
@@ -69,65 +57,56 @@ export function DailyHealthPanel({ className }: DailyHealthPanelProps) {
     bd.lowScorePages;
 
   const issues: IssueItem[] = [
-    { label: 'Missing ALT', count: bd.missingAltText, icon: <Image className="h-3.5 w-3.5" />, color: 'text-rose-400' },
-    { label: 'Missing Meta Desc', count: bd.missingMetaDescription, icon: <FileText className="h-3.5 w-3.5" />, color: 'text-amber-400' },
-    { label: 'Missing Title', count: bd.missingTitle, icon: <Type className="h-3.5 w-3.5" />, color: 'text-orange-400' },
-    { label: 'Missing H1', count: bd.missingH1, icon: <Heading1 className="h-3.5 w-3.5" />, color: 'text-yellow-400' },
-    { label: 'Broken Links', count: bd.brokenLinks, icon: <LinkIcon className="h-3.5 w-3.5" />, color: 'text-red-400' },
-    { label: 'Spelling', count: bd.spellingErrors, icon: <Type className="h-3.5 w-3.5" />, color: 'text-blue-400' },
-    { label: 'Missing OG', count: bd.missingOpenGraph, icon: <Share2 className="h-3.5 w-3.5" />, color: 'text-purple-400' },
-    { label: 'Missing Schema', count: bd.missingSchema, icon: <Code className="h-3.5 w-3.5" />, color: 'text-cyan-400' },
-    { label: 'Low Score', count: bd.lowScorePages, icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-400' },
+    { label: 'ALT', count: bd.missingAltText, icon: <Image className="h-3 w-3" />, color: 'text-rose-400' },
+    { label: 'Meta', count: bd.missingMetaDescription, icon: <FileText className="h-3 w-3" />, color: 'text-amber-400' },
+    { label: 'Title', count: bd.missingTitle, icon: <Type className="h-3 w-3" />, color: 'text-orange-400' },
+    { label: 'H1', count: bd.missingH1, icon: <Heading1 className="h-3 w-3" />, color: 'text-yellow-400' },
+    { label: 'Broken', count: bd.brokenLinks, icon: <LinkIcon className="h-3 w-3" />, color: 'text-red-400' },
+    { label: 'Spelling', count: bd.spellingErrors, icon: <Type className="h-3 w-3" />, color: 'text-blue-400' },
+    { label: 'OG', count: bd.missingOpenGraph, icon: <Share2 className="h-3 w-3" />, color: 'text-purple-400' },
+    { label: 'Schema', count: bd.missingSchema, icon: <Code className="h-3 w-3" />, color: 'text-cyan-400' },
+    { label: 'Low Score', count: bd.lowScorePages, icon: <AlertTriangle className="h-3 w-3" />, color: 'text-red-400' },
   ].filter(i => i.count > 0);
+
+  const scoreColor = report.avgScore >= 80 ? 'text-emerald-500' : report.avgScore >= 60 ? 'text-amber-500' : 'text-red-500';
+  const scoreBg = report.avgScore >= 80 ? 'bg-emerald-500/10' : report.avgScore >= 60 ? 'bg-amber-500/10' : 'bg-red-500/10';
 
   return (
     <Card className={cn('border', className)}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-primary" />
-            <CardTitle className="text-base">Site Health Report</CardTitle>
-            <Badge variant="secondary" className="text-xs">
-              {report.date}
-            </Badge>
+      <CardContent className="p-3 sm:p-4">
+        {/* Summary line */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className={cn('flex items-center justify-center w-9 h-9 rounded-full shrink-0', scoreBg)}>
+            <span className={cn('text-sm font-bold', scoreColor)}>{report.avgScore}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            {report.projectCount} projects · {report.totalPages} pages
+          <div className="flex items-center gap-1.5 text-sm flex-1 min-w-0">
+            <Activity className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="font-medium whitespace-nowrap">Site Health</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="font-semibold tabular-nums">{visibleTotalIssues}</span>
+            <span className="text-muted-foreground truncate whitespace-nowrap">
+              issues · {report.projectCount} projects · {report.totalPages} pages
+            </span>
           </div>
+          <Badge variant="secondary" className="text-xs shrink-0">{report.date}</Badge>
         </div>
-      </CardHeader>
 
-      <CardContent className="pt-0">
-        <div className="flex gap-6">
-          {/* Score + summary */}
-          <div className="flex items-center gap-4">
-            <ScoreRing score={report.avgScore} />
-            <div>
-              <p className="text-sm font-medium">
-                {visibleTotalIssues} issues found
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Avg score across all sites
-              </p>
-            </div>
-          </div>
-
-          {/* Issue grid */}
-          <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-1.5">
+        {/* Issue chips */}
+        {issues.length > 0 && (
+          <div className="mt-3 flex items-center gap-x-3 gap-y-1.5 flex-wrap">
             {issues.map((item) => (
-              <div key={item.label} className="flex items-center gap-1.5">
+              <div key={item.label} className="flex items-center gap-1">
                 <span className={item.color}>{item.icon}</span>
-                <span className="text-xs text-muted-foreground truncate">{item.label}</span>
-                <span className="text-xs font-semibold ml-auto">{item.count}</span>
+                <span className="text-xs text-muted-foreground">{item.label}</span>
+                <span className="text-xs font-semibold tabular-nums">{item.count}</span>
               </div>
             ))}
           </div>
-        </div>
+        )}
 
         {/* Per-project breakdown */}
         {report.projects.length > 0 && (
-          <div className="mt-4 pt-3 border-t space-y-1.5">
+          <div className="mt-3 pt-3 border-t">
             {report.projects
               .sort((a, b) => a.avgScore - b.avgScore)
               .slice(0, 5)
@@ -142,22 +121,22 @@ export function DailyHealthPanel({ className }: DailyHealthPanelProps) {
                   p.issues.missingOpenGraph +
                   p.issues.missingSchema +
                   p.issues.lowScorePages;
-                const scoreColor = p.avgScore >= 80 ? 'text-emerald-500' : p.avgScore >= 60 ? 'text-amber-500' : 'text-red-500';
+                const pColor = p.avgScore >= 80 ? 'text-emerald-500' : p.avgScore >= 60 ? 'text-amber-500' : 'text-red-500';
 
                 return (
                   <Link
                     key={p.projectId}
                     href={`/modules/project-links/${p.projectId}`}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-muted/50 transition-colors text-sm"
                   >
-                    <span className={cn('text-sm font-bold tabular-nums w-8', scoreColor)}>
-                      {p.avgScore}
+                    <span className={cn('font-bold tabular-nums w-7 shrink-0', pColor)}>{p.avgScore}</span>
+                    <span className="font-medium flex-1 truncate">{p.projectName}</span>
+                    <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">
+                      {p.totalPages} pages
                     </span>
-                    <span className="text-sm font-medium flex-1 truncate">{p.projectName}</span>
-                    <span className="text-xs text-muted-foreground">{p.totalPages} pages</span>
-                    <Badge variant="outline" className="text-[10px] h-5">
+                    <span className="text-xs text-muted-foreground tabular-nums shrink-0 w-16 text-right">
                       {totalIssues} issues
-                    </Badge>
+                    </span>
                   </Link>
                 );
               })}
