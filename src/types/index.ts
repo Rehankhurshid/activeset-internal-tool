@@ -589,3 +589,134 @@ export interface TimelineTemplate {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+// --- TASK & REQUEST TYPES ---
+// Tasks are discrete trackable work items, one per row in the Tasks tab.
+// Requests are the original incoming blobs (Slack/email/paste) that may have
+// been parsed by AI into one or more tasks. A task may have a requestId
+// linking it back to its source bundle, or be created standalone.
+
+export type TaskCategory =
+  | 'fix'
+  | 'feature'
+  | 'copy'
+  | 'design'
+  | 'bug'
+  | 'content'
+  | 'other';
+
+export type TaskStatus =
+  | 'backlog'
+  | 'todo'
+  | 'in_progress'
+  | 'in_review'
+  | 'done'
+  | 'blocked';
+
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export type TaskSource = 'manual' | 'paste' | 'slack' | 'email';
+
+export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
+  fix: 'Fix',
+  feature: 'Feature',
+  copy: 'Copy',
+  design: 'Design',
+  bug: 'Bug',
+  content: 'Content',
+  other: 'Other',
+};
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  backlog: 'Backlog',
+  todo: 'To Do',
+  in_progress: 'In Progress',
+  in_review: 'In Review',
+  done: 'Done',
+  blocked: 'Blocked',
+};
+
+export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent',
+};
+
+export const TASK_CATEGORIES: TaskCategory[] = ['fix', 'feature', 'copy', 'design', 'bug', 'content', 'other'];
+export const TASK_STATUSES: TaskStatus[] = ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'blocked'];
+export const TASK_PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
+
+export interface Task {
+  id: string;
+  projectId: string;
+  /** Optional link back to the Request blob this task was parsed from. */
+  requestId?: string;
+  title: string;
+  description?: string;
+  category: TaskCategory;
+  status: TaskStatus;
+  priority: TaskPriority;
+  /** ISO date string (YYYY-MM-DD) — matches the existing DatePicker convention. */
+  dueDate?: string;
+  tags?: string[];
+  source: TaskSource;
+  /** Optional URL back to the originating Slack message / email thread. */
+  sourceLink?: string;
+  /** Email of the assigned team member. */
+  assignee?: string;
+  /** Manual order within a status bucket (for future kanban / drag-drop). */
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt?: Date;
+  createdBy: string;
+}
+
+export type CreateTaskInput = Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completedAt' | 'order'> & {
+  order?: number;
+};
+
+export type UpdateTaskInput = Partial<
+  Pick<
+    Task,
+    | 'title'
+    | 'description'
+    | 'category'
+    | 'status'
+    | 'priority'
+    | 'dueDate'
+    | 'tags'
+    | 'sourceLink'
+    | 'assignee'
+    | 'order'
+  >
+>;
+
+export type RequestSource = 'paste' | 'slack' | 'email';
+export type RequestStatus = 'new' | 'parsed' | 'archived';
+
+export interface ProjectRequest {
+  id: string;
+  projectId: string;
+  rawText: string;
+  source: RequestSource;
+  /** Optional sender name/email if known (e.g. who sent the Slack message). */
+  sender?: string;
+  /** When the request was received (ISO). */
+  receivedAt: Date;
+  /** When AI parsing finished (ISO). */
+  parsedAt?: Date;
+  status: RequestStatus;
+  /** IDs of tasks generated from this request. */
+  taskIds: string[];
+  createdBy: string;
+}
+
+/** AI-parsed task suggestion returned from /api/tasks/parse-request. */
+export interface ParsedTaskSuggestion {
+  title: string;
+  description?: string;
+  category: TaskCategory;
+  priority: TaskPriority;
+}

@@ -15,11 +15,12 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare, Receipt } from 'lucide-react';
+import { Building2, Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { AppNavigation } from '@/shared/ui';
+import { TasksTab } from '@/components/tasks/TasksTab';
 import { toast } from 'sonner';
 
 interface PageProps {
@@ -273,6 +274,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                 <span className="hidden sm:inline">Audit Dashboard</span>
                                 <span className="sm:hidden">Audit</span>
                             </TabsTrigger>
+                            <TabsTrigger value="tasks" className="gap-2 flex-1 sm:flex-none">
+                                <ListTodo className="h-4 w-4" />
+                                <span className="hidden sm:inline">Tasks</span>
+                                <span className="sm:hidden">Tasks</span>
+                            </TabsTrigger>
                             <TabsTrigger value="webflow" className="gap-2 flex-1 sm:flex-none">
                                 <Globe className="h-4 w-4" />
                                 <span className="hidden sm:inline">Webflow Pages</span>
@@ -331,6 +337,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             detectedLocales={project.detectedLocales}
                             pathToLocaleMap={project.pathToLocaleMap}
                             imageScanJob={project.imageScanJob}
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="tasks" className="mt-4 sm:mt-6">
+                        <TasksTab
+                            projectId={project.id}
+                            userEmail={user?.email ?? ''}
                         />
                     </TabsContent>
 

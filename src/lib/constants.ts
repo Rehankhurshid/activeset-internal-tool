@@ -19,6 +19,10 @@ export const COLLECTIONS = {
   APP_SECRETS: 'app_secrets',
   // Per-project mirror of Refrens invoices. Admin-only at the API layer.
   PROJECT_INVOICES: 'project_invoices',
+  // Discrete trackable work items, one row per actionable task.
+  TASKS: 'tasks',
+  // Raw incoming request blobs (Slack/email/paste) that get parsed into tasks.
+  REQUESTS: 'requests',
 } as const;
 
 // UI constants

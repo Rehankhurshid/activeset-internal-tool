@@ -17,7 +17,21 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Project, ProjectLink, ProjectStatus, ProjectTag, CreateProjectLinkInput, UpdateProjectLinkInput, AuditResult, ImageScanJob } from '@/types';
+import {
+  Project,
+  ProjectLink,
+  ProjectStatus,
+  ProjectTag,
+  CreateProjectLinkInput,
+  UpdateProjectLinkInput,
+  AuditResult,
+  ImageScanJob,
+  Task,
+  CreateTaskInput,
+  UpdateTaskInput,
+  ProjectRequest,
+  RequestSource,
+} from '@/types';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
 import { compactAuditResult } from '@/lib/scan-utils';
@@ -672,5 +686,224 @@ export const projectsService = {
       logError(error, 'disableAuditShareLink');
       throw new DatabaseError('Failed to disable public audit share link');
     }
+  },
+};
+
+// ============================================================================
+// TASKS & REQUESTS
+// ============================================================================
+
+const TASKS_COLLECTION = COLLECTIONS.TASKS;
+const REQUESTS_COLLECTION = COLLECTIONS.REQUESTS;
+
+/** Convert Firestore doc data to Task with proper Date types. */
+function taskFromDoc(id: string, data: Record<string, unknown>): Task {
+  const createdAt = data.createdAt as Timestamp | undefined;
+  const updatedAt = data.updatedAt as Timestamp | undefined;
+  const completedAt = data.completedAt as Timestamp | undefined;
+  return {
+    id,
+    projectId: data.projectId as string,
+    requestId: data.requestId as string | undefined,
+    title: data.title as string,
+    description: data.description as string | undefined,
+    category: data.category as Task['category'],
+    status: data.status as Task['status'],
+    priority: data.priority as Task['priority'],
+    dueDate: data.dueDate as string | undefined,
+    tags: (data.tags as string[] | undefined) ?? [],
+    source: (data.source as Task['source']) ?? 'manual',
+    sourceLink: data.sourceLink as string | undefined,
+    assignee: data.assignee as string | undefined,
+    order: (data.order as number | undefined) ?? 0,
+    createdAt: createdAt ? createdAt.toDate() : new Date(),
+    updatedAt: updatedAt ? updatedAt.toDate() : new Date(),
+    completedAt: completedAt ? completedAt.toDate() : undefined,
+    createdBy: data.createdBy as string,
+  };
+}
+
+function requestFromDoc(id: string, data: Record<string, unknown>): ProjectRequest {
+  const receivedAt = data.receivedAt as Timestamp | undefined;
+  const parsedAt = data.parsedAt as Timestamp | undefined;
+  return {
+    id,
+    projectId: data.projectId as string,
+    rawText: data.rawText as string,
+    source: data.source as ProjectRequest['source'],
+    sender: data.sender as string | undefined,
+    receivedAt: receivedAt ? receivedAt.toDate() : new Date(),
+    parsedAt: parsedAt ? parsedAt.toDate() : undefined,
+    status: data.status as ProjectRequest['status'],
+    taskIds: (data.taskIds as string[] | undefined) ?? [],
+    createdBy: data.createdBy as string,
+  };
+}
+
+export const tasksService = {
+  /** Create a single task. Returns the new task id. */
+  async createTask(input: CreateTaskInput): Promise<string> {
+    try {
+      const now = Timestamp.now();
+      const payload = stripUndefined({
+        ...input,
+        order: input.order ?? Date.now(),
+        createdAt: now,
+        updatedAt: now,
+      });
+      const ref = await addDoc(collection(db, TASKS_COLLECTION), payload as Record<string, unknown>);
+      return ref.id;
+    } catch (error) {
+      logError(error, 'createTask');
+      throw new DatabaseError('Failed to create task');
+    }
+  },
+
+  /**
+   * Create multiple tasks atomically (e.g. AI-parsed suggestions accepted in
+   * the New Request dialog). Returns the new task ids in the order provided.
+   */
+  async createTasksBatch(inputs: CreateTaskInput[]): Promise<string[]> {
+    if (inputs.length === 0) return [];
+    try {
+      const batch = writeBatch(db);
+      const ids: string[] = [];
+      const now = Timestamp.now();
+      const baseOrder = Date.now();
+      inputs.forEach((input, idx) => {
+        const ref = doc(collection(db, TASKS_COLLECTION));
+        ids.push(ref.id);
+        const payload = stripUndefined({
+          ...input,
+          order: input.order ?? baseOrder + idx,
+          createdAt: now,
+          updatedAt: now,
+        });
+        batch.set(ref, payload as Record<string, unknown>);
+      });
+      await batch.commit();
+      return ids;
+    } catch (error) {
+      logError(error, 'createTasksBatch');
+      throw new DatabaseError('Failed to create tasks');
+    }
+  },
+
+  /** Update a task. `completedAt` is auto-set/cleared when status flips to/from done. */
+  async updateTask(taskId: string, updates: UpdateTaskInput): Promise<void> {
+    try {
+      const ref = doc(db, TASKS_COLLECTION, taskId);
+      const cleaned = stripUndefined(updates);
+      // Auto-stamp completedAt when status flips to done; clear when leaving done.
+      const completedAtUpdate =
+        updates.status === 'done'
+          ? { completedAt: Timestamp.now() }
+          : updates.status
+            ? { completedAt: deleteField() }
+            : {};
+      await updateDoc(ref, {
+        ...cleaned,
+        ...completedAtUpdate,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'updateTask');
+      throw new DatabaseError('Failed to update task');
+    }
+  },
+
+  async deleteTask(taskId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, TASKS_COLLECTION, taskId));
+    } catch (error) {
+      logError(error, 'deleteTask');
+      throw new DatabaseError('Failed to delete task');
+    }
+  },
+
+  /** Real-time subscription to all tasks for a project. */
+  subscribeToProjectTasks(
+    projectId: string,
+    callback: (tasks: Task[]) => void,
+  ): () => void {
+    const q = query(
+      collection(db, TASKS_COLLECTION),
+      where('projectId', '==', projectId),
+    );
+    return onSnapshot(q, (snap) => {
+      const tasks = snap.docs.map((d) => taskFromDoc(d.id, d.data()));
+      // Sort: incomplete first, then by status order, then by `order` field
+      const statusOrder: Record<Task['status'], number> = {
+        in_progress: 0,
+        in_review: 1,
+        todo: 2,
+        backlog: 3,
+        blocked: 4,
+        done: 5,
+      };
+      tasks.sort((a, b) => {
+        const sa = statusOrder[a.status] ?? 99;
+        const sb = statusOrder[b.status] ?? 99;
+        if (sa !== sb) return sa - sb;
+        return (a.order ?? 0) - (b.order ?? 0);
+      });
+      callback(tasks);
+    });
+  },
+};
+
+export const requestsService = {
+  /** Create a Request blob (no parsing yet). Returns the new id. */
+  async createRequest(input: {
+    projectId: string;
+    rawText: string;
+    source: RequestSource;
+    sender?: string;
+    createdBy: string;
+  }): Promise<string> {
+    try {
+      const now = Timestamp.now();
+      const payload = stripUndefined({
+        ...input,
+        receivedAt: now,
+        status: 'new' as const,
+        taskIds: [],
+      });
+      const ref = await addDoc(collection(db, REQUESTS_COLLECTION), payload as Record<string, unknown>);
+      return ref.id;
+    } catch (error) {
+      logError(error, 'createRequest');
+      throw new DatabaseError('Failed to create request');
+    }
+  },
+
+  /** Mark a request as parsed and link the generated task ids back. */
+  async markRequestParsed(requestId: string, taskIds: string[]): Promise<void> {
+    try {
+      const ref = doc(db, REQUESTS_COLLECTION, requestId);
+      await updateDoc(ref, {
+        status: 'parsed' as const,
+        parsedAt: Timestamp.now(),
+        taskIds,
+      });
+    } catch (error) {
+      logError(error, 'markRequestParsed');
+      throw new DatabaseError('Failed to mark request parsed');
+    }
+  },
+
+  subscribeToProjectRequests(
+    projectId: string,
+    callback: (requests: ProjectRequest[]) => void,
+  ): () => void {
+    const q = query(
+      collection(db, REQUESTS_COLLECTION),
+      where('projectId', '==', projectId),
+    );
+    return onSnapshot(q, (snap) => {
+      const requests = snap.docs.map((d) => requestFromDoc(d.id, d.data()));
+      requests.sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime());
+      callback(requests);
+    });
   },
 };
