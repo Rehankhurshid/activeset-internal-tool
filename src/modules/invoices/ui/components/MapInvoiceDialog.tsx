@@ -37,6 +37,13 @@ interface AvailableInvoiceItem {
 
 interface MapInvoiceDialogProps {
   projectId: string;
+  /** When set, the picked invoice fills this slot instead of creating an
+   *  ad-hoc row. The slot's planning fields (label, expected amounts) are
+   *  preserved. */
+  targetSlotId?: string;
+  /** Display only — shown in the dialog header so the user knows which slot
+   *  they're filling. */
+  targetSlotLabel?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onMapped: (invoice: ProjectInvoice) => void;
@@ -77,7 +84,14 @@ function formatRelativeTime(iso: string | null): string {
   return date.toLocaleString();
 }
 
-export function MapInvoiceDialog({ projectId, open, onOpenChange, onMapped }: MapInvoiceDialogProps) {
+export function MapInvoiceDialog({
+  projectId,
+  targetSlotId,
+  targetSlotLabel,
+  open,
+  onOpenChange,
+  onMapped,
+}: MapInvoiceDialogProps) {
   const [items, setItems] = useState<AvailableInvoiceItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -155,7 +169,11 @@ export function MapInvoiceDialog({ projectId, open, onOpenChange, onMapped }: Ma
       const res = await fetchAuthed('/api/refrens/invoices/map', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, refrensInvoiceId: item.refrensInvoiceId }),
+        body: JSON.stringify({
+          projectId,
+          refrensInvoiceId: item.refrensInvoiceId,
+          ...(targetSlotId ? { slotId: targetSlotId } : {}),
+        }),
       });
       const data = (await res.json()) as { invoice?: ProjectInvoice; error?: string };
       if (!res.ok || !data.invoice) {
@@ -184,10 +202,13 @@ export function MapInvoiceDialog({ projectId, open, onOpenChange, onMapped }: Ma
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Map existing invoice</DialogTitle>
+          <DialogTitle>
+            {targetSlotLabel ? `Map invoice → ${targetSlotLabel}` : 'Map existing invoice'}
+          </DialogTitle>
           <DialogDescription>
-            Pick a Refrens invoice to attach to this project. Useful for invoices created
-            directly in Refrens or before this integration existed.
+            {targetSlotLabel
+              ? `Pick the Refrens invoice that fills this slot. The slot's expected amount and due date stay as they are.`
+              : `Pick a Refrens invoice to attach to this project.`}
           </DialogDescription>
         </DialogHeader>
 

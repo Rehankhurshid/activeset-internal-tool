@@ -85,7 +85,13 @@ export async function GET(req: NextRequest) {
   };
 
   for (const inv of invoices) {
-    if (inv.status === 'PAID' || inv.status === 'CANCELED') {
+    // Skip terminal statuses and empty slots (PENDING means no Refrens
+    // invoice attached yet — nothing to sync).
+    if (inv.status === 'PAID' || inv.status === 'CANCELED' || inv.status === 'PENDING') {
+      summary.skipped++;
+      continue;
+    }
+    if (!inv.refrensInvoiceId || !inv.refrensUrlKey) {
       summary.skipped++;
       continue;
     }

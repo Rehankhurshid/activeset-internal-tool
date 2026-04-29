@@ -1,7 +1,12 @@
 import 'server-only';
 import { db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
-import type { InvoiceStatus, ProjectInvoice } from '@/modules/invoices/domain/types';
+import type {
+  CreateSlotInput,
+  InvoiceStatus,
+  ProjectInvoice,
+  UpdateSlotInput,
+} from '@/modules/invoices/domain/types';
 import type { RefrensInvoiceSummary } from '@/services/RefrensService';
 
 function invoicesCollection() {
@@ -22,8 +27,7 @@ function isOverdueDate(dueDate: string | null | undefined): boolean {
 
 /**
  * Refrens reports UNPAID/PAID/CANCELED. We compute OVERDUE locally based on
- * dueDate so it can drive notifications without waiting on Refrens. Anything
- * else falls back to UNKNOWN.
+ * dueDate. PENDING is reserved for empty slots (no Refrens invoice mapped).
  */
 function normalizeStatus(
   raw: string | undefined | null,
@@ -43,20 +47,63 @@ function pickAmount(raw: RefrensInvoiceSummary): number | null {
   return total.total ?? total.amount ?? total.subTotal ?? null;
 }
 
-function refrensToMirror(
-  projectId: string,
-  raw: RefrensInvoiceSummary & { urlKey: string }
-): Omit<ProjectInvoice, 'id'> {
-  const now = new Date().toISOString();
-  const dueDate = raw.dueDate ?? null;
-  const status = normalizeStatus(raw.status, dueDate);
+/**
+ * Hydrates a stored doc into a `ProjectInvoice`, supplying defaults for
+ * fields older rows may not carry (label, order, slot metadata, etc.).
+ */
+function hydrate(id: string, data: Record<string, unknown>): ProjectInvoice {
   return {
-    projectId,
+    id,
+    projectId: String(data.projectId ?? ''),
+    label: (data.label as string | null) ?? null,
+    expectedAmount: (data.expectedAmount as number | null) ?? null,
+    expectedCurrency: (data.expectedCurrency as string | null) ?? null,
+    expectedDueDate: (data.expectedDueDate as string | null) ?? null,
+    notes: (data.notes as string | null) ?? null,
+    order: typeof data.order === 'number' ? data.order : 0,
+    refrensInvoiceId: (data.refrensInvoiceId as string | null) ?? null,
+    refrensUrlKey: (data.refrensUrlKey as string | null) ?? null,
+    invoiceNumber: (data.invoiceNumber as string | null) ?? null,
+    status: ((data.status as InvoiceStatus | undefined) ?? 'PENDING'),
+    lastKnownStatus: ((data.lastKnownStatus as InvoiceStatus | undefined) ?? 'PENDING'),
+    amount: (data.amount as number | null) ?? null,
+    currency: (data.currency as string | null) ?? null,
+    invoiceDate: (data.invoiceDate as string | null) ?? null,
+    dueDate: (data.dueDate as string | null) ?? null,
+    shareLink: (data.shareLink as string | null) ?? null,
+    pdfLink: (data.pdfLink as string | null) ?? null,
+    billedToName: (data.billedToName as string | null) ?? null,
+    billedToEmail: (data.billedToEmail as string | null) ?? null,
+    emailNotifyEnabled: Boolean(data.emailNotifyEnabled),
+    lastSyncedAt: (data.lastSyncedAt as string | null) ?? null,
+    createdAt: (data.createdAt as string) || new Date().toISOString(),
+    updatedAt: (data.updatedAt as string) || new Date().toISOString(),
+  };
+}
+
+function refrensFields(
+  raw: RefrensInvoiceSummary & { urlKey: string }
+): Pick<
+  ProjectInvoice,
+  | 'refrensInvoiceId'
+  | 'refrensUrlKey'
+  | 'invoiceNumber'
+  | 'status'
+  | 'amount'
+  | 'currency'
+  | 'invoiceDate'
+  | 'dueDate'
+  | 'shareLink'
+  | 'pdfLink'
+  | 'billedToName'
+  | 'billedToEmail'
+> {
+  const dueDate = raw.dueDate ?? null;
+  return {
     refrensInvoiceId: raw._id,
     refrensUrlKey: raw.urlKey,
     invoiceNumber: raw.invoiceNumber != null ? String(raw.invoiceNumber) : null,
-    status,
-    lastKnownStatus: status,
+    status: normalizeStatus(raw.status, dueDate),
     amount: pickAmount(raw),
     currency: raw.currency ?? null,
     invoiceDate: raw.invoiceDate ?? null,
@@ -65,10 +112,6 @@ function refrensToMirror(
     pdfLink: raw.share?.pdf ?? null,
     billedToName: raw.billedTo?.name ?? null,
     billedToEmail: raw.billedTo?.email ?? null,
-    emailNotifyEnabled: false,
-    lastSyncedAt: now,
-    createdAt: raw.createdAt ?? now,
-    updatedAt: now,
   };
 }
 
@@ -80,9 +123,136 @@ export interface SyncResult {
 }
 
 /**
- * Inserts or updates the local mirror from a Refrens response. Idempotent on
- * (projectId, refrensInvoiceId). Preserves user-owned fields (notify toggle,
- * createdAt) and reports whether the status flipped vs. the previous mirror.
+ * Creates an empty slot — planning-only, no Refrens invoice attached yet.
+ * The new row appears in the project's invoice list with status `PENDING`.
+ */
+export async function createSlot(
+  projectId: string,
+  input: CreateSlotInput
+): Promise<ProjectInvoice> {
+  const now = new Date().toISOString();
+  const col = invoicesCollection();
+
+  // Order = max(existing) + 1 so new slots append by default
+  const existing = await col.where('projectId', '==', projectId).get();
+  const maxOrder = existing.docs.reduce((m, d) => {
+    const v = (d.data() as { order?: number }).order;
+    return typeof v === 'number' && v > m ? v : m;
+  }, -1);
+
+  const doc = {
+    projectId,
+    label: input.label,
+    expectedAmount: input.expectedAmount ?? null,
+    expectedCurrency: input.expectedCurrency ?? null,
+    expectedDueDate: input.expectedDueDate ?? null,
+    notes: input.notes ?? null,
+    order: maxOrder + 1,
+    refrensInvoiceId: null,
+    refrensUrlKey: null,
+    invoiceNumber: null,
+    status: 'PENDING' as InvoiceStatus,
+    lastKnownStatus: 'PENDING' as InvoiceStatus,
+    amount: null,
+    currency: null,
+    invoiceDate: null,
+    dueDate: null,
+    shareLink: null,
+    pdfLink: null,
+    billedToName: null,
+    billedToEmail: null,
+    emailNotifyEnabled: false,
+    lastSyncedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const ref = await col.add(doc);
+  return hydrate(ref.id, doc);
+}
+
+export async function updateSlotFields(id: string, patch: UpdateSlotInput): Promise<void> {
+  const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+  if ('label' in patch && typeof patch.label === 'string') update.label = patch.label;
+  if ('expectedAmount' in patch) update.expectedAmount = patch.expectedAmount ?? null;
+  if ('expectedCurrency' in patch) update.expectedCurrency = patch.expectedCurrency ?? null;
+  if ('expectedDueDate' in patch) update.expectedDueDate = patch.expectedDueDate ?? null;
+  if ('notes' in patch) update.notes = patch.notes ?? null;
+  await invoicesCollection().doc(id).set(update, { merge: true });
+}
+
+export async function deleteSlot(id: string): Promise<void> {
+  await invoicesCollection().doc(id).delete();
+}
+
+/** Clears Refrens fields on a slot, returning it to `PENDING`. */
+export async function unmapSlot(id: string): Promise<ProjectInvoice | null> {
+  const ref = invoicesCollection().doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const now = new Date().toISOString();
+  await ref.set(
+    {
+      refrensInvoiceId: null,
+      refrensUrlKey: null,
+      invoiceNumber: null,
+      status: 'PENDING' as InvoiceStatus,
+      lastKnownStatus: 'PENDING' as InvoiceStatus,
+      amount: null,
+      currency: null,
+      invoiceDate: null,
+      dueDate: null,
+      shareLink: null,
+      pdfLink: null,
+      billedToName: null,
+      billedToEmail: null,
+      lastSyncedAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+  const after = await ref.get();
+  return hydrate(after.id, after.data() ?? {});
+}
+
+/**
+ * Maps a Refrens invoice into an existing slot. The slot's planning fields
+ * (label / expected amounts / due / notes / order) are preserved.
+ */
+export async function fillSlotWithRefrens(
+  slotId: string,
+  raw: RefrensInvoiceSummary & { urlKey: string }
+): Promise<SyncResult> {
+  const ref = invoicesCollection().doc(slotId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new Error(`Slot ${slotId} not found`);
+  }
+  const prev = hydrate(snap.id, snap.data() ?? {});
+  const refrens = refrensFields(raw);
+  const now = new Date().toISOString();
+  const merged: Omit<ProjectInvoice, 'id'> = {
+    ...prev,
+    ...refrens,
+    lastKnownStatus: prev.status,
+    lastSyncedAt: now,
+    updatedAt: now,
+  };
+  // Don't write `id` back into the doc body
+  const { ...body } = merged;
+  await ref.set(body, { merge: true });
+  return {
+    invoice: { id: slotId, ...merged },
+    statusChanged: prev.status !== merged.status,
+    oldStatus: prev.status,
+    newStatus: merged.status,
+  };
+}
+
+/**
+ * Map without a target slot — creates an ad-hoc row backed by the Refrens
+ * invoice. Idempotent on `(projectId, refrensInvoiceId)` so calling map on
+ * the same invoice twice doesn't duplicate.
  */
 export async function upsertInvoiceFromRefrens(
   projectId: string,
@@ -95,15 +265,26 @@ export async function upsertInvoiceFromRefrens(
     .limit(1)
     .get();
 
-  const mirror = refrensToMirror(projectId, raw);
+  const refrens = refrensFields(raw);
+  const now = new Date().toISOString();
 
   if (!existing.empty) {
     const docRef = existing.docs[0].ref;
-    const prev = existing.docs[0].data() as ProjectInvoice;
+    const prev = hydrate(existing.docs[0].id, existing.docs[0].data());
     const merged: Omit<ProjectInvoice, 'id'> = {
-      ...mirror,
+      ...prev,
+      ...refrens,
+      // preserve user-owned fields
       emailNotifyEnabled: prev.emailNotifyEnabled,
+      label: prev.label,
+      expectedAmount: prev.expectedAmount,
+      expectedCurrency: prev.expectedCurrency,
+      expectedDueDate: prev.expectedDueDate,
+      notes: prev.notes,
+      order: prev.order,
       lastKnownStatus: prev.status,
+      lastSyncedAt: now,
+      updatedAt: now,
       createdAt: prev.createdAt,
     };
     await docRef.set(merged, { merge: true });
@@ -115,24 +296,38 @@ export async function upsertInvoiceFromRefrens(
     };
   }
 
-  const docRef = await col.add(mirror);
+  // New ad-hoc row
+  const doc = {
+    projectId,
+    label: null,
+    expectedAmount: null,
+    expectedCurrency: null,
+    expectedDueDate: null,
+    notes: null,
+    order: 0,
+    ...refrens,
+    lastKnownStatus: refrens.status,
+    emailNotifyEnabled: false,
+    lastSyncedAt: now,
+    createdAt: raw.createdAt ?? now,
+    updatedAt: now,
+  };
+  const ref = await col.add(doc);
+  const invoice = hydrate(ref.id, doc);
   return {
-    invoice: { id: docRef.id, ...mirror },
+    invoice,
     statusChanged: false,
-    oldStatus: mirror.status,
-    newStatus: mirror.status,
+    oldStatus: invoice.status,
+    newStatus: invoice.status,
   };
 }
 
 export async function listInvoicesForProject(projectId: string): Promise<ProjectInvoice[]> {
-  const snap = await invoicesCollection()
-    .where('projectId', '==', projectId)
-    .get();
-  const items = snap.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<ProjectInvoice, 'id'>),
-  }));
+  const snap = await invoicesCollection().where('projectId', '==', projectId).get();
+  const items = snap.docs.map((doc) => hydrate(doc.id, doc.data()));
+  // Sort: by order asc, then invoiceDate desc, then createdAt desc
   return items.sort((a, b) => {
+    if (a.order !== b.order) return a.order - b.order;
     const aKey = a.invoiceDate ?? a.createdAt;
     const bKey = b.invoiceDate ?? b.createdAt;
     return bKey.localeCompare(aKey);
@@ -141,23 +336,15 @@ export async function listInvoicesForProject(projectId: string): Promise<Project
 
 export async function listAllInvoices(): Promise<ProjectInvoice[]> {
   const snap = await invoicesCollection().get();
-  return snap.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<ProjectInvoice, 'id'>),
-  }));
+  return snap.docs.map((doc) => hydrate(doc.id, doc.data()));
 }
 
 export async function getInvoiceById(id: string): Promise<ProjectInvoice | null> {
   const snap = await invoicesCollection().doc(id).get();
   if (!snap.exists) return null;
-  return { id: snap.id, ...(snap.data() as Omit<ProjectInvoice, 'id'>) };
+  return hydrate(snap.id, snap.data() ?? {});
 }
 
-/**
- * Returns the existing mirror for a given Refrens invoice id, or null.
- * Used by the "map existing invoice" flow to detect collisions across
- * projects — one Refrens invoice belongs to one project at a time.
- */
 export async function findInvoiceByRefrensId(
   refrensInvoiceId: string
 ): Promise<ProjectInvoice | null> {
@@ -167,13 +354,10 @@ export async function findInvoiceByRefrensId(
     .get();
   if (snap.empty) return null;
   const doc = snap.docs[0];
-  return { id: doc.id, ...(doc.data() as Omit<ProjectInvoice, 'id'>) };
+  return hydrate(doc.id, doc.data());
 }
 
-export async function setInvoiceNotifyEnabled(
-  id: string,
-  enabled: boolean
-): Promise<void> {
+export async function setInvoiceNotifyEnabled(id: string, enabled: boolean): Promise<void> {
   await invoicesCollection().doc(id).set(
     { emailNotifyEnabled: enabled, updatedAt: new Date().toISOString() },
     { merge: true }
@@ -181,18 +365,14 @@ export async function setInvoiceNotifyEnabled(
 }
 
 /**
- * Recomputes status purely from the existing dueDate (no Refrens call). Used
- * by cron to flip UNPAID → OVERDUE when a due date passes without any other
- * change. Returns a SyncResult so callers can fire status-change notifications
- * with the same shape as a full refresh.
+ * Recomputes status purely from the existing dueDate (no Refrens call). PAID,
+ * CANCELED, and PENDING are terminal here — only UNPAID/OVERDUE flip.
  */
 export async function recomputeOverdueStatus(invoice: ProjectInvoice): Promise<SyncResult> {
-  // Treat the current Refrens-side status as the inverse of any locally-derived
-  // OVERDUE — if we previously bumped it to OVERDUE, the underlying Refrens
-  // status was UNPAID. PAID and CANCELED are terminal; we never demote them.
-  const baseRaw =
-    invoice.status === 'OVERDUE' || invoice.status === 'UNPAID' ? 'UNPAID' : invoice.status;
-  const newStatus = normalizeStatus(baseRaw, invoice.dueDate);
+  if (invoice.status !== 'UNPAID' && invoice.status !== 'OVERDUE') {
+    return { invoice, statusChanged: false, oldStatus: invoice.status, newStatus: invoice.status };
+  }
+  const newStatus = normalizeStatus('UNPAID', invoice.dueDate);
   if (newStatus === invoice.status) {
     return { invoice, statusChanged: false, oldStatus: invoice.status, newStatus };
   }
@@ -219,3 +399,4 @@ export async function recomputeOverdueStatus(invoice: ProjectInvoice): Promise<S
     newStatus,
   };
 }
+

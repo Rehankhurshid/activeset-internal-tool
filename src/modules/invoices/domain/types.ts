@@ -1,46 +1,74 @@
 /**
- * Local mirror of a Refrens invoice, scoped to a project.
+ * A `ProjectInvoice` is a slot-based row in `project_invoices`. A row is in
+ * one of three observable states:
  *
- * Thin by design: status + amount + share/PDF links + the project link. For
- * full line items, taxes, and edits the user deep-links to Refrens via
- * `shareLink` / `pdfLink`. Refrens is the source of truth.
+ *  - **Empty slot**: planning fields set (`label`, `expectedAmount`, …) but
+ *    no Refrens invoice attached yet. `status === 'PENDING'`.
+ *  - **Filled slot**: planning fields *and* Refrens fields set. Status
+ *    reflects the real invoice (UNPAID / PAID / OVERDUE / CANCELED).
+ *  - **Ad-hoc**: only Refrens fields, no `label`. Renders using the
+ *    invoice number as fallback label. Allowed for legacy / one-off rows.
+ *
+ * Refrens stays the source of truth for invoice content; we only mirror the
+ * slim fields needed to render the list and deep-link out.
  */
 
-export type InvoiceStatus = 'UNPAID' | 'PAID' | 'OVERDUE' | 'CANCELED' | 'UNKNOWN';
+export type InvoiceStatus =
+  | 'PENDING'
+  | 'UNPAID'
+  | 'PAID'
+  | 'OVERDUE'
+  | 'CANCELED'
+  | 'UNKNOWN';
 
 export interface ProjectInvoice {
-  id: string;                    // Firestore doc id
+  id: string;
   projectId: string;
-  refrensInvoiceId: string;      // Refrens `_id`
-  refrensUrlKey: string;         // captured at create time so future API calls work
-  invoiceNumber: string | null;  // human-friendly invoice number from Refrens
+
+  // --- Slot fields ---
+  label: string | null;
+  expectedAmount: number | null;
+  expectedCurrency: string | null;
+  expectedDueDate: string | null;
+  notes: string | null;
+  order: number;
+
+  // --- Refrens fields (null on empty slots) ---
+  refrensInvoiceId: string | null;
+  refrensUrlKey: string | null;
+  invoiceNumber: string | null;
   status: InvoiceStatus;
-  lastKnownStatus: InvoiceStatus; // used in Phase 3 to detect status flips for emails
+  lastKnownStatus: InvoiceStatus;
   amount: number | null;
   currency: string | null;
-  invoiceDate: string | null;    // ISO date
-  dueDate: string | null;        // ISO date
+  invoiceDate: string | null;
+  dueDate: string | null;
   shareLink: string | null;
   pdfLink: string | null;
   billedToName: string | null;
   billedToEmail: string | null;
-  emailNotifyEnabled: boolean;   // Phase 3 toggle, default false
-  lastSyncedAt: string;          // ISO
-  createdAt: string;             // ISO
-  updatedAt: string;             // ISO
+
+  // --- User-controlled ---
+  emailNotifyEnabled: boolean;
+
+  // --- Bookkeeping ---
+  lastSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface CreateInvoiceFormItem {
-  name: string;
-  rate: number;
-  quantity: number;
+export interface CreateSlotInput {
+  label: string;
+  expectedAmount?: number | null;
+  expectedCurrency?: string | null;
+  expectedDueDate?: string | null;
+  notes?: string | null;
 }
 
-export interface CreateInvoiceFormValues {
-  billedToName: string;
-  billedToEmail?: string;
-  invoiceDate: string;     // YYYY-MM-DD
-  dueDate: string;         // YYYY-MM-DD
-  currency: string;        // ISO 4217, e.g. INR, USD
-  items: CreateInvoiceFormItem[];
+export interface UpdateSlotInput {
+  label?: string;
+  expectedAmount?: number | null;
+  expectedCurrency?: string | null;
+  expectedDueDate?: string | null;
+  notes?: string | null;
 }
