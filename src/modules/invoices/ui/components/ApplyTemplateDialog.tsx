@@ -22,11 +22,23 @@ import {
 } from '@/lib/payment-templates';
 import type { ProjectInvoice } from '@/modules/invoices/domain/types';
 
+export interface ApplyTemplateInitialValues {
+  presetId?: string;
+  months?: number;
+  quarters?: number;
+  totalAmount?: string;
+  currency?: string;
+  startDate?: string;
+}
+
 interface ApplyTemplateDialogProps {
   projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApplied: (invoices: ProjectInvoice[]) => void;
+  /** Optional initial values applied each time the dialog opens. Used by the
+   *  subscription renewal nudge to prefill cadence + amount. */
+  initialValues?: ApplyTemplateInitialValues;
 }
 
 const DEFAULT_PRESET_ID = 'one-time';
@@ -61,6 +73,7 @@ export function ApplyTemplateDialog({
   open,
   onOpenChange,
   onApplied,
+  initialValues,
 }: ApplyTemplateDialogProps) {
   const [presetId, setPresetId] = useState(DEFAULT_PRESET_ID);
   const [months, setMonths] = useState(DEFAULT_MONTHS);
@@ -72,13 +85,14 @@ export function ApplyTemplateDialog({
 
   useEffect(() => {
     if (open) {
-      setPresetId(DEFAULT_PRESET_ID);
-      setMonths(DEFAULT_MONTHS);
-      setQuarters(DEFAULT_QUARTERS);
-      setTotalAmount('');
-      setCurrency('INR');
-      setStartDate(todayIso());
+      setPresetId(initialValues?.presetId ?? DEFAULT_PRESET_ID);
+      setMonths(initialValues?.months ?? DEFAULT_MONTHS);
+      setQuarters(initialValues?.quarters ?? DEFAULT_QUARTERS);
+      setTotalAmount(initialValues?.totalAmount ?? '');
+      setCurrency(initialValues?.currency ?? 'INR');
+      setStartDate(initialValues?.startDate ?? todayIso());
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const buildTemplate = (): PaymentTemplate | null => {

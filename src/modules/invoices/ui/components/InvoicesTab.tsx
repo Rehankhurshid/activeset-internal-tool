@@ -5,22 +5,25 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, RefreshCw, Settings, Receipt, AlertCircle, Layers, FileText, Link2 } from 'lucide-react';
+import { Plus, RefreshCw, Settings, Receipt, AlertCircle, Layers, FileText, Link2, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchAuthed } from '@/lib/api-client';
 import { SlotCard } from './SlotCard';
 import { SlotDialog } from './SlotDialog';
 import { MapInvoiceDialog } from './MapInvoiceDialog';
-import { ApplyTemplateDialog } from './ApplyTemplateDialog';
+import { ApplyTemplateDialog, type ApplyTemplateInitialValues } from './ApplyTemplateDialog';
 import { LinkProposalDialog } from './LinkProposalDialog';
 import { proposalService } from '@/app/modules/proposal/services/ProposalService';
-import { describeTemplate } from '@/lib/payment-templates';
+import { describeTemplate, addDaysIso } from '@/lib/payment-templates';
 import type { Proposal } from '@/app/modules/proposal/types/Proposal';
 import type { ProjectInvoice } from '@/modules/invoices/domain/types';
 
 interface InvoicesTabProps {
   projectId: string;
   proposalId?: string;
+  /** Used to detect subscription/retainer projects so we can nudge for the
+   *  next billing cycle when the last slot is approaching its due date. */
+  projectTags?: ReadonlyArray<string>;
 }
 
 interface ConfigStatus {
@@ -45,7 +48,7 @@ function summarize(invoices: ProjectInvoice[]): string {
   return parts.join(' · ');
 }
 
-export function InvoicesTab({ projectId, proposalId }: InvoicesTabProps) {
+export function InvoicesTab({ projectId, proposalId, projectTags }: InvoicesTabProps) {
   const [config, setConfig] = useState<ConfigStatus | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [invoices, setInvoices] = useState<ProjectInvoice[]>([]);
@@ -63,6 +66,8 @@ export function InvoicesTab({ projectId, proposalId }: InvoicesTabProps) {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  const [renewPrefill, setRenewPrefill] = useState<ApplyTemplateInitialValues | null>(null);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -223,6 +228,45 @@ export function InvoicesTab({ projectId, proposalId }: InvoicesTabProps) {
 
   const proposalTerms = proposal?.data?.paymentTerms;
 
+  // --- Subscription renewal nudge ----------------------------------------
+  // For projects tagged `subscription`, watch the latest slot with a due date
+  // and prompt for a renewal when it's within 30 days. We default to a
+  // 3-month renewal at the same per-slot amount and the day after the last
+  // due date — admin can adjust everything in the dialog.
+  const isSubscription = (projectTags ?? []).includes('subscription');
+  const renewalNudge = (() => {
+    if (!isSubscription) return null;
+    const datedSlots = invoices
+      .filter((inv) => Boolean(inv.expectedDueDate))
+      .sort((a, b) => (b.expectedDueDate ?? '').localeCompare(a.expectedDueDate ?? ''));
+    const last = datedSlots[0];
+    if (!last?.expectedDueDate) return null;
+    const dueMs = new Date(last.expectedDueDate).getTime();
+    if (Number.isNaN(dueMs)) return null;
+    const daysUntil = Math.round((dueMs - Date.now()) / 86_400_000);
+    if (daysUntil > 30) return null;
+    const perSlot = last.expectedAmount ?? 0;
+    const currency = last.expectedCurrency ?? 'INR';
+    const renewalCount = 3;
+    return {
+      daysUntil,
+      lastDueDate: last.expectedDueDate,
+      prefill: {
+        presetId: 'monthly',
+        months: renewalCount,
+        totalAmount: perSlot > 0 ? String(perSlot * renewalCount) : '',
+        currency,
+        startDate: addDaysIso(last.expectedDueDate, 1),
+      } satisfies ApplyTemplateInitialValues,
+    };
+  })();
+
+  const openRenewalDialog = () => {
+    if (!renewalNudge) return;
+    setRenewPrefill(renewalNudge.prefill);
+    setTemplateDialogOpen(true);
+  };
+
   return (
     <div className="space-y-4">
       {/* Proposal link banner — drives "Import from proposal" */}
@@ -279,6 +323,32 @@ export function InvoicesTab({ projectId, proposalId }: InvoicesTabProps) {
             <Button variant="outline" size="sm" onClick={() => setLinkDialogOpen(true)}>
               <Link2 className="mr-1.5 h-3.5 w-3.5" />
               Link a proposal
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Subscription renewal nudge */}
+      {renewalNudge && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="p-3 flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="h-4 w-4 text-amber-600" />
+              <span>
+                Last subscription slot is due{' '}
+                {renewalNudge.daysUntil < 0
+                  ? `${Math.abs(renewalNudge.daysUntil)} day${
+                      Math.abs(renewalNudge.daysUntil) === 1 ? '' : 's'
+                    } ago`
+                  : renewalNudge.daysUntil === 0
+                    ? 'today'
+                    : `in ${renewalNudge.daysUntil} day${renewalNudge.daysUntil === 1 ? '' : 's'}`}
+                . Add the next 3 months?
+              </span>
+            </div>
+            <Button size="sm" onClick={openRenewalDialog}>
+              <Layers className="mr-1.5 h-3.5 w-3.5" />
+              Renew 3 months
             </Button>
           </CardContent>
         </Card>
@@ -358,8 +428,12 @@ export function InvoicesTab({ projectId, proposalId }: InvoicesTabProps) {
       <ApplyTemplateDialog
         projectId={projectId}
         open={templateDialogOpen}
-        onOpenChange={setTemplateDialogOpen}
+        onOpenChange={(o) => {
+          setTemplateDialogOpen(o);
+          if (!o) setRenewPrefill(null);
+        }}
         onApplied={handleTemplateApplied}
+        initialValues={renewPrefill ?? undefined}
       />
 
       <LinkProposalDialog

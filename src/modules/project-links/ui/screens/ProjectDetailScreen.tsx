@@ -368,7 +368,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
                     {isAdmin && (
                         <TabsContent value="invoices" className="mt-4 sm:mt-6">
-                            <InvoicesTab projectId={project.id} proposalId={project.proposalId} />
+                            <InvoicesTab
+                                projectId={project.id}
+                                proposalId={project.proposalId}
+                                projectTags={project.tags}
+                            />
                         </TabsContent>
                     )}
                 </Tabs>
