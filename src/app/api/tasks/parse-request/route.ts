@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateObject } from 'ai';
+import { z } from 'zod';
 import {
   ApiAuthError,
   apiAuthErrorResponse,
@@ -8,17 +10,30 @@ import {
   TASK_CATEGORIES,
   TASK_PRIORITIES,
   type ParsedTaskSuggestion,
-  type TaskCategory,
-  type TaskPriority,
 } from '@/types';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
-// Cap input size — Gemini can handle more, but a single Slack message rarely
-// exceeds this and capping protects us from runaway prompts.
+const DEFAULT_MODEL = process.env.PROPOSAL_AI_MODEL || 'google/gemini-2.5-flash';
+
+// Cap input size to protect against runaway prompts.
 const MAX_INPUT_CHARS = 20_000;
 // Hard ceiling on suggestions returned, regardless of what the model says.
 const MAX_SUGGESTIONS = 25;
+
+const taskSuggestionSchema = z.object({
+  tasks: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(200),
+        description: z.string().optional(),
+        category: z.enum(TASK_CATEGORIES as unknown as [string, ...string[]]),
+        priority: z.enum(TASK_PRIORITIES as unknown as [string, ...string[]]),
+      }),
+    )
+    .max(MAX_SUGGESTIONS),
+});
 
 const SYSTEM_PROMPT = `You are an assistant that splits informal client change-request messages (from Slack, email, or pasted text) into a structured list of discrete, trackable tasks.
 
@@ -42,36 +57,21 @@ STRICT RULES:
 3. Pick the closest category. Use "other" only as a last resort.
 4. Default priority is "medium" unless the sender explicitly signals urgency ("ASAP", "blocker", "today") → "high"/"urgent", or marks something as nice-to-have → "low".
 5. Title MUST start with a verb (Fix, Add, Update, Remove, Hide, Align, Link, Localize, etc.).
-6. Preserve any specific names, page sections, or copy mentioned in the source — these are usually load-bearing.
-7. Output ONLY the JSON object. No prose, no markdown fences.`;
+6. Preserve any specific names, page sections, or copy mentioned in the source — these are usually load-bearing.`;
 
-function isValidCategory(value: unknown): value is TaskCategory {
-  return typeof value === 'string' && (TASK_CATEGORIES as readonly string[]).includes(value);
-}
-
-function isValidPriority(value: unknown): value is TaskPriority {
-  return typeof value === 'string' && (TASK_PRIORITIES as readonly string[]).includes(value);
-}
-
-function sanitizeSuggestions(raw: unknown): ParsedTaskSuggestion[] {
-  if (!raw || typeof raw !== 'object') return [];
-  const list = (raw as { tasks?: unknown }).tasks;
-  if (!Array.isArray(list)) return [];
-
+function sanitizeSuggestions(
+  raw: z.infer<typeof taskSuggestionSchema>,
+): ParsedTaskSuggestion[] {
   const cleaned: ParsedTaskSuggestion[] = [];
-  for (const item of list) {
-    if (!item || typeof item !== 'object') continue;
-    const obj = item as Record<string, unknown>;
-    const title = typeof obj.title === 'string' ? obj.title.trim() : '';
+  for (const item of raw.tasks) {
+    const title = item.title.trim();
     if (!title) continue;
+    const description = item.description?.trim();
     cleaned.push({
       title: title.slice(0, 200),
-      description:
-        typeof obj.description === 'string' && obj.description.trim()
-          ? obj.description.trim()
-          : undefined,
-      category: isValidCategory(obj.category) ? obj.category : 'other',
-      priority: isValidPriority(obj.priority) ? obj.priority : 'medium',
+      description: description ? description : undefined,
+      category: item.category as ParsedTaskSuggestion['category'],
+      priority: item.priority as ParsedTaskSuggestion['priority'],
     });
     if (cleaned.length >= MAX_SUGGESTIONS) break;
   }
@@ -80,13 +80,6 @@ function sanitizeSuggestions(raw: unknown): ParsedTaskSuggestion[] {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!GEMINI_API_KEY) {
-      return NextResponse.json(
-        { error: 'Gemini API key not configured.' },
-        { status: 500 },
-      );
-    }
-
     const body = (await request.json().catch(() => null)) as
       | { rawText?: string; projectId?: string; sender?: string }
       | null;
@@ -107,52 +100,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Auth + project ownership check (matches existing routes).
     await requireProjectAccess(request, projectId);
 
     const truncated = rawText.slice(0, MAX_INPUT_CHARS);
 
-    const { GoogleGenAI } = await import('@google/genai');
-    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    const prompt = `${SYSTEM_PROMPT}
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: SYSTEM_PROMPT },
-            {
-              text: `SENDER: ${body.sender || 'unknown'}\n\nMESSAGE:\n${truncated}`,
-            },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: 'application/json',
-      },
+SENDER: ${body.sender || 'unknown'}
+
+MESSAGE:
+${truncated}`;
+
+    const { object } = await generateObject({
+      model: DEFAULT_MODEL,
+      schema: taskSuggestionSchema,
+      prompt,
+      temperature: 0.2,
     });
 
-    const generated = response.text;
-    if (!generated) {
-      return NextResponse.json(
-        { error: 'AI returned no response' },
-        { status: 502 },
-      );
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(generated);
-    } catch {
-      console.error('[parse-request] failed to JSON.parse model output:', generated);
-      return NextResponse.json(
-        { error: 'AI response was not valid JSON. Try again or paste a shorter message.' },
-        { status: 502 },
-      );
-    }
-
-    const suggestions = sanitizeSuggestions(parsed);
+    const suggestions = sanitizeSuggestions(object);
     if (suggestions.length === 0) {
       return NextResponse.json({
         success: true,
@@ -166,8 +132,11 @@ export async function POST(request: NextRequest) {
     if (error instanceof ApiAuthError) {
       return apiAuthErrorResponse(error);
     }
-    console.error('[parse-request] error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[parse-request] generateObject failed:', message);
+    return NextResponse.json(
+      { error: 'AI task parsing failed', details: message },
+      { status: 502 },
+    );
   }
 }

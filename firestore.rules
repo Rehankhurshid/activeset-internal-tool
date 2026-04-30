@@ -20,7 +20,8 @@ service cloud.firestore {
     match /projects/{projectId} {
       function isAdmin() {
         return request.auth != null
-          && request.auth.token.email == 'rehan@activeset.co';
+          && (request.auth.token.email == 'rehan@activeset.co'
+              || request.auth.token.admin == true);
       }
 
       function isActiveSetUser() {
@@ -91,6 +92,7 @@ service cloud.firestore {
     match /access_control/{id}            { allow read, write: if true; }
     match /configurations/{id}            { allow read, write: if true; }
     match /webflow_account_history/{id}   { allow read, write: if true; }
+    match /tasks/{id}                     { allow read, write: if true; }
 
     // Proposals - authenticated agency users only (contains pricing/internal notes)
     match /proposals/{proposalId} {
