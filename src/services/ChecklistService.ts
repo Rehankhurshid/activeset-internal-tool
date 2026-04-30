@@ -12,6 +12,7 @@ import {
     Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { toSafeDate } from '@/lib/firestore-dates';
 import {
     ProjectChecklist,
     ChecklistSection,
@@ -72,8 +73,8 @@ function parseChecklistDoc(docSnap: { id: string; data: () => Record<string, unk
     return {
         id: docSnap.id,
         ...data,
-        createdAt: (data.createdAt as { toDate: () => Date }).toDate(),
-        updatedAt: (data.updatedAt as { toDate: () => Date }).toDate(),
+        createdAt: toSafeDate(data.createdAt),
+        updatedAt: toSafeDate(data.updatedAt),
     } as ProjectChecklist;
 }
 
