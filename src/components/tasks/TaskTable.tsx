@@ -17,6 +17,8 @@ import {
   Trash2,
   ExternalLink,
   Sparkles,
+  Link2,
+  Link2Off,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -65,6 +67,7 @@ import {
   TaskPriorityBadge,
   TaskStatusBadge,
 } from './TaskBadges';
+import { ClickUpLinkDialog } from './ClickUpLinkDialog';
 
 interface TaskTableProps {
   tasks: Task[];
@@ -80,13 +83,18 @@ const SOURCE_LABEL: Record<Task['source'], string> = {
   paste: 'Pasted',
   slack: 'Slack',
   email: 'Email',
+  clickup: 'ClickUp',
 };
+
+/** Once a task is linked to ClickUp, ClickUp owns these fields. */
+const isSyncedFromClickUp = (t: Task) => t.source === 'clickup' && Boolean(t.clickupTaskId);
 
 export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [titleQuery, setTitleQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
+  const [linkDialogTask, setLinkDialogTask] = useState<Task | null>(null);
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
@@ -145,15 +153,20 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         ),
         cell: ({ row }) => {
           const task = row.original;
+          const synced = isSyncedFromClickUp(task);
           return (
             <div className="min-w-[240px]">
-              <InlineEdit
-                value={task.title}
-                onSave={(v) => handleUpdate(task.id, { title: v })}
-                className="text-sm"
-                displayClassName="text-sm font-medium"
-                inputClassName="h-8 text-sm"
-              />
+              {synced ? (
+                <div className="text-sm font-medium px-2">{task.title}</div>
+              ) : (
+                <InlineEdit
+                  value={task.title}
+                  onSave={(v) => handleUpdate(task.id, { title: v })}
+                  className="text-sm"
+                  displayClassName="text-sm font-medium"
+                  inputClassName="h-8 text-sm"
+                />
+              )}
               {task.description && (
                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 px-2">
                   {task.description}
@@ -170,6 +183,13 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         ),
         cell: ({ row }) => {
           const task = row.original;
+          if (isSyncedFromClickUp(task)) {
+            return (
+              <div className="px-1">
+                <TaskStatusBadge status={task.status} />
+              </div>
+            );
+          }
           return (
             <Select
               value={task.status}
@@ -209,6 +229,13 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         },
         cell: ({ row }) => {
           const task = row.original;
+          if (isSyncedFromClickUp(task)) {
+            return (
+              <div className="px-1">
+                <TaskPriorityBadge priority={task.priority} />
+              </div>
+            );
+          }
           return (
             <Select
               value={task.priority}
@@ -269,6 +296,13 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         ),
         cell: ({ row }) => {
           const task = row.original;
+          if (isSyncedFromClickUp(task)) {
+            return (
+              <div className="px-1 text-xs text-muted-foreground">
+                {task.assignee ? task.assignee.split('@')[0] : 'Unassigned'}
+              </div>
+            );
+          }
           return (
             <Select
               value={task.assignee ?? '__unassigned__'}
@@ -306,6 +340,7 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
             <DueDateCell
               value={task.dueDate}
               onChange={(v) => handleUpdate(task.id, { dueDate: v || undefined })}
+              readOnly={isSyncedFromClickUp(task)}
             />
           );
         },
@@ -316,6 +351,7 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         enableSorting: false,
         cell: ({ row }) => {
           const task = row.original;
+          const synced = isSyncedFromClickUp(task);
           return (
             <div className="flex items-center gap-1">
               {task.requestId && (
@@ -324,10 +360,42 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
                   aria-label="AI parsed"
                 />
               )}
-              <Badge variant="outline" className="text-xs font-normal">
-                {SOURCE_LABEL[task.source]}
-              </Badge>
-              {task.sourceLink && (
+              <button
+                type="button"
+                onClick={() => setLinkDialogTask(task)}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-md text-xs px-1.5 py-0.5 border transition-colors',
+                  synced
+                    ? 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                    : 'border-border bg-transparent text-muted-foreground hover:bg-accent',
+                )}
+                title={synced ? 'View ClickUp link' : 'Link to a ClickUp task'}
+              >
+                {synced ? (
+                  <>
+                    <Link2 className="h-3 w-3" />
+                    ClickUp
+                  </>
+                ) : (
+                  <>
+                    <Link2Off className="h-3 w-3" />
+                    {SOURCE_LABEL[task.source]}
+                  </>
+                )}
+              </button>
+              {synced && task.clickupUrl && (
+                <a
+                  href={task.clickupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={(e) => e.stopPropagation()}
+                  title="Open in ClickUp"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {!synced && task.sourceLink && (
                 <a
                   href={task.sourceLink}
                   target="_blank"
@@ -476,6 +544,16 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      {linkDialogTask && (
+        <ClickUpLinkDialog
+          open={Boolean(linkDialogTask)}
+          onOpenChange={(open) => {
+            if (!open) setLinkDialogTask(null);
+          }}
+          task={linkDialogTask}
+        />
+      )}
     </div>
   );
 }
@@ -503,9 +581,11 @@ function SortableHeader({
 function DueDateCell({
   value,
   onChange,
+  readOnly = false,
 }: {
   value?: string;
   onChange: (next: string) => void;
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const date = value ? new Date(value + 'T00:00:00') : undefined;
@@ -515,6 +595,21 @@ function DueDateCell({
     const today = format(new Date(), 'yyyy-MM-dd');
     return value < today;
   })();
+
+  if (readOnly) {
+    return (
+      <div
+        className={cn(
+          'h-8 px-2 inline-flex items-center text-xs',
+          !value && 'text-muted-foreground',
+          overdue && 'text-rose-600',
+        )}
+      >
+        <CalendarIcon className="h-3.5 w-3.5 mr-1.5 opacity-70" />
+        {value ? format(date!, 'MMM d') : '—'}
+      </div>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

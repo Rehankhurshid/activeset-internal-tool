@@ -617,7 +617,7 @@ export type TaskStatus =
 
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
-export type TaskSource = 'manual' | 'paste' | 'slack' | 'email';
+export type TaskSource = 'manual' | 'paste' | 'slack' | 'email' | 'clickup';
 
 export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
   fix: 'Fix',
@@ -669,11 +669,27 @@ export interface Task {
   assignee?: string;
   /** Manual order within a status bucket (for future kanban / drag-drop). */
   order: number;
+  /** ClickUp task ID when this task is linked to a ClickUp task. Sync source of truth. */
+  clickupTaskId?: string;
+  /** Direct link to the ClickUp task (https://app.clickup.com/t/...). */
+  clickupUrl?: string;
+  /** ISO timestamp of the most recent successful ClickUp → app sync. */
+  clickupSyncedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   completedAt?: Date;
   createdBy: string;
 }
+
+/** Fields owned by ClickUp once a task is linked. The TaskTable disables inline editing for these. */
+export const CLICKUP_SYNCED_FIELDS = [
+  'title',
+  'description',
+  'status',
+  'priority',
+  'dueDate',
+  'assignee',
+] as const;
 
 export type CreateTaskInput = Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completedAt' | 'order'> & {
   order?: number;
@@ -692,6 +708,10 @@ export type UpdateTaskInput = Partial<
     | 'sourceLink'
     | 'assignee'
     | 'order'
+    | 'source'
+    | 'clickupTaskId'
+    | 'clickupUrl'
+    | 'clickupSyncedAt'
   >
 >;
 
