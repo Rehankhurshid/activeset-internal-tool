@@ -10,7 +10,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import {
+  User,
+  onAuthStateChanged,
+  signInWithCustomToken,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
 import { auth, googleProvider } from '@/platform/firebase/client';
 import { accessControlService } from '@/platform/auth/access-control';
 
@@ -20,39 +26,64 @@ const isLocalDevelopment = () => {
   return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 };
 
-// Create a mock user for local development
-const createMockUser = (): User => {
-  const mockUser = {
-    uid: 'local-dev-user',
-    email: 'local-dev@activeset.co',
+/**
+ * Sign in to a real Firebase Auth session via the dev-only `/api/auth/dev-token`
+ * endpoint. The token is for the `local-dev@activeset.co` user with an
+ * `admin: true` custom claim — so Firestore rules and server APIs see a valid
+ * auth context, unlike the previous in-memory mock which bypassed Firebase
+ * entirely and made every Firestore call fail with "Missing or insufficient
+ * permissions".
+ */
+async function signInForLocalDev(): Promise<void> {
+  const res = await fetch('/api/auth/dev-token', { method: 'POST' });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Dev token request failed (${res.status})`);
+  }
+  const { token } = (await res.json()) as { token?: string };
+  if (!token) throw new Error('Dev token missing from response');
+  await signInWithCustomToken(auth, token);
+}
+
+/**
+ * Localhost-only fallback: when Firebase Admin credentials aren't configured,
+ * mint an in-memory mock User so UI development isn't blocked. Firestore writes
+ * will still fail (no real auth context), but every screen renders so the
+ * frontend can be exercised end-to-end. Never returns a mock outside localhost.
+ */
+function buildLocalDevMockUser(): User {
+  const fakeUid = 'local-dev-mock';
+  const fakeEmail = 'local-dev@activeset.co';
+  const idTokenResult = {
+    token: 'mock',
+    expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    authTime: new Date().toISOString(),
+    issuedAtTime: new Date().toISOString(),
+    signInProvider: 'password',
+    signInSecondFactor: null,
+    claims: { admin: true },
+  } as unknown as Awaited<ReturnType<User['getIdTokenResult']>>;
+
+  return {
+    uid: fakeUid,
+    email: fakeEmail,
+    displayName: 'Local Dev (mock)',
     emailVerified: true,
-    displayName: 'Local Dev User',
+    isAnonymous: false,
     photoURL: null,
     phoneNumber: null,
-    isAnonymous: false,
-    providerId: 'local-dev',
-    metadata: {
-      creationTime: new Date().toISOString(),
-      lastSignInTime: new Date().toISOString(),
-    },
+    providerId: 'firebase',
+    metadata: {} as User['metadata'],
     providerData: [],
     refreshToken: '',
     tenantId: null,
     delete: async () => {},
-    getIdToken: async () => '',
-    getIdTokenResult: async () => ({
-      authTime: new Date().toISOString(),
-      issuedAtTime: new Date().toISOString(),
-      expirationTime: new Date(Date.now() + 3600000).toISOString(),
-      signInProvider: 'local-dev',
-      signInSecondFactor: null,
-      claims: {},
-    }),
+    getIdToken: async () => 'mock',
+    getIdTokenResult: async () => idTokenResult,
     reload: async () => {},
-    toJSON: () => ({}),
+    toJSON: () => ({ uid: fakeUid, email: fakeEmail }),
   } as unknown as User;
-  return mockUser;
-};
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -74,20 +105,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    // Skip auth for local development
+    // On localhost, kick off a real Firebase Auth sign-in via the dev-only
+    // custom-token endpoint. If that fails (e.g. Firebase Admin creds aren't
+    // configured locally) fall back to an in-memory mock User so the UI is
+    // still navigable for frontend development.
     if (isLocalDevelopment()) {
-      const mockUser = createMockUser();
-      setUser(mockUser);
-      setIsAdmin(true); // Make local dev user an admin
-      setLoading(false);
-      return;
+      signInForLocalDev().catch((err) => {
+        console.warn('[useAuth] dev-token sign-in failed, falling back to mock user', err);
+        const mockUser = buildLocalDevMockUser();
+        setUser(mockUser);
+        setIsAdmin(true);
+        setLoading(false);
+      });
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser && firebaseUser.email) {
         // Allow any authenticated user - module access is checked separately
         setUser(firebaseUser);
-        setIsAdmin(accessControlService.isAdmin(firebaseUser.email));
+        // Admin status is derived from either the hardcoded admin email
+        // (rehan@activeset.co) or the `admin` custom claim that the dev-token
+        // endpoint stamps onto the local-dev user. Reading the claim requires
+        // decoding the ID token result.
+        try {
+          const tokenResult = await firebaseUser.getIdTokenResult();
+          const adminClaim = (tokenResult.claims as { admin?: unknown }).admin === true;
+          setIsAdmin(accessControlService.isAdmin(firebaseUser.email) || adminClaim);
+        } catch {
+          setIsAdmin(accessControlService.isAdmin(firebaseUser.email));
+        }
       } else {
         setUser(null);
         setIsAdmin(false);
@@ -99,15 +145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
-    // Skip auth for local development
-    if (isLocalDevelopment()) {
-      const mockUser = createMockUser();
-      setUser(mockUser);
-      setIsAdmin(true);
-      setLoading(false);
-      return;
-    }
-
     try {
       setError(null);
       setLoading(true);
@@ -140,13 +177,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    // Skip auth for local development
-    if (isLocalDevelopment()) {
-      setUser(null);
-      setIsAdmin(false);
-      return;
-    }
-
     try {
       await signOut(auth);
       setUser(null);

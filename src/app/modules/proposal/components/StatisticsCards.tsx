@@ -48,15 +48,15 @@ export default function StatisticsCards({ proposals }: StatisticsCardsProps) {
     ];
 
     return (
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 mb-6">
             {stats.map((stat, index) => (
                 <Card
                     key={index}
-                    className={`flex items-center gap-2.5 px-4 py-2.5 bg-gradient-to-r ${stat.gradient} border-0 backdrop-blur-sm`}
+                    className={`flex flex-row items-center gap-2.5 px-3 sm:px-4 py-2.5 bg-gradient-to-r ${stat.gradient} border-0 backdrop-blur-sm min-w-0`}
                 >
-                    <stat.icon className={`w-4 h-4 ${stat.iconColor}`} />
-                    <span className="text-lg font-semibold">{stat.value}</span>
-                    <span className="text-sm text-muted-foreground">{stat.title}</span>
+                    <stat.icon className={`w-4 h-4 shrink-0 ${stat.iconColor}`} />
+                    <span className="text-lg font-semibold tabular-nums">{stat.value}</span>
+                    <span className="text-sm text-muted-foreground truncate">{stat.title}</span>
                 </Card>
             ))}
         </div>

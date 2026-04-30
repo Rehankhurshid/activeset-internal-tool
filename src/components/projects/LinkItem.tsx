@@ -296,7 +296,7 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
                     <Eye className="h-4 w-4" />
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+                <DialogContent className="sm:max-w-4xl h-[80vh] flex flex-col">
                   <DialogHeader>
                     <DialogTitle className="flex items-center justify-between">
                       <span>{link.title}</span>

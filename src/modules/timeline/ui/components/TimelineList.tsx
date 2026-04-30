@@ -53,8 +53,8 @@ export function TimelineList({
     }
 
     return (
-        <div className="rounded-xl border bg-card overflow-hidden">
-            <Table>
+        <div className="rounded-xl border bg-card overflow-x-auto">
+            <Table className="min-w-[760px]">
                 <TableHeader>
                     <TableRow>
                         <TableHead>Milestone</TableHead>

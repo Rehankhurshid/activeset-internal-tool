@@ -15,13 +15,15 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
+import { Building2, Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare, Receipt, ListTodo, ChevronDown } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { AppNavigation } from '@/shared/ui';
 import { TasksTab } from '@/components/tasks/TasksTab';
 import { toast } from 'sonner';
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { cn } from '@/lib/utils';
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -216,6 +218,17 @@ export default function ProjectDetailPage({ params }: PageProps) {
         return <div className="p-8">Project not found</div>;
     }
 
+    const tabOptions: { value: string; label: string; icon: React.ReactNode }[] = [
+        { value: 'audit', label: 'Audit Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
+        { value: 'tasks', label: 'Tasks', icon: <ListTodo className="h-4 w-4" /> },
+        { value: 'webflow', label: 'Webflow Pages', icon: <Globe className="h-4 w-4" /> },
+        { value: 'images', label: 'Image Library', icon: <ImageIcon className="h-4 w-4" /> },
+        { value: 'checklist', label: 'Checklist', icon: <ListChecks className="h-4 w-4" /> },
+        { value: 'timeline', label: 'Timeline', icon: <GanttChartSquare className="h-4 w-4" /> },
+        ...(isAdmin ? [{ value: 'invoices', label: 'Invoices', icon: <Receipt className="h-4 w-4" /> }] : []),
+    ];
+    const activeTabOption = tabOptions.find(t => t.value === activeTab) ?? tabOptions[0];
+
     return (
         <div className="min-h-screen bg-background flex flex-col">
             <AppNavigation
@@ -267,59 +280,41 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
                 {/* Main Content */}
                 <Tabs defaultValue="audit" value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
-                        <TabsList className="w-full sm:w-auto">
-                            <TabsTrigger value="audit" className="gap-2 flex-1 sm:flex-none">
-                                <LayoutDashboard className="h-4 w-4" />
-                                <span className="hidden sm:inline">Audit Dashboard</span>
-                                <span className="sm:hidden">Audit</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="tasks" className="gap-2 flex-1 sm:flex-none">
-                                <ListTodo className="h-4 w-4" />
-                                <span className="hidden sm:inline">Tasks</span>
-                                <span className="sm:hidden">Tasks</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="webflow" className="gap-2 flex-1 sm:flex-none">
-                                <Globe className="h-4 w-4" />
-                                <span className="hidden sm:inline">Webflow Pages</span>
-                                <span className="sm:hidden">Webflow</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="images" className="gap-2 flex-1 sm:flex-none">
-                                <ImageIcon className="h-4 w-4" />
-                                <span className="hidden sm:inline">Image Library</span>
-                                <span className="sm:hidden">Images</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="checklist" className="gap-2 flex-1 sm:flex-none">
-                                <ListChecks className="h-4 w-4" />
-                                <span className="hidden sm:inline">Checklist</span>
-                                <span className="sm:hidden">SOP</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="timeline" className="gap-2 flex-1 sm:flex-none">
-                                <GanttChartSquare className="h-4 w-4" />
-                                <span className="hidden sm:inline">Timeline</span>
-                                <span className="sm:hidden">Timeline</span>
-                            </TabsTrigger>
-                            {isAdmin && (
-                                <TabsTrigger value="invoices" className="gap-2 flex-1 sm:flex-none">
-                                    <Receipt className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Invoices</span>
-                                    <span className="sm:hidden">Invoices</span>
-                                </TabsTrigger>
-                            )}
-                        </TabsList>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+                        {/* Mobile: Sheet selector — single button shows current tab and opens full list */}
+                        <div className="sm:hidden">
+                            <MobileTabSelector
+                                options={tabOptions}
+                                value={activeTab}
+                                activeOption={activeTabOption}
+                                onChange={setActiveTab}
+                            />
+                        </div>
+
+                        {/* Desktop: scrollable horizontal tabs */}
+                        <div className="hidden sm:block max-w-full overflow-x-auto -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                            <TabsList className="w-auto inline-flex">
+                                {tabOptions.map(opt => (
+                                    <TabsTrigger key={opt.value} value={opt.value} className="gap-2">
+                                        {opt.icon}
+                                        <span>{opt.label}</span>
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+                        </div>
 
                         {/* Show Scan Sitemap when in audit tab */}
                         {activeTab === 'audit' && (
                             <div className="w-full sm:w-auto flex items-center gap-2">
                                 <Button
                                     variant="outline"
-                                    className="gap-2"
+                                    className="gap-2 flex-1 sm:flex-none"
                                     onClick={handleManualSitemapSync}
                                     disabled={isSyncingSitemap || !canSyncProject}
                                     title={syncButtonTitle}
                                 >
                                     <RefreshCw className={`h-4 w-4 ${isSyncingSitemap ? 'animate-spin' : ''}`} />
-                                    {syncButtonLabel}
+                                    <span className="truncate">{syncButtonLabel}</span>
                                 </Button>
                                 <ScanSitemapDialog
                                     projectId={project.id}
@@ -398,5 +393,62 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 />
             </main>
         </div>
+    );
+}
+
+interface MobileTabSelectorProps {
+    options: { value: string; label: string; icon: React.ReactNode }[];
+    value: string;
+    activeOption: { value: string; label: string; icon: React.ReactNode };
+    onChange: (value: string) => void;
+}
+
+function MobileTabSelector({ options, value, activeOption, onChange }: MobileTabSelectorProps) {
+    const [open, setOpen] = useState(false);
+    return (
+        <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+                <Button
+                    variant="outline"
+                    className="w-full justify-between h-11 px-3 text-base"
+                    aria-haspopup="menu"
+                >
+                    <span className="flex items-center gap-2 min-w-0">
+                        <span className="shrink-0 text-muted-foreground">{activeOption.icon}</span>
+                        <span className="font-medium truncate">{activeOption.label}</span>
+                    </span>
+                    <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
+                </Button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="rounded-t-xl p-0 max-h-[80vh]">
+                <SheetHeader className="border-b">
+                    <SheetTitle className="text-base">Select section</SheetTitle>
+                </SheetHeader>
+                <div className="p-2">
+                    {options.map(opt => {
+                        const isActive = opt.value === value;
+                        return (
+                            <button
+                                key={opt.value}
+                                onClick={() => {
+                                    onChange(opt.value);
+                                    setOpen(false);
+                                }}
+                                className={cn(
+                                    "w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors",
+                                    isActive
+                                        ? "bg-accent text-accent-foreground"
+                                        : "hover:bg-accent/60 active:bg-accent"
+                                )}
+                            >
+                                <span className={cn("shrink-0", isActive ? "text-foreground" : "text-muted-foreground")}>{opt.icon}</span>
+                                <span className="text-sm font-medium flex-1">{opt.label}</span>
+                                {isActive && <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />}
+                            </button>
+                        );
+                    })}
+                </div>
+            </SheetContent>
+        </Sheet>
     );
 }

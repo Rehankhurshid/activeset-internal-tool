@@ -606,7 +606,7 @@ export function WebflowPagesDashboard({
 
           {/* Pages List */}
           {loading ? (
-            <div className="border rounded-md">
+            <div className="border rounded-md overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -648,8 +648,8 @@ export function WebflowPagesDashboard({
             </div>
           ) : (
             <TooltipProvider>
-              <div className="rounded-md border">
-                <Table>
+              <div className="rounded-md border overflow-x-auto">
+                <Table className="min-w-[860px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="w-[25%]">Page Name</TableHead>

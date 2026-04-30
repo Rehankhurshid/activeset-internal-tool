@@ -54,7 +54,7 @@ export function AuditDetailDialog({ isOpen, onOpenChange, auditResult, linkTitle
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
                 <DialogHeader>
                     <div className="flex items-center justify-between mr-8">
                         <DialogTitle>{linkTitle}</DialogTitle>

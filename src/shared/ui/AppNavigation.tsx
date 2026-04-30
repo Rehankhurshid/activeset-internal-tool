@@ -20,7 +20,7 @@ import {
   Menu,
   FolderOpen,
   FileText,
-
+  ListChecks,
   Lock,
   Loader2,
   MonitorSmartphone,
@@ -28,7 +28,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Badge } from '@/components/ui/badge';
 import { ScanActivityIndicator } from '@/components/navigation/ScanActivityIndicator';
 import { AlertIndicator } from '@/components/navigation/AlertIndicator';
@@ -169,79 +170,97 @@ export function AppNavigation({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Mobile Menu */}
-          {isHomePage && (
-            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden h-8 w-8">
-                  <Menu className="h-4 w-4" />
-                  <span className="sr-only">Toggle menu</span>
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-[300px] sm:w-[400px]">
-                <div className="flex flex-col gap-4 mt-4">
-                  <div className="flex items-center gap-2 pb-4 border-b">
-                    <User className="h-4 w-4" />
-                    <div className="flex flex-col min-w-0">
-                      <p className="text-sm font-medium truncate">{user?.displayName || 'User'}</p>
-                      <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                    </div>
-                  </div>
-
-                  <nav className="flex flex-col gap-2">
-                    <MobileNavLink
-                      href="/modules/project-links"
-                      icon={<FolderOpen className="h-4 w-4" />}
-                      label="Client Projects"
-                      hasAccess={projectLinksAccess}
-                      loading={accessLoading}
-                      onClick={() => setMobileMenuOpen(false)}
-                    />
-                    {(accessLoading || proposalAccess) && (
-                      <MobileNavLink
-                        href="/modules/proposal"
-                        icon={<FileText className="h-4 w-4" />}
-                        label="Proposals"
-                        hasAccess={proposalAccess}
-                        loading={accessLoading}
-                        onClick={() => setMobileMenuOpen(false)}
-                      />
-                    )}
-                    <MobileNavLink
-                      href="/modules/screenshot-runner"
-                      icon={<MonitorSmartphone className="h-4 w-4" />}
-                      label="Screenshot Runner"
-                      hasAccess={projectLinksAccess}
-                      loading={accessLoading}
-                      onClick={() => setMobileMenuOpen(false)}
-                    />
-                    <MobileNavLink
-                      href="/modules/seo-engine"
-                      icon={<PenLine className="h-4 w-4" />}
-                      label="SEO Engine"
-                      hasAccess={true}
-                      loading={false}
-                      onClick={() => setMobileMenuOpen(false)}
-                    />
-                  </nav>
-
-                  <div className="pt-4 border-t">
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start"
-                      onClick={() => {
-                        logout();
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Sign out
-                    </Button>
-                  </div>
+          {/* Mobile Menu - available on every page so users can navigate from anywhere */}
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="md:hidden h-8 w-8">
+                <Menu className="h-4 w-4" />
+                <span className="sr-only">Toggle menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[88vw] max-w-sm p-0 flex flex-col">
+              <VisuallyHidden>
+                <SheetTitle>Navigation menu</SheetTitle>
+                <SheetDescription>Main app navigation and account actions</SheetDescription>
+              </VisuallyHidden>
+              <div className="flex items-center gap-3 p-4 pb-4 border-b">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <User className="h-5 w-5 text-primary" />
                 </div>
-              </SheetContent>
-            </Sheet>
-          )}
+                <div className="flex flex-col min-w-0">
+                  <p className="text-sm font-medium truncate">{user?.displayName || 'User'}</p>
+                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                </div>
+              </div>
+
+              <nav className="flex flex-col gap-1 p-3 flex-1 overflow-y-auto">
+                <MobileNavLink
+                  href="/"
+                  icon={<Home className="h-4 w-4" />}
+                  label="Dashboard"
+                  hasAccess={true}
+                  loading={false}
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+                <MobileNavLink
+                  href="/modules/project-links"
+                  icon={<FolderOpen className="h-4 w-4" />}
+                  label="Client Projects"
+                  hasAccess={projectLinksAccess}
+                  loading={accessLoading}
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+                {(accessLoading || proposalAccess) && (
+                  <MobileNavLink
+                    href="/modules/proposal"
+                    icon={<FileText className="h-4 w-4" />}
+                    label="Proposals"
+                    hasAccess={proposalAccess}
+                    loading={accessLoading}
+                    onClick={() => setMobileMenuOpen(false)}
+                  />
+                )}
+                <MobileNavLink
+                  href="/modules/screenshot-runner"
+                  icon={<MonitorSmartphone className="h-4 w-4" />}
+                  label="Screenshot Runner"
+                  hasAccess={projectLinksAccess}
+                  loading={accessLoading}
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+                <MobileNavLink
+                  href="/modules/seo-engine"
+                  icon={<PenLine className="h-4 w-4" />}
+                  label="SEO Engine"
+                  hasAccess={true}
+                  loading={false}
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+                <MobileNavLink
+                  href="/modules/checklist-creator"
+                  icon={<ListChecks className="h-4 w-4" />}
+                  label="Checklist Creator"
+                  hasAccess={true}
+                  loading={false}
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+              </nav>
+
+              <div className="p-4 border-t mt-auto">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    logout();
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
 
           {children}
         </div>
