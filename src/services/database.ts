@@ -722,9 +722,6 @@ const REQUESTS_COLLECTION = COLLECTIONS.REQUESTS;
 
 /** Convert Firestore doc data to Task with proper Date types. */
 function taskFromDoc(id: string, data: Record<string, unknown>): Task {
-  const createdAt = data.createdAt as Timestamp | undefined;
-  const updatedAt = data.updatedAt as Timestamp | undefined;
-  const completedAt = data.completedAt as Timestamp | undefined;
   return {
     id,
     projectId: data.projectId as string,
@@ -740,24 +737,22 @@ function taskFromDoc(id: string, data: Record<string, unknown>): Task {
     sourceLink: data.sourceLink as string | undefined,
     assignee: data.assignee as string | undefined,
     order: (data.order as number | undefined) ?? 0,
-    createdAt: createdAt ? createdAt.toDate() : new Date(),
-    updatedAt: updatedAt ? updatedAt.toDate() : new Date(),
-    completedAt: completedAt ? completedAt.toDate() : undefined,
+    createdAt: data.createdAt ? toSafeDate(data.createdAt) : new Date(),
+    updatedAt: data.updatedAt ? toSafeDate(data.updatedAt) : new Date(),
+    completedAt: data.completedAt ? toSafeDate(data.completedAt) : undefined,
     createdBy: data.createdBy as string,
   };
 }
 
 function requestFromDoc(id: string, data: Record<string, unknown>): ProjectRequest {
-  const receivedAt = data.receivedAt as Timestamp | undefined;
-  const parsedAt = data.parsedAt as Timestamp | undefined;
   return {
     id,
     projectId: data.projectId as string,
     rawText: data.rawText as string,
     source: data.source as ProjectRequest['source'],
     sender: data.sender as string | undefined,
-    receivedAt: receivedAt ? receivedAt.toDate() : new Date(),
-    parsedAt: parsedAt ? parsedAt.toDate() : undefined,
+    receivedAt: data.receivedAt ? toSafeDate(data.receivedAt) : new Date(),
+    parsedAt: data.parsedAt ? toSafeDate(data.parsedAt) : undefined,
     status: data.status as ProjectRequest['status'],
     taskIds: (data.taskIds as string[] | undefined) ?? [],
     createdBy: data.createdBy as string,
