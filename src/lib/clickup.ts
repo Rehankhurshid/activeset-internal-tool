@@ -221,68 +221,6 @@ export function clickUpTaskToUpdate(task: ClickUpTask): UpdateTaskInput {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Task creation
-// ────────────────────────────────────────────────────────────────────────────
-
-/** ClickUp priority numeric codes — 1=urgent, 2=high, 3=normal, 4=low. */
-const PRIORITY_TO_CODE: Record<TaskPriority, 1 | 2 | 3 | 4> = {
-  urgent: 1,
-  high: 2,
-  medium: 3,
-  low: 4,
-};
-
-export interface CreateClickUpTaskInput {
-  name: string;
-  description?: string;
-  /** Local priority — gets translated to ClickUp's numeric code. */
-  priority?: TaskPriority;
-  /** Tag names; tags must already exist at the space level. */
-  tags?: string[];
-  /** ISO YYYY-MM-DD; converted to ms epoch for the API. */
-  dueDate?: string;
-  /** ClickUp user IDs (numeric). Use the workspace member directory if unsure. */
-  assigneeIds?: number[];
-  /** Custom field values, keyed by field id. */
-  customFields?: { id: string; value: unknown }[];
-}
-
-function isoDateToEpochMs(iso: string | undefined): number | undefined {
-  if (!iso) return undefined;
-  // ClickUp stores due dates as UTC midnight when only a date is given.
-  const ms = Date.parse(`${iso}T00:00:00Z`);
-  return Number.isFinite(ms) ? ms : undefined;
-}
-
-/** Create a task in a ClickUp list. Returns the new task with id + url so the
- *  caller can mirror it into the local `tasks` collection. */
-export async function createClickUpTask(
-  listId: string,
-  input: CreateClickUpTaskInput,
-): Promise<ClickUpTask> {
-  const body: Record<string, unknown> = {
-    name: input.name,
-  };
-  if (input.description) body.description = input.description;
-  if (input.priority) body.priority = PRIORITY_TO_CODE[input.priority];
-  if (input.tags && input.tags.length > 0) body.tags = input.tags;
-  if (input.assigneeIds && input.assigneeIds.length > 0) body.assignees = input.assigneeIds;
-  const dueMs = isoDateToEpochMs(input.dueDate);
-  if (dueMs) body.due_date = dueMs;
-  if (input.customFields && input.customFields.length > 0) {
-    body.custom_fields = input.customFields;
-  }
-
-  return clickupRequest<ClickUpTask>(
-    `/list/${encodeURIComponent(listId)}/task`,
-    {
-      method: 'POST',
-      body: JSON.stringify(body),
-    },
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Webhook signature
 // ────────────────────────────────────────────────────────────────────────────
 

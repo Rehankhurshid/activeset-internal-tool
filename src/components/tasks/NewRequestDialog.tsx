@@ -58,9 +58,6 @@ const SOURCE_LABELS: Record<RequestSource, string> = {
   paste: 'Pasted',
   slack: 'Slack',
   email: 'Email',
-  // 'intake' arrives via the public intake form, not the operator dialog —
-  // labelled here so the record stays exhaustive for the type.
-  intake: 'Public intake',
 };
 
 let idCounter = 0;

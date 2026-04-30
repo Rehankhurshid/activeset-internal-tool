@@ -84,7 +84,6 @@ const SOURCE_LABEL: Record<Task['source'], string> = {
   slack: 'Slack',
   email: 'Email',
   clickup: 'ClickUp',
-  intake: 'Public intake',
 };
 
 /** Once a task is linked to ClickUp, ClickUp owns these fields. */

@@ -4,7 +4,7 @@ import { LoginForm, useAuth, useModuleAccess } from '@/modules/auth-access';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { FolderOpen, FileText, Sparkles, Lock, ListChecks, PenLine, Inbox } from 'lucide-react';
+import { FolderOpen, FileText, Sparkles, Lock, ListChecks, PenLine } from 'lucide-react';
 import { AppNavigation } from '@/shared/ui';
 import { DashboardAlertPanel } from '@/components/alerts/DashboardAlertPanel';
 import { DailyHealthPanel } from '@/components/alerts/DailyHealthPanel';
@@ -164,21 +164,6 @@ export default function Home() {
               <div className="flex items-center gap-1.5 text-xs text-teal-500 font-medium">
                 <Sparkles className="h-3 w-3" />
                 <span>AI Powered</span>
-              </div>
-            )}
-
-            {/* Client Intake Module */}
-            {renderModuleCard(
-              "/modules/intake",
-              <Inbox className="h-6 w-6 text-amber-500" />,
-              "bg-amber-500/10 dark:bg-amber-500/20",
-              "Client Intake",
-              "Public intake URLs + cross-client command center. Replaces guest seats and Word-doc briefs.",
-              true,
-              false,
-              <div className="flex items-center gap-1.5 text-xs text-amber-500 font-medium">
-                <Sparkles className="h-3 w-3" />
-                <span>AI Routed</span>
               </div>
             )}
           </div>
