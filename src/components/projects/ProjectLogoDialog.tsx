@@ -35,13 +35,21 @@ export function ProjectLogoDialog({ projectId, currentLogoUrl, autoFetchUrl, tri
         }
     };
 
-    const handleAutoFetch = () => {
+    const handleAutoFetch = async () => {
         if (!autoFetchUrl) return;
+        setBusy(true);
+        setError(null);
         try {
-            const domain = new URL(autoFetchUrl).hostname;
-            save(`https://www.google.com/s2/favicons?domain=${domain}&sz=128`);
+            const res = await fetch(`/api/favicon?url=${encodeURIComponent(autoFetchUrl)}`);
+            if (!res.ok) throw new Error();
+            const data = (await res.json()) as { url?: string };
+            if (!data.url) throw new Error();
+            await projectsService.updateProjectLogo(projectId, data.url);
+            setOpen(false);
         } catch {
-            setError('Could not detect a domain');
+            setError('Could not fetch icon');
+        } finally {
+            setBusy(false);
         }
     };
 
