@@ -106,7 +106,12 @@ export default function ClickUpSettingsPage() {
       });
       const data = (await res.json()) as TestNagResult & { error?: string; details?: string };
       if (!res.ok) {
-        throw new Error(data.error || data.details || `Test failed (${res.status})`);
+        const summary = data.error || `Test failed (${res.status})`;
+        toast.error(summary, {
+          description: data.details,
+          duration: 12_000,
+        });
+        return;
       }
       setLastTest(data);
       if ((data.posted ?? 0) === 0) {
