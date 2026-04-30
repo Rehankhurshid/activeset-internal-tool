@@ -336,6 +336,15 @@ export const projectsService = {
     });
   },
 
+  // Set or clear the project's custom logo (URL or compressed data URL)
+  async updateProjectLogo(projectId: string, logoUrl: string | null): Promise<void> {
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+      logoUrl: logoUrl ? logoUrl : deleteField(),
+      updatedAt: Timestamp.now(),
+    });
+  },
+
   // Update project sitemap URL
   async updateProjectSitemap(projectId: string, sitemapUrl: string): Promise<void> {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);

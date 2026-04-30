@@ -324,6 +324,8 @@ export interface Project {
   updatedAt: Date;
   userId: string;
   client?: string; // Optional client/company name used to group projects together
+  /** Optional logo for the project — either a remote URL or a small data URL. */
+  logoUrl?: string;
   /** Optional link to a proposal — drives "Import from proposal" on the
    *  Invoices tab. Set via the project header's proposal picker. */
   proposalId?: string;

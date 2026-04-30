@@ -24,6 +24,7 @@ import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS } f
 import { projectsService } from '@/services/database';
 import { cn } from '@/lib/utils';
 import { ProjectScanBadge } from './ProjectScanBadge';
+import { ProjectLogoDialog } from './ProjectLogoDialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -47,6 +48,16 @@ const TAG_COLORS: Record<ProjectTag, { bg: string; text: string; border: string 
 };
 
 const ALL_TAGS: ProjectTag[] = ['retainer', 'one_time', 'subscription', 'maintenance', 'consulting'];
+
+function detectWebsiteUrl(project: Project): string | undefined {
+    const custom = project.webflowConfig?.customDomain;
+    if (custom) return custom.startsWith('http') ? custom : `https://${custom}`;
+    const links = project.links || [];
+    const live = links.find(l => /live|production|website/i.test(l.title) && !/staging|dev/i.test(l.title));
+    if (live?.url) return live.url;
+    const firstHttp = links.find(l => /^https?:\/\//i.test(l.url));
+    return firstHttp?.url;
+}
 
 interface ProjectCardProps {
     project: Project;
@@ -155,21 +166,42 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                 {/* Header */}
                 <div className="flex items-start justify-between p-4 pb-2 pt-5">
                     <div className="flex items-start gap-3 overflow-hidden flex-1 min-w-0">
-                        {/* Status dot + Project initial */}
-                        <div className={cn(
-                            "relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-bold shrink-0 transition-all duration-300",
-                            "shadow-sm border",
-                            isCurrent
-                                ? "bg-primary/10 text-primary border-primary/20"
-                                : "bg-muted text-muted-foreground border-border/30"
-                        )}>
-                            {project.name.charAt(0).toUpperCase()}
-                            {/* Live dot */}
-                            <div className={cn(
-                                "absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card transition-colors",
-                                isCurrent ? "bg-emerald-500" : "bg-muted-foreground/40"
-                            )} />
-                        </div>
+                        {/* Status dot + Project logo / initial */}
+                        <ProjectLogoDialog
+                            projectId={project.id}
+                            currentLogoUrl={project.logoUrl}
+                            autoFetchUrl={detectWebsiteUrl(project)}
+                            trigger={
+                                <button
+                                    type="button"
+                                    aria-label={`Set logo for ${project.name}`}
+                                    className={cn(
+                                        "relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-bold shrink-0 transition-all duration-300 overflow-hidden",
+                                        "shadow-sm border cursor-pointer hover:ring-2 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                        isCurrent
+                                            ? "bg-primary/10 text-primary border-primary/20"
+                                            : "bg-muted text-muted-foreground border-border/30"
+                                    )}
+                                >
+                                    {project.logoUrl ? (
+                                        <img
+                                            src={project.logoUrl}
+                                            alt=""
+                                            className="w-full h-full object-cover"
+                                            loading="lazy"
+                                            decoding="async"
+                                        />
+                                    ) : (
+                                        project.name.charAt(0).toUpperCase()
+                                    )}
+                                    {/* Live dot */}
+                                    <div className={cn(
+                                        "absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card transition-colors",
+                                        isCurrent ? "bg-emerald-500" : "bg-muted-foreground/40"
+                                    )} />
+                                </button>
+                            }
+                        />
 
                         <div className="min-w-0 flex flex-col gap-1">
                             <h3 className={cn(
