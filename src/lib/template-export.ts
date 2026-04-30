@@ -1,13 +1,15 @@
-import { SOPTemplate } from '@/types';
+import { SOPTemplate, SOPTemplateSection, SOPTemplateItem } from '@/types';
 import jsPDF from 'jspdf';
 
 /**
  * Convert an SOP template to a formatted Markdown string.
  */
-export function templateToMarkdown(template: SOPTemplate): string {
+export function templateToMarkdown(template: Partial<SOPTemplate>): string {
     const lines: string[] = [];
 
-    lines.push(`# ${template.icon} ${template.name}`);
+    const icon = template.icon || '📝';
+    const name = template.name || 'Untitled Template';
+    lines.push(`# ${icon} ${name}`);
     lines.push('');
     if (template.description) {
         lines.push(`> ${template.description}`);
@@ -16,20 +18,157 @@ export function templateToMarkdown(template: SOPTemplate): string {
     lines.push('---');
     lines.push('');
 
-    for (const section of template.sections) {
+    for (const section of template.sections || []) {
         lines.push(`## ${section.emoji || '📁'} ${section.title}`);
         lines.push('');
-        for (const item of section.items) {
+        for (const item of section.items || []) {
             const emoji = item.emoji ? `${item.emoji} ` : '';
             lines.push(`- [ ] ${emoji}${item.title}`);
             if (item.referenceLink) {
                 lines.push(`  - 🔗 Reference: ${item.referenceLink}`);
+            }
+            if (item.hoverImage) {
+                lines.push(`  - 🖼️ Image: ${item.hoverImage}`);
             }
         }
         lines.push('');
     }
 
     return lines.join('\n');
+}
+
+/**
+ * Parse a Markdown string back into a partial SOP template.
+ * Mirrors the format produced by `templateToMarkdown`, but is lenient
+ * about whitespace and missing fields.
+ */
+export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
+    const lines = md.replace(/\r\n/g, '\n').split('\n');
+
+    let name = '';
+    let icon = '📝';
+    let description = '';
+    const sections: SOPTemplateSection[] = [];
+
+    let currentSection: SOPTemplateSection | null = null;
+    let currentItem: SOPTemplateItem | null = null;
+    let descriptionCaptured = false;
+
+    const titleRegex = /^#\s+(.+)$/;
+    const sectionRegex = /^##\s+(.+)$/;
+    // Matches "- [ ] ..." or "- [x] ..." etc.
+    const itemRegex = /^\s*-\s*\[[ xX]?\]\s*(.+)$/;
+    // Sub-bullet "  - 🔗 Reference: …" / "  - 🖼️ Image: …"
+    const subRefRegex = /^\s+-\s*(?:🔗|Reference|🌐)[^a-zA-Z0-9]*(?:Reference\s*:?\s*)?(.+)$/i;
+    const subImgRegex = /^\s+-\s*(?:🖼️?|Image)[^a-zA-Z0-9]*(?:Image\s*:?\s*)?(.+)$/i;
+    const blockquoteRegex = /^>\s*(.+)$/;
+    const dividerRegex = /^---+\s*$/;
+
+    const splitEmoji = (text: string): { emoji?: string; title: string } => {
+        const trimmed = text.trim();
+        // Leading emoji cluster: base pictograph + optional modifier / VS-16 / ZWJ-joined sequences.
+        const m = trimmed.match(/^(\p{Extended_Pictographic}(?:️|⃣|\p{Emoji_Modifier}|‍\p{Extended_Pictographic})*)\s+(.+)$/u);
+        if (m) return { emoji: m[1], title: m[2].trim() };
+        return { title: trimmed };
+    };
+
+    const flushItem = () => {
+        if (currentSection && currentItem) {
+            currentSection.items.push(currentItem);
+        }
+        currentItem = null;
+    };
+
+    const flushSection = () => {
+        flushItem();
+        if (currentSection) {
+            sections.push(currentSection);
+        }
+        currentSection = null;
+    };
+
+    for (const rawLine of lines) {
+        const line = rawLine.replace(/\s+$/, '');
+        if (!line) continue;
+
+        // Title (first H1 wins)
+        if (!name) {
+            const tm = line.match(titleRegex);
+            if (tm) {
+                const parsed = splitEmoji(tm[1]);
+                if (parsed.emoji) icon = parsed.emoji;
+                name = parsed.title;
+                continue;
+            }
+        }
+
+        // Description (first blockquote line(s) before any section)
+        if (!descriptionCaptured && sections.length === 0 && !currentSection) {
+            const bq = line.match(blockquoteRegex);
+            if (bq) {
+                description = description ? `${description} ${bq[1].trim()}` : bq[1].trim();
+                continue;
+            }
+        }
+
+        // Divider — marks end of description block
+        if (dividerRegex.test(line)) {
+            descriptionCaptured = true;
+            continue;
+        }
+
+        // Section header
+        const sm = line.match(sectionRegex);
+        if (sm) {
+            flushSection();
+            const parsed = splitEmoji(sm[1]);
+            currentSection = {
+                title: parsed.title,
+                emoji: parsed.emoji || '📁',
+                items: [],
+                order: sections.length,
+            };
+            descriptionCaptured = true;
+            continue;
+        }
+
+        // Item line — must come before sub-bullet regex (since itemRegex also starts with `-`)
+        const im = line.match(itemRegex);
+        if (im && currentSection) {
+            flushItem();
+            const parsed = splitEmoji(im[1]);
+            currentItem = {
+                title: parsed.title,
+                emoji: parsed.emoji,
+                status: 'not_started',
+                order: currentSection.items.length,
+            };
+            continue;
+        }
+
+        // Sub-bullet for current item (reference link)
+        if (currentItem) {
+            const refMatch = line.match(subRefRegex);
+            if (refMatch) {
+                currentItem.referenceLink = refMatch[1].trim();
+                continue;
+            }
+            const imgMatch = line.match(subImgRegex);
+            if (imgMatch) {
+                currentItem.hoverImage = imgMatch[1].trim();
+                continue;
+            }
+        }
+    }
+
+    flushSection();
+
+    return {
+        name,
+        icon,
+        description,
+        sections,
+    };
 }
 
 /**
