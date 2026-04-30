@@ -93,6 +93,7 @@ service cloud.firestore {
     match /configurations/{id}            { allow read, write: if true; }
     match /webflow_account_history/{id}   { allow read, write: if true; }
     match /tasks/{id}                     { allow read, write: if true; }
+    match /requests/{id}                  { allow read, write: if true; }
 
     // Proposals - authenticated agency users only (contains pricing/internal notes)
     match /proposals/{proposalId} {
