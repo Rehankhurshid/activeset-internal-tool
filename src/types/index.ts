@@ -344,6 +344,10 @@ export interface Project {
   disableDropdown?: boolean; // Hide the bottom-right project-links dropdown
   // Persisted bulk image-scan job so progress survives page refresh.
   imageScanJob?: ImageScanJob;
+  /** ClickUp list bound to this project. New tasks created in this list auto-import as
+   *  pre-linked Tasks; updates flow in via webhook the same way per-task linking does. */
+  clickupListId?: string;
+  clickupListName?: string;
 }
 
 export interface ImageScanJob {

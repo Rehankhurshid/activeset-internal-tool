@@ -339,6 +339,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         <TasksTab
                             projectId={project.id}
                             userEmail={user?.email ?? ''}
+                            clickupListId={project.clickupListId}
+                            clickupListName={project.clickupListName}
                         />
                     </TabsContent>
 

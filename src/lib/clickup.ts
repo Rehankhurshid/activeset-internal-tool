@@ -71,6 +71,24 @@ export function buildClickUpTaskUrl(taskId: string): string {
   return `https://app.clickup.com/t/${taskId}`;
 }
 
+/**
+ * Extract a ClickUp list id from a URL or accept a numeric id directly.
+ *
+ * Supported URL shapes:
+ *   https://app.clickup.com/12345/v/li/678
+ *   https://app.clickup.com/12345/v/l/678
+ *   https://app.clickup.com/12345/l/678
+ *   https://app.clickup.com/12345/v/li/678/t/abc123  (list inferred from a task URL)
+ */
+export function parseClickUpListId(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const liMatch = trimmed.match(/\/(?:v\/)?(?:li|l)\/(\d+)/);
+  if (liMatch?.[1]) return liMatch[1];
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  return null;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Task fetching + field mapping
 // ────────────────────────────────────────────────────────────────────────────
@@ -98,10 +116,52 @@ interface ClickUpTask {
   assignees?: ClickUpUser[];
   tags?: { name: string }[];
   url?: string;
+  /** Container the task currently lives in. ClickUp returns this on
+   *  GET /task/{id} as well as in webhook payloads for created/moved events. */
+  list?: { id: string; name?: string } | null;
 }
 
 export async function fetchClickUpTask(taskId: string): Promise<ClickUpTask> {
   return clickupRequest<ClickUpTask>(`/task/${encodeURIComponent(taskId)}`);
+}
+
+export interface ClickUpList {
+  id: string;
+  name: string;
+  task_count?: number | null;
+}
+
+export async function fetchClickUpList(listId: string): Promise<ClickUpList> {
+  return clickupRequest<ClickUpList>(`/list/${encodeURIComponent(listId)}`);
+}
+
+/**
+ * Fetch every task in a list, paginating until exhausted (ClickUp returns up to
+ * 100 tasks per page).
+ */
+export async function listTasksInList(
+  listId: string,
+  opts: { includeClosed?: boolean; subtasks?: boolean } = {},
+): Promise<ClickUpTask[]> {
+  const all: ClickUpTask[] = [];
+  let page = 0;
+  // Hard ceiling so a misconfigured list can't burn unbounded API budget.
+  const MAX_PAGES = 50; // 5,000 tasks
+  while (page < MAX_PAGES) {
+    const params = new URLSearchParams({
+      page: String(page),
+      include_closed: String(Boolean(opts.includeClosed)),
+      subtasks: String(Boolean(opts.subtasks)),
+    });
+    const res = await clickupRequest<{ tasks: ClickUpTask[] }>(
+      `/list/${encodeURIComponent(listId)}/task?${params.toString()}`,
+    );
+    const batch = res.tasks ?? [];
+    all.push(...batch);
+    if (batch.length < 100) break;
+    page += 1;
+  }
+  return all;
 }
 
 /** Map a ClickUp status string to one of our TaskStatus enum values. */

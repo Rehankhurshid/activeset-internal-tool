@@ -15,13 +15,16 @@ import { tasksService } from '@/services/database';
 
 import { TaskTable } from './TaskTable';
 import { NewRequestDialog } from './NewRequestDialog';
+import { ClickUpListLinkCard } from './ClickUpListLinkCard';
 
 interface TasksTabProps {
   projectId: string;
   userEmail: string;
+  clickupListId?: string;
+  clickupListName?: string;
 }
 
-export function TasksTab({ projectId, userEmail }: TasksTabProps) {
+export function TasksTab({ projectId, userEmail, clickupListId, clickupListName }: TasksTabProps) {
   const { tasks, loading } = useProjectTasks(projectId);
   const { requests } = useProjectRequests(projectId);
   const { assignees } = useAssignees();
@@ -105,6 +108,13 @@ export function TasksTab({ projectId, userEmail }: TasksTabProps) {
           New Request
         </Button>
       </div>
+
+      {/* ClickUp list binding (one card per project; handles link + bulk import) */}
+      <ClickUpListLinkCard
+        projectId={projectId}
+        clickupListId={clickupListId}
+        clickupListName={clickupListName}
+      />
 
       {/* Table */}
       <TaskTable tasks={tasks} assignees={assignees} loading={loading} />

@@ -19,6 +19,7 @@ export const maxDuration = 30;
 
 const APP_SECRETS_COLLECTION = COLLECTIONS.APP_SECRETS;
 const TASKS_COLLECTION = COLLECTIONS.TASKS;
+const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
 
 interface ClickUpAppSecrets {
   webhookSecret?: string;
@@ -33,12 +34,21 @@ async function loadWebhookSecret(): Promise<string | null> {
   return data?.webhookSecret ?? null;
 }
 
+/** Find the project (if any) bound to a given ClickUp list id. */
+async function findProjectForList(listId: string): Promise<string | null> {
+  const snap = await adminDb
+    .collection(PROJECTS_COLLECTION)
+    .where('clickupListId', '==', listId)
+    .limit(1)
+    .get();
+  return snap.empty ? null : snap.docs[0].id;
+}
+
 export async function POST(request: NextRequest) {
   if (!hasFirebaseAdminCredentials) {
     return NextResponse.json({ error: 'Server not configured' }, { status: 503 });
   }
 
-  // Read raw body once — needed for signature verification AND JSON parsing.
   const rawBody = await request.text();
 
   const secret = await loadWebhookSecret();
@@ -64,49 +74,92 @@ export async function POST(request: NextRequest) {
   if (!event) {
     return NextResponse.json({ error: 'Missing event' }, { status: 400 });
   }
-
-  // Non-task events are ignored — we only subscribe to task events but
-  // ClickUp can deliver list/folder events on shared workspaces.
   if (!taskId || !event.startsWith('task')) {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  // Look up our local Task linked to this ClickUp task.
+  // Local task already linked? Look it up first; that determines whether this
+  // is an update vs a candidate-for-create.
   const matches = await adminDb
     .collection(TASKS_COLLECTION)
     .where('clickupTaskId', '==', taskId)
     .limit(1)
     .get();
+  const existing = matches.empty ? null : matches.docs[0];
 
-  if (matches.empty) {
-    // Task not linked locally — common case (we don't mirror every ClickUp task,
-    // only ones explicitly linked from the app). Acknowledge so ClickUp doesn't retry.
-    return NextResponse.json({ ok: true, ignored: 'unlinked' });
-  }
-
-  const docRef = matches.docs[0].ref;
-
+  // taskDeleted is the easy case — no need to refetch.
   if (event === 'taskDeleted') {
-    // Don't delete our local task — just unlink and flip source back to manual
-    // so the team retains the row (it may have local notes / tags).
-    await docRef.update({
+    if (!existing) {
+      return NextResponse.json({ ok: true, ignored: 'unlinked-and-deleted' });
+    }
+    await existing.ref.update({
       clickupTaskId: null,
       clickupUrl: null,
       clickupSyncedAt: null,
       source: 'manual',
       updatedAt: Timestamp.now(),
     });
-    return NextResponse.json({ ok: true, action: 'unlinked' });
+    return NextResponse.json({ ok: true, action: 'unlinked-on-delete' });
   }
 
+  // For create/update/move/etc, fetch the current ClickUp state — gives us the
+  // canonical fields and (importantly) the current list id for routing.
+  let task;
   try {
-    const task = await fetchClickUpTask(taskId);
-    const patch = clickUpTaskToUpdate(task);
-    const completedAtUpdate =
-      patch.status === 'done'
-        ? { completedAt: Timestamp.now() }
-        : { completedAt: null };
-    await docRef.update({
+    task = await fetchClickUpTask(taskId);
+  } catch (err) {
+    if (err instanceof ClickUpError && err.status === 404) {
+      // Task disappeared between webhook fire and our fetch — treat as delete.
+      if (existing) {
+        await existing.ref.update({
+          clickupTaskId: null,
+          clickupUrl: null,
+          clickupSyncedAt: null,
+          source: 'manual',
+          updatedAt: Timestamp.now(),
+        });
+        return NextResponse.json({ ok: true, action: 'unlinked-on-404' });
+      }
+      return NextResponse.json({ ok: true, ignored: '404-unmatched' });
+    }
+    throw err;
+  }
+
+  const currentListId = task.list?.id ?? null;
+  const patch = clickUpTaskToUpdate(task);
+  const completedAtUpdate =
+    patch.status === 'done' ? { completedAt: Timestamp.now() } : { completedAt: null };
+
+  if (existing) {
+    // Update path. If the task moved OUT of a linked list, unlink it (option A
+    // behavior — keep the local row, drop the ClickUp link).
+    const localData = existing.data() as { projectId?: string };
+    const projectId = localData.projectId;
+    let movedOutOfLinkedList = false;
+    if (projectId) {
+      const projSnap = await adminDb
+        .collection(PROJECTS_COLLECTION)
+        .doc(projectId)
+        .get();
+      const linkedListId = (projSnap.data() as { clickupListId?: string } | undefined)
+        ?.clickupListId;
+      if (linkedListId && currentListId && linkedListId !== currentListId) {
+        movedOutOfLinkedList = true;
+      }
+    }
+
+    if (movedOutOfLinkedList) {
+      await existing.ref.update({
+        clickupTaskId: null,
+        clickupUrl: null,
+        clickupSyncedAt: null,
+        source: 'manual',
+        updatedAt: Timestamp.now(),
+      });
+      return NextResponse.json({ ok: true, action: 'unlinked-list-moved-out' });
+    }
+
+    await existing.ref.update({
       ...patch,
       ...completedAtUpdate,
       clickupUrl: task.url ?? buildClickUpTaskUrl(taskId),
@@ -114,10 +167,39 @@ export async function POST(request: NextRequest) {
       updatedAt: Timestamp.now(),
     });
     return NextResponse.json({ ok: true, action: 'synced', event });
-  } catch (err) {
-    const status = err instanceof ClickUpError ? (err.status ?? 502) : 500;
-    const message = err instanceof Error ? err.message : 'Unexpected error';
-    console.error('[clickup-webhook] sync failed:', message);
-    return NextResponse.json({ error: 'Sync failed', details: message }, { status });
   }
+
+  // No local task. If the current list is bound to a project, auto-create the
+  // local task pre-linked. Otherwise it's just an unrelated workspace event.
+  if (!currentListId) {
+    return NextResponse.json({ ok: true, ignored: 'unlinked' });
+  }
+  const projectId = await findProjectForList(currentListId);
+  if (!projectId) {
+    return NextResponse.json({ ok: true, ignored: 'list-not-bound' });
+  }
+
+  const now = Timestamp.now();
+  await adminDb.collection(TASKS_COLLECTION).add({
+    projectId,
+    title: patch.title ?? task.name ?? 'Untitled',
+    description: patch.description,
+    category: 'other',
+    status: patch.status ?? 'todo',
+    priority: patch.priority ?? 'medium',
+    dueDate: patch.dueDate,
+    tags: patch.tags ?? [],
+    assignee: patch.assignee,
+    source: 'clickup',
+    clickupTaskId: taskId,
+    clickupUrl: task.url ?? buildClickUpTaskUrl(taskId),
+    clickupSyncedAt: now,
+    order: Date.now(),
+    completedAt: patch.status === 'done' ? now : null,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: 'clickup-sync@system',
+  });
+
+  return NextResponse.json({ ok: true, action: 'created', projectId });
 }
