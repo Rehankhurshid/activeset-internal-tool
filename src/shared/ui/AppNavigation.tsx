@@ -97,13 +97,15 @@ export function AppNavigation({
                 hasAccess={projectLinksAccess}
                 loading={accessLoading}
               />
-              <NavigationLink
-                href="/modules/proposal"
-                icon={<FileText className="h-4 w-4" />}
-                label="Proposals"
-                hasAccess={proposalAccess}
-                loading={accessLoading}
-              />
+              {(accessLoading || proposalAccess) && (
+                <NavigationLink
+                  href="/modules/proposal"
+                  icon={<FileText className="h-4 w-4" />}
+                  label="Proposals"
+                  hasAccess={proposalAccess}
+                  loading={accessLoading}
+                />
+              )}
               <NavigationLink
                 href="/modules/screenshot-runner"
                 icon={<MonitorSmartphone className="h-4 w-4" />}
@@ -195,14 +197,16 @@ export function AppNavigation({
                       loading={accessLoading}
                       onClick={() => setMobileMenuOpen(false)}
                     />
-                    <MobileNavLink
-                      href="/modules/proposal"
-                      icon={<FileText className="h-4 w-4" />}
-                      label="Proposals"
-                      hasAccess={proposalAccess}
-                      loading={accessLoading}
-                      onClick={() => setMobileMenuOpen(false)}
-                    />
+                    {(accessLoading || proposalAccess) && (
+                      <MobileNavLink
+                        href="/modules/proposal"
+                        icon={<FileText className="h-4 w-4" />}
+                        label="Proposals"
+                        hasAccess={proposalAccess}
+                        loading={accessLoading}
+                        onClick={() => setMobileMenuOpen(false)}
+                      />
+                    )}
                     <MobileNavLink
                       href="/modules/screenshot-runner"
                       icon={<MonitorSmartphone className="h-4 w-4" />}

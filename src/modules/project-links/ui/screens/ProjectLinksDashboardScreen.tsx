@@ -28,6 +28,7 @@ import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { AppNavigation } from '@/shared/ui';
+import { toast } from 'sonner';
 
 type StatusFilter = 'all' | 'maintenance' | 'active' | 'past';
 
@@ -54,7 +55,7 @@ export function ProjectLinksDashboardScreen() {
   const [groupByClient, setGroupByClient] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('maintenance');
   const [activeTags, setActiveTags] = useState<ProjectTag[]>([]);
-  const { isLoading: isCreatingProject, execute: executeCreateProject } = useAsyncOperation();
+  const { isLoading: isCreatingProject, execute: executeCreateProject } = useAsyncOperation<string>();
 
   useEffect(() => {
     if (!user) return;
@@ -72,13 +73,22 @@ export function ProjectLinksDashboardScreen() {
   const handleCreateProject = async () => {
     if (!user || !newProjectName.trim()) return;
 
-    const success = await executeCreateProject(async () => {
-      await projectLinksRepository.createProject(user.uid, newProjectName.trim());
+    const trimmedName = newProjectName.trim();
+    const projectId = await executeCreateProject(async () => {
+      return await projectLinksRepository.createProject(user.uid, trimmedName);
     });
 
-    if (success) {
+    if (projectId) {
       setNewProjectName('');
       setIsCreating(false);
+      // New projects start with no tags, so the default 'maintenance' filter
+      // would hide them. Switch to 'all' and clear tag chips so the user
+      // actually sees the project they just created.
+      setStatusFilter('all');
+      setActiveTags([]);
+      toast.success(`Project "${trimmedName}" created`);
+    } else {
+      toast.error('Failed to create project. See console for details.');
     }
   };
 

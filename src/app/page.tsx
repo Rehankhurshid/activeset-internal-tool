@@ -122,8 +122,8 @@ export default function Home() {
               projectLinksAccessLoading
             )}
 
-            {/* Proposal Generator Module */}
-            {renderModuleCard(
+            {/* Proposal Generator Module — hidden for users without access */}
+            {(proposalAccessLoading || hasProposalAccess) && renderModuleCard(
               "/modules/proposal",
               <FileText className="h-6 w-6 text-purple-500" />,
               "bg-purple-500/10 dark:bg-purple-500/20",

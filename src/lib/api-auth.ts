@@ -78,9 +78,13 @@ export async function requireAdmin(req: NextRequest): Promise<AuthedCaller> {
 }
 
 /**
- * Verifies the caller (via {@link requireCaller}) AND that they own the given
- * project (or are admin). Returns the caller. Throws {@link ApiAuthError} on
- * any failure.
+ * Verifies the caller (via {@link requireCaller}) AND that the project exists.
+ * Returns the caller. Throws {@link ApiAuthError} on any failure.
+ *
+ * Project access is shared across the @activeset.co domain — `requireCaller`
+ * already restricts callers to that domain, which mirrors the Firestore rules
+ * for the `projects` collection. Admin-only resources (e.g. invoices, Refrens)
+ * must use {@link requireAdmin} instead.
  */
 export async function requireProjectAccess(
   req: NextRequest,
@@ -97,9 +101,6 @@ export async function requireProjectAccess(
   const data = projectSnap.data() as { userId?: string } | undefined;
   if (!data) {
     throw new ApiAuthError(404, 'Project not found');
-  }
-  if (!caller.isAdmin && data.userId !== caller.uid) {
-    throw new ApiAuthError(403, 'Forbidden');
   }
   return caller;
 }

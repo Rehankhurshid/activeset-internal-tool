@@ -23,6 +23,12 @@ service cloud.firestore {
           && request.auth.token.email == 'rehan@activeset.co';
       }
 
+      function isActiveSetUser() {
+        return request.auth != null
+          && request.auth.token.email is string
+          && request.auth.token.email.matches('.*@activeset\\.co$');
+      }
+
       function isOwner() {
         return request.auth != null
           && resource.data.userId == request.auth.uid;
@@ -39,11 +45,11 @@ service cloud.firestore {
       }
 
       function canAccessProject() {
-        return isAdmin() || isOwner();
+        return isAdmin() || isOwner() || isActiveSetUser();
       }
 
       function canAccessProjectById() {
-        return isAdmin() || isProjectOwnerById();
+        return isAdmin() || isProjectOwnerById() || isActiveSetUser();
       }
 
       function writeHasNoApiToken() {
@@ -53,7 +59,7 @@ service cloud.firestore {
       }
 
       allow read: if canAccessProject();
-      allow create: if (isAdmin() || isNewOwner()) && writeHasNoApiToken();
+      allow create: if (isAdmin() || isNewOwner() || isActiveSetUser()) && writeHasNoApiToken();
       allow update: if canAccessProject()
         && request.resource.data.userId == resource.data.userId
         && writeHasNoApiToken();

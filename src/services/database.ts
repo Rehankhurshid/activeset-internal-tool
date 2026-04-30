@@ -583,49 +583,63 @@ export const projectsService = {
   subscribeToAllProjects(callback: (projects: Project[]) => void): () => void {
     const q = query(collection(db, PROJECTS_COLLECTION));
 
-    return onSnapshot(q, async (snapshot) => {
-      const projects = snapshot.docs.map(d => {
-        const data = d.data();
-        return sanitizeProjectData({
-          id: d.id,
-          ...data,
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate(),
-        }) as Project;
-      });
+    return onSnapshot(
+      q,
+      async (snapshot) => {
+        const projects = snapshot.docs.map(d => {
+          const data = d.data();
+          return sanitizeProjectData({
+            id: d.id,
+            ...data,
+            createdAt: data.createdAt.toDate(),
+            updatedAt: data.updatedAt.toDate(),
+          }) as Project;
+        });
 
-      // Merge audit results from subcollections
-      await Promise.all(
-        projects.map(async (project) => {
-          project.links = await mergeAuditResults(project.id, project.links);
-        })
-      );
+        // Merge audit results from subcollections
+        await Promise.all(
+          projects.map(async (project) => {
+            project.links = await mergeAuditResults(project.id, project.links);
+          })
+        );
 
-      const sortedProjects = projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-      callback(sortedProjects);
-    });
+        const sortedProjects = projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        callback(sortedProjects);
+      },
+      (error) => {
+        console.error('subscribeToAllProjects failed', error);
+        callback([]);
+      }
+    );
   },
 
   // Real-time subscription to a single project (merges audit data from subcollection)
   subscribeToProject(projectId: string, callback: (project: Project | null) => void): () => void {
     const docRef = doc(db, PROJECTS_COLLECTION, projectId);
 
-    return onSnapshot(docRef, async (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const project: Project = sanitizeProjectData({
-          id: docSnap.id,
-          ...data,
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate(),
-        }) as Project;
-        // Merge audit results from subcollection
-        project.links = await mergeAuditResults(projectId, project.links);
-        callback(project);
-      } else {
+    return onSnapshot(
+      docRef,
+      async (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const project: Project = sanitizeProjectData({
+            id: docSnap.id,
+            ...data,
+            createdAt: data.createdAt.toDate(),
+            updatedAt: data.updatedAt.toDate(),
+          }) as Project;
+          // Merge audit results from subcollection
+          project.links = await mergeAuditResults(projectId, project.links);
+          callback(project);
+        } else {
+          callback(null);
+        }
+      },
+      (error) => {
+        console.error('subscribeToProject failed', error);
         callback(null);
       }
-    });
+    );
   },
 
   // NOTE: Webflow config writes are intentionally NOT exposed here. The token
