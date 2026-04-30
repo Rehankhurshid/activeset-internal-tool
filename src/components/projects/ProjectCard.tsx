@@ -9,6 +9,8 @@ import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
 import {
     Trash2,
     ChevronRight,
+    ChevronDown,
+    ChevronUp,
     Link as LinkIcon,
     Edit,
     MoreVertical,
@@ -68,6 +70,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
     const [isDeleting, setIsDeleting] = React.useState(false);
     const [editingLinkId, setEditingLinkId] = React.useState<string | null>(null);
+    const [isExpanded, setIsExpanded] = React.useState(false);
 
     const status: ProjectStatus = project.status || 'current';
     const tags: ProjectTag[] = project.tags || [];
@@ -125,7 +128,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     // ONLY manual links (source !== 'auto')
     const manualLinks = project.links?.filter(l => l.source !== 'auto') || [];
     const displayLimit = 3;
-    const displayLinks = manualLinks.slice(0, displayLimit);
+    const displayLinks = isExpanded ? manualLinks : manualLinks.slice(0, displayLimit);
     const remainingCount = manualLinks.length > displayLimit ? manualLinks.length - displayLimit : 0;
 
     const handleEditLink = async (linkId: string, title: string, url: string) => {
@@ -383,9 +386,25 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                             ))}
                             {remainingCount > 0 && (
                                 <div className="pt-1 pl-2">
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted/50 text-[10px] font-medium text-muted-foreground">
-                                        +{remainingCount} more
-                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsExpanded(v => !v)}
+                                        aria-expanded={isExpanded}
+                                        aria-label={isExpanded ? 'Show fewer links' : `Show ${remainingCount} more links`}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted/50 hover:bg-muted text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        {isExpanded ? (
+                                            <>
+                                                <ChevronUp className="w-2.5 h-2.5" />
+                                                Show less
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ChevronDown className="w-2.5 h-2.5" />
+                                                +{remainingCount} more
+                                            </>
+                                        )}
+                                    </button>
                                 </div>
                             )}
                             <div className="pt-1.5 px-1">
