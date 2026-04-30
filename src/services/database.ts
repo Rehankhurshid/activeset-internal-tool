@@ -853,25 +853,32 @@ export const tasksService = {
       collection(db, TASKS_COLLECTION),
       where('projectId', '==', projectId),
     );
-    return onSnapshot(q, (snap) => {
-      const tasks = snap.docs.map((d) => taskFromDoc(d.id, d.data()));
-      // Sort: incomplete first, then by status order, then by `order` field
-      const statusOrder: Record<Task['status'], number> = {
-        in_progress: 0,
-        in_review: 1,
-        todo: 2,
-        backlog: 3,
-        blocked: 4,
-        done: 5,
-      };
-      tasks.sort((a, b) => {
-        const sa = statusOrder[a.status] ?? 99;
-        const sb = statusOrder[b.status] ?? 99;
-        if (sa !== sb) return sa - sb;
-        return (a.order ?? 0) - (b.order ?? 0);
-      });
-      callback(tasks);
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        const tasks = snap.docs.map((d) => taskFromDoc(d.id, d.data()));
+        // Sort: incomplete first, then by status order, then by `order` field
+        const statusOrder: Record<Task['status'], number> = {
+          in_progress: 0,
+          in_review: 1,
+          todo: 2,
+          backlog: 3,
+          blocked: 4,
+          done: 5,
+        };
+        tasks.sort((a, b) => {
+          const sa = statusOrder[a.status] ?? 99;
+          const sb = statusOrder[b.status] ?? 99;
+          if (sa !== sb) return sa - sb;
+          return (a.order ?? 0) - (b.order ?? 0);
+        });
+        callback(tasks);
+      },
+      (error) => {
+        console.error('subscribeToProjectTasks failed', error);
+        callback([]);
+      },
+    );
   },
 };
 
@@ -923,10 +930,17 @@ export const requestsService = {
       collection(db, REQUESTS_COLLECTION),
       where('projectId', '==', projectId),
     );
-    return onSnapshot(q, (snap) => {
-      const requests = snap.docs.map((d) => requestFromDoc(d.id, d.data()));
-      requests.sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime());
-      callback(requests);
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        const requests = snap.docs.map((d) => requestFromDoc(d.id, d.data()));
+        requests.sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime());
+        callback(requests);
+      },
+      (error) => {
+        console.error('subscribeToProjectRequests failed', error);
+        callback([]);
+      },
+    );
   },
 };
