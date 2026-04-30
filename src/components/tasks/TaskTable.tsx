@@ -155,9 +155,11 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
           const task = row.original;
           const synced = isSyncedFromClickUp(task);
           return (
-            <div className="min-w-[240px]">
+            <div className="min-w-[240px] max-w-[420px]">
               {synced ? (
-                <div className="text-sm font-medium px-2">{task.title}</div>
+                <div className="text-sm font-medium px-2 break-words">
+                  {task.title}
+                </div>
               ) : (
                 <InlineEdit
                   value={task.title}
@@ -168,7 +170,7 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
                 />
               )}
               {task.description && (
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 px-2">
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 px-2 whitespace-pre-line break-words">
                   {task.description}
                 </p>
               )}
