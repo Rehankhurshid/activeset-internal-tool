@@ -348,6 +348,17 @@ export interface Project {
    *  pre-linked Tasks; updates flow in via webhook the same way per-task linking does. */
   clickupListId?: string;
   clickupListName?: string;
+  /** Public intake settings — when enabled, exposes a `/intake/<token>` URL the client
+   *  can use to drop change requests without a workspace seat. Tokens are random and
+   *  rotatable; disable flips `intakeEnabled` to false without invalidating the URL. */
+  intakeToken?: string;
+  intakeEnabled?: boolean;
+  /** When true, parsed requests immediately create ClickUp tasks. When false, they
+   *  stage as a `request` blob for operator triage in the command center. */
+  intakeAutoCreate?: boolean;
+  /** Optional client-facing welcome blurb on the intake page. */
+  intakeWelcomeMessage?: string;
+  intakeUpdatedAt?: string;
 }
 
 export interface ImageScanJob {
@@ -621,7 +632,7 @@ export type TaskStatus =
 
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
-export type TaskSource = 'manual' | 'paste' | 'slack' | 'email' | 'clickup';
+export type TaskSource = 'manual' | 'paste' | 'slack' | 'email' | 'clickup' | 'intake';
 
 export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
   fix: 'Fix',
@@ -719,7 +730,7 @@ export type UpdateTaskInput = Partial<
   >
 >;
 
-export type RequestSource = 'paste' | 'slack' | 'email';
+export type RequestSource = 'paste' | 'slack' | 'email' | 'intake';
 export type RequestStatus = 'new' | 'parsed' | 'archived';
 
 export interface ProjectRequest {
@@ -745,4 +756,77 @@ export interface ParsedTaskSuggestion {
   description?: string;
   category: TaskCategory;
   priority: TaskPriority;
+}
+
+// ---------------------------------------------------------------------------
+// Public intake (replaces the "client as guest seat" model)
+// ---------------------------------------------------------------------------
+
+/** Submitted via the public `/intake/<token>` form. Lands as a `requests` blob;
+ *  optionally fans out to ClickUp tasks immediately when the project has
+ *  `intakeAutoCreate` enabled. */
+export interface IntakeSubmissionPayload {
+  requesterName: string;
+  requesterEmail?: string;
+  /** The actual ask — may be a single task or a bullet list. The server runs
+   *  AI parsing to split into discrete tasks when the project allows. */
+  message: string;
+  /** Optional Loom or external doc link the client wants attached. */
+  referenceUrl?: string;
+  /** Hint to the operator/AI: a single concrete request vs. a bundled list. */
+  isList?: boolean;
+  urgency?: 'low' | 'medium' | 'high' | 'urgent';
+  /** ISO YYYY-MM-DD if the requester wants a specific deadline. */
+  deadline?: string;
+}
+
+export interface IntakeSubmissionResponse {
+  success: boolean;
+  requestId: string;
+  /** Number of ClickUp tasks created (only when intakeAutoCreate=true). */
+  tasksCreated: number;
+  taskUrls: string[];
+  message: string;
+}
+
+/** Operator command-center summary of a single project's open work, derived
+ *  from the locally-mirrored `tasks` collection (kept in sync via webhook + cron). */
+export interface ProjectIntakeSummary {
+  projectId: string;
+  projectName: string;
+  client?: string;
+  clickupListId?: string;
+  clickupListName?: string;
+  intakeEnabled?: boolean;
+  intakeToken?: string;
+  intakeAutoCreate?: boolean;
+  /** Counts across linked ClickUp tasks for this project. */
+  open: number;
+  inProgress: number;
+  inReview: number;
+  blocked: number;
+  done: number;
+  /** Tasks open >14 days with no due date or no assignee. */
+  staleCount: number;
+  /** Tasks `blocked` for >5 days. */
+  blockedAgingCount: number;
+  /** Tasks `in_review` for >3 days. */
+  reviewAgingCount: number;
+  /** Untriaged `requests` blobs awaiting operator action. */
+  untriagedRequests: number;
+  lastSyncedAt?: string;
+}
+
+export interface IntakeDashboardResponse {
+  generatedAt: string;
+  projects: ProjectIntakeSummary[];
+  totals: {
+    projects: number;
+    open: number;
+    blocked: number;
+    blockedAgingCount: number;
+    staleCount: number;
+    reviewAgingCount: number;
+    untriagedRequests: number;
+  };
 }
