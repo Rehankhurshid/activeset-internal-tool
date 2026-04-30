@@ -124,9 +124,14 @@ if (!admin.apps.length) {
     }
 }
 
-// Export db and auth, with fallback mocks for build time or missing credentials
-export const db = (admin.apps.length ? admin.firestore() : {
-    collection: () => {
+// Export db and auth, with fallback mocks for build time or missing credentials.
+//
+// ignoreUndefinedProperties: true so writes that include undefined fields silently
+// drop them instead of throwing. Necessary for the ClickUp sync (third-party data
+// often has missing optional fields) and matches the pattern most callers already
+// use via stripUndefined() in services/database.ts.
+function buildAdminDb(): Firestore {
+    if (!admin.apps.length) {
         const mockQuery = {
             doc: () => ({
                 get: async () => ({ exists: false, data: () => undefined }),
@@ -140,9 +145,19 @@ export const db = (admin.apps.length ? admin.firestore() : {
             add: async () => ({ id: 'mock-id' }),
             get: async () => ({ empty: true, docs: [] })
         };
-        return mockQuery;
+        return { collection: () => mockQuery } as unknown as Firestore;
     }
-}) as unknown as Firestore;
+    const fs = admin.firestore();
+    try {
+        fs.settings({ ignoreUndefinedProperties: true });
+    } catch {
+        // Settings can only be applied before the first read/write — in long-lived
+        // processes this may already be set on a re-import. Safe to ignore.
+    }
+    return fs;
+}
+
+export const db = buildAdminDb();
 
 if (!admin.apps.length) {
     console.warn('[firebase-admin] Running without admin credentials. Public share links cannot be resolved.');
