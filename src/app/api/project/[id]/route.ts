@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db } from '@/lib/firebase-admin';
 
 // Use Node runtime because firestore SDK relies on Node APIs not available in Edge Runtime
 export const runtime = 'nodejs';
@@ -38,18 +37,17 @@ function pickPublicFields(data: Record<string, unknown>) {
   return out;
 }
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
-    const docRef = doc(db, 'projects', id);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
+    const snap = await db.collection('projects').doc(id).get();
+    if (!snap.exists) {
       return new NextResponse(JSON.stringify({ error: 'Project not found' }), {
         status: 404,
         headers: corsHeaders,
       });
     }
-    const safe = pickPublicFields(snap.data() as Record<string, unknown>);
+    const safe = pickPublicFields((snap.data() || {}) as Record<string, unknown>);
     return new NextResponse(
       JSON.stringify({ id: snap.id, ...safe }),
       {
@@ -58,10 +56,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     );
   } catch (e: unknown) {
-    return new NextResponse(JSON.stringify({ error: (e as Error).message }), {
-      status: 500,
-      headers: corsHeaders,
-    });
+    const err = e as Error & { code?: string | number };
+    return new NextResponse(
+      JSON.stringify({ error: err.message, code: err.code, name: err.name }),
+      { status: 500, headers: corsHeaders }
+    );
   }
 }
 
