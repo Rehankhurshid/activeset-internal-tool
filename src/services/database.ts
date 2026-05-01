@@ -797,31 +797,48 @@ function pushNewTasksToClickUp(projectId: string, taskIds: string[]): void {
     });
 }
 
+/** Subset of UpdateTaskInput that flows app → ClickUp via /api/clickup/sync-update. */
+const CLICKUP_PUSHABLE_FIELDS = [
+  'title',
+  'description',
+  'status',
+  'priority',
+  'dueDate',
+  'assignee',
+] as const;
+
+type ClickUpPushableField = (typeof CLICKUP_PUSHABLE_FIELDS)[number];
+
 /**
- * Fire-and-forget push of an app-side assignee change to the linked ClickUp
- * task. The route (re)reads the task and figures out the diff against the
- * current ClickUp assignees, so we just need to identify the task.
+ * Fire-and-forget push of an app-side update to the linked ClickUp task.
+ * Forwards only the fields ClickUp can accept; the route handles mapping
+ * (priority enum, due-date epoch, status name lookup, assignee id diff).
  */
-function pushAssigneeChangeToClickUp(projectId: string, taskId: string): void {
+function pushUpdateToClickUp(
+  projectId: string,
+  taskId: string,
+  patch: Partial<Pick<UpdateTaskInput, ClickUpPushableField>>,
+): void {
   if (typeof window === 'undefined') return;
   if (!projectId || !taskId) return;
+  if (Object.keys(patch).length === 0) return;
   const user = auth?.currentUser;
   if (!user) return;
   void user
     .getIdToken()
     .then((idToken) =>
-      fetch('/api/clickup/sync-assignee', {
+      fetch('/api/clickup/sync-update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${idToken}`,
           'x-project-id': projectId,
         },
-        body: JSON.stringify({ projectId, taskId }),
+        body: JSON.stringify({ projectId, taskId, patch }),
       }),
     )
     .catch((err) => {
-      console.error('[tasksService] ClickUp sync-assignee failed', err);
+      console.error('[tasksService] ClickUp sync-update failed', err);
     });
 }
 
@@ -888,16 +905,30 @@ export const tasksService = {
   async updateTask(taskId: string, updates: UpdateTaskInput): Promise<void> {
     try {
       const ref = doc(db, TASKS_COLLECTION, taskId);
+
       // Distinguish "key absent" from "key present with value undefined" — the
-      // latter is the UI's way of clearing the field (e.g. "Unassigned"). The
+      // latter is the UI's way of clearing a field (e.g. "Unassigned"). The
       // generic stripUndefined would drop those keys, so the clear would be a
-      // no-op. Convert explicit-undefined assignee → deleteField() instead.
-      const wantsAssigneeChange = 'assignee' in updates;
-      const isClearingAssignee = wantsAssigneeChange && updates.assignee === undefined;
+      // no-op. Convert explicit-undefined to deleteField() for clearable fields.
       const cleaned = stripUndefined(updates) as Record<string, unknown>;
-      if (isClearingAssignee) {
+      if ('assignee' in updates && updates.assignee === undefined) {
         cleaned.assignee = deleteField();
       }
+      if ('dueDate' in updates && updates.dueDate === undefined) {
+        cleaned.dueDate = deleteField();
+      }
+
+      // Build the ClickUp patch (subset of CLICKUP_PUSHABLE_FIELDS that the
+      // user touched). Use "key in updates" so we capture explicit-undefined
+      // (i.e. "clear this field").
+      const clickupPatch: Partial<Pick<UpdateTaskInput, ClickUpPushableField>> = {};
+      for (const field of CLICKUP_PUSHABLE_FIELDS) {
+        if (field in updates) {
+          (clickupPatch as Record<string, unknown>)[field] = (updates as Record<string, unknown>)[field];
+        }
+      }
+      const wantsClickUpPush = Object.keys(clickupPatch).length > 0;
+
       // Auto-stamp completedAt when status flips to done; clear when leaving done.
       const completedAtUpdate =
         updates.status === 'done'
@@ -911,19 +942,19 @@ export const tasksService = {
         updatedAt: Timestamp.now(),
       });
 
-      // If the patch changed `assignee` AND the task is linked to ClickUp,
-      // push the change. We re-read the doc to grab projectId + clickupTaskId
-      // (small cost, only when assignee changed).
-      if (wantsAssigneeChange && typeof window !== 'undefined') {
+      // If any pushable field changed AND the task is linked to ClickUp,
+      // forward the change. Re-read the doc to grab projectId + clickupTaskId
+      // (small cost, only on relevant edits).
+      if (wantsClickUpPush && typeof window !== 'undefined') {
         void getDoc(ref)
           .then((s) => {
             const d = s.data() as { projectId?: string; clickupTaskId?: string } | undefined;
             if (d?.projectId && d?.clickupTaskId) {
-              pushAssigneeChangeToClickUp(d.projectId, taskId);
+              pushUpdateToClickUp(d.projectId, taskId, clickupPatch);
             }
           })
           .catch((err) => {
-            console.error('[tasksService] failed to re-read task for sync-assignee', err);
+            console.error('[tasksService] failed to re-read task for sync-update', err);
           });
       }
     } catch (error) {

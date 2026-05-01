@@ -305,31 +305,26 @@ function pickAssigneeEmail(assignees: ClickUpUser[] | undefined): string | undef
 }
 
 /**
- * Replace a task's assignees in ClickUp. Pass the numeric ids to add and
- * remove. Either array may be empty.
+ * Generic PUT /task/{id} wrapper. The caller composes the body in ClickUp's
+ * native shape — `{ name, description, status, priority, due_date, due_date_time,
+ * assignees: { add, rem } }` — and this helper just forwards it.
  *
- * Used by the bidirectional assignee sync — the caller computes the diff
- * (current ClickUp assignees vs. desired set from the app) and passes the
- * delta. ClickUp's PUT endpoint requires the explicit add/rem split rather
- * than a full replacement payload.
+ * No-ops if the body has no recognized keys (saves an API round-trip).
  */
-export async function updateClickUpTaskAssignees(
+export async function updateClickUpTask(
   taskId: string,
-  addIds: number[],
-  removeIds: number[],
+  body: Record<string, unknown>,
 ): Promise<void> {
-  if (addIds.length === 0 && removeIds.length === 0) return;
+  if (Object.keys(body).length === 0) return;
   await clickupRequest<unknown>(`/task/${encodeURIComponent(taskId)}`, {
     method: 'PUT',
-    body: JSON.stringify({
-      assignees: { add: addIds, rem: removeIds },
-    }),
+    body: JSON.stringify(body),
   });
 }
 
 /** Convert a YYYY-MM-DD ISO date to a ClickUp epoch-ms number, anchored at UTC noon
  *  to avoid timezone day-flips. Returns null for invalid input. */
-function isoDateToClickUpMs(iso?: string): number | null {
+export function isoDateToClickUpMs(iso?: string | null): number | null {
   if (!iso) return null;
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;

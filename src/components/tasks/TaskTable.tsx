@@ -87,7 +87,7 @@ const SOURCE_LABEL: Record<Task['source'], string> = {
 };
 
 /** Once a task is linked to ClickUp, ClickUp owns these fields. */
-const isSyncedFromClickUp = (t: Task) => t.source === 'clickup' && Boolean(t.clickupTaskId);
+const isLinkedToClickUp = (t: Task) => Boolean(t.clickupTaskId);
 
 export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -153,22 +153,17 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         ),
         cell: ({ row }) => {
           const task = row.original;
-          const synced = isSyncedFromClickUp(task);
+          // Title is bidirectional — always editable. Edits flow to ClickUp
+          // via /api/clickup/sync-update for linked tasks.
           return (
             <div className="min-w-[240px] max-w-[420px]">
-              {synced ? (
-                <div className="text-sm font-medium px-2 break-words">
-                  {task.title}
-                </div>
-              ) : (
-                <InlineEdit
-                  value={task.title}
-                  onSave={(v) => handleUpdate(task.id, { title: v })}
-                  className="text-sm"
-                  displayClassName="text-sm font-medium"
-                  inputClassName="h-8 text-sm"
-                />
-              )}
+              <InlineEdit
+                value={task.title}
+                onSave={(v) => handleUpdate(task.id, { title: v })}
+                className="text-sm"
+                displayClassName="text-sm font-medium"
+                inputClassName="h-8 text-sm"
+              />
               {task.description && (
                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 px-2 whitespace-pre-line break-words">
                   {task.description}
@@ -185,13 +180,7 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         ),
         cell: ({ row }) => {
           const task = row.original;
-          if (isSyncedFromClickUp(task)) {
-            return (
-              <div className="px-1">
-                <TaskStatusBadge status={task.status} />
-              </div>
-            );
-          }
+          // Status is bidirectional — always editable.
           return (
             <Select
               value={task.status}
@@ -231,13 +220,7 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         },
         cell: ({ row }) => {
           const task = row.original;
-          if (isSyncedFromClickUp(task)) {
-            return (
-              <div className="px-1">
-                <TaskPriorityBadge priority={task.priority} />
-              </div>
-            );
-          }
+          // Priority is bidirectional — always editable.
           return (
             <Select
               value={task.priority}
@@ -337,7 +320,6 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
             <DueDateCell
               value={task.dueDate}
               onChange={(v) => handleUpdate(task.id, { dueDate: v || undefined })}
-              readOnly={isSyncedFromClickUp(task)}
             />
           );
         },
@@ -348,7 +330,7 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         enableSorting: false,
         cell: ({ row }) => {
           const task = row.original;
-          const synced = isSyncedFromClickUp(task);
+          const synced = isLinkedToClickUp(task);
           return (
             <div className="flex items-center gap-1">
               {task.requestId && (
