@@ -39,5 +39,28 @@ export async function GET() {
     out.firestoreCall = { error: (e as Error).message };
   }
 
+  // Mirror the exact call /api/project/[id]/route.ts makes to spot any divergence
+  try {
+    const id = 'y8fkUIxcYDpgPDKq3tyX';
+    const snap = await db.collection('projects').doc(id).get();
+    out.routeMirror = {
+      exists: snap.exists,
+      keys: Object.keys(snap.data() || {}),
+    };
+  } catch (e) {
+    out.routeMirror = { error: (e as Error).message };
+  }
+
+  // Also test what /api/project/[id]/checklist/route.ts hits
+  try {
+    const snap = await db
+      .collection('project_checklists')
+      .doc('y8fkUIxcYDpgPDKq3tyX')
+      .get();
+    out.checklistCall = { exists: snap.exists };
+  } catch (e) {
+    out.checklistCall = { error: (e as Error).message };
+  }
+
   return NextResponse.json(out);
 }
