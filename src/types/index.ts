@@ -689,14 +689,17 @@ export interface Task {
   createdBy: string;
 }
 
-/** Fields owned by ClickUp once a task is linked. The TaskTable disables inline editing for these. */
+/** Fields owned by ClickUp once a task is linked. The TaskTable disables inline editing for these.
+ *
+ *  `assignee` is intentionally NOT in this list: assignee is bidirectional
+ *  (app ↔ ClickUp), so the cell stays editable on linked tasks and edits are
+ *  pushed to ClickUp via /api/clickup/sync-assignee. */
 export const CLICKUP_SYNCED_FIELDS = [
   'title',
   'description',
   'status',
   'priority',
   'dueDate',
-  'assignee',
 ] as const;
 
 export type CreateTaskInput = Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'completedAt' | 'order'> & {

@@ -298,13 +298,8 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         ),
         cell: ({ row }) => {
           const task = row.original;
-          if (isSyncedFromClickUp(task)) {
-            return (
-              <div className="px-1 text-xs text-muted-foreground">
-                {task.assignee ? task.assignee.split('@')[0] : 'Unassigned'}
-              </div>
-            );
-          }
+          // Assignee is bidirectional — always editable, even on ClickUp-imported
+          // tasks. Edits flow to ClickUp via /api/clickup/sync-assignee.
           return (
             <Select
               value={task.assignee ?? '__unassigned__'}
