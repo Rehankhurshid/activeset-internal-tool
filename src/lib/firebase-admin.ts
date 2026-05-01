@@ -48,7 +48,19 @@ const parseServiceAccount = (raw: string): admin.ServiceAccount | null => {
         const normalized = normalizeServiceAccount(parsed);
         if (normalized) return normalized;
     } catch {
-        // Not plain JSON, continue to base64 attempt.
+        // Not plain JSON, continue.
+    }
+
+    // Pasted-from-file form: raw newlines inside the private_key string break
+    // JSON.parse with "Bad control character in string literal". Strip CRs,
+    // escape LFs, then retry.
+    try {
+        const escaped = raw.trim().replace(/\r/g, '').replace(/\n/g, '\\n');
+        const parsed = JSON.parse(escaped) as unknown;
+        const normalized = normalizeServiceAccount(parsed);
+        if (normalized) return normalized;
+    } catch {
+        // Continue to base64 attempt.
     }
 
     try {
