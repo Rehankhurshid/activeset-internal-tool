@@ -20,6 +20,7 @@ import {
     Tag,
     Check,
     Globe,
+    ListTodo,
     SlidersHorizontal,
 } from 'lucide-react';
 import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS } from '@/types';
@@ -77,6 +78,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const isCurrent = status === 'current';
     const hasScanning = !!project.sitemapUrl || project.links?.some(l => l.source === 'auto');
     const hasWebflow = !!project.webflowConfig;
+    const hasClickUp = !!project.clickupListId;
     const disableAuditBadge = project.disableAuditBadge === true;
     const disableDropdown = project.disableDropdown === true;
 
@@ -256,6 +258,17 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                     >
                                         <Globe className="w-2.5 h-2.5 mr-0.5" />
                                         WF
+                                    </Badge>
+                                )}
+
+                                {hasClickUp && (
+                                    <Badge
+                                        variant="outline"
+                                        className="text-[10px] px-1.5 py-0 h-[18px] font-medium border border-violet-500/30 bg-violet-500/5 text-violet-400"
+                                        title={project.clickupListName ? `ClickUp list: ${project.clickupListName}` : 'ClickUp list bound'}
+                                    >
+                                        <ListTodo className="w-2.5 h-2.5 mr-0.5" />
+                                        CU
                                     </Badge>
                                 )}
                             </div>

@@ -679,6 +679,10 @@ export interface Task {
   clickupUrl?: string;
   /** ISO timestamp of the most recent successful ClickUp → app sync. */
   clickupSyncedAt?: Date;
+  /** Last error message when an outbound (app → ClickUp) push failed. Cleared on success. */
+  clickupSyncError?: string;
+  /** Timestamp of the last failed outbound push. Cleared on success. */
+  clickupSyncFailedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   completedAt?: Date;
@@ -716,6 +720,8 @@ export type UpdateTaskInput = Partial<
     | 'clickupTaskId'
     | 'clickupUrl'
     | 'clickupSyncedAt'
+    | 'clickupSyncError'
+    | 'clickupSyncFailedAt'
   >
 >;
 

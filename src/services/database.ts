@@ -16,7 +16,7 @@ import {
   where,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { toSafeDate } from '@/lib/firestore-dates';
 import {
   Project,
@@ -740,6 +740,8 @@ function taskFromDoc(id: string, data: Record<string, unknown>): Task {
     clickupTaskId: data.clickupTaskId as string | undefined,
     clickupUrl: data.clickupUrl as string | undefined,
     clickupSyncedAt: data.clickupSyncedAt ? toSafeDate(data.clickupSyncedAt) : undefined,
+    clickupSyncError: data.clickupSyncError as string | undefined,
+    clickupSyncFailedAt: data.clickupSyncFailedAt ? toSafeDate(data.clickupSyncFailedAt) : undefined,
     createdAt: data.createdAt ? toSafeDate(data.createdAt) : new Date(),
     updatedAt: data.updatedAt ? toSafeDate(data.updatedAt) : new Date(),
     completedAt: data.completedAt ? toSafeDate(data.completedAt) : undefined,
@@ -762,6 +764,39 @@ function requestFromDoc(id: string, data: Record<string, unknown>): ProjectReque
   };
 }
 
+/**
+ * Fire-and-forget push of newly-created local tasks to the project's bound
+ * ClickUp list. Runs only in the browser (where the user's Firebase ID token
+ * is available). The server route is a no-op when the project has no
+ * `clickupListId`, so we don't need to pre-check from here.
+ *
+ * Failures don't surface to the caller — the API route stamps
+ * `clickupSyncError` / `clickupSyncFailedAt` on the task doc, and the UI can
+ * subscribe to that for a retry affordance.
+ */
+function pushNewTasksToClickUp(projectId: string, taskIds: string[]): void {
+  if (typeof window === 'undefined') return;
+  if (!projectId || taskIds.length === 0) return;
+  const user = auth?.currentUser;
+  if (!user) return;
+  void user
+    .getIdToken()
+    .then((idToken) =>
+      fetch('/api/clickup/sync-create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+          'x-project-id': projectId,
+        },
+        body: JSON.stringify({ projectId, taskIds }),
+      }),
+    )
+    .catch((err) => {
+      console.error('[tasksService] ClickUp sync-create failed', err);
+    });
+}
+
 export const tasksService = {
   /** Create a single task. Returns the new task id. */
   async createTask(input: CreateTaskInput): Promise<string> {
@@ -774,6 +809,7 @@ export const tasksService = {
         updatedAt: now,
       });
       const ref = await addDoc(collection(db, TASKS_COLLECTION), payload as Record<string, unknown>);
+      pushNewTasksToClickUp(input.projectId, [ref.id]);
       return ref.id;
     } catch (error) {
       logError(error, 'createTask');
@@ -804,6 +840,15 @@ export const tasksService = {
         batch.set(ref, payload as Record<string, unknown>);
       });
       await batch.commit();
+      // All inputs in a batch share a project (current callers always do); group
+      // by projectId defensively in case that ever changes.
+      const byProject = new Map<string, string[]>();
+      inputs.forEach((input, idx) => {
+        const list = byProject.get(input.projectId) ?? [];
+        list.push(ids[idx]);
+        byProject.set(input.projectId, list);
+      });
+      byProject.forEach((batchIds, projectId) => pushNewTasksToClickUp(projectId, batchIds));
       return ids;
     } catch (error) {
       logError(error, 'createTasksBatch');

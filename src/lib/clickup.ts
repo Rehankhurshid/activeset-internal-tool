@@ -125,14 +125,57 @@ export async function fetchClickUpTask(taskId: string): Promise<ClickUpTask> {
   return clickupRequest<ClickUpTask>(`/task/${encodeURIComponent(taskId)}`);
 }
 
+export interface ClickUpListStatus {
+  status: string;
+  type?: 'open' | 'custom' | 'closed' | 'done';
+  orderindex?: number;
+  color?: string;
+}
+
 export interface ClickUpList {
   id: string;
   name: string;
   task_count?: number | null;
+  statuses?: ClickUpListStatus[];
 }
 
 export async function fetchClickUpList(listId: string): Promise<ClickUpList> {
   return clickupRequest<ClickUpList>(`/list/${encodeURIComponent(listId)}`);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Team members (for assignee email → ClickUp user id mapping)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface ClickUpMember {
+  id: number;
+  email?: string;
+  username?: string;
+}
+
+interface ClickUpTeamResponse {
+  team: {
+    id: string;
+    name: string;
+    members?: Array<{ user?: { id: number; username?: string; email?: string } }>;
+  };
+}
+
+/** Fetch all members of a ClickUp Workspace ("team"). */
+export async function fetchTeamMembers(teamId: string): Promise<ClickUpMember[]> {
+  const res = await clickupRequest<ClickUpTeamResponse>(`/team/${encodeURIComponent(teamId)}`);
+  return (res.team?.members ?? [])
+    .map((m) => m.user)
+    .filter((u): u is NonNullable<typeof u> => Boolean(u && typeof u.id === 'number'));
+}
+
+/** Build a lowercase-email → ClickUp user id map. */
+export function buildEmailToClickUpIdMap(members: ClickUpMember[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const m of members) {
+    if (m.email) map.set(m.email.toLowerCase(), m.id);
+  }
+  return map;
 }
 
 /**
@@ -190,6 +233,61 @@ export function mapClickUpPriority(p?: ClickUpTask['priority']): TaskPriority {
   }
 }
 
+/** ClickUp's numeric priority enum: 1=urgent, 2=high, 3=normal, 4=low. */
+export function taskPriorityToClickUp(p: TaskPriority): 1 | 2 | 3 | 4 {
+  switch (p) {
+    case 'urgent':
+      return 1;
+    case 'high':
+      return 2;
+    case 'low':
+      return 4;
+    default:
+      return 3;
+  }
+}
+
+/**
+ * Find the status name on a ClickUp list that best matches one of our
+ * `TaskStatus` values. Returns `undefined` if no good match exists — callers
+ * should omit `status` so ClickUp uses the list's default.
+ *
+ * Mirrors the inbound logic in `mapClickUpStatus` so a status bounces cleanly:
+ * app → ClickUp → app should return the same enum value.
+ */
+export function taskStatusToClickUpStatus(
+  taskStatus: TaskStatus,
+  listStatuses: ClickUpListStatus[] | undefined,
+): string | undefined {
+  if (!listStatuses || listStatuses.length === 0) return undefined;
+  const norm = listStatuses.map((s) => ({ raw: s, key: s.status.toLowerCase().trim() }));
+  const find = (pred: (s: (typeof norm)[number]) => boolean): string | undefined =>
+    norm.find(pred)?.raw.status;
+
+  switch (taskStatus) {
+    case 'done':
+      return (
+        find((s) => s.raw.type === 'done' || s.raw.type === 'closed') ??
+        find((s) => ['complete', 'completed', 'closed', 'done'].includes(s.key))
+      );
+    case 'in_progress':
+      return find((s) => s.key.includes('progress') || s.key === 'doing' || s.key === 'active');
+    case 'in_review':
+      return find((s) => s.key.includes('review') || s.key === 'qa' || s.key === 'qc');
+    case 'blocked':
+      return find((s) => s.key.includes('block'));
+    case 'backlog':
+      return find((s) => s.key === 'backlog');
+    case 'todo':
+      return (
+        find((s) => ['todo', 'to do', 'open'].includes(s.key)) ??
+        find((s) => s.raw.type === 'open')
+      );
+    default:
+      return undefined;
+  }
+}
+
 /** Convert a ClickUp due_date (ms epoch as string) to YYYY-MM-DD. */
 function toIsoDate(epochMs?: string | null): string | undefined {
   if (!epochMs) return undefined;
@@ -204,6 +302,57 @@ function pickAssigneeEmail(assignees: ClickUpUser[] | undefined): string | undef
   if (!assignees || assignees.length === 0) return undefined;
   const first = assignees.find((a) => a.email && a.email.endsWith('@activeset.co')) ?? assignees[0];
   return first?.email?.toLowerCase();
+}
+
+/** Convert a YYYY-MM-DD ISO date to a ClickUp epoch-ms number, anchored at UTC noon
+ *  to avoid timezone day-flips. Returns null for invalid input. */
+function isoDateToClickUpMs(iso?: string): number | null {
+  if (!iso) return null;
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Task creation (app → ClickUp)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface CreateClickUpTaskInput {
+  name: string;
+  description?: string;
+  priority?: TaskPriority;
+  dueDate?: string;        // YYYY-MM-DD
+  tags?: string[];
+  assigneeIds?: number[];  // ClickUp user IDs (numeric)
+  status?: string;         // raw ClickUp status name; if omitted, ClickUp uses the list's default
+}
+
+export async function createClickUpTask(
+  listId: string,
+  input: CreateClickUpTaskInput,
+): Promise<ClickUpTask> {
+  const body: Record<string, unknown> = {
+    name: input.name,
+  };
+  if (input.description) body.description = input.description;
+  if (input.priority) body.priority = taskPriorityToClickUp(input.priority);
+  const dueMs = isoDateToClickUpMs(input.dueDate);
+  if (dueMs !== null) {
+    body.due_date = dueMs;
+    body.due_date_time = false;
+  }
+  if (input.tags && input.tags.length > 0) body.tags = input.tags;
+  if (input.assigneeIds && input.assigneeIds.length > 0) body.assignees = input.assigneeIds;
+  if (input.status) body.status = input.status;
+
+  return clickupRequest<ClickUpTask>(
+    `/list/${encodeURIComponent(listId)}/task`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 /** Build the patch we apply to our Task when ClickUp sends an update. */
