@@ -42,9 +42,16 @@ export function DailyReviewBanner({ projects, className }: DailyReviewBannerProp
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // Only "current" projects are reviewable. Past projects don't need a daily check.
+  // "Live" projects = current + tagged. Untagged-current projects fall outside
+  // both the Maintenance and Active dashboard buckets, so the user doesn't think
+  // of them as live work — and we shouldn't pester them for a daily review.
   const currentProjects = React.useMemo(
-    () => projects.filter(p => (p.status ?? 'current') === 'current'),
+    () =>
+      projects.filter(p => {
+        const status = p.status ?? 'current';
+        if (status !== 'current') return false;
+        return (p.tags?.length ?? 0) > 0;
+      }),
     [projects],
   );
   const total = currentProjects.length;

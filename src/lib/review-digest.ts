@@ -60,6 +60,9 @@ export async function runReviewDigest(): Promise<ReviewDigestResult> {
     const data = doc.data() as Record<string, unknown>;
     const status = (data.status as string | undefined) ?? 'current';
     if (status !== 'current') continue;
+    // "Live" = tagged. Mirrors DailyReviewBanner so the email matches the UI.
+    const tags = (data.tags as string[] | undefined) ?? [];
+    if (tags.length === 0) continue;
     total += 1;
 
     const lastReviewDate = data.lastReviewDate as string | undefined;

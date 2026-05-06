@@ -243,7 +243,8 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
 
                                 <ChecklistProgressBadge projectId={project.id} className="ml-0.5" />
 
-                                {isCurrent && (
+                                {/* Daily review pill — only on "live" (current + tagged) projects, mirroring the dashboard banner */}
+                                {isCurrent && tags.length > 0 && (
                                     <ProjectReviewToggle project={project} variant="pill" className="ml-0.5" />
                                 )}
 
