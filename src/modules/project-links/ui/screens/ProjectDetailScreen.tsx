@@ -11,6 +11,10 @@ import { ProjectTextCheckCard, WebsiteAuditDashboardScreen } from '@/modules/sit
 import { WebflowPagesDashboard, webflowConfigRepository } from '@/modules/webflow';
 import { InvoicesTab } from '@/modules/invoices';
 import type { WebflowConfigInput } from '@/types/webflow';
+import type { ProjectChecklist } from '@/types';
+import { checklistService } from '@/services/ChecklistService';
+import { useProjectTasks } from '@/hooks/useProjectTasks';
+import { useProjectTimeline } from '@/hooks/useProjectTimeline';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +45,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
     // Default to 'audit' tab
     const [activeTab, setActiveTab] = useState('audit');
 
+    // Live data for tab stats — subscribed at the parent so badges update without
+    // requiring the user to open each tab first.
+    const { tasks } = useProjectTasks(project?.id);
+    const { timeline } = useProjectTimeline(project?.id);
+    const [checklists, setChecklists] = useState<ProjectChecklist[]>([]);
+
     useEffect(() => {
         if (!user || !id) return;
 
@@ -57,6 +67,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
         return () => unsubscribe();
     }, [user, id]);
+
+    useEffect(() => {
+        if (!project?.id) return;
+        const unsub = checklistService.subscribeToProjectChecklists(project.id, setChecklists);
+        return () => unsub();
+    }, [project?.id]);
 
     const hasWebflowSync = Boolean(project?.webflowConfig?.siteId && project?.webflowConfig?.hasApiToken);
     const canSyncProject = Boolean(project?.sitemapUrl || hasWebflowSync);
@@ -218,13 +234,33 @@ export default function ProjectDetailPage({ params }: PageProps) {
         return <div className="p-8">Project not found</div>;
     }
 
-    const tabOptions: { value: string; label: string; icon: React.ReactNode }[] = [
-        { value: 'audit', label: 'Audit Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
-        { value: 'tasks', label: 'Tasks', icon: <ListTodo className="h-4 w-4" /> },
-        { value: 'webflow', label: 'Webflow Pages', icon: <Globe className="h-4 w-4" /> },
+    const autoLinksCount = project.links.filter(l => l.source === 'auto').length;
+    const openTaskCount = tasks.filter(t => t.status !== 'done').length;
+    const checklistItems = checklists.flatMap(c => c.sections.flatMap(s => s.items));
+    const checklistDone = checklistItems.filter(i => i.status === 'completed' || i.status === 'skipped').length;
+    const checklistTotal = checklistItems.length;
+    const timelineMilestones = timeline?.milestones?.length ?? 0;
+    const timelinePhases = timeline?.phases?.length ?? 0;
+
+    const auditStat: TabStat = { label: String(autoLinksCount), tone: autoLinksCount > 0 ? 'set' : 'unset' };
+    const tasksStat: TabStat = { label: String(openTaskCount), tone: openTaskCount > 0 ? 'set' : 'unset' };
+    const webflowStat: TabStat = hasWebflowSync
+        ? { label: 'Set', tone: 'set' }
+        : { label: 'Not Set', tone: 'unset' };
+    const checklistStat: TabStat = checklistTotal > 0
+        ? { label: `${checklistDone}/${checklistTotal}`, tone: 'set' }
+        : { label: 'Not Set', tone: 'unset' };
+    const timelineStat: TabStat = timelinePhases + timelineMilestones > 0
+        ? { label: String(timelineMilestones || timelinePhases), tone: 'set' }
+        : { label: 'Not Set', tone: 'unset' };
+
+    const tabOptions: TabOption[] = [
+        { value: 'audit', label: 'Audit Dashboard', icon: <LayoutDashboard className="h-4 w-4" />, stat: auditStat },
+        { value: 'tasks', label: 'Tasks', icon: <ListTodo className="h-4 w-4" />, stat: tasksStat },
+        { value: 'webflow', label: 'Webflow Pages', icon: <Globe className="h-4 w-4" />, stat: webflowStat },
         { value: 'images', label: 'Image Library', icon: <ImageIcon className="h-4 w-4" /> },
-        { value: 'checklist', label: 'Checklist', icon: <ListChecks className="h-4 w-4" /> },
-        { value: 'timeline', label: 'Timeline', icon: <GanttChartSquare className="h-4 w-4" /> },
+        { value: 'checklist', label: 'Checklist', icon: <ListChecks className="h-4 w-4" />, stat: checklistStat },
+        { value: 'timeline', label: 'Timeline', icon: <GanttChartSquare className="h-4 w-4" />, stat: timelineStat },
         ...(isAdmin ? [{ value: 'invoices', label: 'Invoices', icon: <Receipt className="h-4 w-4" /> }] : []),
     ];
     const activeTabOption = tabOptions.find(t => t.value === activeTab) ?? tabOptions[0];
@@ -298,6 +334,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                     <TabsTrigger key={opt.value} value={opt.value} className="gap-2">
                                         {opt.icon}
                                         <span>{opt.label}</span>
+                                        {opt.stat && <TabStatBadge stat={opt.stat} />}
                                     </TabsTrigger>
                                 ))}
                             </TabsList>
@@ -398,10 +435,29 @@ export default function ProjectDetailPage({ params }: PageProps) {
     );
 }
 
+type TabStat = { label: string; tone: 'set' | 'unset' };
+
+function TabStatBadge({ stat, className }: { stat: TabStat; className?: string }) {
+    return (
+        <Badge
+            variant={stat.tone === 'set' ? 'secondary' : 'outline'}
+            className={cn(
+                'h-5 px-1.5 text-[10px] font-mono leading-none tabular-nums',
+                stat.tone === 'unset' && 'text-muted-foreground/70 border-dashed',
+                className,
+            )}
+        >
+            {stat.label}
+        </Badge>
+    );
+}
+
+type TabOption = { value: string; label: string; icon: React.ReactNode; stat?: TabStat };
+
 interface MobileTabSelectorProps {
-    options: { value: string; label: string; icon: React.ReactNode }[];
+    options: TabOption[];
     value: string;
-    activeOption: { value: string; label: string; icon: React.ReactNode };
+    activeOption: TabOption;
     onChange: (value: string) => void;
 }
 
@@ -418,6 +474,7 @@ function MobileTabSelector({ options, value, activeOption, onChange }: MobileTab
                     <span className="flex items-center gap-2 min-w-0">
                         <span className="shrink-0 text-muted-foreground">{activeOption.icon}</span>
                         <span className="font-medium truncate">{activeOption.label}</span>
+                        {activeOption.stat && <TabStatBadge stat={activeOption.stat} />}
                     </span>
                     <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
                 </Button>
@@ -445,6 +502,7 @@ function MobileTabSelector({ options, value, activeOption, onChange }: MobileTab
                             >
                                 <span className={cn("shrink-0", isActive ? "text-foreground" : "text-muted-foreground")}>{opt.icon}</span>
                                 <span className="text-sm font-medium flex-1">{opt.label}</span>
+                                {opt.stat && <TabStatBadge stat={opt.stat} />}
                                 {isActive && <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />}
                             </button>
                         );
