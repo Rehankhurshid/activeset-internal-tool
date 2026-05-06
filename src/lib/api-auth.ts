@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth as adminAuth, db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
 
-const ADMIN_EMAIL = 'rehan@activeset.co';
+const ADMIN_EMAILS = ['rehan@activeset.co', 'salman@activeset.co'];
 
 export interface AuthedCaller {
   uid: string;
@@ -44,9 +44,13 @@ export async function requireCaller(req: NextRequest): Promise<AuthedCaller> {
   if (!idToken) {
     throw new ApiAuthError(401, 'Missing Authorization bearer token');
   }
-  let decoded: { uid: string; email?: string };
+  let decoded: { uid: string; email?: string; admin?: boolean };
   try {
-    decoded = await adminAuth.verifyIdToken(idToken);
+    decoded = (await adminAuth.verifyIdToken(idToken)) as {
+      uid: string;
+      email?: string;
+      admin?: boolean;
+    };
   } catch {
     throw new ApiAuthError(401, 'Invalid or expired auth token');
   }
@@ -60,7 +64,9 @@ export async function requireCaller(req: NextRequest): Promise<AuthedCaller> {
   return {
     uid: decoded.uid,
     email,
-    isAdmin: email === ADMIN_EMAIL,
+    // Admin = hardcoded admin email OR `admin: true` custom claim (set by
+    // /api/auth/dev-token for local-dev@activeset.co so dev sessions are admin).
+    isAdmin: ADMIN_EMAILS.includes(email) || decoded.admin === true,
   };
 }
 

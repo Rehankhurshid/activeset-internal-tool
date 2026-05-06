@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { accessControlService } from '@/services/AccessControlService';
+import { accessControlService, ADMIN_EMAILS } from '@/services/AccessControlService';
 
 interface UseAssigneesResult {
   assignees: string[];
@@ -23,9 +23,9 @@ export function useAssignees(): UseAssigneesResult {
       try {
         const access = await accessControlService.getModuleAccess();
         // `project-links` is a public module — fall back to ALL emails listed
-        // anywhere in the access doc, plus the admin. This keeps the dropdown
-        // useful even though the module itself isn't restricted.
-        const all = new Set<string>([access.admin]);
+        // anywhere in the access doc, plus every hardcoded admin. This keeps
+        // the dropdown useful even though the module itself isn't restricted.
+        const all = new Set<string>([access.admin, ...ADMIN_EMAILS]);
         for (const list of Object.values(access.modules)) {
           for (const email of list) {
             if (email && email !== '*') all.add(email);

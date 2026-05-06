@@ -1,7 +1,18 @@
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-const ADMIN_EMAIL = 'rehan@activeset.co';
+/**
+ * Admins always have full access to every module and cannot be removed from
+ * access lists. The first entry is the "primary" admin written to the
+ * `admin` field of the access doc for backward compatibility with consumers
+ * that still treat that field as a single string.
+ */
+export const ADMIN_EMAILS = [
+    'rehan@activeset.co',
+    'salman@activeset.co',
+] as const;
+const PRIMARY_ADMIN_EMAIL = ADMIN_EMAILS[0];
+const ADMIN_EMAILS_LOWER = ADMIN_EMAILS.map(e => e.toLowerCase());
 
 export interface ModuleAccess {
     admin: string;
@@ -26,24 +37,24 @@ class AccessControlService {
                 return docSnap.data() as ModuleAccess;
             }
 
-            // Initialize with admin having access to all restricted modules
+            // Initialize with admins having access to all restricted modules
             const defaultAccess: ModuleAccess = {
-                admin: ADMIN_EMAIL,
+                admin: PRIMARY_ADMIN_EMAIL,
                 modules: {
-                    proposal: [ADMIN_EMAIL],
-                    'project-links': [ADMIN_EMAIL]
+                    proposal: [...ADMIN_EMAILS],
+                    'project-links': [...ADMIN_EMAILS]
                 }
             };
             await this.saveModuleAccess(defaultAccess);
             return defaultAccess;
         } catch (error) {
             console.error('Error fetching module access:', error);
-            // Fallback to allow admin
+            // Fallback to allow admins
             return {
-                admin: ADMIN_EMAIL,
+                admin: PRIMARY_ADMIN_EMAIL,
                 modules: {
-                    proposal: [ADMIN_EMAIL],
-                    'project-links': [ADMIN_EMAIL]
+                    proposal: [...ADMIN_EMAILS],
+                    'project-links': [...ADMIN_EMAILS]
                 }
             };
         }
@@ -86,7 +97,7 @@ class AccessControlService {
     }
 
     isAdmin(email: string): boolean {
-        return email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+        return ADMIN_EMAILS_LOWER.includes(email.toLowerCase());
     }
 
     async getModuleUsers(module: RestrictedModule): Promise<string[]> {
@@ -112,8 +123,8 @@ class AccessControlService {
         const access = await this.getModuleAccess();
         const normalizedEmail = email.toLowerCase().trim();
 
-        // Can't remove admin
-        if (normalizedEmail === ADMIN_EMAIL.toLowerCase()) {
+        // Can't remove any admin
+        if (ADMIN_EMAILS_LOWER.includes(normalizedEmail)) {
             throw new Error('Cannot remove admin from access list');
         }
 
