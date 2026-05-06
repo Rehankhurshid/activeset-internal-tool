@@ -22,6 +22,7 @@ import { type Project, type ProjectStatus, type ProjectTag } from '@/modules/pro
 import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
 import { PROJECT_TAG_LABELS } from '@/types';
 import { ProjectCard } from '@/components/projects/ProjectCard';
+import { DailyReviewBanner } from '@/components/projects/DailyReviewBanner';
 import { Card, CardContent } from "@/components/ui/card";
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
@@ -374,6 +375,9 @@ export function ProjectLinksDashboardScreen() {
                 </Badge>
               </div>
             </div>
+
+            {/* Daily review banner — only renders when there are current projects */}
+            <DailyReviewBanner projects={projects} className="mb-4 sm:mb-6" />
 
             {/* Projects Grid/List */}
             {filteredProjects.length > 0 ? (

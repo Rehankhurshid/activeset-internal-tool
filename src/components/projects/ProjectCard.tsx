@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AddLinkDialog } from './AddLinkDialog';
 import { ChecklistProgressBadge } from '@/components/checklist/ChecklistProgressBadge';
+import { ProjectReviewToggle } from './ProjectReviewToggle';
 
 const TAG_COLORS: Record<ProjectTag, { bg: string; text: string; border: string }> = {
     retainer: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
@@ -241,6 +242,10 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 </span>
 
                                 <ChecklistProgressBadge projectId={project.id} className="ml-0.5" />
+
+                                {isCurrent && (
+                                    <ProjectReviewToggle project={project} variant="pill" className="ml-0.5" />
+                                )}
 
                                 {hasScanning && (
                                     <ProjectScanBadge

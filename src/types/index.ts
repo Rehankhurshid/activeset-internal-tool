@@ -348,6 +348,15 @@ export interface Project {
    *  pre-linked Tasks; updates flow in via webhook the same way per-task linking does. */
   clickupListId?: string;
   clickupListName?: string;
+  // --- Daily review tracking ---
+  /** UTC date (YYYY-MM-DD) of the most recent review. Primary "is it reviewed today" check. */
+  lastReviewDate?: string;
+  /** ISO timestamp of the most recent review. For tooltips / "X mins ago". */
+  lastReviewedAt?: string;
+  /** Email of whoever last marked the review. */
+  lastReviewedBy?: string;
+  /** Consecutive days with at least one review. Resets if a day is skipped. */
+  reviewStreak?: number;
 }
 
 export interface ImageScanJob {

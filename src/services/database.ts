@@ -377,6 +377,61 @@ export const projectsService = {
     await deleteDoc(projectRef);
   },
 
+  // Mark a project as reviewed for today. Bumps the streak on consecutive days,
+  // resets it when a day is skipped. Idempotent within the same day.
+  async markProjectReviewed(projectId: string, reviewerEmail: string): Promise<void> {
+    try {
+      const project = await this.getProject(projectId);
+      if (!project) throw new DatabaseError('Project not found');
+
+      const { todayIso, nextStreak } = await import('@/lib/review-status');
+      const today = todayIso();
+      const streak = nextStreak(
+        { lastReviewDate: project.lastReviewDate, reviewStreak: project.reviewStreak },
+        today,
+      );
+
+      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+      await updateDoc(projectRef, {
+        lastReviewDate: today,
+        lastReviewedAt: new Date().toISOString(),
+        lastReviewedBy: reviewerEmail,
+        reviewStreak: streak,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'markProjectReviewed');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to mark project reviewed');
+    }
+  },
+
+  // Undo today's review. Decrements streak (or clears it). No-op if not reviewed today.
+  async unmarkProjectReviewed(projectId: string): Promise<void> {
+    try {
+      const project = await this.getProject(projectId);
+      if (!project) throw new DatabaseError('Project not found');
+
+      const { todayIso } = await import('@/lib/review-status');
+      const today = todayIso();
+      if (project.lastReviewDate !== today) return; // not reviewed today, nothing to undo
+
+      const prevStreak = (project.reviewStreak ?? 1) - 1;
+      const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+      await updateDoc(projectRef, {
+        lastReviewDate: deleteField(),
+        lastReviewedAt: deleteField(),
+        lastReviewedBy: deleteField(),
+        reviewStreak: prevStreak > 0 ? prevStreak : deleteField(),
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'unmarkProjectReviewed');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to undo project review');
+    }
+  },
+
   // Image-scan job lifecycle — persisted on the project doc so bulk-scan
   // progress survives refreshes and is visible to every subscribed tab.
   async setImageScanJob(projectId: string, job: ImageScanJob | null): Promise<void> {
