@@ -36,6 +36,7 @@ interface TestNagResult {
   examined?: number;
   assignees?: number;
   posted?: number;
+  skippedNonTeam?: number;
   note?: string;
   recipient?: string;
   results?: { assignee: string; posted: boolean; reason?: string }[];
@@ -309,10 +310,13 @@ export default function ClickUpSettingsPage() {
               Test the Nag-Bot
             </CardTitle>
             <CardDescription>
-              Runs the bot against today&apos;s overdue / stale tasks but DMs every message to{' '}
-              <span className="font-mono">{user?.email}</span> instead of pinging the team. Real
-              assignees are NOT @-mentioned — you&apos;ll see exactly what each person would have
-              received in a personal DM thread with the bot.
+              Runs the bot against your team&apos;s upcoming, due-today, overdue, and stale tasks,
+              but DMs every message to <span className="font-mono">{user?.email}</span> instead of
+              pinging the team. Tasks assigned to clients or external collaborators are skipped
+              entirely — only <span className="font-mono">@activeset.co</span> emails (plus any in
+              <span className="font-mono"> NAG_TEAM_EMAILS</span>) get nagged. Real assignees are
+              NOT @-mentioned — you&apos;ll see exactly what each person would have received,
+              across all tone tiers from cheery early-bird to whimsical storybook.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -335,7 +339,14 @@ export default function ClickUpSettingsPage() {
                       {lastTest.posted === 1 ? '' : 's'} covering{' '}
                       <span className="font-semibold">{lastTest.assignees}</span> teammate
                       {lastTest.assignees === 1 ? '' : 's'} (
-                      <span className="font-semibold">{lastTest.examined}</span> tasks examined).
+                      <span className="font-semibold">{lastTest.examined}</span> tasks examined
+                      {(lastTest.skippedNonTeam ?? 0) > 0 && (
+                        <>
+                          ; <span className="font-semibold">{lastTest.skippedNonTeam}</span>{' '}
+                          skipped — assigned to non-team members
+                        </>
+                      )}
+                      ).
                     </p>
                     {lastTest.results && lastTest.results.length > 0 && (
                       <ul className="text-xs text-muted-foreground list-disc list-inside space-y-0.5 pt-1">
@@ -363,7 +374,10 @@ export default function ClickUpSettingsPage() {
             <CardDescription>
               The cron <span className="font-mono">/api/cron/nag-tasks</span> runs at 10:00 and 15:00
               ET on weekdays, posts to <span className="font-mono">SLACK_CHANNEL_ID</span>, and
-              mentions the assignee using their email-matched Slack id.
+              mentions the assignee using their email-matched Slack id. Only team members
+              (<span className="font-mono">@activeset.co</span> emails, plus anything in the
+              optional <span className="font-mono">NAG_TEAM_EMAILS</span> env var) ever get pinged
+              — clients and external collaborators are filtered out before the bot speaks.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-sm space-y-2">
