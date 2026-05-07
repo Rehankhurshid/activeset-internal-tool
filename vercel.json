@@ -18,7 +18,7 @@
     },
     {
       "path": "/api/cron/clickup-refresh",
-      "schedule": "15 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/nag-tasks",

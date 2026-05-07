@@ -425,6 +425,12 @@ export interface ClickUpWebhook {
   endpoint: string;
   events: string[];
   secret: string;
+  /** ClickUp marks a webhook as `failing` after consecutive delivery failures
+   *  and auto-disables it. Used by the refresh cron to detect + re-register. */
+  health?: {
+    status?: 'active' | 'failing' | string;
+    fail_count?: number;
+  };
 }
 
 export const CLICKUP_TASK_EVENTS = [

@@ -46,33 +46,57 @@ async function findProjectForList(listId: string): Promise<string | null> {
 
 export async function POST(request: NextRequest) {
   if (!hasFirebaseAdminCredentials) {
-    return NextResponse.json({ error: 'Server not configured' }, { status: 503 });
+    // Acknowledge so ClickUp doesn't trip its auto-disable threshold while the
+    // server is briefly misconfigured. The cron's webhook health check will
+    // re-register a fresh webhook once credentials come back.
+    console.error('[clickup-webhook] Firebase admin not configured');
+    return NextResponse.json({ ok: true, ignored: 'admin-unconfigured' });
   }
 
   const rawBody = await request.text();
 
-  const secret = await loadWebhookSecret();
+  const secret = await loadWebhookSecret().catch((err) => {
+    console.error('[clickup-webhook] failed to load webhook secret', err);
+    return null;
+  });
   if (!secret) {
-    console.error('[clickup-webhook] No webhook secret configured in app_secrets/clickup');
-    return NextResponse.json({ error: 'Webhook not registered' }, { status: 503 });
+    // No secret = we can't verify, but returning 5xx would let ClickUp
+    // auto-disable us. Ack and rely on cron re-registration.
+    return NextResponse.json({ ok: true, ignored: 'no-secret' });
   }
 
   const sig = request.headers.get('x-signature') || request.headers.get('X-Signature');
   if (!verifyClickUpSignature(rawBody, sig, secret)) {
+    // Signature mismatch IS a real misconfiguration we want to surface — the
+    // cron's webhook health check will detect ClickUp marking us as failing
+    // and re-register, which rotates the secret.
     console.warn('[clickup-webhook] signature mismatch');
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 
+  // From here on, ALWAYS return 200. Internal errors (Firestore blip, ClickUp
+  // GET timeout, malformed payload) are logged but never bubble up — five
+  // consecutive 5xx responses cause ClickUp to permanently auto-disable the
+  // webhook, and any blip would be enough to break sync until manual re-register.
+  try {
+    return await handleVerifiedEvent(rawBody);
+  } catch (err) {
+    console.error('[clickup-webhook] handler error (acked to avoid auto-disable)', err);
+    return NextResponse.json({ ok: true, ignored: 'internal-error' });
+  }
+}
+
+async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
   let payload: ClickUpWebhookPayload;
   try {
     payload = JSON.parse(rawBody) as ClickUpWebhookPayload;
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    return NextResponse.json({ ok: true, ignored: 'invalid-json' });
   }
 
   const { event, task_id: taskId } = payload;
   if (!event) {
-    return NextResponse.json({ error: 'Missing event' }, { status: 400 });
+    return NextResponse.json({ ok: true, ignored: 'no-event' });
   }
   if (!taskId || !event.startsWith('task')) {
     return NextResponse.json({ ok: true, ignored: true });
@@ -192,6 +216,7 @@ export async function POST(request: NextRequest) {
     assignee: patch.assignee,
     source: 'clickup',
     clickupTaskId: taskId,
+    parentClickupTaskId: patch.parentClickupTaskId,
     clickupUrl: task.url ?? buildClickUpTaskUrl(taskId),
     clickupSyncedAt: now,
     order: Date.now(),
