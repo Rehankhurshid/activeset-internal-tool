@@ -2,16 +2,42 @@
 
 import { useEffect, useState } from 'react';
 import { accessControlService, ADMIN_EMAILS } from '@/services/AccessControlService';
+import { fetchAuthed } from '@/lib/api-client';
 
 interface UseAssigneesResult {
   assignees: string[];
   loading: boolean;
 }
 
+async function loadFromClickUp(): Promise<string[] | null> {
+  try {
+    const res = await fetchAuthed('/api/clickup/members');
+    if (!res.ok) return null;
+    const data = (await res.json()) as { emails?: string[] };
+    if (!Array.isArray(data.emails) || data.emails.length === 0) return null;
+    return data.emails;
+  } catch (err) {
+    console.warn('[useAssignees] ClickUp members fetch failed', err);
+    return null;
+  }
+}
+
+async function loadFromAccessControl(): Promise<string[]> {
+  const access = await accessControlService.getModuleAccess();
+  const all = new Set<string>([access.admin, ...ADMIN_EMAILS]);
+  for (const list of Object.values(access.modules)) {
+    for (const email of list) {
+      if (email && email !== '*') all.add(email);
+    }
+  }
+  return Array.from(all).sort();
+}
+
 /**
- * Returns the list of @activeset.co emails that have access to the
- * `project-links` module — these are the candidates for the task assignee
- * dropdown. Falls back to the admin email if the access doc isn't reachable.
+ * Returns the list of emails that can be assigned to a task. Sourced from the
+ * linked ClickUp workspace so the dropdown reflects the real team. Falls back
+ * to the access-control doc (admins + module-access lists) if the ClickUp
+ * endpoint is unreachable or the workspace isn't configured.
  */
 export function useAssignees(): UseAssigneesResult {
   const [assignees, setAssignees] = useState<string[]>([]);
@@ -21,18 +47,10 @@ export function useAssignees(): UseAssigneesResult {
     let cancelled = false;
     (async () => {
       try {
-        const access = await accessControlService.getModuleAccess();
-        // `project-links` is a public module — fall back to ALL emails listed
-        // anywhere in the access doc, plus every hardcoded admin. This keeps
-        // the dropdown useful even though the module itself isn't restricted.
-        const all = new Set<string>([access.admin, ...ADMIN_EMAILS]);
-        for (const list of Object.values(access.modules)) {
-          for (const email of list) {
-            if (email && email !== '*') all.add(email);
-          }
-        }
+        const fromClickUp = await loadFromClickUp();
+        const list = fromClickUp ?? (await loadFromAccessControl());
         if (!cancelled) {
-          setAssignees(Array.from(all).sort());
+          setAssignees(list);
           setLoading(false);
         }
       } catch (err) {
