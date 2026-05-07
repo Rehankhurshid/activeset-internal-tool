@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils';
 import { AppNavigation } from '@/shared/ui';
 import { toast } from 'sonner';
 
-type StatusFilter = 'all' | 'maintenance' | 'active' | 'past';
+type StatusFilter = 'all' | 'maintenance' | 'active' | 'closed' | 'paid';
 
 const TAG_FILTER_COLORS: Record<ProjectTag, string> = {
   retainer: 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20',
@@ -113,8 +113,8 @@ export function ProjectLinksDashboardScreen() {
       // Status filter
       if (statusFilter !== 'all') {
         const projectStatus = project.status || 'current';
-        if (statusFilter === 'past') {
-          if (projectStatus !== 'past') return false;
+        if (statusFilter === 'closed' || statusFilter === 'paid') {
+          if (projectStatus !== statusFilter) return false;
         } else {
           if (projectStatus !== 'current') return false;
           const bucketTags = statusFilter === 'maintenance' ? MAINTENANCE_TAGS : ACTIVE_TAGS;
@@ -171,7 +171,8 @@ export function ProjectLinksDashboardScreen() {
     const tags = p.tags || [];
     return ACTIVE_TAGS.some(t => tags.includes(t));
   }).length;
-  const pastCount = projects.filter(p => p.status === 'past').length;
+  const closedCount = projects.filter(p => p.status === 'closed').length;
+  const paidCount = projects.filter(p => p.status === 'paid').length;
   const totalManualLinks = projects.reduce((acc, p) =>
     acc + (p.links?.filter(l => l.source !== 'auto').length || 0), 0
   );
@@ -312,7 +313,8 @@ export function ProjectLinksDashboardScreen() {
                     { value: 'all' as StatusFilter, label: 'All', count: projects.length },
                     { value: 'maintenance' as StatusFilter, label: 'Maintenance', count: maintenanceCount },
                     { value: 'active' as StatusFilter, label: 'Active', count: activeCount },
-                    { value: 'past' as StatusFilter, label: 'Past', count: pastCount },
+                    { value: 'closed' as StatusFilter, label: 'Closed', count: closedCount },
+                    { value: 'paid' as StatusFilter, label: 'Paid', count: paidCount },
                   ]).map(({ value, label, count }) => (
                     <button
                       key={value}

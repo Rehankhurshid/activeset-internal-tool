@@ -16,14 +16,17 @@ import {
     MoreVertical,
     Plus,
     Circle,
+    CircleDot,
     Archive,
     Tag,
     Check,
     Globe,
     ListTodo,
     SlidersHorizontal,
+    DollarSign,
+    Activity,
 } from 'lucide-react';
-import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS } from '@/types';
+import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS, PROJECT_STATUS_LABELS } from '@/types';
 import { projectsService } from '@/services/database';
 import { cn } from '@/lib/utils';
 import { ProjectScanBadge } from './ProjectScanBadge';
@@ -53,6 +56,33 @@ const TAG_COLORS: Record<ProjectTag, { bg: string; text: string; border: string 
 
 const ALL_TAGS: ProjectTag[] = ['retainer', 'one_time', 'subscription', 'maintenance', 'consulting'];
 
+const STATUS_OPTIONS: { value: ProjectStatus; icon: React.ComponentType<{ className?: string }>; description: string }[] = [
+    { value: 'current', icon: Activity, description: 'Work in progress' },
+    { value: 'closed', icon: Archive, description: 'Done — payment pending' },
+    { value: 'paid', icon: DollarSign, description: 'Payment received' },
+];
+
+const STATUS_BADGE_STYLES: Record<ProjectStatus, { text: string; border: string; bg: string; dot: string }> = {
+    current: {
+        text: 'text-emerald-400',
+        border: 'border-emerald-500/30',
+        bg: 'bg-emerald-500/5',
+        dot: 'text-emerald-500',
+    },
+    closed: {
+        text: 'text-amber-400',
+        border: 'border-amber-500/30',
+        bg: 'bg-amber-500/5',
+        dot: 'text-amber-500',
+    },
+    paid: {
+        text: 'text-sky-400',
+        border: 'border-sky-500/30',
+        bg: 'bg-sky-500/5',
+        dot: 'text-sky-500',
+    },
+};
+
 function detectWebsiteUrl(project: Project): string | undefined {
     const custom = project.webflowConfig?.customDomain;
     if (custom) return custom.startsWith('http') ? custom : `https://${custom}`;
@@ -77,6 +107,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const status: ProjectStatus = project.status || 'current';
     const tags: ProjectTag[] = project.tags || [];
     const isCurrent = status === 'current';
+    const statusStyles = STATUS_BADGE_STYLES[status];
     const hasScanning = !!project.sitemapUrl || project.links?.some(l => l.source === 'auto');
     const hasWebflow = !!project.webflowConfig;
     const hasClickUp = !!project.clickupListId;
@@ -94,8 +125,8 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
         }
     };
 
-    const handleToggleStatus = async () => {
-        const newStatus: ProjectStatus = isCurrent ? 'past' : 'current';
+    const handleSetStatus = async (newStatus: ProjectStatus) => {
+        if (newStatus === status) return;
         await projectsService.updateProjectStatus(project.id, newStatus);
     };
 
@@ -224,16 +255,14 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                     variant="outline"
                                     className={cn(
                                         "text-[10px] px-1.5 py-0 h-[18px] font-medium border transition-colors cursor-default",
-                                        isCurrent
-                                            ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5"
-                                            : "text-muted-foreground border-border bg-muted/30"
+                                        statusStyles.text, statusStyles.border, statusStyles.bg
                                     )}
                                 >
                                     <Circle className={cn(
                                         "w-1.5 h-1.5 mr-1 fill-current",
-                                        isCurrent ? "text-emerald-500" : "text-muted-foreground/50"
+                                        statusStyles.dot
                                     )} />
-                                    {isCurrent ? 'Current' : 'Past'}
+                                    {PROJECT_STATUS_LABELS[status]}
                                 </Badge>
 
                                 {/* Link count */}
@@ -293,21 +322,39 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 <MoreVertical className="h-3.5 w-3.5" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                            {/* Status toggle */}
-                            <DropdownMenuItem onClick={handleToggleStatus}>
-                                {isCurrent ? (
-                                    <>
-                                        <Archive className="mr-2 h-4 w-4" />
-                                        Mark as Past
-                                    </>
-                                ) : (
-                                    <>
-                                        <Circle className="mr-2 h-4 w-4 fill-emerald-500 text-emerald-500" />
-                                        Mark as Current
-                                    </>
-                                )}
-                            </DropdownMenuItem>
+                        <DropdownMenuContent align="end" className="w-52">
+                            {/* Status sub-menu */}
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <CircleDot className={cn("mr-2 h-4 w-4", statusStyles.dot)} />
+                                    Status: {PROJECT_STATUS_LABELS[status]}
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    {STATUS_OPTIONS.map(({ value, icon: Icon, description }) => {
+                                        const styles = STATUS_BADGE_STYLES[value];
+                                        return (
+                                            <DropdownMenuItem
+                                                key={value}
+                                                onClick={() => handleSetStatus(value)}
+                                                className="flex items-start gap-2"
+                                            >
+                                                <Icon className={cn("h-4 w-4 mt-0.5 shrink-0", styles.dot)} />
+                                                <div className="flex flex-col">
+                                                    <span className="flex items-center gap-1.5">
+                                                        {PROJECT_STATUS_LABELS[value]}
+                                                        {value === status && (
+                                                            <Check className="h-3 w-3 text-muted-foreground" />
+                                                        )}
+                                                    </span>
+                                                    <span className="text-[10px] text-muted-foreground">
+                                                        {description}
+                                                    </span>
+                                                </div>
+                                            </DropdownMenuItem>
+                                        );
+                                    })}
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
 
                             {/* Tag sub-menu */}
                             <DropdownMenuSub>

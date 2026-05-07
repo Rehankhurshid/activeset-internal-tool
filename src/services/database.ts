@@ -32,6 +32,7 @@ import {
   UpdateTaskInput,
   ProjectRequest,
   RequestSource,
+  normalizeProjectStatus,
 } from '@/types';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
@@ -64,6 +65,11 @@ function sanitizeProjectData<T extends Record<string, unknown>>(data: T): T {
       ...rest,
       hasApiToken: Boolean(apiToken),
     };
+  }
+  if ('status' in data) {
+    (data as { status?: unknown }).status = normalizeProjectStatus(
+      (data as { status?: unknown }).status,
+    );
   }
   return data;
 }
@@ -307,7 +313,7 @@ export const projectsService = {
     });
   },
 
-  // Update project status (current / past)
+  // Update project status (current / closed / paid)
   async updateProjectStatus(projectId: string, status: ProjectStatus): Promise<void> {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {

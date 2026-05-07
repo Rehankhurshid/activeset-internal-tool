@@ -292,7 +292,7 @@ export interface ChangeLogQueryOptions {
 
 // --- PROJECT STATUS & TAG TYPES ---
 
-export type ProjectStatus = 'current' | 'past';
+export type ProjectStatus = 'current' | 'closed' | 'paid';
 
 export type ProjectTag =
   | 'retainer'
@@ -311,8 +311,16 @@ export const PROJECT_TAG_LABELS: Record<ProjectTag, string> = {
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   current: 'Current',
-  past: 'Past',
+  closed: 'Closed',
+  paid: 'Paid',
 };
+
+/** Legacy docs may still carry status: 'past' — read it as 'paid'. */
+export function normalizeProjectStatus(raw: unknown): ProjectStatus {
+  if (raw === 'closed' || raw === 'paid' || raw === 'current') return raw;
+  if (raw === 'past') return 'paid';
+  return 'current';
+}
 
 export interface Project {
   id: string;
