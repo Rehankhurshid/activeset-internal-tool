@@ -119,6 +119,8 @@ interface ClickUpTask {
   /** Container the task currently lives in. ClickUp returns this on
    *  GET /task/{id} as well as in webhook payloads for created/moved events. */
   list?: { id: string; name?: string } | null;
+  /** Parent task id when this task is a subtask. `null` for top-level tasks. */
+  parent?: string | null;
 }
 
 export async function fetchClickUpTask(taskId: string): Promise<ClickUpTask> {
@@ -384,6 +386,7 @@ export function clickUpTaskToUpdate(task: ClickUpTask): UpdateTaskInput {
     dueDate: toIsoDate(task.due_date),
     assignee: pickAssigneeEmail(task.assignees),
     tags: task.tags?.map((t) => t.name).filter(Boolean) ?? [],
+    parentClickupTaskId: task.parent ?? undefined,
   };
 }
 

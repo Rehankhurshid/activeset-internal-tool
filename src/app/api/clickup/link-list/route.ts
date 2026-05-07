@@ -82,10 +82,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch list metadata + every task in the list.
+    // Fetch list metadata + every task in the list (including subtasks so they
+    // mirror locally as separate rows linked to their parent).
     const [list, tasks] = await Promise.all([
       fetchClickUpList(listId),
-      listTasksInList(listId),
+      listTasksInList(listId, { subtasks: true }),
     ]);
 
     // Persist the binding on the project doc.

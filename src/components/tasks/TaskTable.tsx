@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import {
   ArrowUpDown,
   CalendarIcon,
+  CornerDownRight,
   Trash2,
   ExternalLink,
   Sparkles,
@@ -122,6 +123,47 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
     });
   }, [tasks, titleQuery, statusFilter, priorityFilter]);
 
+  // Re-order so subtasks appear directly under their parent. Tanstack preserves
+  // input order when no column sort is active; once the user clicks a column
+  // header, the column sort takes over and grouping breaks (acceptable v1).
+  const ordered = useMemo(() => {
+    const byClickupId = new Map<string, Task>();
+    for (const t of filtered) {
+      if (t.clickupTaskId) byClickupId.set(t.clickupTaskId, t);
+    }
+    const childrenByParent = new Map<string, Task[]>();
+    const topLevel: Task[] = [];
+    for (const t of filtered) {
+      const parentId = t.parentClickupTaskId;
+      if (parentId && byClickupId.has(parentId)) {
+        const list = childrenByParent.get(parentId) ?? [];
+        list.push(t);
+        childrenByParent.set(parentId, list);
+      } else {
+        // No parent in the visible set — render as a top-level row, even if
+        // `parentClickupTaskId` is set (parent was filtered out / not imported).
+        topLevel.push(t);
+      }
+    }
+    const result: Task[] = [];
+    for (const t of topLevel) {
+      result.push(t);
+      if (t.clickupTaskId) {
+        const kids = childrenByParent.get(t.clickupTaskId);
+        if (kids) result.push(...kids);
+      }
+    }
+    return result;
+  }, [filtered]);
+
+  // Whether a row should render with subtask styling — true when the parent is
+  // also in the current visible set (so the visual link reads).
+  const visibleParentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const t of filtered) if (t.clickupTaskId) ids.add(t.clickupTaskId);
+    return ids;
+  }, [filtered]);
+
   const handleUpdate = async (
     taskId: string,
     patch: Parameters<typeof tasksService.updateTask>[1],
@@ -153,22 +195,37 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         ),
         cell: ({ row }) => {
           const task = row.original;
+          const isSubtask =
+            !!task.parentClickupTaskId && visibleParentIds.has(task.parentClickupTaskId);
           // Title is bidirectional — always editable. Edits flow to ClickUp
           // via /api/clickup/sync-update for linked tasks.
           return (
-            <div className="min-w-[240px] max-w-[420px]">
-              <InlineEdit
-                value={task.title}
-                onSave={(v) => handleUpdate(task.id, { title: v })}
-                className="text-sm"
-                displayClassName="text-sm font-medium"
-                inputClassName="h-8 text-sm"
-              />
-              {task.description && (
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 px-2 whitespace-pre-line break-words">
-                  {task.description}
-                </p>
-              )}
+            <div className={cn('min-w-[240px] max-w-[420px]', isSubtask && 'pl-6')}>
+              <div className="flex items-start gap-1.5">
+                {isSubtask && (
+                  <CornerDownRight
+                    className="h-3.5 w-3.5 mt-1 shrink-0 text-muted-foreground"
+                    aria-label="Subtask"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <InlineEdit
+                    value={task.title}
+                    onSave={(v) => handleUpdate(task.id, { title: v })}
+                    className="text-sm"
+                    displayClassName={cn(
+                      'text-sm font-medium',
+                      isSubtask && 'text-muted-foreground',
+                    )}
+                    inputClassName="h-8 text-sm"
+                  />
+                  {task.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 px-2 whitespace-pre-line break-words">
+                      {task.description}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           );
         },
@@ -406,11 +463,11 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         ),
       },
     ],
-    [assignees],
+    [assignees, visibleParentIds],
   );
 
   const table = useReactTable({
-    data: filtered,
+    data: ordered,
     columns,
     state: { sorting },
     onSortingChange: setSorting,

@@ -684,6 +684,8 @@ export interface Task {
   order: number;
   /** ClickUp task ID when this task is linked to a ClickUp task. Sync source of truth. */
   clickupTaskId?: string;
+  /** ClickUp task ID of the parent task when this is a subtask in ClickUp. */
+  parentClickupTaskId?: string;
   /** Direct link to the ClickUp task (https://app.clickup.com/t/...). */
   clickupUrl?: string;
   /** ISO timestamp of the most recent successful ClickUp → app sync. */
@@ -730,6 +732,7 @@ export type UpdateTaskInput = Partial<
     | 'order'
     | 'source'
     | 'clickupTaskId'
+    | 'parentClickupTaskId'
     | 'clickupUrl'
     | 'clickupSyncedAt'
     | 'clickupSyncError'
