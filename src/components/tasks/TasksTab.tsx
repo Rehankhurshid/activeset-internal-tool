@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { useProjectRequests } from '@/hooks/useProjectRequests';
 import { useAssignees } from '@/hooks/useAssignees';
+import { useLastViewed } from '@/hooks/useLastViewed';
 import { tasksService } from '@/services/database';
 
 import { TaskTable } from './TaskTable';
@@ -28,6 +29,7 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName 
   const { tasks, loading } = useProjectTasks(projectId);
   const { requests } = useProjectRequests(projectId);
   const { assignees } = useAssignees();
+  const previousViewedAt = useLastViewed(`tasks-tab-viewed:${projectId}:${userEmail}`);
 
   const [requestDialogOpen, setRequestDialogOpen] = useState(false);
   const [quickAddTitle, setQuickAddTitle] = useState('');
@@ -42,6 +44,17 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName 
     (t) => t.assignee === userEmail && t.status !== 'done',
   ).length;
   const requestCount = requests.length;
+  // Tasks created since this user last viewed this project's Tasks tab.
+  // Suppress on first ever visit (previousViewedAt === 0) and skip ones the
+  // current user created themselves — those aren't "new" to them.
+  const newCount =
+    previousViewedAt > 0
+      ? tasks.filter((t) => {
+          if (t.createdBy === userEmail) return false;
+          const ms = t.createdAt instanceof Date ? t.createdAt.getTime() : 0;
+          return ms > previousViewedAt;
+        }).length
+      : 0;
 
   const handleQuickAdd = async () => {
     const title = quickAddTitle.trim();
@@ -71,11 +84,12 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName 
   return (
     <div className="space-y-4">
       {/* Summary strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <SummaryCard label="Open" value={openCount} />
         <SummaryCard label="Urgent" value={urgentCount} accent="rose" />
         <SummaryCard label="Assigned to me" value={myCount} accent="blue" />
         <SummaryCard label="Requests" value={requestCount} accent="violet" />
+        <SummaryCard label="New since last visit" value={newCount} accent="emerald" />
       </div>
 
       {/* Action row */}
@@ -117,7 +131,13 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName 
       />
 
       {/* Table */}
-      <TaskTable tasks={tasks} assignees={assignees} loading={loading} />
+      <TaskTable
+        tasks={tasks}
+        assignees={assignees}
+        loading={loading}
+        previousViewedAt={previousViewedAt}
+        userEmail={userEmail}
+      />
 
       <NewRequestDialog
         open={requestDialogOpen}
@@ -133,6 +153,7 @@ const ACCENT_CLASSES: Record<string, string> = {
   rose: 'text-rose-600 dark:text-rose-400',
   blue: 'text-blue-600 dark:text-blue-400',
   violet: 'text-violet-600 dark:text-violet-400',
+  emerald: 'text-emerald-600 dark:text-emerald-400',
 };
 
 function SummaryCard({

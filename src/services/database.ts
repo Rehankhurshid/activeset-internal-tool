@@ -793,6 +793,7 @@ function taskFromDoc(id: string, data: Record<string, unknown>): Task {
     assignee: data.assignee as string | undefined,
     order: (data.order as number | undefined) ?? 0,
     clickupTaskId: data.clickupTaskId as string | undefined,
+    parentClickupTaskId: data.parentClickupTaskId as string | undefined,
     clickupUrl: data.clickupUrl as string | undefined,
     clickupSyncedAt: data.clickupSyncedAt ? toSafeDate(data.clickupSyncedAt) : undefined,
     clickupSyncError: data.clickupSyncError as string | undefined,

@@ -74,6 +74,12 @@ interface TaskTableProps {
   tasks: Task[];
   assignees: string[];
   loading: boolean;
+  /** ms-since-epoch of the user's previous visit to this Tasks tab. Tasks
+   *  created after this timestamp render with a "New" badge + accent border.
+   *  Pass 0 to disable. */
+  previousViewedAt?: number;
+  /** Used to suppress "new" badges on tasks the current user created. */
+  userEmail?: string;
 }
 
 type StatusFilter = TaskStatus | 'all' | 'open';
@@ -90,7 +96,19 @@ const SOURCE_LABEL: Record<Task['source'], string> = {
 /** Once a task is linked to ClickUp, ClickUp owns these fields. */
 const isLinkedToClickUp = (t: Task) => Boolean(t.clickupTaskId);
 
-export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
+export function TaskTable({
+  tasks,
+  assignees,
+  loading,
+  previousViewedAt = 0,
+  userEmail,
+}: TaskTableProps) {
+  const isNewSinceLastVisit = (t: Task): boolean => {
+    if (previousViewedAt <= 0) return false;
+    if (userEmail && t.createdBy === userEmail) return false;
+    const ms = t.createdAt instanceof Date ? t.createdAt.getTime() : 0;
+    return ms > previousViewedAt;
+  };
   const [sorting, setSorting] = useState<SortingState>([]);
   const [titleQuery, setTitleQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
@@ -197,6 +215,7 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
           const task = row.original;
           const isSubtask =
             !!task.parentClickupTaskId && visibleParentIds.has(task.parentClickupTaskId);
+          const isNew = isNewSinceLastVisit(task);
           // Title is bidirectional — always editable. Edits flow to ClickUp
           // via /api/clickup/sync-update for linked tasks.
           return (
@@ -209,16 +228,27 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <InlineEdit
-                    value={task.title}
-                    onSave={(v) => handleUpdate(task.id, { title: v })}
-                    className="text-sm"
-                    displayClassName={cn(
-                      'text-sm font-medium',
-                      isSubtask && 'text-muted-foreground',
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <InlineEdit
+                      value={task.title}
+                      onSave={(v) => handleUpdate(task.id, { title: v })}
+                      className="text-sm"
+                      displayClassName={cn(
+                        'text-sm font-medium',
+                        isSubtask && 'text-muted-foreground',
+                      )}
+                      inputClassName="h-8 text-sm"
+                    />
+                    {isNew && (
+                      <Badge
+                        variant="outline"
+                        className="h-5 px-1.5 text-[10px] font-medium border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                        title={`Added on ${task.createdAt.toLocaleString()}`}
+                      >
+                        New
+                      </Badge>
                     )}
-                    inputClassName="h-8 text-sm"
-                  />
+                  </div>
                   {task.description && (
                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 px-2 whitespace-pre-line break-words">
                       {task.description}
@@ -463,7 +493,7 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
         ),
       },
     ],
-    [assignees, visibleParentIds],
+    [assignees, visibleParentIds, previousViewedAt, userEmail],
   );
 
   const table = useReactTable({
@@ -562,20 +592,25 @@ export function TaskTable({ tasks, assignees, loading }: TaskTableProps) {
                 </TableCell>
               </TableRow>
             ) : (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className={cn(
-                    row.original.status === 'done' && 'opacity-60',
-                  )}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="py-1.5 align-middle">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              table.getRowModel().rows.map((row) => {
+                const isNew = isNewSinceLastVisit(row.original);
+                return (
+                  <TableRow
+                    key={row.id}
+                    className={cn(
+                      row.original.status === 'done' && 'opacity-60',
+                      isNew &&
+                        'bg-emerald-500/5 border-l-2 border-l-emerald-500',
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} className="py-1.5 align-middle">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
