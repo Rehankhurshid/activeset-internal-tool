@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ProjectReviewToggle } from './ProjectReviewToggle';
 import type { Project } from '@/types';
-import { isReviewedToday, getReviewStatus } from '@/lib/review-status';
+import { isReviewedToday, getReviewStatus, todayIso } from '@/lib/review-status';
 import { cn } from '@/lib/utils';
 
 interface DailyReviewBannerProps {
@@ -40,7 +40,8 @@ export function DailyReviewBanner({ projects, className }: DailyReviewBannerProp
     setDismissedFor(window.localStorage.getItem(DISMISS_STORAGE_KEY));
   }, []);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Local-TZ "today" — the banner resets at the user's midnight, not UTC's.
+  const today = todayIso();
 
   // "Live" projects = current + tagged. Untagged-current projects fall outside
   // both the Maintenance and Active dashboard buckets, so the user doesn't think

@@ -49,7 +49,11 @@ export async function runReviewDigest(): Promise<ReviewDigestResult> {
     return { ok: false, reason: 'email config missing' };
   }
 
-  const today = todayIso();
+  // Server-side "today" must be pinned to a named zone — UTC would roll over
+  // partway through the team's working day. Defaults to Eastern, matching the
+  // 22:00 UTC = ~5pm ET cron schedule. Override with REVIEW_TIMEZONE env.
+  const reviewTz = process.env.REVIEW_TIMEZONE || 'America/New_York';
+  const today = todayIso(new Date(), reviewTz);
 
   const snap = await adminDb.collection(PROJECTS_COLLECTION).get();
 

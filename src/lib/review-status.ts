@@ -2,9 +2,29 @@ import type { Project } from '@/types';
 
 export type ReviewStatus = 'today' | 'recent' | 'stale' | 'overdue' | 'never';
 
-/** YYYY-MM-DD in UTC. Same convention used by client write + cron read. */
-export function todayIso(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
+/**
+ * YYYY-MM-DD in a named timezone. When no zone is passed we fall back to the
+ * runtime's local timezone — the browser's TZ on the client, the server's TZ
+ * on the server. Crons should pass an explicit zone (e.g. `America/New_York`)
+ * so the boundary doesn't shift with the build environment.
+ */
+export function todayIso(now: Date = new Date(), timeZone?: string): string {
+  if (!timeZone) {
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  // en-CA already formats as YYYY-MM-DD, but formatToParts gives us a guarantee
+  // it stays that way regardless of locale data quirks.
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? '00';
+  return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
 /** Days between two YYYY-MM-DD strings (positive when `b` is later). */
