@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/modules/auth-access';
 import { EmbedDialog } from '@/modules/project-links';
 import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
@@ -42,8 +43,16 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const [isSyncingSitemap, setIsSyncingSitemap] = useState(false);
     const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
 
-    // Default to 'audit' tab
-    const [activeTab, setActiveTab] = useState('audit');
+    // Default to 'audit' tab, or whatever ?tab=… in the URL points at (lets the
+    // dashboard's daily-review banner land directly on Tasks). The list of valid
+    // tab values is enforced below in tabOptions; falling back to 'audit' is safe.
+    const searchParams = useSearchParams();
+    const initialTab = (() => {
+        const fromUrl = searchParams?.get('tab');
+        const valid = ['audit', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
+        return fromUrl && valid.includes(fromUrl) ? fromUrl : 'audit';
+    })();
+    const [activeTab, setActiveTab] = useState(initialTab);
 
     // Live data for tab stats — subscribed at the parent so badges update without
     // requiring the user to open each tab first.
