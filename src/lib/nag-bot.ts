@@ -295,7 +295,7 @@ function buildBlocks(
   blocks.push(
     {
       type: 'section',
-      text: { type: 'mrkdwn', text: `${mentionStr} ${roast}` },
+      text: { type: 'mrkdwn', text: mentionStr ? `${mentionStr} ${roast}` : roast },
     },
     {
       type: 'section',
@@ -325,17 +325,39 @@ export interface RunNagBotOptions {
   testRecipientSlackId?: string | null;
 }
 
+export interface DeliveryResult {
+  posted: boolean;
+  reason?: string;
+}
+
+export interface AssigneeResult {
+  assignee: string;
+  /** True if EITHER channel or DM was delivered. False only if both failed (or both skipped). */
+  posted: boolean;
+  /** Top-level error summary when nothing went through. */
+  reason?: string;
+  /** Outcome of the team-channel post (undefined in test mode — see `channel` block instead). */
+  channel?: DeliveryResult;
+  /** Outcome of the direct-message delivery. */
+  dm?: DeliveryResult;
+}
+
 export interface RunNagBotResult {
   ok: boolean;
   reason?: string;
   testMode?: boolean;
   examined?: number;
   assignees?: number;
+  /** Assignees who got at least one delivery (channel OR DM). */
   posted?: number;
+  /** Count of successful team-channel posts. */
+  channelDeliveries?: number;
+  /** Count of successful direct-message deliveries. */
+  dmDeliveries?: number;
   /** Tasks skipped because the assignee was not on the team (e.g. a client). */
   skippedNonTeam?: number;
   note?: string;
-  results?: { assignee: string; posted: boolean; reason?: string }[];
+  results?: AssigneeResult[];
 }
 
 export async function runNagBot(opts: RunNagBotOptions = {}): Promise<RunNagBotResult> {
@@ -428,7 +450,8 @@ export async function runNagBot(opts: RunNagBotOptions = {}): Promise<RunNagBotR
     grouped.set(c.assignee, list);
   }
 
-  const results: { assignee: string; posted: boolean; reason?: string }[] = [];
+  const results: AssigneeResult[] = [];
+  const teamChannel = testMode ? null : process.env.SLACK_CHANNEL_ID || null;
 
   for (const [assignee, tasks] of grouped.entries()) {
     tasks.sort((a, b) => {
@@ -464,10 +487,7 @@ export async function runNagBot(opts: RunNagBotOptions = {}): Promise<RunNagBotR
       }
     }
 
-    // In test mode we never @-mention the real assignee — show their name as
-    // bold plain text so they don't get pinged from a test run.
     const assigneeLabel = assignee.split('@')[0];
-    const mentionStr = testMode ? `*${assigneeLabel}*` : mention(slackId, assignee);
     const urgencyLabel =
       maxDaysOverdue >= 1
         ? `max overdue: ${maxDaysOverdue}d`
@@ -476,24 +496,92 @@ export async function runNagBot(opts: RunNagBotOptions = {}): Promise<RunNagBotR
           : maxDaysOverdue === STALE_NO_DUE_SENTINEL
             ? `stale, no due date`
             : `soonest due: ${Math.abs(maxDaysOverdue)}d out`;
-    const testHeader = testMode
-      ? `:test_tube: *Test* — this would normally ping *${assigneeLabel}* in <#${process.env.SLACK_CHANNEL_ID ?? 'the channel'}> (tier: ${tier}, ${urgencyLabel})`
-      : undefined;
 
-    const blocks = buildBlocks(mentionStr, roast, tasks, tier, testHeader);
-    const fallbackText = testMode
-      ? `[TEST] would have pinged ${assigneeLabel} — ${tasks.length} task${tasks.length === 1 ? '' : 's'}.`
-      : `${mentionStr} — ${tasks.length} task${tasks.length === 1 ? '' : 's'} on the radar.`;
-
-    try {
-      await postMessage({ channel, text: fallbackText, blocks, unfurl_links: false });
-      results.push({ assignee, posted: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'unknown';
-      console.error('[nag-bot] slack post failed for', assignee, err);
-      results.push({ assignee, posted: false, reason: message });
+    // ── Test mode: single DM to the admin, no channel post, no real DMs ─────
+    if (testMode) {
+      const mentionStr = `*${assigneeLabel}*`;
+      const testHeader = `:test_tube: *Test* — this would normally ping *${assigneeLabel}* in <#${process.env.SLACK_CHANNEL_ID ?? 'the channel'}> AND DM them (tier: ${tier}, ${urgencyLabel})`;
+      const blocks = buildBlocks(mentionStr, roast, tasks, tier, testHeader);
+      const fallbackText = `[TEST] would have pinged ${assigneeLabel} — ${tasks.length} task${tasks.length === 1 ? '' : 's'}.`;
+      const r: AssigneeResult = { assignee, posted: false };
+      try {
+        await postMessage({ channel: channel!, text: fallbackText, blocks, unfurl_links: false });
+        r.posted = true;
+        r.channel = { posted: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'unknown';
+        console.error('[nag-bot] test slack post failed for', assignee, err);
+        r.channel = { posted: false, reason: message };
+        r.reason = message;
+      }
+      results.push(r);
+      continue;
     }
+
+    // ── Production: deliver to BOTH the team channel AND a DM to the person ─
+    const mentionStr = mention(slackId, assignee);
+    const channelBlocks = buildBlocks(mentionStr, roast, tasks, tier);
+    const channelFallback = `${mentionStr} — ${tasks.length} task${tasks.length === 1 ? '' : 's'} on the radar.`;
+    // DM is already addressed to the person, so drop the @-mention prefix.
+    const dmBlocks = buildBlocks('', roast, tasks, tier);
+    const dmFallback = `Hey — ${tasks.length} task${tasks.length === 1 ? '' : 's'} on your radar.`;
+
+    const r: AssigneeResult = { assignee, posted: false };
+
+    // 1) Channel post. Failure here (e.g. channel_not_found, bot not in channel)
+    // does NOT block the DM — most assignees still get the nudge directly.
+    if (teamChannel) {
+      try {
+        await postMessage({
+          channel: teamChannel,
+          text: channelFallback,
+          blocks: channelBlocks,
+          unfurl_links: false,
+        });
+        r.channel = { posted: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'unknown';
+        console.error('[nag-bot] channel post failed for', assignee, err);
+        r.channel = { posted: false, reason: message };
+      }
+    } else {
+      r.channel = { posted: false, reason: 'no SLACK_CHANNEL_ID configured' };
+    }
+
+    // 2) Direct message. Requires a resolved Slack user id (email → id lookup).
+    if (slackId) {
+      try {
+        await postMessage({
+          channel: slackId,
+          text: dmFallback,
+          blocks: dmBlocks,
+          unfurl_links: false,
+        });
+        r.dm = { posted: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'unknown';
+        console.error('[nag-bot] DM post failed for', assignee, err);
+        r.dm = { posted: false, reason: message };
+      }
+    } else {
+      r.dm = {
+        posted: false,
+        reason:
+          'no Slack user id (email not found in workspace, or users:read.email scope missing)',
+      };
+    }
+
+    // The overall "posted" flag is true if EITHER delivery succeeded — the person
+    // got the nudge somewhere. The detail is in r.channel / r.dm.
+    r.posted = Boolean(r.channel?.posted || r.dm?.posted);
+    if (!r.posted) {
+      r.reason = r.dm?.reason || r.channel?.reason || 'both deliveries failed';
+    }
+    results.push(r);
   }
+
+  const channelDeliveries = results.filter((r) => r.channel?.posted).length;
+  const dmDeliveries = results.filter((r) => r.dm?.posted).length;
 
   return {
     ok: true,
@@ -501,6 +589,8 @@ export async function runNagBot(opts: RunNagBotOptions = {}): Promise<RunNagBotR
     examined: candidates.length,
     assignees: grouped.size,
     posted: results.filter((r) => r.posted).length,
+    channelDeliveries,
+    dmDeliveries,
     skippedNonTeam,
     results,
   };

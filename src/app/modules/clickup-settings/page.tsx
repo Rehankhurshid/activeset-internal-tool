@@ -30,16 +30,29 @@ interface RegistrationStatus {
   hasSecret: boolean;
 }
 
+interface TestNagDelivery {
+  posted: boolean;
+  reason?: string;
+}
+
 interface TestNagResult {
   ok: boolean;
   testMode?: boolean;
   examined?: number;
   assignees?: number;
   posted?: number;
+  channelDeliveries?: number;
+  dmDeliveries?: number;
   skippedNonTeam?: number;
   note?: string;
   recipient?: string;
-  results?: { assignee: string; posted: boolean; reason?: string }[];
+  results?: {
+    assignee: string;
+    posted: boolean;
+    reason?: string;
+    channel?: TestNagDelivery;
+    dm?: TestNagDelivery;
+  }[];
 }
 
 export default function ClickUpSettingsPage() {
@@ -312,11 +325,12 @@ export default function ClickUpSettingsPage() {
             <CardDescription>
               Runs the bot against your team&apos;s upcoming, due-today, overdue, and stale tasks,
               but DMs every message to <span className="font-mono">{user?.email}</span> instead of
-              pinging the team. Tasks assigned to clients or external collaborators are skipped
-              entirely — only <span className="font-mono">@activeset.co</span> emails (plus any in
-              <span className="font-mono"> NAG_TEAM_EMAILS</span>) get nagged. Real assignees are
-              NOT @-mentioned — you&apos;ll see exactly what each person would have received,
-              across all tone tiers from cheery early-bird to whimsical storybook.
+              pinging the team or sending real DMs. Tasks assigned to clients or external
+              collaborators are skipped entirely — only <span className="font-mono">@activeset.co</span>{' '}
+              emails (plus any in <span className="font-mono">NAG_TEAM_EMAILS</span>) get nagged.
+              Real assignees are NOT @-mentioned. In production the bot posts to{' '}
+              <span className="font-mono">SLACK_CHANNEL_ID</span> AND DMs each assignee
+              directly, so they get the nudge even when the channel post fails.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -373,8 +387,13 @@ export default function ClickUpSettingsPage() {
             </CardTitle>
             <CardDescription>
               The cron <span className="font-mono">/api/cron/nag-tasks</span> runs at 10:00 and 15:00
-              ET on weekdays, posts to <span className="font-mono">SLACK_CHANNEL_ID</span>, and
-              mentions the assignee using their email-matched Slack id. Only team members
+              ET on weekdays. For every team member with upcoming / due / overdue work, the bot
+              delivers TWICE:
+              <span className="font-semibold"> (1)</span> a public ping in{' '}
+              <span className="font-mono">SLACK_CHANNEL_ID</span> with the assignee @-mentioned,
+              and <span className="font-semibold">(2)</span> a direct message to that person in
+              parallel. If the channel post fails (e.g. the bot isn&apos;t invited to the channel),
+              the DM still goes through. Only team members
               (<span className="font-mono">@activeset.co</span> emails, plus anything in the
               optional <span className="font-mono">NAG_TEAM_EMAILS</span> env var) ever get pinged
               — clients and external collaborators are filtered out before the bot speaks.
