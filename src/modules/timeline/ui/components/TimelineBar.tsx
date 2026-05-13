@@ -22,6 +22,9 @@ interface TimelineBarProps {
     onOpen: () => void;
     onUpdateDates: (startDate: string, endDate: string) => void;
     onStatusChange: (status: TimelineItemStatus) => void;
+    /** Disable drag/resize/status picker. Bar still shows the milestone but
+     *  pointer events are no-ops. Used by the public share view. */
+    readOnly?: boolean;
 }
 
 export function TimelineBar({
@@ -32,6 +35,7 @@ export function TimelineBar({
     onOpen,
     onUpdateDates,
     onStatusChange,
+    readOnly = false,
 }: TimelineBarProps) {
     const barRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{
@@ -187,63 +191,73 @@ export function TimelineBar({
     return (
         <div
             ref={barRef}
-            role="button"
-            tabIndex={0}
+            role={readOnly ? undefined : 'button'}
+            tabIndex={readOnly ? -1 : 0}
             aria-label={`${milestone.title}, ${formatDateShort(previewStart)} to ${formatDateShort(previewEnd)}, ${milestone.status}`}
             className={cn(
                 'absolute top-1/2 -translate-y-1/2 h-7 rounded-md border flex items-center select-none group',
-                'transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:ring-offset-background',
+                'transition-shadow',
+                !readOnly &&
+                    'hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:ring-offset-background',
                 bgSoft,
                 isDragging && 'shadow-lg ring-2 ring-primary/60',
                 milestone.status === 'completed' && 'opacity-70',
                 milestone.status === 'blocked' && 'ring-2 ring-destructive/50'
             )}
             style={{ left, width }}
-            onPointerDown={(e) => handlePointerDown(e, 'move')}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onKeyDown={handleKeyDown}
+            onPointerDown={readOnly ? undefined : (e) => handlePointerDown(e, 'move')}
+            onPointerMove={readOnly ? undefined : handlePointerMove}
+            onPointerUp={readOnly ? undefined : handlePointerUp}
+            onKeyDown={readOnly ? undefined : handleKeyDown}
             title={`${milestone.title} · ${formatDateShort(previewStart)} → ${formatDateShort(previewEnd)}`}
         >
-            {/* Resize handles */}
-            <div
-                role="separator"
-                aria-label="Resize start"
-                className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-foreground/40 rounded-l"
-                onPointerDown={(e) => handlePointerDown(e, 'resize-start')}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-            />
-            <div
-                role="separator"
-                aria-label="Resize end"
-                className="absolute right-0 top-0 h-full w-1.5 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-foreground/40 rounded-r"
-                onPointerDown={(e) => handlePointerDown(e, 'resize-end')}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-            />
+            {/* Resize handles — hidden in read-only mode */}
+            {!readOnly && (
+                <>
+                    <div
+                        role="separator"
+                        aria-label="Resize start"
+                        className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-foreground/40 rounded-l"
+                        onPointerDown={(e) => handlePointerDown(e, 'resize-start')}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                    />
+                    <div
+                        role="separator"
+                        aria-label="Resize end"
+                        className="absolute right-0 top-0 h-full w-1.5 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-foreground/40 rounded-r"
+                        onPointerDown={(e) => handlePointerDown(e, 'resize-end')}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                    />
+                </>
+            )}
 
             {/* Label */}
             <div className="relative z-10 px-2 text-[11px] font-medium truncate flex items-center gap-1.5 w-full">
-                <StatusPicker
-                    status={milestone.status}
-                    onChange={onStatusChange}
-                    align="start"
-                >
-                    <button
-                        type="button"
-                        // Keep the status picker independent of drag and
-                        // open-on-click: stop pointer and click propagation
-                        // before the parent bar's handlers see the event.
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onPointerUp={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                        className="shrink-0 p-0.5 -m-0.5 rounded hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-ring/60"
-                        aria-label={`Change status (currently ${TIMELINE_STATUS_LABELS[milestone.status]})`}
+                {readOnly ? (
+                    <StatusDot status={milestone.status} />
+                ) : (
+                    <StatusPicker
+                        status={milestone.status}
+                        onChange={onStatusChange}
+                        align="start"
                     >
-                        <StatusDot status={milestone.status} />
-                    </button>
-                </StatusPicker>
+                        <button
+                            type="button"
+                            // Keep the status picker independent of drag and
+                            // open-on-click: stop pointer and click propagation
+                            // before the parent bar's handlers see the event.
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onPointerUp={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            className="shrink-0 p-0.5 -m-0.5 rounded hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-ring/60"
+                            aria-label={`Change status (currently ${TIMELINE_STATUS_LABELS[milestone.status]})`}
+                        >
+                            <StatusDot status={milestone.status} />
+                        </button>
+                    </StatusPicker>
+                )}
                 <span className="truncate">{milestone.title}</span>
                 {showPreviewDates && (
                     <span className="ml-auto shrink-0 text-[10px] opacity-70 tabular-nums">

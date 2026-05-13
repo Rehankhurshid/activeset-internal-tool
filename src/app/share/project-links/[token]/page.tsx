@@ -1,11 +1,12 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { WebsiteAuditDashboardScreen, type FolderPageTypes, type ProjectLink } from '@/modules/site-monitoring';
+import { type FolderPageTypes, type ProjectLink } from '@/modules/site-monitoring';
 import { db, hasFirebaseAdminCredentials } from '@/platform/firebase/admin';
 import type { AuditResult } from '@/types';
 import { Globe } from 'lucide-react';
 import Link from 'next/link';
+import { SharedProjectTabs } from './SharedProjectTabs';
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -18,6 +19,7 @@ interface SharedAuditProject {
   folderPageTypes?: FolderPageTypes;
   detectedLocales?: string[];
   pathToLocaleMap?: Record<string, string>;
+  sitemapUrl?: string;
 }
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +44,7 @@ const getSharedAuditProject = async (token: string): Promise<SharedAuditProject 
       detectedLocales?: string[];
       pathToLocaleMap?: Record<string, string>;
       publicAuditShareEnabled?: boolean;
+      sitemapUrl?: string;
     };
 
     if (data.publicAuditShareEnabled === false) return null;
@@ -73,6 +76,7 @@ const getSharedAuditProject = async (token: string): Promise<SharedAuditProject 
       folderPageTypes: data.folderPageTypes,
       detectedLocales: Array.isArray(data.detectedLocales) ? data.detectedLocales : [],
       pathToLocaleMap: data.pathToLocaleMap || {},
+      sitemapUrl: data.sitemapUrl,
     };
   } catch (error) {
     console.error('[PublicAuditShare] Failed to fetch shared project:', error);
@@ -130,9 +134,9 @@ export default async function SharedProjectAuditPage({ params }: PageProps) {
                 Read only
               </Badge>
             </div>
-            <h1 className="text-lg sm:text-xl font-semibold mt-2">{project.name} Audit Dashboard</h1>
+            <h1 className="text-lg sm:text-xl font-semibold mt-2">{project.name}</h1>
             <p className="text-xs text-muted-foreground mt-1">
-              This is a shared snapshot of audit results. Editing and scanning actions are disabled.
+              Shared snapshot. Editing and scanning actions are disabled.
             </p>
           </div>
 
@@ -151,13 +155,14 @@ export default async function SharedProjectAuditPage({ params }: PageProps) {
           </div>
         </div>
 
-        <WebsiteAuditDashboardScreen
-          links={sharedLinks}
+        <SharedProjectTabs
           projectId={project.id}
+          projectName={project.name}
+          links={sharedLinks}
           folderPageTypes={project.folderPageTypes}
           detectedLocales={project.detectedLocales}
           pathToLocaleMap={project.pathToLocaleMap}
-          isReadOnly
+          sitemapUrl={project.sitemapUrl}
         />
       </main>
     </div>

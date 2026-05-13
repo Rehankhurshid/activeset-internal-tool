@@ -80,6 +80,9 @@ interface TaskTableProps {
   previousViewedAt?: number;
   /** Used to suppress "new" badges on tasks the current user created. */
   userEmail?: string;
+  /** Render cells as static (no inline editing, no delete, no ClickUp link
+   *  dialog). Used by the public share view. */
+  readOnly?: boolean;
 }
 
 type StatusFilter = TaskStatus | 'all' | 'open';
@@ -102,6 +105,7 @@ export function TaskTable({
   loading,
   previousViewedAt = 0,
   userEmail,
+  readOnly = false,
 }: TaskTableProps) {
   const isNewSinceLastVisit = (t: Task): boolean => {
     if (previousViewedAt <= 0) return false;
@@ -229,16 +233,27 @@ export function TaskTable({
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <InlineEdit
-                      value={task.title}
-                      onSave={(v) => handleUpdate(task.id, { title: v })}
-                      className="text-sm"
-                      displayClassName={cn(
-                        'text-sm font-medium',
-                        isSubtask && 'text-muted-foreground',
-                      )}
-                      inputClassName="h-8 text-sm"
-                    />
+                    {readOnly ? (
+                      <span
+                        className={cn(
+                          'text-sm font-medium',
+                          isSubtask && 'text-muted-foreground',
+                        )}
+                      >
+                        {task.title}
+                      </span>
+                    ) : (
+                      <InlineEdit
+                        value={task.title}
+                        onSave={(v) => handleUpdate(task.id, { title: v })}
+                        className="text-sm"
+                        displayClassName={cn(
+                          'text-sm font-medium',
+                          isSubtask && 'text-muted-foreground',
+                        )}
+                        inputClassName="h-8 text-sm"
+                      />
+                    )}
                     {isNew && (
                       <Badge
                         variant="outline"
@@ -267,7 +282,13 @@ export function TaskTable({
         ),
         cell: ({ row }) => {
           const task = row.original;
-          // Status is bidirectional — always editable.
+          if (readOnly) {
+            return (
+              <div className="h-8 px-1 inline-flex items-center">
+                <TaskStatusBadge status={task.status} />
+              </div>
+            );
+          }
           return (
             <Select
               value={task.status}
@@ -307,7 +328,13 @@ export function TaskTable({
         },
         cell: ({ row }) => {
           const task = row.original;
-          // Priority is bidirectional — always editable.
+          if (readOnly) {
+            return (
+              <div className="h-8 px-1 inline-flex items-center">
+                <TaskPriorityBadge priority={task.priority} />
+              </div>
+            );
+          }
           return (
             <Select
               value={task.priority}
@@ -338,6 +365,13 @@ export function TaskTable({
         ),
         cell: ({ row }) => {
           const task = row.original;
+          if (readOnly) {
+            return (
+              <div className="h-8 px-1 inline-flex items-center">
+                <TaskCategoryBadge category={task.category} />
+              </div>
+            );
+          }
           return (
             <Select
               value={task.category}
@@ -368,8 +402,17 @@ export function TaskTable({
         ),
         cell: ({ row }) => {
           const task = row.original;
-          // Assignee is bidirectional — always editable, even on ClickUp-imported
-          // tasks. Edits flow to ClickUp via /api/clickup/sync-assignee.
+          if (readOnly) {
+            return (
+              <div className="h-8 px-1 inline-flex items-center text-xs">
+                {task.assignee ? (
+                  <span>{task.assignee.split('@')[0]}</span>
+                ) : (
+                  <span className="text-muted-foreground">Unassigned</span>
+                )}
+              </div>
+            );
+          }
           return (
             <Select
               value={task.assignee ?? '__unassigned__'}
@@ -407,6 +450,7 @@ export function TaskTable({
             <DueDateCell
               value={task.dueDate}
               onChange={(v) => handleUpdate(task.id, { dueDate: v || undefined })}
+              readOnly={readOnly}
             />
           );
         },
@@ -426,29 +470,53 @@ export function TaskTable({
                   aria-label="AI parsed"
                 />
               )}
-              <button
-                type="button"
-                onClick={() => setLinkDialogTask(task)}
-                className={cn(
-                  'inline-flex items-center gap-1 rounded-md text-xs px-1.5 py-0.5 border transition-colors',
-                  synced
-                    ? 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                    : 'border-border bg-transparent text-muted-foreground hover:bg-accent',
-                )}
-                title={synced ? 'View ClickUp link' : 'Link to a ClickUp task'}
-              >
-                {synced ? (
-                  <>
-                    <Link2 className="h-3 w-3" />
-                    ClickUp
-                  </>
-                ) : (
-                  <>
-                    <Link2Off className="h-3 w-3" />
-                    {SOURCE_LABEL[task.source]}
-                  </>
-                )}
-              </button>
+              {readOnly ? (
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-md text-xs px-1.5 py-0.5 border',
+                    synced
+                      ? 'border-violet-200 bg-violet-50 text-violet-700'
+                      : 'border-border bg-transparent text-muted-foreground',
+                  )}
+                  title={synced ? 'Linked to ClickUp' : 'Not linked to ClickUp'}
+                >
+                  {synced ? (
+                    <>
+                      <Link2 className="h-3 w-3" />
+                      ClickUp
+                    </>
+                  ) : (
+                    <>
+                      <Link2Off className="h-3 w-3" />
+                      {SOURCE_LABEL[task.source]}
+                    </>
+                  )}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setLinkDialogTask(task)}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-md text-xs px-1.5 py-0.5 border transition-colors',
+                    synced
+                      ? 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                      : 'border-border bg-transparent text-muted-foreground hover:bg-accent',
+                  )}
+                  title={synced ? 'View ClickUp link' : 'Link to a ClickUp task'}
+                >
+                  {synced ? (
+                    <>
+                      <Link2 className="h-3 w-3" />
+                      ClickUp
+                    </>
+                  ) : (
+                    <>
+                      <Link2Off className="h-3 w-3" />
+                      {SOURCE_LABEL[task.source]}
+                    </>
+                  )}
+                </button>
+              )}
               {synced && task.clickupUrl && (
                 <a
                   href={task.clickupUrl}
@@ -476,24 +544,28 @@ export function TaskTable({
           );
         },
       },
-      {
-        id: 'actions',
-        header: '',
-        enableSorting: false,
-        cell: ({ row }) => (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-rose-600"
-            onClick={() => handleDelete(row.original.id)}
-            title="Delete task"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        ),
-      },
+      ...(readOnly
+        ? []
+        : [
+            {
+              id: 'actions',
+              header: '',
+              enableSorting: false,
+              cell: ({ row }) => (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-rose-600"
+                  onClick={() => handleDelete(row.original.id)}
+                  title="Delete task"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              ),
+            } as ColumnDef<Task>,
+          ]),
     ],
-    [assignees, visibleParentIds, previousViewedAt, userEmail],
+    [assignees, visibleParentIds, previousViewedAt, userEmail, readOnly],
   );
 
   const table = useReactTable({
@@ -616,7 +688,7 @@ export function TaskTable({
         </Table>
       </div>
 
-      {linkDialogTask && (
+      {!readOnly && linkDialogTask && (
         <ClickUpLinkDialog
           open={Boolean(linkDialogTask)}
           onOpenChange={(open) => {

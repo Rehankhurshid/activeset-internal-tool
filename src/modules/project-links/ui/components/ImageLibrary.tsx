@@ -581,11 +581,13 @@ function ImageCard({
   maxWidth,
   projectName,
   onClick,
+  readOnly = false,
 }: {
   image: ImageEntry;
   maxWidth: number | 'full';
   projectName: string;
   onClick: () => void;
+  readOnly?: boolean;
 }) {
   const DeviceIcon = DEVICE_ICON[image.device] || Monitor;
   const cardStyle = maxWidth !== 'full' ? { maxWidth: `${maxWidth}px` } : undefined;
@@ -615,7 +617,9 @@ function ImageCard({
           >
             <ExternalLink className="h-3 w-3" />
           </a>
-          <RecaptureButton urls={[image.pageUrl]} projectName={projectName} variant="outline" className="bg-black/60 text-white border-white/20 hover:bg-black/80 hover:text-white" />
+          {!readOnly && (
+            <RecaptureButton urls={[image.pageUrl]} projectName={projectName} variant="outline" className="bg-black/60 text-white border-white/20 hover:bg-black/80 hover:text-white" />
+          )}
         </div>
       </div>
       <CardContent className="px-3 py-2.5">
@@ -1131,6 +1135,7 @@ function FolderGroup({
   maxWidth,
   projectName,
   onImageClick,
+  readOnly = false,
 }: {
   folder: string;
   images: ImageEntry[];
@@ -1138,6 +1143,7 @@ function FolderGroup({
   maxWidth: number | 'full';
   projectName: string;
   onImageClick: (image: ImageEntry) => void;
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const folderUrls = useMemo(() => [...new Set(images.map((img) => img.pageUrl))], [images]);
@@ -1165,13 +1171,15 @@ function FolderGroup({
             </Badge>
           </button>
         </CollapsibleTrigger>
-        <RecaptureButton
-          urls={folderUrls}
-          projectName={projectName}
-          label={`Recapture ${folderUrls.length}`}
-          variant="outline"
-          className="shrink-0"
-        />
+        {!readOnly && (
+          <RecaptureButton
+            urls={folderUrls}
+            projectName={projectName}
+            label={`Recapture ${folderUrls.length}`}
+            variant="outline"
+            className="shrink-0"
+          />
+        )}
       </div>
       <CollapsibleContent>
         <div className="mt-2 pb-1" style={masonryStyle}>
@@ -1182,6 +1190,7 @@ function FolderGroup({
                 maxWidth={maxWidth}
                 projectName={projectName}
                 onClick={() => onImageClick(img)}
+                readOnly={readOnly}
               />
             </div>
           ))}
@@ -1200,9 +1209,13 @@ interface ImageLibraryProps {
   projectName: string;
   projectId: string;
   sitemapUrl?: string;
+  /** Hide capture/recapture CTAs and use a minimal empty state. Used by the
+   *  public share view, where viewers can browse screenshots but not trigger
+   *  scans. */
+  readOnly?: boolean;
 }
 
-export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: ImageLibraryProps) {
+export function ImageLibrary({ links, projectName, projectId, sitemapUrl, readOnly = false }: ImageLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [lightboxImages, setLightboxImages] = useState<ImageEntry[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -1411,6 +1424,19 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
   }
 
   if (allImages.length === 0) {
+    if (readOnly) {
+      return (
+        <div className="rounded-lg border border-dashed p-12">
+          <div className="flex flex-col items-center text-center">
+            <ImageIcon className="h-12 w-12 text-muted-foreground/50" />
+            <h3 className="mt-4 text-lg font-medium">No screenshots yet</h3>
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">
+              The owner hasn&apos;t captured any screenshots for this project.
+            </p>
+          </div>
+        </div>
+      );
+    }
     return <EmptyState projectName={projectName} projectId={projectId} sitemapUrl={sitemapUrl} links={links} />;
   }
 
@@ -1457,6 +1483,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
                 maxWidth={w.maxWidth}
                 projectName={projectName}
                 onClick={() => openLightbox(filtered, i)}
+                readOnly={readOnly}
               />
             </div>
           ))}
@@ -1477,6 +1504,7 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
               maxWidth={w.maxWidth}
               projectName={projectName}
               onImageClick={(img) => openLightbox(filtered, filtered.indexOf(img))}
+              readOnly={readOnly}
               />
           );
         })}
@@ -1498,15 +1526,17 @@ export function ImageLibrary({ links, projectName, projectId, sitemapUrl }: Imag
               className="pl-9"
             />
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-1.5 text-xs"
-            onClick={handleCopyAllCapture}
-          >
-            {copiedAll ? <Check className="h-3 w-3" /> : <RefreshCw className="h-3 w-3" />}
-            {copiedAll ? 'Copied' : 'Recapture All'}
-          </Button>
+          {!readOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5 text-xs"
+              onClick={handleCopyAllCapture}
+            >
+              {copiedAll ? <Check className="h-3 w-3" /> : <RefreshCw className="h-3 w-3" />}
+              {copiedAll ? 'Copied' : 'Recapture All'}
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-3">

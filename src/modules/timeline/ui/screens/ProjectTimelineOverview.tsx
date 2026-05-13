@@ -70,10 +70,14 @@ import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
 interface ProjectTimelineOverviewProps {
     projectId: string;
     userEmail?: string;
+    /** Hide every action button (Add Milestone, More menu, edit sheet) and
+     *  freeze the gantt/list. Used by the public share view. */
+    readOnly?: boolean;
 }
 
 export function ProjectTimelineOverview({
     projectId,
+    readOnly = false,
 }: ProjectTimelineOverviewProps) {
     const { timeline, loading } = useProjectTimeline(projectId);
     const { builtIn: builtInTemplates, custom: customTemplates } =
@@ -386,71 +390,85 @@ export function ProjectTimelineOverview({
                     )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                    {!isEmpty && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    aria-label="Timeline actions"
-                                >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem
-                                    onSelect={() => setTemplateDialogOpen(true)}
-                                >
-                                    <Sparkles className="h-4 w-4" />
-                                    Use template
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onSelect={() => setImportDialogOpen(true)}
-                                >
-                                    <FileText className="h-4 w-4" />
-                                    Import markdown
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onSelect={() => setProposalImportOpen(true)}
-                                >
-                                    <FileSignature className="h-4 w-4" />
-                                    Import from proposal
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onSelect={() => setMdEditorOpen(true)}
-                                >
-                                    <Code2 className="h-4 w-4" />
-                                    Edit as markdown
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onSelect={() => {
-                                        setEditingTemplate(null);
-                                        setSaveTemplateOpen(true);
-                                    }}
-                                >
-                                    <Save className="h-4 w-4" />
-                                    Save as template
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )}
-                    <Button size="sm" className="gap-1.5" onClick={openNew}>
-                        <Plus className="h-4 w-4" />
-                        Add Milestone
-                    </Button>
-                </div>
+                {!readOnly && (
+                    <div className="flex items-center gap-2">
+                        {!isEmpty && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        aria-label="Timeline actions"
+                                    >
+                                        <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuItem
+                                        onSelect={() => setTemplateDialogOpen(true)}
+                                    >
+                                        <Sparkles className="h-4 w-4" />
+                                        Use template
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        onSelect={() => setImportDialogOpen(true)}
+                                    >
+                                        <FileText className="h-4 w-4" />
+                                        Import markdown
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        onSelect={() => setProposalImportOpen(true)}
+                                    >
+                                        <FileSignature className="h-4 w-4" />
+                                        Import from proposal
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        onSelect={() => setMdEditorOpen(true)}
+                                    >
+                                        <Code2 className="h-4 w-4" />
+                                        Edit as markdown
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        onSelect={() => {
+                                            setEditingTemplate(null);
+                                            setSaveTemplateOpen(true);
+                                        }}
+                                    >
+                                        <Save className="h-4 w-4" />
+                                        Save as template
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+                        <Button size="sm" className="gap-1.5" onClick={openNew}>
+                            <Plus className="h-4 w-4" />
+                            Add Milestone
+                        </Button>
+                    </div>
+                )}
             </div>
 
             {/* Body */}
             {isEmpty ? (
-                <EmptyState
-                    onNew={openNew}
-                    onImportMarkdown={() => setImportDialogOpen(true)}
-                    onImportProposal={() => setProposalImportOpen(true)}
-                    onOpenTemplates={() => setTemplateDialogOpen(true)}
-                />
+                readOnly ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center border rounded-xl bg-card">
+                        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                            <GanttChartSquare className="h-8 w-8 text-primary" />
+                        </div>
+                        <h3 className="text-lg font-semibold mb-1">No timeline yet</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm">
+                            The owner hasn&apos;t published a project timeline.
+                        </p>
+                    </div>
+                ) : (
+                    <EmptyState
+                        onNew={openNew}
+                        onImportMarkdown={() => setImportDialogOpen(true)}
+                        onImportProposal={() => setProposalImportOpen(true)}
+                        onOpenTemplates={() => setTemplateDialogOpen(true)}
+                    />
+                )
             ) : viewMode === 'timeline' ? (
                 <TimelineGantt
                     timeline={timeline!}
@@ -459,24 +477,28 @@ export function ProjectTimelineOverview({
                     onUpdateMilestoneDates={handleUpdateDates}
                     onUpdateMilestoneStatus={handleUpdateStatus}
                     onTogglePhaseCollapsed={handleTogglePhaseCollapsed}
+                    readOnly={readOnly}
                 />
             ) : (
                 <TimelineList
                     timeline={timeline!}
                     onOpenMilestone={openEdit}
                     onStatusChange={handleUpdateStatus}
+                    readOnly={readOnly}
                 />
             )}
 
-            <TimelineEditSheet
-                open={editOpen}
-                onOpenChange={setEditOpen}
-                milestone={editingMilestone}
-                phases={timeline?.phases ?? []}
-                onSave={handleSave}
-                onDelete={editingMilestone ? handleDelete : undefined}
-                onAddPhase={handleAddPhase}
-            />
+            {!readOnly && (
+                <TimelineEditSheet
+                    open={editOpen}
+                    onOpenChange={setEditOpen}
+                    milestone={editingMilestone}
+                    phases={timeline?.phases ?? []}
+                    onSave={handleSave}
+                    onDelete={editingMilestone ? handleDelete : undefined}
+                    onAddPhase={handleAddPhase}
+                />
+            )}
 
             <TemplatePickerDialog
                 open={templateDialogOpen}

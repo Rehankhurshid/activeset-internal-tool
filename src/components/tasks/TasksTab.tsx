@@ -23,9 +23,12 @@ interface TasksTabProps {
   userEmail: string;
   clickupListId?: string;
   clickupListName?: string;
+  /** Hide quick-add, new request, ClickUp link, and table editors. Used by
+   *  the public share view so guests can browse but not modify tasks. */
+  readOnly?: boolean;
 }
 
-export function TasksTab({ projectId, userEmail, clickupListId, clickupListName }: TasksTabProps) {
+export function TasksTab({ projectId, userEmail, clickupListId, clickupListName, readOnly = false }: TasksTabProps) {
   const { tasks, loading } = useProjectTasks(projectId);
   const { requests } = useProjectRequests(projectId);
   const { assignees } = useAssignees();
@@ -92,43 +95,47 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName 
         <SummaryCard label="New since last visit" value={newCount} accent="emerald" />
       </div>
 
-      {/* Action row */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleQuickAdd();
-          }}
-          className="flex-1 flex gap-2"
-        >
-          <Input
-            placeholder="Quick add: type a task title and press Enter…"
-            value={quickAddTitle}
-            onChange={(e) => setQuickAddTitle(e.target.value)}
-            disabled={creating}
-            className="flex-1"
-          />
-          <Button
-            type="submit"
-            variant="outline"
-            disabled={creating || !quickAddTitle.trim()}
+      {/* Action row — hidden in read-only share view */}
+      {!readOnly && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleQuickAdd();
+            }}
+            className="flex-1 flex gap-2"
           >
-            <Plus className="h-4 w-4 mr-2" />
-            Add
+            <Input
+              placeholder="Quick add: type a task title and press Enter…"
+              value={quickAddTitle}
+              onChange={(e) => setQuickAddTitle(e.target.value)}
+              disabled={creating}
+              className="flex-1"
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={creating || !quickAddTitle.trim()}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add
+            </Button>
+          </form>
+          <Button onClick={() => setRequestDialogOpen(true)}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            New Request
           </Button>
-        </form>
-        <Button onClick={() => setRequestDialogOpen(true)}>
-          <Sparkles className="h-4 w-4 mr-2" />
-          New Request
-        </Button>
-      </div>
+        </div>
+      )}
 
-      {/* ClickUp list binding (one card per project; handles link + bulk import) */}
-      <ClickUpListLinkCard
-        projectId={projectId}
-        clickupListId={clickupListId}
-        clickupListName={clickupListName}
-      />
+      {/* ClickUp list binding — hidden in read-only share view */}
+      {!readOnly && (
+        <ClickUpListLinkCard
+          projectId={projectId}
+          clickupListId={clickupListId}
+          clickupListName={clickupListName}
+        />
+      )}
 
       {/* Table */}
       <TaskTable
@@ -137,14 +144,17 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName 
         loading={loading}
         previousViewedAt={previousViewedAt}
         userEmail={userEmail}
+        readOnly={readOnly}
       />
 
-      <NewRequestDialog
-        open={requestDialogOpen}
-        onOpenChange={setRequestDialogOpen}
-        projectId={projectId}
-        userEmail={userEmail}
-      />
+      {!readOnly && (
+        <NewRequestDialog
+          open={requestDialogOpen}
+          onOpenChange={setRequestDialogOpen}
+          projectId={projectId}
+          userEmail={userEmail}
+        />
+      )}
     </div>
   );
 }

@@ -30,12 +30,15 @@ interface TimelineListProps {
     timeline: ProjectTimeline;
     onOpenMilestone: (milestoneId: string) => void;
     onStatusChange: (milestoneId: string, status: TimelineItemStatus) => void;
+    /** Disable row click and status picker. Used by the public share view. */
+    readOnly?: boolean;
 }
 
 export function TimelineList({
     timeline,
     onOpenMilestone,
     onStatusChange,
+    readOnly = false,
 }: TimelineListProps) {
     const rows = useMemo(() => {
         const phaseMap = new Map(timeline.phases.map((p) => [p.id, p]));
@@ -70,8 +73,10 @@ export function TimelineList({
                     {rows.map(({ milestone, phase, effectiveColor }) => (
                         <TableRow
                             key={milestone.id}
-                            className="cursor-pointer"
-                            onClick={() => onOpenMilestone(milestone.id)}
+                            className={readOnly ? undefined : 'cursor-pointer'}
+                            onClick={
+                                readOnly ? undefined : () => onOpenMilestone(milestone.id)
+                            }
                         >
                             <TableCell className="font-medium">
                                 <div className="flex items-center gap-2">
@@ -101,18 +106,22 @@ export function TimelineList({
                                     e.stopPropagation();
                                 }}
                             >
-                                <StatusPicker
-                                    status={milestone.status}
-                                    onChange={(next) => onStatusChange(milestone.id, next)}
-                                >
-                                    <button
-                                        type="button"
-                                        className="inline-flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-ring/60"
-                                        aria-label={`Change status (currently ${TIMELINE_STATUS_LABELS[milestone.status]})`}
+                                {readOnly ? (
+                                    <StatusBadge status={milestone.status} />
+                                ) : (
+                                    <StatusPicker
+                                        status={milestone.status}
+                                        onChange={(next) => onStatusChange(milestone.id, next)}
                                     >
-                                        <StatusBadge status={milestone.status} />
-                                    </button>
-                                </StatusPicker>
+                                        <button
+                                            type="button"
+                                            className="inline-flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-ring/60"
+                                            aria-label={`Change status (currently ${TIMELINE_STATUS_LABELS[milestone.status]})`}
+                                        >
+                                            <StatusBadge status={milestone.status} />
+                                        </button>
+                                    </StatusPicker>
+                                )}
                             </TableCell>
                             <TableCell className="tabular-nums text-xs">
                                 {formatDateShort(milestone.startDate)}

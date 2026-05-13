@@ -39,6 +39,9 @@ interface TimelineGanttProps {
         status: TimelineItemStatus
     ) => void;
     onTogglePhaseCollapsed: (phaseId: string) => void;
+    /** Disable drag/resize/status edits on bars. Phase collapse and the
+     *  visual layout still work. Used by the public share view. */
+    readOnly?: boolean;
 }
 
 const LABEL_COL_WIDTH = 224; // px — sticky phase/milestone label column
@@ -66,6 +69,7 @@ export function TimelineGantt({
     onUpdateMilestoneDates,
     onUpdateMilestoneStatus,
     onTogglePhaseCollapsed,
+    readOnly = false,
 }: TimelineGanttProps) {
     const dayWidth = ZOOM_DAY_WIDTH[zoom];
 
@@ -160,7 +164,7 @@ export function TimelineGantt({
                                         )}
                                         style={{ height: PHASE_HEADER_HEIGHT }}
                                     >
-                                        {!isUngrouped && (
+                                        {!isUngrouped && !readOnly && (
                                             <button
                                                 type="button"
                                                 onClick={() => onTogglePhaseCollapsed(row.phase.id)}
@@ -239,6 +243,7 @@ export function TimelineGantt({
                                         onStatusChange={(s) =>
                                             onUpdateMilestoneStatus(row.milestone.id, s)
                                         }
+                                        readOnly={readOnly}
                                     />
                                 </div>
                             );
