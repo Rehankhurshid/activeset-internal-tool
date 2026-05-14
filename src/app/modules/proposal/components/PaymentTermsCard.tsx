@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, Receipt } from 'lucide-react';
 import {
   PRESET_TEMPLATE_OPTIONS,
+  defaultHourlyRate,
   expandToSlots,
   type PaymentTemplate,
 } from '@/lib/payment-templates';
@@ -31,6 +32,7 @@ function presetIdFromTemplate(template: PaymentTemplate | undefined): string {
   if (template.kind === 'one-time') return 'one-time';
   if (template.kind === 'monthly') return 'monthly';
   if (template.kind === 'quarterly') return 'quarterly';
+  if (template.kind === 'hourly') return 'hourly';
   if (template.kind === 'split') {
     const key = template.percentages.join('-');
     if (key === '50-50') return 'split-50-50';
@@ -43,13 +45,20 @@ function presetIdFromTemplate(template: PaymentTemplate | undefined): string {
 function buildTemplate(
   presetId: string,
   months: number,
-  quarters: number
+  quarters: number,
+  hours: number,
+  rate: number
 ): PaymentTemplate | null {
   const preset = PRESET_TEMPLATE_OPTIONS.find((p) => p.id === presetId);
   if (!preset) return null;
   if (preset.template) return preset.template;
   if (preset.id === 'monthly') return { kind: 'monthly', months };
   if (preset.id === 'quarterly') return { kind: 'quarterly', quarters };
+  if (preset.id === 'hourly') {
+    if (!Number.isFinite(hours) || hours <= 0) return null;
+    if (!Number.isFinite(rate) || rate <= 0) return null;
+    return { kind: 'hourly', hours, rate };
+  }
   return null;
 }
 
@@ -77,8 +86,19 @@ export function PaymentTermsCard({
     existing?.template.kind === 'monthly' ? existing.template.months : 6;
   const quarters =
     existing?.template.kind === 'quarterly' ? existing.template.quarters : 4;
-  const totalAmount = existing?.totalAmount?.toString() ?? '';
+  const hoursStored =
+    existing?.template.kind === 'hourly' ? existing.template.hours : null;
+  const rateStored =
+    existing?.template.kind === 'hourly' ? existing.template.rate : null;
   const currency = existing?.currency ?? data.pricing.currency ?? 'INR';
+  const fallbackRate = defaultHourlyRate(currency);
+  const hours = hoursStored != null ? hoursStored : 0;
+  const rate = rateStored != null ? rateStored : (fallbackRate ?? 0);
+  const isHourly = presetId === 'hourly';
+
+  const totalAmount = isHourly
+    ? (hoursStored != null && rateStored != null ? String(hoursStored * rateStored) : '')
+    : (existing?.totalAmount?.toString() ?? '');
   const startDate = existing?.startDate ?? todayIso();
 
   const totalNum = Number(totalAmount);
@@ -86,7 +106,7 @@ export function PaymentTermsCard({
 
   const preview = useMemo(() => {
     if (!existing) return null;
-    const template = buildTemplate(presetId, months, quarters);
+    const template = buildTemplate(presetId, months, quarters, hours, rate);
     if (!template || !hasValidTotal || !currency || !startDate) return null;
     try {
       return expandToSlots(template, { totalAmount: totalNum, currency, startDate });
@@ -94,12 +114,14 @@ export function PaymentTermsCard({
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existing, presetId, months, quarters, totalNum, currency, startDate]);
+  }, [existing, presetId, months, quarters, hours, rate, totalNum, currency, startDate]);
 
   const writeTerms = (patch: Partial<{
     presetId: string;
     months: number;
     quarters: number;
+    hours: number;
+    rate: number;
     totalAmount: string;
     currency: string;
     startDate: string;
@@ -107,11 +129,22 @@ export function PaymentTermsCard({
     const nextPreset = patch.presetId ?? presetId;
     const nextMonths = patch.months ?? months;
     const nextQuarters = patch.quarters ?? quarters;
-    const nextTotalRaw = patch.totalAmount ?? totalAmount;
+    const nextHours = patch.hours ?? hours;
+    let nextRate = patch.rate ?? rate;
     const nextCurrency = patch.currency ?? currency;
     const nextStartDate = patch.startDate ?? startDate;
 
-    const template = buildTemplate(nextPreset, nextMonths, nextQuarters);
+    // When switching to hourly with no rate yet, seed from currency default.
+    if (nextPreset === 'hourly' && (!Number.isFinite(nextRate) || nextRate <= 0)) {
+      const def = defaultHourlyRate(nextCurrency);
+      if (def != null) nextRate = def;
+    }
+
+    const template = buildTemplate(nextPreset, nextMonths, nextQuarters, nextHours, nextRate);
+    const nextTotalRaw =
+      template?.kind === 'hourly'
+        ? String(template.hours * template.rate)
+        : (patch.totalAmount ?? totalAmount);
     const total = Number(nextTotalRaw);
     if (!template || !Number.isFinite(total) || total <= 0 || !nextCurrency || !nextStartDate) {
       // Not enough info yet — don't commit partial state
@@ -202,29 +235,73 @@ export function PaymentTermsCard({
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-2 col-span-2">
-              <Label>Total amount</Label>
-              <Input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                value={totalAmount}
-                onChange={(e) => writeTerms({ totalAmount: e.target.value })}
-                placeholder="50000"
-              />
+          {isHourly ? (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-2">
+                <Label>Hours</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.25"
+                  value={hoursStored ?? ''}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    writeTerms({ hours: Number.isFinite(v) ? v : 0 });
+                  }}
+                  placeholder="20"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Hourly rate</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={rateStored ?? ''}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    writeTerms({ rate: Number.isFinite(v) ? v : 0 });
+                  }}
+                  placeholder={fallbackRate != null ? String(fallbackRate) : '50'}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Currency</Label>
+                <Input
+                  value={currency}
+                  onChange={(e) => writeTerms({ currency: e.target.value })}
+                  className="uppercase"
+                  maxLength={3}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Currency</Label>
-              <Input
-                value={currency}
-                onChange={(e) => writeTerms({ currency: e.target.value })}
-                className="uppercase"
-                maxLength={3}
-              />
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-2 col-span-2">
+                <Label>Total amount</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={totalAmount}
+                  onChange={(e) => writeTerms({ totalAmount: e.target.value })}
+                  placeholder="50000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Currency</Label>
+                <Input
+                  value={currency}
+                  onChange={(e) => writeTerms({ currency: e.target.value })}
+                  className="uppercase"
+                  maxLength={3}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="space-y-2">
             <Label>Start date</Label>

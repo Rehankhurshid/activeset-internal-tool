@@ -17,7 +17,19 @@ export type PaymentTemplate =
   | { kind: 'split'; percentages: number[] }
   | { kind: 'monthly'; months: number }
   | { kind: 'quarterly'; quarters: number }
+  | { kind: 'hourly'; hours: number; rate: number }
   | { kind: 'custom'; items: PaymentTemplateCustomItem[] };
+
+/**
+ * Suggested hourly rate per currency. Used as the form default when the user
+ * picks the "Hourly" template; they can override it before saving.
+ */
+export function defaultHourlyRate(currency: string): number | null {
+  const c = currency.trim().toUpperCase();
+  if (c === 'USD') return 50;
+  if (c === 'INR') return 3000;
+  return null;
+}
 
 export interface PaymentTemplateCustomItem {
   label: string;
@@ -133,6 +145,12 @@ export const PRESET_TEMPLATE_OPTIONS: PresetTemplateOption[] = [
     description: 'N equal quarterly slots',
     template: null, // requires `quarters` input
   },
+  {
+    id: 'hourly',
+    label: 'Hourly Work',
+    description: 'Hours × hourly rate (defaults: $50, ₹3000)',
+    template: null, // requires `hours` + `rate` inputs
+  },
 ];
 
 export function expandToSlots(
@@ -203,6 +221,26 @@ export function expandToSlots(
       }));
     }
 
+    case 'hourly': {
+      const { hours, rate } = template;
+      if (!Number.isFinite(hours) || hours <= 0) {
+        throw new Error('hours must be a positive number');
+      }
+      if (!Number.isFinite(rate) || rate <= 0) {
+        throw new Error('hourly rate must be a positive number');
+      }
+      const amount = roundCurrency(hours * rate);
+      return [
+        {
+          label: `Hourly work · ${hours}h`,
+          expectedAmount: amount,
+          expectedCurrency: currency,
+          expectedDueDate: startDate,
+          notes: `${hours} hours × ${currency} ${rate}/hour`,
+        },
+      ];
+    }
+
     case 'custom': {
       if (template.items.length === 0) throw new Error('custom template needs at least one item');
       return template.items.map((item, i) => {
@@ -237,6 +275,8 @@ export function describeTemplate(template: PaymentTemplate): string {
       return `Monthly × ${template.months}`;
     case 'quarterly':
       return `Quarterly × ${template.quarters}`;
+    case 'hourly':
+      return `Hourly · ${template.hours}h @ ${template.rate}`;
     case 'custom':
       return `Custom (${template.items.length} item${template.items.length === 1 ? '' : 's'})`;
   }

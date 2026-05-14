@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { fetchAuthed } from '@/lib/api-client';
 import {
   PRESET_TEMPLATE_OPTIONS,
+  defaultHourlyRate,
   expandToSlots,
   type PaymentTemplate,
 } from '@/lib/payment-templates';
@@ -29,6 +30,8 @@ export interface ApplyTemplateInitialValues {
   totalAmount?: string;
   currency?: string;
   startDate?: string;
+  hours?: string;
+  hourlyRate?: string;
 }
 
 interface ApplyTemplateDialogProps {
@@ -44,6 +47,7 @@ interface ApplyTemplateDialogProps {
 const DEFAULT_PRESET_ID = 'one-time';
 const DEFAULT_MONTHS = 6;
 const DEFAULT_QUARTERS = 4;
+const DEFAULT_HOURS = '';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -81,6 +85,8 @@ export function ApplyTemplateDialog({
   const [totalAmount, setTotalAmount] = useState('');
   const [currency, setCurrency] = useState('INR');
   const [startDate, setStartDate] = useState(todayIso());
+  const [hours, setHours] = useState(DEFAULT_HOURS);
+  const [hourlyRate, setHourlyRate] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -91,9 +97,40 @@ export function ApplyTemplateDialog({
       setTotalAmount(initialValues?.totalAmount ?? '');
       setCurrency(initialValues?.currency ?? 'INR');
       setStartDate(initialValues?.startDate ?? todayIso());
+      setHours(initialValues?.hours ?? DEFAULT_HOURS);
+      const initialRate = initialValues?.hourlyRate;
+      if (initialRate != null) {
+        setHourlyRate(initialRate);
+      } else {
+        const def = defaultHourlyRate(initialValues?.currency ?? 'INR');
+        setHourlyRate(def != null ? String(def) : '');
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const isHourly = presetId === 'hourly';
+  const hoursNum = Number(hours);
+  const hourlyRateNum = Number(hourlyRate);
+  const hourlyTotal =
+    isHourly &&
+    Number.isFinite(hoursNum) &&
+    Number.isFinite(hourlyRateNum) &&
+    hoursNum > 0 &&
+    hourlyRateNum > 0
+      ? hoursNum * hourlyRateNum
+      : 0;
+
+  // When user switches to hourly or changes currency, suggest the default
+  // rate for the chosen currency — but only when the field is empty so we
+  // never clobber a rate the user typed themselves.
+  useEffect(() => {
+    if (!isHourly) return;
+    if (hourlyRate.trim()) return;
+    const def = defaultHourlyRate(currency);
+    if (def != null) setHourlyRate(String(def));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHourly, currency]);
 
   const buildTemplate = (): PaymentTemplate | null => {
     const preset = PRESET_TEMPLATE_OPTIONS.find((p) => p.id === presetId);
@@ -101,19 +138,27 @@ export function ApplyTemplateDialog({
     if (preset.template) return preset.template;
     if (preset.id === 'monthly') return { kind: 'monthly', months };
     if (preset.id === 'quarterly') return { kind: 'quarterly', quarters };
+    if (preset.id === 'hourly') {
+      if (!Number.isFinite(hoursNum) || hoursNum <= 0) return null;
+      if (!Number.isFinite(hourlyRateNum) || hourlyRateNum <= 0) return null;
+      return { kind: 'hourly', hours: hoursNum, rate: hourlyRateNum };
+    }
     return null;
   };
 
-  const totalNum = Number(totalAmount);
+  const effectiveTotal = isHourly ? hourlyTotal : Number(totalAmount);
   const validParams =
-    Number.isFinite(totalNum) && totalNum > 0 && currency.trim() && startDate.trim();
+    Number.isFinite(effectiveTotal) &&
+    effectiveTotal > 0 &&
+    currency.trim() &&
+    startDate.trim();
 
   const preview = useMemo(() => {
     const template = buildTemplate();
     if (!template || !validParams) return null;
     try {
       return expandToSlots(template, {
-        totalAmount: totalNum,
+        totalAmount: effectiveTotal,
         currency: currency.trim().toUpperCase(),
         startDate,
       });
@@ -121,16 +166,20 @@ export function ApplyTemplateDialog({
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [presetId, months, quarters, totalAmount, currency, startDate]);
+  }, [presetId, months, quarters, totalAmount, currency, startDate, hours, hourlyRate]);
 
   const handleApply = async () => {
     const template = buildTemplate();
     if (!template) {
-      toast.error('Pick a template');
+      toast.error(isHourly ? 'Enter hours and hourly rate' : 'Pick a template');
       return;
     }
     if (!validParams) {
-      toast.error('Fill total amount, currency and start date');
+      toast.error(
+        isHourly
+          ? 'Fill hours, hourly rate, currency and start date'
+          : 'Fill total amount, currency and start date'
+      );
       return;
     }
     setSubmitting(true);
@@ -141,7 +190,7 @@ export function ApplyTemplateDialog({
         body: JSON.stringify({
           projectId,
           template,
-          totalAmount: totalNum,
+          totalAmount: effectiveTotal,
           currency: currency.trim().toUpperCase(),
           startDate,
         }),
@@ -223,31 +272,79 @@ export function ApplyTemplateDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-2 col-span-2">
-              <Label htmlFor="total">Total amount</Label>
-              <Input
-                id="total"
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                value={totalAmount}
-                onChange={(e) => setTotalAmount(e.target.value)}
-                placeholder="50000"
-              />
+          {isHourly ? (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-2">
+                  <Label htmlFor="hours">Hours</Label>
+                  <Input
+                    id="hours"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.25"
+                    value={hours}
+                    onChange={(e) => setHours(e.target.value)}
+                    placeholder="20"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="rate">Hourly rate</Label>
+                  <Input
+                    id="rate"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={hourlyRate}
+                    onChange={(e) => setHourlyRate(e.target.value)}
+                    placeholder="50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currency">Currency</Label>
+                  <Input
+                    id="currency"
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="uppercase"
+                    maxLength={3}
+                  />
+                </div>
+              </div>
+              {hourlyTotal > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  Total: {formatAmount(hourlyTotal, currency.trim().toUpperCase() || 'INR')}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="total">Total amount</Label>
+                <Input
+                  id="total"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={totalAmount}
+                  onChange={(e) => setTotalAmount(e.target.value)}
+                  placeholder="50000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="currency">Currency</Label>
+                <Input
+                  id="currency"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="uppercase"
+                  maxLength={3}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="currency">Currency</Label>
-              <Input
-                id="currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="uppercase"
-                maxLength={3}
-              />
-            </div>
-          </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="start">Start date</Label>
