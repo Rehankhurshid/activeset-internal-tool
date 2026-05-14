@@ -130,6 +130,15 @@ export interface PricingItem {
     name: string;
     price: string;
     description?: string; // Rich text/markdown support
+    /**
+     * When set, this line item is billed hourly. `price` is computed as
+     * `hours * rate` and kept in sync so totals/exports still work; the UI
+     * shows hours + rate fields instead of a flat price input.
+     */
+    hourly?: {
+        hours: number;
+        rate: number;
+    };
 }
 
 export interface PricingSection {

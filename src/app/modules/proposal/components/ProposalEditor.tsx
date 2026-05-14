@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Trash2, Save, Loader2, Settings, X, ImageIcon, Upload, FileText, AlertTriangle, Sparkles, ChevronDown, ChevronUp, GripVertical, History, Lock, Menu } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Trash2, Save, Loader2, Settings, X, ImageIcon, Upload, FileText, AlertTriangle, Sparkles, ChevronDown, ChevronUp, GripVertical, History, Lock, Menu, Clock } from "lucide-react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -745,20 +746,20 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
       const updatedItems = prev.data.pricing.items.map((item, i) =>
         i === index ? { ...item, [field]: value } : item
       );
-      
+
       // Auto-calculate total from all items
       const currency = prev.data.pricing.currency || 'USD';
       const total = updatedItems.reduce((sum, item) => {
         const priceValue = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
         return sum + priceValue;
       }, 0);
-      
+
       // Format total with currency
       const currencySymbol = getCurrencySymbol(currency);
-      const formattedTotal = total > 0 
+      const formattedTotal = total > 0
         ? `${currencySymbol} ${total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
         : '';
-      
+
       return {
         ...prev,
         data: {
@@ -769,6 +770,81 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
             total: formattedTotal
           }
         }
+      };
+    });
+  };
+
+  const recomputeTotal = (items: { price: string }[], currency: string) => {
+    const total = items.reduce((sum, item) => {
+      const priceValue = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
+      return sum + priceValue;
+    }, 0);
+    const currencySymbol = getCurrencySymbol(currency);
+    return total > 0
+      ? `${currencySymbol} ${total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+      : '';
+  };
+
+  const defaultHourlyRateForCurrency = (currency: string): number => {
+    const c = (currency || '').toUpperCase();
+    if (c === 'INR') return 3000;
+    return 50; // USD / fallback
+  };
+
+  const toggleHourlyPricingItem = (index: number, enabled: boolean) => {
+    setFormData(prev => {
+      const currency = prev.data.pricing.currency || 'USD';
+      const updatedItems = prev.data.pricing.items.map((item, i) => {
+        if (i !== index) return item;
+        if (enabled) {
+          // Seed: rate adopts the existing price (or currency default). Hours
+          // start at 0 — i.e. rate-card mode — so the item shows as
+          // "{rate}/hr" without inflating the proposal total. The user can
+          // bump hours later if the engagement has a defined scope.
+          const existing = parseFloat(item.price.replace(/[^\d.-]/g, '')) || 0;
+          const rate = existing > 0 ? existing : defaultHourlyRateForCurrency(currency);
+          return { ...item, hourly: { hours: 0, rate }, price: '' };
+        }
+        // Disabling — drop hourly metadata; keep current price field as-is.
+        const rest = { ...item };
+        delete rest.hourly;
+        return rest;
+      });
+      return {
+        ...prev,
+        data: {
+          ...prev.data,
+          pricing: {
+            ...prev.data.pricing,
+            items: updatedItems,
+            total: recomputeTotal(updatedItems, currency),
+          },
+        },
+      };
+    });
+  };
+
+  const updateHourlyPricingItem = (index: number, field: 'hours' | 'rate', value: number) => {
+    setFormData(prev => {
+      const currency = prev.data.pricing.currency || 'USD';
+      const updatedItems = prev.data.pricing.items.map((item, i) => {
+        if (i !== index || !item.hourly) return item;
+        const nextHourly = { ...item.hourly, [field]: value };
+        const h = Number.isFinite(nextHourly.hours) ? nextHourly.hours : 0;
+        const r = Number.isFinite(nextHourly.rate) ? nextHourly.rate : 0;
+        const computed = h > 0 && r > 0 ? Math.round(h * r * 100) / 100 : 0;
+        return { ...item, hourly: nextHourly, price: computed > 0 ? String(computed) : '' };
+      });
+      return {
+        ...prev,
+        data: {
+          ...prev.data,
+          pricing: {
+            ...prev.data.pricing,
+            items: updatedItems,
+            total: recomputeTotal(updatedItems, currency),
+          },
+        },
       };
     });
   };
@@ -1980,23 +2056,62 @@ Example:
                           onChange={(e) => updatePricingItem(index, 'name', e.target.value)}
                           className="flex-1"
                         />
-                        <div className="flex items-center gap-2 w-full sm:w-40">
-                          <span className="text-muted-foreground text-sm whitespace-nowrap">
-                            {getCurrencySymbol(formData.data.pricing.currency)}
-                          </span>
-                          <Input
-                            type="number"
-                            placeholder="0"
-                            value={item.price.replace(/[^\d.-]/g, '')}
-                            onChange={(e) => {
-                              const numericValue = e.target.value.replace(/[^\d.-]/g, '');
-                              updatePricingItem(index, 'price', numericValue);
-                            }}
-                            className="flex-1"
-                            min="0"
-                            step="0.01"
-                          />
-                        </div>
+                        {item.hourly ? (
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <div className="flex items-center gap-1.5">
+                              <Input
+                                type="number"
+                                placeholder="Hours"
+                                value={item.hourly.hours || ''}
+                                onChange={(e) => {
+                                  const v = Number(e.target.value);
+                                  updateHourlyPricingItem(index, 'hours', Number.isFinite(v) ? v : 0);
+                                }}
+                                className="w-20"
+                                min="0"
+                                step="0.25"
+                              />
+                              <span className="text-muted-foreground text-xs">h</span>
+                            </div>
+                            <span className="text-muted-foreground text-xs">×</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-muted-foreground text-sm whitespace-nowrap">
+                                {getCurrencySymbol(formData.data.pricing.currency)}
+                              </span>
+                              <Input
+                                type="number"
+                                placeholder="Rate"
+                                value={item.hourly.rate || ''}
+                                onChange={(e) => {
+                                  const v = Number(e.target.value);
+                                  updateHourlyPricingItem(index, 'rate', Number.isFinite(v) ? v : 0);
+                                }}
+                                className="w-24"
+                                min="0"
+                                step="0.01"
+                              />
+                              <span className="text-muted-foreground text-xs whitespace-nowrap">/hr</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 w-full sm:w-40">
+                            <span className="text-muted-foreground text-sm whitespace-nowrap">
+                              {getCurrencySymbol(formData.data.pricing.currency)}
+                            </span>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              value={item.price.replace(/[^\d.-]/g, '')}
+                              onChange={(e) => {
+                                const numericValue = e.target.value.replace(/[^\d.-]/g, '');
+                                updatePricingItem(index, 'price', numericValue);
+                              }}
+                              className="flex-1"
+                              min="0"
+                              step="0.01"
+                            />
+                          </div>
+                        )}
                         {formData.data.pricing.items.length > 1 && (
                           <Button
                             variant="outline"
@@ -2006,6 +2121,24 @@ Example:
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <Switch
+                            checked={Boolean(item.hourly)}
+                            onCheckedChange={(v) => toggleHourlyPricingItem(index, Boolean(v))}
+                          />
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Clock className="w-3 h-3" />
+                            Hourly
+                          </span>
+                        </label>
+                        {item.hourly && item.price && (
+                          <span className="text-muted-foreground tabular-nums">
+                            Total: {getCurrencySymbol(formData.data.pricing.currency)}{' '}
+                            {Number(item.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                          </span>
                         )}
                       </div>
                       {/* <Textarea

@@ -223,10 +223,24 @@ export default function ProposalViewer({ proposal, onBack = () => { }, isPublic 
     return `${proposal.title} by ${proposal.agencyName}`;
   };
 
+  const formatPricingItemLabel = (item: { name: string; price: string; hourly?: { hours: number; rate: number } }): string => {
+    if (item.hourly) {
+      const { hours, rate } = item.hourly;
+      const cur = (proposal.data.pricing.currency || 'USD').toUpperCase();
+      const sym = cur === 'INR' ? '₹' : cur === 'EUR' ? '€' : cur === 'GBP' ? '£' : cur === 'JPY' ? '¥' : '$';
+      if (hours > 0) {
+        const total = (hours * rate).toLocaleString('en-US', { maximumFractionDigits: 2 });
+        return `${hours}h × ${sym}${rate}/hr = ${sym}${total}`;
+      }
+      return `${sym}${rate.toLocaleString('en-US', { maximumFractionDigits: 2 })}/hr`;
+    }
+    return item.price;
+  };
+
   const getPlainTextBody = () => {
     const shareUrl = getShareUrl();
     const pricingLines = proposal.data.pricing.items
-      .map(item => `  • ${item.name}: ${item.price}`)
+      .map(item => `  • ${item.name}: ${formatPricingItemLabel(item)}`)
       .join('\n');
     const timelinePhases = proposal.data.timeline.phases
       .map(p => p.title)
@@ -277,7 +291,7 @@ ${proposal.agencyName}`;
   
   <p><strong>💰 Pricing Summary</strong></p>
   <ul style="margin: 0; padding-left: 20px;">
-    ${pricingItems.map(item => `<li><strong>${item.name}:</strong> ${item.price}</li>`).join('\n    ')}
+    ${pricingItems.map(item => `<li><strong>${item.name}:</strong> ${formatPricingItemLabel(item)}</li>`).join('\n    ')}
   </ul>
   <p style="margin-top: 8px;"><strong>Total: ${proposal.data.pricing.total}</strong></p>
   
@@ -674,13 +688,34 @@ ${proposal.agencyName}`;
                       </div>
 
                       <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {proposal.data.pricing.items.map((item, index) => (
+                        {proposal.data.pricing.items.map((item, index) => {
+                          const currencySymbol = (() => {
+                            const c = (proposal.data.pricing.currency || 'USD').toUpperCase();
+                            if (c === 'INR') return '₹';
+                            if (c === 'EUR') return '€';
+                            if (c === 'GBP') return '£';
+                            if (c === 'JPY') return '¥';
+                            if (c === 'CHF') return 'CHF';
+                            return '$';
+                          })();
+                          const hourly = item.hourly;
+                          const priceLabel = hourly
+                            ? (hourly.hours > 0
+                                ? `${currencySymbol} ${(hourly.hours * hourly.rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+                                : `${currencySymbol} ${hourly.rate.toLocaleString('en-US', { maximumFractionDigits: 2 })}/hr`)
+                            : item.price;
+                          return (
                           <div key={index} className="break-inside-avoid">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                               <div style={{ flex: 1 }}>
                                 <h4 style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>{item.name}</h4>
+                                {hourly && hourly.hours > 0 && (
+                                  <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '2px' }}>
+                                    {hourly.hours}h × {currencySymbol} {hourly.rate.toLocaleString('en-US', { maximumFractionDigits: 2 })}/hr
+                                  </div>
+                                )}
                               </div>
-                              <div style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>{item.price}</div>
+                              <div style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>{priceLabel}</div>
                             </div>
                             {item.description && (
                               <div
@@ -697,7 +732,8 @@ ${proposal.agencyName}`;
                               <hr style={{ marginTop: '16px', border: 'none', borderTop: '1px solid #e5e7eb' }} />
                             )}
                           </div>
-                        ))}
+                          );
+                        })}
 
                         <hr style={{ border: 'none', borderTop: '1px solid #d1d5db' }} />
 

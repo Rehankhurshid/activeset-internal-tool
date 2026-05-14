@@ -118,10 +118,24 @@ export default function LivePreview({ proposal }: LivePreviewProps) {
                                             </div>
                                         </div>
                                         <div className="p-6 space-y-4">
-                                            {proposal.data.pricing.items.filter(i => i.name).map((item, idx) => (
+                                            {proposal.data.pricing.items.filter(i => i.name).map((item, idx) => {
+                                                const cur = (proposal.data.pricing.currency || 'USD').toUpperCase();
+                                                const sym = cur === 'INR' ? '₹' : cur === 'EUR' ? '€' : cur === 'GBP' ? '£' : cur === 'JPY' ? '¥' : '$';
+                                                const hourly = item.hourly;
+                                                const priceLabel = hourly
+                                                    ? (hourly.hours > 0
+                                                        ? `${sym} ${(hourly.hours * hourly.rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+                                                        : `${sym} ${hourly.rate.toLocaleString('en-US', { maximumFractionDigits: 2 })}/hr`)
+                                                    : item.price;
+                                                return (
                                                 <div key={idx} className="flex justify-between items-start">
                                                     <div className="flex-1">
                                                         <h4 className="text-lg font-semibold text-gray-900">{item.name}</h4>
+                                                        {hourly && hourly.hours > 0 && (
+                                                            <div className="text-xs text-gray-500 mt-0.5">
+                                                                {hourly.hours}h × {sym} {hourly.rate.toLocaleString('en-US', { maximumFractionDigits: 2 })}/hr
+                                                            </div>
+                                                        )}
                                                         {item.description && (
                                                             <div
                                                                 className="text-sm text-gray-500 mt-1"
@@ -129,9 +143,10 @@ export default function LivePreview({ proposal }: LivePreviewProps) {
                                                             />
                                                         )}
                                                     </div>
-                                                    <div className="text-lg font-semibold text-gray-900 ml-8">{item.price}</div>
+                                                    <div className="text-lg font-semibold text-gray-900 ml-8">{priceLabel}</div>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                         {proposal.data.pricing.total && (
                                             <div className="bg-blue-600 px-6 py-4 flex justify-between items-center">
