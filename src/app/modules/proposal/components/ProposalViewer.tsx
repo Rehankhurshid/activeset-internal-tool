@@ -699,11 +699,16 @@ ${proposal.agencyName}`;
                             return '$';
                           })();
                           const hourly = item.hourly;
+                          const formatMoney = (n: number) =>
+                            `${currencySymbol} ${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+                          const numericPrice = Number(item.price.replace(/[^\d.-]/g, ''));
                           const priceLabel = hourly
                             ? (hourly.hours > 0
-                                ? `${currencySymbol} ${(hourly.hours * hourly.rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-                                : `${currencySymbol} ${hourly.rate.toLocaleString('en-US', { maximumFractionDigits: 2 })}/hr`)
-                            : item.price;
+                                ? formatMoney(hourly.hours * hourly.rate)
+                                : `${formatMoney(hourly.rate)}/hr`)
+                            : (Number.isFinite(numericPrice) && numericPrice > 0
+                                ? formatMoney(numericPrice)
+                                : item.price);
                           return (
                           <div key={index} className="break-inside-avoid">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -737,10 +742,35 @@ ${proposal.agencyName}`;
 
                         <hr style={{ border: 'none', borderTop: '1px solid #d1d5db' }} />
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px' }}>
-                          <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Total</h3>
-                          <div style={{ fontSize: '24px', fontWeight: 700, color: '#111827' }}>{proposal.data.pricing.total}</div>
-                        </div>
+                        {(() => {
+                          const rateCardItems = proposal.data.pricing.items.filter(
+                            (i) => i.hourly && i.hourly.hours === 0
+                          );
+                          const hasFixedScope = proposal.data.pricing.items.some(
+                            (i) => !i.hourly || (i.hourly && i.hourly.hours > 0)
+                          );
+                          return (
+                            <div style={{ paddingTop: '8px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>
+                                  {rateCardItems.length > 0 && hasFixedScope ? 'Fixed scope total' : 'Total'}
+                                </h3>
+                                <div style={{ fontSize: '24px', fontWeight: 700, color: '#111827' }}>
+                                  {proposal.data.pricing.total || '—'}
+                                </div>
+                              </div>
+                              {rateCardItems.length > 0 && (
+                                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '6px', textAlign: 'right' }}>
+                                  + hourly billing for{' '}
+                                  {rateCardItems
+                                    .map((i) => i.name || 'additional work')
+                                    .join(', ')}{' '}
+                                  — billed at the rate above, scope TBD
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

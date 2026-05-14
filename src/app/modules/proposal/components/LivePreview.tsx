@@ -122,11 +122,15 @@ export default function LivePreview({ proposal }: LivePreviewProps) {
                                                 const cur = (proposal.data.pricing.currency || 'USD').toUpperCase();
                                                 const sym = cur === 'INR' ? '₹' : cur === 'EUR' ? '€' : cur === 'GBP' ? '£' : cur === 'JPY' ? '¥' : '$';
                                                 const hourly = item.hourly;
+                                                const numericPrice = Number(item.price.replace(/[^\d.-]/g, ''));
+                                                const fmt = (n: number) => `${sym} ${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
                                                 const priceLabel = hourly
                                                     ? (hourly.hours > 0
-                                                        ? `${sym} ${(hourly.hours * hourly.rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-                                                        : `${sym} ${hourly.rate.toLocaleString('en-US', { maximumFractionDigits: 2 })}/hr`)
-                                                    : item.price;
+                                                        ? fmt(hourly.hours * hourly.rate)
+                                                        : `${fmt(hourly.rate)}/hr`)
+                                                    : (Number.isFinite(numericPrice) && numericPrice > 0
+                                                        ? fmt(numericPrice)
+                                                        : item.price);
                                                 return (
                                                 <div key={idx} className="flex justify-between items-start">
                                                     <div className="flex-1">
@@ -148,12 +152,26 @@ export default function LivePreview({ proposal }: LivePreviewProps) {
                                                 );
                                             })}
                                         </div>
-                                        {proposal.data.pricing.total && (
-                                            <div className="bg-blue-600 px-6 py-4 flex justify-between items-center">
-                                                <span className="text-lg font-semibold text-white">Total Investment</span>
-                                                <span className="text-2xl font-bold text-white">{proposal.data.pricing.total}</span>
-                                            </div>
-                                        )}
+                                        {(() => {
+                                            const rateCardItems = proposal.data.pricing.items.filter(i => i.hourly && i.hourly.hours === 0);
+                                            const hasFixedScope = proposal.data.pricing.items.some(i => !i.hourly || (i.hourly && i.hourly.hours > 0));
+                                            if (!proposal.data.pricing.total && rateCardItems.length === 0) return null;
+                                            return (
+                                                <div className="bg-blue-600 px-6 py-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-lg font-semibold text-white">
+                                                            {rateCardItems.length > 0 && hasFixedScope ? 'Fixed scope total' : 'Total Investment'}
+                                                        </span>
+                                                        <span className="text-2xl font-bold text-white">{proposal.data.pricing.total || '—'}</span>
+                                                    </div>
+                                                    {rateCardItems.length > 0 && (
+                                                        <div className="text-xs text-white/80 mt-1 text-right">
+                                                            + hourly billing for {rateCardItems.map(i => i.name || 'additional work').join(', ')}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             </section>
