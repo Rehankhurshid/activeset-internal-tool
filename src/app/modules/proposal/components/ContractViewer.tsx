@@ -22,6 +22,11 @@ import { toast } from 'sonner';
 const SignatureSection = dynamic(() => import('./SignatureSection'), { ssr: false });
 const AgencySignatureDialog = dynamic(() => import('./AgencySignatureDialog'), { ssr: false });
 
+// Match the proposal viewer typography. next/font emits hashed family names,
+// so the CSS variables (declared in layout.tsx) are the only reliable handle.
+const FONT_TITLE = "var(--font-funnel-display), 'Funnel Display', system-ui, sans-serif";
+const FONT_BODY = "var(--font-funnel-sans), 'Funnel Sans', system-ui, sans-serif";
+
 interface ContractViewerProps {
     proposal: Proposal;
     onBack?: () => void;
@@ -225,7 +230,8 @@ export default function ContractViewer({
             <style
                 dangerouslySetInnerHTML={{
                     __html: `
-            .contract-body { font-family: Georgia, 'Times New Roman', serif; }
+            .contract-body { font-family: ${FONT_BODY}; }
+            .contract-body h1, .contract-body h2, .contract-heading { font-family: ${FONT_TITLE}; }
             .contract-clause ul { list-style: disc; padding-left: 1.5rem; margin: 0.5rem 0; }
             .contract-clause ol { list-style: decimal; padding-left: 1.5rem; margin: 0.5rem 0; }
             .contract-clause li { margin-bottom: 0.4rem; line-height: 1.7; }
@@ -273,7 +279,7 @@ export default function ContractViewer({
                                 <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">
                                     Prepared for
                                 </p>
-                                <p className="font-semibold text-gray-900">
+                                <p className="contract-heading font-semibold text-gray-900">
                                     {contract.client.legalName || '________________'}
                                 </p>
                                 <p className="text-sm text-gray-600 whitespace-pre-line">
@@ -289,7 +295,7 @@ export default function ContractViewer({
                                 <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">
                                     Prepared by
                                 </p>
-                                <p className="font-semibold text-gray-900">
+                                <p className="contract-heading font-semibold text-gray-900">
                                     {contract.agency.legalName}
                                 </p>
                                 <p className="text-sm text-gray-600 whitespace-pre-line">
@@ -372,7 +378,7 @@ export default function ContractViewer({
 
                         {/* Signature block */}
                         <div className="mt-12 pt-8 border-t-2 border-gray-300 contract-sig-block">
-                            <p className="font-bold text-gray-900 mb-1">
+                            <p className="contract-heading font-bold text-gray-900 mb-1">
                                 IN WITNESS WHEREOF
                             </p>
                             <p className="text-sm text-gray-600 mb-8">
@@ -400,7 +406,7 @@ export default function ContractViewer({
                                     <p className="text-[11px] uppercase tracking-wide text-gray-400">
                                         The Client
                                     </p>
-                                    <p className="font-semibold text-gray-900">
+                                    <p className="contract-heading font-semibold text-gray-900">
                                         {contract.client.signatoryName ||
                                             sig.client.name ||
                                             '________________'}
@@ -458,7 +464,7 @@ export default function ContractViewer({
                                     <p className="text-[11px] uppercase tracking-wide text-gray-400">
                                         The Agency
                                     </p>
-                                    <p className="font-semibold text-gray-900">
+                                    <p className="contract-heading font-semibold text-gray-900">
                                         {contract.agency.signatoryName ||
                                             sig.agency.name ||
                                             '________________'}
