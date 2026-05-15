@@ -3,7 +3,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, Share2, Trash2, Loader2, MoreVertical, XCircle, RotateCcw } from "lucide-react";
+import { Eye, Pencil, Share2, Trash2, Loader2, MoreVertical, XCircle, RotateCcw, ScrollText, Lock, LockOpen } from "lucide-react";
+import { computeLockInEnd, formatContractDate } from "../lib/contractTemplate";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -55,14 +56,32 @@ export default function ProposalCard({
 
     const viewCount = proposal.viewCount ?? 0;
 
+    const isContract = proposal.documentType === 'contract';
+    const contract = proposal.data.contract;
+    const lockInEnd =
+        isContract && contract && contract.lockInMonths > 0
+            ? computeLockInEnd(contract.effectiveDate, contract.lockInMonths)
+            : null;
+    const lockActive = lockInEnd
+        ? new Date(lockInEnd + 'T00:00:00').getTime() > Date.now()
+        : false;
+
     return (
         <Card className="group bg-card hover:shadow-lg transition-all duration-200 border-border/50 hover:border-border overflow-hidden">
             <CardContent className="p-4">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2 mb-3">
-                    <Badge variant="outline" className={`text-xs ${getStatusColor(proposal.status)}`}>
-                        {proposal.status}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className={`text-xs ${getStatusColor(proposal.status)}`}>
+                            {proposal.status}
+                        </Badge>
+                        {isContract && (
+                            <Badge variant="outline" className="text-xs gap-1 border-indigo-200 bg-indigo-50 text-indigo-700">
+                                <ScrollText className="w-3 h-3" />
+                                Contract
+                            </Badge>
+                        )}
+                    </div>
                     <span className="text-xs text-muted-foreground">{formatDate(proposal.updatedAt)}</span>
                 </div>
 
@@ -78,6 +97,29 @@ export default function ProposalCard({
                 <p className="text-sm text-muted-foreground truncate">
                     {proposal.clientName}
                 </p>
+
+                {/* Lock-in status (contracts only) */}
+                {lockInEnd && (
+                    <div
+                        className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded text-xs ${
+                            lockActive
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-green-50 text-green-700'
+                        }`}
+                    >
+                        {lockActive ? (
+                            <>
+                                <Lock className="w-3 h-3" />
+                                Locked until {formatContractDate(lockInEnd)}
+                            </>
+                        ) : (
+                            <>
+                                <LockOpen className="w-3 h-3" />
+                                Lock-in ended
+                            </>
+                        )}
+                    </div>
+                )}
 
                 {/* Created By */}
                 {proposal.createdBy && (

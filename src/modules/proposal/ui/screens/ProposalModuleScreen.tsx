@@ -5,10 +5,13 @@ import { Toaster, toast } from 'sonner';
 import Dashboard from '@/app/modules/proposal/components/Dashboard';
 import ProposalEditor from '@/app/modules/proposal/components/ProposalEditor';
 import ProposalViewer from '@/app/modules/proposal/components/ProposalViewer';
+import ContractEditor from '@/app/modules/proposal/components/ContractEditor';
+import ContractViewer from '@/app/modules/proposal/components/ContractViewer';
 import LoadingScreen from '@/app/modules/proposal/components/LoadingScreen';
 import NewProposalWizard from '@/app/modules/proposal/components/NewProposalWizard';
 import { proposalService } from '@/app/modules/proposal/services/ProposalService';
 import { templateService } from '@/app/modules/proposal/services/TemplateService';
+import { buildBlankContract } from '@/app/modules/proposal/lib/contractTemplate';
 import { Proposal, ProposalTemplate, ViewType } from '@/app/modules/proposal/types/Proposal';
 import { useModuleAccess, useAuth } from '@/modules/auth-access';
 import { Button } from '@/components/ui/button';
@@ -119,6 +122,12 @@ export default function ProposalPage() {
 
     const handleCreateProposal = () => {
         setWizardOpen(true);
+    };
+
+    const handleCreateContract = () => {
+        setEditingTemplate(null);
+        setSelectedProposal(buildBlankContract({ agencyName: 'ActiveSet' }));
+        setCurrentView('editor');
     };
 
     const handleWizardCreate = (draft: Proposal) => {
@@ -324,15 +333,24 @@ export default function ProposalPage() {
 
         return (
             <>
-                <ProposalEditor
-                    proposal={selectedProposal}
-                    editingTemplate={editingTemplate}
-                    onSave={handleSaveProposal}
-                    onSaveAsTemplate={handleSaveAsTemplate}
-                    onDeleteTemplate={handleDeleteEditingTemplate}
-                    onCancel={handleEditorCancel}
-                    loading={actionLoading === 'saving'}
-                />
+                {selectedProposal?.documentType === 'contract' ? (
+                    <ContractEditor
+                        proposal={selectedProposal}
+                        onSave={handleSaveProposal}
+                        onCancel={handleEditorCancel}
+                        loading={actionLoading === 'saving'}
+                    />
+                ) : (
+                    <ProposalEditor
+                        proposal={selectedProposal}
+                        editingTemplate={editingTemplate}
+                        onSave={handleSaveProposal}
+                        onSaveAsTemplate={handleSaveAsTemplate}
+                        onDeleteTemplate={handleDeleteEditingTemplate}
+                        onCancel={handleEditorCancel}
+                        loading={actionLoading === 'saving'}
+                    />
+                )}
                 <Toaster />
             </>
         );
@@ -341,10 +359,17 @@ export default function ProposalPage() {
     if (currentView === 'viewer' && selectedProposal) {
         return (
             <>
-                <ProposalViewer
-                    proposal={selectedProposal}
-                    onBack={() => setCurrentView('dashboard')}
-                />
+                {selectedProposal.documentType === 'contract' ? (
+                    <ContractViewer
+                        proposal={selectedProposal}
+                        onBack={() => setCurrentView('dashboard')}
+                    />
+                ) : (
+                    <ProposalViewer
+                        proposal={selectedProposal}
+                        onBack={() => setCurrentView('dashboard')}
+                    />
+                )}
                 <Toaster />
             </>
         );
@@ -366,6 +391,7 @@ export default function ProposalPage() {
                 templates={templates}
                 actionLoading={actionLoading}
                 onCreateProposal={handleCreateProposal}
+                onCreateContract={handleCreateContract}
                 onCreateFromTemplate={handleCreateFromTemplate}
                 onEditTemplate={handleEditTemplate}
                 onDeleteTemplate={handleDeleteTemplate}

@@ -5,6 +5,7 @@ import { db as adminDb } from '@/lib/firebase-admin';
 import { db as clientDb } from '@/lib/firebase';
 import { Proposal } from '@/app/modules/proposal/types/Proposal';
 import ProposalViewer from '@/app/modules/proposal/components/ProposalViewer';
+import ContractViewer from '@/app/modules/proposal/components/ContractViewer';
 import TrackProposalView from '@/app/modules/proposal/components/TrackProposalView';
 
 interface PageProps {
@@ -39,10 +40,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
 
+  const isContract = proposal.documentType === 'contract';
   const title = `${proposal.clientName} · ${proposal.title}`;
   const plain = stripHtml(proposal.data.overview || '');
-  const description =
-    plain.length > 200
+  const description = isContract
+    ? `Retainer agreement between ${proposal.agencyName} and ${proposal.clientName}.`
+    : plain.length > 200
       ? plain.slice(0, 197).trimEnd() + '…'
       : plain || `Proposal from ${proposal.agencyName} for ${proposal.clientName}.`;
 
@@ -109,10 +112,11 @@ export default async function PublicProposalView({ params }: PageProps) {
   return (
     <>
       <TrackProposalView proposalId={proposal.id} />
-      <ProposalViewer
-        proposal={proposal}
-        isPublic
-      />
+      {proposal.documentType === 'contract' ? (
+        <ContractViewer proposal={proposal} isPublic />
+      ) : (
+        <ProposalViewer proposal={proposal} isPublic />
+      )}
     </>
   );
 }

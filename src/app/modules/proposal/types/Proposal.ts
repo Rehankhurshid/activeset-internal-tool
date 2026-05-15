@@ -10,6 +10,56 @@ export type ProposalSectionId =
     | 'signatures'
     | 'general';
 
+// Whether a record is a sales proposal or a legal contract. Missing/undefined
+// is treated as 'proposal' so every pre-existing record keeps working.
+export type DocumentType = 'proposal' | 'contract';
+
+// A party to the contract (the agreement is between the client and the agency).
+export interface ContractParty {
+    legalName: string;       // Registered company name
+    address: string;         // Full address block (newlines preserved)
+    signatoryName: string;   // Person who signs on behalf of the party
+    signatoryTitle: string;  // Their title, e.g. "Partner"
+    email: string;
+}
+
+// One numbered legal section of the contract. `body` is rich-text HTML and is
+// editable per contract so wording can be negotiated.
+export interface ContractClause {
+    id: string;       // stable slug, e.g. 'scope', 'confidentiality'
+    heading: string;
+    body: string;     // HTML
+    /**
+     * When true the body is regenerated from structured fields (currently only
+     * the Term & lock-in clause) whenever those fields change, unless the user
+     * has manually edited it.
+     */
+    generated?: boolean;
+}
+
+export type BillingCycle = 'monthly' | 'quarterly' | 'annually';
+
+export interface ContractData {
+    client: ContractParty;
+    agency: ContractParty;
+    effectiveDate: string;   // ISO YYYY-MM-DD — contract commencement date
+    retainer: {
+        amount: number;
+        currency: string;    // e.g. 'SGD', 'USD'
+        billingCycle: BillingCycle;
+    };
+    /**
+     * Minimum committed term in months. 0 means no lock-in. Stored structured
+     * so the dashboard can surface lock-in expiry, and used to (re)generate the
+     * Term clause text.
+     */
+    lockInMonths: number;
+    governingLawCountry: string;
+    jurisdictionCity: string;
+    /** Ordered legal sections rendered as the body of the agreement. */
+    clauses: ContractClause[];
+}
+
 // Comment types for Google Doc-style inline commenting
 export interface ProposalComment {
     id: string;
@@ -73,6 +123,9 @@ export interface Proposal {
         email: string;
         displayName?: string;
     };
+    // Missing/undefined => 'proposal'. Drives which editor/viewer is used and
+    // whether `data.contract` is present.
+    documentType?: DocumentType;
     title: string;
     clientName: string;
     agencyName: string;
@@ -113,7 +166,16 @@ export interface Proposal {
         };
         terms: string;
         signatures: {
-            agency: { name: string; email: string; signatureData?: string };
+            agency: {
+                name: string;
+                email: string;
+                signatureData?: string;
+                // Set when the agency counter-signs. A contract is only
+                // "fully executed" once both agency.signedAt and
+                // client.signedAt are present.
+                signedAt?: string;
+                signatureAudit?: SignatureAudit;
+            };
             client: {
                 name: string;
                 email: string;
@@ -123,6 +185,8 @@ export interface Proposal {
                 signatureAudit?: SignatureAudit;
             };
         };
+        // Present only when documentType === 'contract'.
+        contract?: ContractData;
     };
 }
 

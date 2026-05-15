@@ -24,6 +24,7 @@ interface DashboardProps {
     templates: ProposalTemplate[];
     actionLoading: string | null;
     onCreateProposal: () => void;
+    onCreateContract: () => void;
     onCreateFromTemplate: (template: ProposalTemplate) => void;
     onEditTemplate: (template: ProposalTemplate) => void;
     onDeleteTemplate: (templateId: string) => void;
@@ -39,6 +40,7 @@ export default function Dashboard({
     templates,
     actionLoading,
     onCreateProposal,
+    onCreateContract,
     onCreateFromTemplate,
     onEditTemplate,
     onDeleteTemplate,
@@ -66,12 +68,17 @@ export default function Dashboard({
                 case 'client':
                     res = a.clientName.localeCompare(b.clientName);
                     break;
-                case 'amount':
-                    // Remove currency symbols and commas for comparison
-                    const amountA = parseFloat(a.data.pricing.total.replace(/[^0-9.-]+/g, '')) || 0;
-                    const amountB = parseFloat(b.data.pricing.total.replace(/[^0-9.-]+/g, '')) || 0;
-                    res = amountA - amountB;
+                case 'amount': {
+                    // Contracts use the retainer amount; proposals use the pricing total.
+                    const amt = (p: Proposal) =>
+                        p.documentType === 'contract'
+                            ? p.data.contract?.retainer.amount || 0
+                            : parseFloat(
+                                  (p.data.pricing?.total || '').replace(/[^0-9.-]+/g, '')
+                              ) || 0;
+                    res = amt(a) - amt(b);
                     break;
+                }
             }
             return sortOrder === 'asc' ? res : -res;
         });
@@ -235,6 +242,10 @@ export default function Dashboard({
                                     <DropdownMenuItem onClick={onCreateProposal}>
                                         <Plus className="w-4 h-4 mr-2" />
                                         Blank Proposal
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={onCreateContract}>
+                                        <FileText className="w-4 h-4 mr-2" />
+                                        Retainer Contract
                                     </DropdownMenuItem>
 
                                     {templates.length > 0 && (

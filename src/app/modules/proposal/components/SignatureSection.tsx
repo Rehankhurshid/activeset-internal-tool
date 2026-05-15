@@ -16,6 +16,8 @@ import '@fontsource/sacramento';
 
 interface SignatureSectionProps {
     clientName: string;
+    /** Noun used in the signing UI copy, e.g. "Proposal" or "Contract". */
+    documentNoun?: string;
     existingSignature?: string;
     signedDocUrl?: string; // New prop for signed PDF link
     signedAt?: string;
@@ -116,6 +118,7 @@ const SIGNATURE_FONTS = [
 
 export default function SignatureSection({
     clientName,
+    documentNoun = 'Proposal',
     existingSignature,
     signedDocUrl,
     signedAt,
@@ -254,7 +257,7 @@ export default function SignatureSection({
                     </div>
                     <div>
                         <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#166534', margin: 0 }}>
-                            Proposal Approved
+                            {documentNoun} Approved
                         </h3>
                         <p style={{ fontSize: '14px', color: '#15803d', margin: 0 }}>
                             Signed by {clientName} on {new Date(signedAt).toLocaleDateString('en-US', {
@@ -310,7 +313,7 @@ export default function SignatureSection({
                             Awaiting Client Signature
                         </h3>
                         <p style={{ fontSize: '14px', color: '#a16207', margin: 0 }}>
-                            Share this proposal with {clientName} to get their approval.
+                            Share this {documentNoun.toLowerCase()} with {clientName} to get their approval.
                         </p>
                     </div>
                 </div>
@@ -324,7 +327,7 @@ export default function SignatureSection({
                 Sign to Approve
             </h3>
             <p className="text-sm text-blue-600 mb-6">
-                Please review the proposal above. When you are ready, choose your preferred signing method below.
+                Please review the {documentNoun.toLowerCase()} above. When you are ready, choose your preferred signing method below.
             </p>
 
             <Tabs defaultValue="draw" className="w-full" onValueChange={setActiveTab}>
@@ -432,7 +435,7 @@ export default function SignatureSection({
                         ) : (
                             <>
                                 <Check className="w-4 h-4 mr-2" />
-                                Approve Proposal
+                                Approve {documentNoun}
                             </>
                         )}
                     </Button>

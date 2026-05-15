@@ -492,6 +492,10 @@ class ProposalService {
                         agency: {
                             ...proposal.data.signatures.agency,
                             signatureData,
+                            // Records the agency counter-signature. For contracts
+                            // this is what marks the agency side as executed.
+                            signedAt: updatedAt,
+                            signatureAudit: { method: 'drawn' as const },
                         },
                     },
                 },
@@ -527,7 +531,12 @@ class ProposalService {
                     ...proposal.data,
                     signatures: {
                         ...proposal.data.signatures,
-                        agency: { ...proposal.data.signatures.agency, signatureData },
+                        agency: {
+                            ...proposal.data.signatures.agency,
+                            signatureData,
+                            signedAt: updatedAt,
+                            signatureAudit: { method: 'drawn' as const },
+                        },
                     },
                 },
             };
