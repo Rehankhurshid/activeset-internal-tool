@@ -466,6 +466,77 @@ class ProposalService {
 
 
 
+    /**
+     * Adds (or replaces) the agency's own counter-signature on a proposal from
+     * the portal. Unlike `updateProposal`, this is allowed even when the
+     * proposal is locked: a counter-signature is not a content edit, and the
+     * agency often signs after the client has already approved.
+     */
+    async signAsAgency(id: string, signatureData: string): Promise<Proposal> {
+        try {
+            const docRef = doc(db, this.COLLECTION_NAME, id);
+            const docSnap = await getDoc(docRef);
+
+            if (!docSnap.exists()) {
+                throw new Error('Proposal not found');
+            }
+
+            const proposal = docSnap.data() as Proposal;
+            const hadSignature = !!proposal.data.signatures.agency.signatureData;
+            const updatedAt = new Date().toISOString();
+
+            const writePayload = {
+                updatedAt,
+                data: {
+                    signatures: {
+                        agency: {
+                            ...proposal.data.signatures.agency,
+                            signatureData,
+                        },
+                    },
+                },
+            };
+
+            // Deep merge keeps client signature, analytics counters and all
+            // other proposal data untouched.
+            await Promise.all([
+                setDoc(docRef, writePayload, { merge: true }),
+                setDoc(doc(db, this.SHARED_COLLECTION, id), {
+                    ...writePayload,
+                    sharedAt: updatedAt,
+                }, { merge: true }),
+            ]);
+
+            const agency = proposal.data.signatures.agency;
+            historyService.recordEdit({
+                proposalId: id,
+                timestamp: updatedAt,
+                editorName: agency.name || 'Agency',
+                editorEmail: agency.email || '',
+                sectionChanged: 'signatures',
+                changeType: 'signed',
+                summary: hadSignature
+                    ? `Agency signature updated by ${agency.name || 'agency'}`
+                    : `Agency signature added by ${agency.name || 'agency'}`,
+            }).catch(err => console.error('Failed to record agency signature history:', err));
+
+            return {
+                ...proposal,
+                updatedAt,
+                data: {
+                    ...proposal.data,
+                    signatures: {
+                        ...proposal.data.signatures,
+                        agency: { ...proposal.data.signatures.agency, signatureData },
+                    },
+                },
+            };
+        } catch (error) {
+            console.error('Error saving agency signature:', error);
+            throw error;
+        }
+    }
+
     private async sendSignatureNotification(proposal: Proposal, signedAt: string): Promise<void> {
         try {
             const baseUrl = typeof window !== 'undefined'

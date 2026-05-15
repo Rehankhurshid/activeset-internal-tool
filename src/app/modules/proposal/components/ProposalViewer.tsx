@@ -11,6 +11,7 @@ import { toast } from "sonner";
 
 const DEFAULT_HERO = '/default-hero.png';
 const SignatureSection = dynamic(() => import("./SignatureSection"), { ssr: false });
+const AgencySignatureDialog = dynamic(() => import("./AgencySignatureDialog"), { ssr: false });
 const CommentSidebar = dynamic(() => import("./CommentSidebar"));
 
 // Font family constants
@@ -119,6 +120,7 @@ export default function ProposalViewer({ proposal, onBack = () => { }, isPublic 
   const [commentCount, setCommentCount] = useState(0);
   const [activeCommentSection, setActiveCommentSection] = useState<ProposalSectionId | undefined>(undefined);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [showAgencySignDialog, setShowAgencySignDialog] = useState(false);
 
   // Subscribe to comment count
   useEffect(() => {
@@ -1255,14 +1257,37 @@ ${proposal.agencyName}`;
                 <div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-12 pt-12">
                     <div>
-                      {/* Agency Signature if available - currently schema might not have it, but for completeness or if added later */}
-                      <div style={{ height: '80px', display: 'flex', alignItems: 'flex-end', marginBottom: '8px' }}>
+                      <div
+                        className="group"
+                        style={{ height: '80px', display: 'flex', alignItems: 'flex-end', marginBottom: '8px', position: 'relative' }}
+                      >
                         {currentProposal.data.signatures.agency.signatureData ? (
-                          <img
-                            src={currentProposal.data.signatures.agency.signatureData}
-                            alt="Agency Signature"
-                            style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain' }}
-                          />
+                          <>
+                            <img
+                              src={currentProposal.data.signatures.agency.signatureData}
+                              alt="Agency Signature"
+                              style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain' }}
+                            />
+                            {!isPublic && (
+                              <button
+                                type="button"
+                                data-html2canvas-ignore
+                                onClick={() => setShowAgencySignDialog(true)}
+                                className="no-print absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-2 py-1 rounded bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-400 shadow-sm flex items-center gap-1"
+                              >
+                                <PenLine className="w-3 h-3" /> Change
+                              </button>
+                            )}
+                          </>
+                        ) : !isPublic ? (
+                          <button
+                            type="button"
+                            data-html2canvas-ignore
+                            onClick={() => setShowAgencySignDialog(true)}
+                            className="no-print w-full h-full border-2 border-dashed border-slate-300 rounded-md flex items-center justify-center gap-2 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/40 transition-colors"
+                          >
+                            <PenLine className="w-4 h-4" /> Add your signature
+                          </button>
                         ) : null}
                       </div>
                       <div style={{ borderBottom: '1px solid #d1d5db', paddingBottom: '8px', marginBottom: '8px' }}>
@@ -1341,6 +1366,21 @@ ${proposal.agencyName}`;
             Sign Proposal Now
           </Button>
         </div>
+      )}
+
+      {/* Agency self-signing (portal only) */}
+      {!isPublic && (
+        <AgencySignatureDialog
+          open={showAgencySignDialog}
+          onOpenChange={setShowAgencySignDialog}
+          agencyName={currentProposal.data.signatures.agency.name}
+          hasExistingSignature={!!currentProposal.data.signatures.agency.signatureData}
+          onSave={async (signatureData) => {
+            const updated = await proposalService.signAsAgency(currentProposal.id, signatureData);
+            setCurrentProposal(updated);
+            toast.success('Your signature has been added to this proposal.');
+          }}
+        />
       )}
 
       {/* Comment Sidebar */}
