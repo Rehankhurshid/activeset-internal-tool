@@ -331,10 +331,10 @@ export const projectsService = {
     });
   },
 
-  // Update embedded-widget display flags
+  // Update embedded-widget settings
   async updateProjectWidgetFlags(
     projectId: string,
-    flags: { disableAuditBadge?: boolean; disableDropdown?: boolean }
+    flags: { disableAuditBadge?: boolean; disableDropdown?: boolean; enableSpellcheck?: boolean }
   ): Promise<void> {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {

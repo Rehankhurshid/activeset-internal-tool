@@ -113,6 +113,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const hasClickUp = !!project.clickupListId;
     const disableAuditBadge = project.disableAuditBadge === true;
     const disableDropdown = project.disableDropdown === true;
+    const spellcheckEnabled = project.enableSpellcheck !== false;
 
     const handleDelete = async () => {
         setIsDeleting(true);
@@ -146,6 +147,12 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const handleToggleDropdown = async () => {
         await projectsService.updateProjectWidgetFlags(project.id, {
             disableDropdown: !disableDropdown,
+        });
+    };
+
+    const handleSetSpellcheck = async (checked: boolean) => {
+        await projectsService.updateProjectWidgetFlags(project.id, {
+            enableSpellcheck: checked,
         });
     };
 
@@ -379,11 +386,11 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
 
-                            {/* Embedded widget display sub-menu */}
+                            {/* Embedded widget settings sub-menu */}
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
                                     <SlidersHorizontal className="mr-2 h-4 w-4" />
-                                    Widget Display
+                                    Widget Settings
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
                                     <DropdownMenuCheckboxItem
@@ -397,6 +404,12 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                         onCheckedChange={handleToggleDropdown}
                                     >
                                         Show links dropdown
+                                    </DropdownMenuCheckboxItem>
+                                    <DropdownMenuCheckboxItem
+                                        checked={spellcheckEnabled}
+                                        onCheckedChange={(checked) => handleSetSpellcheck(checked === true)}
+                                    >
+                                        Run spell checker
                                     </DropdownMenuCheckboxItem>
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>

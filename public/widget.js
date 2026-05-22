@@ -783,7 +783,9 @@
               typos.push('Check Unavailable');
           }
       } else {
-         typos.push('Skipped (Volume Limit)');
+         result.categories.spelling.status = 'info';
+         result.categories.spelling.score = 100;
+         result.categories.spelling.skippedReason = options.spellcheckReason || 'Disabled';
       }
 
       const uniqueTypos = [...new Set(typos)].slice(0, 10);
@@ -805,7 +807,7 @@
         result.categories.spelling.score = Math.max(0, 100 - (uniqueTypos.length * 5));
       } else if (uniqueTypos[0] === 'Skipped (Volume Limit)') {
          result.categories.spelling.status = 'info';
-         result.categories.spelling.issues = [{ word: 'Skipped: High Volume Folder' }];
+         result.categories.spelling.skippedReason = 'High Volume Folder';
          result.categories.spelling.score = 100; // Don't penalize
       } else if (uniqueTypos[0] === 'Check Unavailable') {
          result.categories.spelling.status = 'info';
@@ -1158,6 +1160,7 @@
           // Per-project display flags (set from the Project Dashboard)
           const disableAuditBadge = data.disableAuditBadge === true;
           const disableDropdown = data.disableDropdown === true;
+          this.projectSpellcheckEnabled = data.enableSpellcheck !== false;
           if (!disableAuditBadge) {
             this.initContentAudit(); // Auto-run audit on load
           }
@@ -1721,11 +1724,12 @@
        // Small delay to ensure DOM is ready
        setTimeout(async () => {
           try {
-             let enableSpellcheck = true;
+             let enableSpellcheck = this.projectSpellcheckEnabled !== false;
+             let spellcheckReason = enableSpellcheck ? '' : 'Disabled in Project Dashboard';
              const baseUrl = ContentQualityAuditor.getApiBaseUrl();
 
              // 1. Check Scan Eligibility (Cost Control)
-             if (this.config.projectId) {
+             if (this.config.projectId && enableSpellcheck) {
                  try {
                      const checkUrl = `${baseUrl}/api/audit-config`;
                      const res = await fetch(checkUrl, {
@@ -1734,12 +1738,15 @@
                          body: JSON.stringify({ projectId: this.config.projectId, url: window.location.href })
                      });
                      const data = await res.json();
-                     enableSpellcheck = data.enableSpellcheck;
+                     enableSpellcheck = data.enableSpellcheck !== false;
+                     if (!enableSpellcheck) {
+                        spellcheckReason = data.reason || 'Disabled';
+                     }
                  } catch (e) { console.warn('Audit Config Check Failed', e); }
              }
 
              // 2. Run Audit
-             const result = await ContentQualityAuditor.audit({ spellcheck: enableSpellcheck });
+             const result = await ContentQualityAuditor.audit({ spellcheck: enableSpellcheck, spellcheckReason });
              ContentQualityAuditor.highlightTypos(result.categories.spelling.issues);
              this.renderStandaloneResults(result);
              
@@ -1816,8 +1823,8 @@
        const esc = (value) => ContentQualityAuditor.escapeHtml(value);
        const rowKey = (name) => `cat-${name.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`;
        const renderRow = (icon, name, statusObj, detailsHtml = '') => {
-           let statusColor = statusObj.status === 'passed' ? '#10b981' : statusObj.status === 'warning' ? '#f59e0b' : '#ef4444';
-           let statusText = statusObj.status === 'passed' ? '✓ Passed' : 'Issues Found';
+           let statusColor = statusObj.status === 'passed' ? '#10b981' : statusObj.status === 'warning' ? '#f59e0b' : statusObj.status === 'info' ? '#60a5fa' : '#ef4444';
+           let statusText = statusObj.status === 'passed' ? '✓ Passed' : statusObj.status === 'info' ? (statusObj.skippedReason ? 'Skipped' : 'Info') : 'Issues Found';
            const hasDetails = Boolean(detailsHtml && detailsHtml.trim());
            const key = rowKey(name);
            
@@ -1881,6 +1888,8 @@
              (item) => `"${esc(item.label || item.match || '[word]')}" · <code>${esc(item.selector || 'unknown')}</code>`,
              14
            );
+       } else if (sp.skippedReason) {
+           spDetails = `<div class="detail-item">• ${esc(sp.skippedReason)}</div>`;
        } else if (sp.issues.length > 0) {
            spDetails = sp.issues
              .slice(0, 5)

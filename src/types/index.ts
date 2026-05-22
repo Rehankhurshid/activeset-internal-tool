@@ -60,6 +60,7 @@ export interface AuditResult {
       status: 'passed' | 'failed' | 'warning' | 'info';
       issues: { word: string; suggestion?: string }[];
       score: number;
+      skippedReason?: string;
     };
     readability: {
       status: 'passed' | 'failed' | 'warning' | 'info';
@@ -347,9 +348,10 @@ export interface Project {
   publicAuditShareToken?: string;
   publicAuditShareEnabled?: boolean;
   publicAuditShareUpdatedAt?: string;
-  // Embedded widget display flags
+  // Embedded widget settings
   disableAuditBadge?: boolean; // Hide the floating score badge on the right
   disableDropdown?: boolean; // Hide the bottom-right project-links dropdown
+  enableSpellcheck?: boolean; // Run the embedded widget spell checker. Defaults to true.
   // Persisted bulk image-scan job so progress survives page refresh.
   imageScanJob?: ImageScanJob;
   /** ClickUp list bound to this project. New tasks created in this list auto-import as

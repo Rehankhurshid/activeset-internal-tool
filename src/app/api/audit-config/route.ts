@@ -19,6 +19,13 @@ export async function POST(request: NextRequest) {
         const project = await projectsService.getProject(projectId);
         if (!project) return NextResponse.json({ enableSpellcheck: false }, { headers: corsHeaders });
 
+        if (project.enableSpellcheck === false) {
+            return NextResponse.json({
+                enableSpellcheck: false,
+                reason: 'Disabled in Project Dashboard',
+            }, { headers: corsHeaders });
+        }
+
         try {
             const parsedUrl = new URL(url);
             const pathSegments = parsedUrl.pathname.split('/').filter(Boolean);
