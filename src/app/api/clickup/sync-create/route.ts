@@ -28,6 +28,7 @@ export const maxDuration = 30;
 const TASKS_COLLECTION = COLLECTIONS.TASKS;
 const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
 const APP_SECRETS_COLLECTION = COLLECTIONS.APP_SECRETS;
+const SYNC_LOCK_TTL_MS = 2 * 60 * 1000;
 
 /** Read the workspace ("team") id from the same secrets doc the webhook uses. */
 async function loadClickUpTeamId(): Promise<string | null> {
@@ -53,6 +54,31 @@ interface SyncResult {
   reason?: string;
   clickupTaskId?: string;
   clickupUrl?: string;
+}
+
+interface TaskForCreate {
+  projectId?: string;
+  title?: string;
+  description?: string;
+  priority?: TaskPriority;
+  status?: TaskStatus;
+  assignee?: string;
+  dueDate?: string;
+  tags?: string[];
+  clickupTaskId?: string;
+  clickupSyncInFlightAt?: Timestamp;
+}
+
+type ClaimResult =
+  | { kind: 'claimed'; data: TaskForCreate }
+  | { kind: 'result'; result: SyncResult };
+
+function timestampMs(value: unknown): number | null {
+  if (!value || typeof value !== 'object') return null;
+  const maybeTimestamp = value as { toMillis?: () => number };
+  if (typeof maybeTimestamp.toMillis !== 'function') return null;
+  const ms = maybeTimestamp.toMillis();
+  return Number.isFinite(ms) ? ms : null;
 }
 
 /**
@@ -121,32 +147,47 @@ export async function POST(request: NextRequest) {
     const results: SyncResult[] = [];
     for (const taskId of taskIds) {
       const taskRef = adminDb.collection(TASKS_COLLECTION).doc(taskId);
-      const snap = await taskRef.get();
-      if (!snap.exists) {
-        results.push({ taskId, status: 'skipped', reason: 'not-found' });
-        continue;
-      }
-      const data = snap.data() as {
-        projectId?: string;
-        title?: string;
-        description?: string;
-        priority?: TaskPriority;
-        status?: TaskStatus;
-        assignee?: string;
-        dueDate?: string;
-        tags?: string[];
-        clickupTaskId?: string;
-      } | undefined;
+      const claim = await adminDb.runTransaction<ClaimResult>(async (tx) => {
+        const snap = await tx.get(taskRef);
+        if (!snap.exists) {
+          return { kind: 'result', result: { taskId, status: 'skipped', reason: 'not-found' } };
+        }
+        const data = snap.data() as TaskForCreate | undefined;
 
-      if (!data || data.projectId !== projectId) {
-        results.push({ taskId, status: 'skipped', reason: 'wrong-project' });
+        if (!data || data.projectId !== projectId) {
+          return { kind: 'result', result: { taskId, status: 'skipped', reason: 'wrong-project' } };
+        }
+        if (data.clickupTaskId) {
+          return { kind: 'result', result: { taskId, status: 'skipped', reason: 'already-linked' } };
+        }
+        if (!data.title?.trim()) {
+          return { kind: 'result', result: { taskId, status: 'skipped', reason: 'empty-title' } };
+        }
+
+        const lockedAt = timestampMs(data.clickupSyncInFlightAt);
+        if (lockedAt !== null && Date.now() - lockedAt < SYNC_LOCK_TTL_MS) {
+          return { kind: 'result', result: { taskId, status: 'skipped', reason: 'sync-in-progress' } };
+        }
+
+        const now = Timestamp.now();
+        tx.update(taskRef, {
+          clickupSyncInFlightAt: now,
+          updatedAt: now,
+        });
+        return { kind: 'claimed', data };
+      });
+
+      if (claim.kind === 'result') {
+        results.push(claim.result);
         continue;
       }
-      if (data.clickupTaskId) {
-        results.push({ taskId, status: 'skipped', reason: 'already-linked' });
-        continue;
-      }
-      if (!data.title?.trim()) {
+      const data = claim.data;
+      const title = data.title?.trim();
+      if (!title) {
+        await taskRef.update({
+          clickupSyncInFlightAt: FieldValue.delete(),
+          updatedAt: Timestamp.now(),
+        });
         results.push({ taskId, status: 'skipped', reason: 'empty-title' });
         continue;
       }
@@ -159,7 +200,7 @@ export async function POST(request: NextRequest) {
 
       try {
         const created = await createClickUpTask(listId, {
-          name: data.title,
+          name: title,
           description: data.description,
           priority: data.priority,
           dueDate: data.dueDate,
@@ -167,22 +208,45 @@ export async function POST(request: NextRequest) {
           status: mappedStatus,
           assigneeIds: assigneeId !== undefined ? [assigneeId] : undefined,
         });
+        const createdUrl = created.url ?? buildClickUpTaskUrl(created.id);
 
-        await taskRef.update({
-          clickupTaskId: created.id,
-          clickupUrl: created.url ?? buildClickUpTaskUrl(created.id),
-          clickupSyncedAt: Timestamp.now(),
-          clickupSyncError: FieldValue.delete(),
-          clickupSyncFailedAt: FieldValue.delete(),
-          updatedAt: Timestamp.now(),
+        const linkResult = await adminDb.runTransaction<'linked' | 'conflict' | 'missing'>(async (tx) => {
+          const latest = await tx.get(taskRef);
+          if (!latest.exists) return 'missing';
+          const latestData = latest.data() as { projectId?: string; clickupTaskId?: string } | undefined;
+          if (!latestData || latestData.projectId !== projectId) return 'missing';
+          if (latestData.clickupTaskId && latestData.clickupTaskId !== created.id) {
+            const message = `Created ClickUp task ${created.id}, but this local task was linked to another ClickUp task before sync finished.`;
+            tx.update(taskRef, {
+              clickupSyncError: message.slice(0, 500),
+              clickupSyncFailedAt: Timestamp.now(),
+              clickupSyncInFlightAt: FieldValue.delete(),
+              updatedAt: Timestamp.now(),
+            });
+            return 'conflict';
+          }
+          tx.update(taskRef, {
+            clickupTaskId: created.id,
+            clickupUrl: createdUrl,
+            clickupSyncedAt: Timestamp.now(),
+            clickupSyncError: FieldValue.delete(),
+            clickupSyncFailedAt: FieldValue.delete(),
+            clickupSyncInFlightAt: FieldValue.delete(),
+            updatedAt: Timestamp.now(),
+          });
+          return 'linked';
         });
 
-        results.push({
-          taskId,
-          status: 'synced',
-          clickupTaskId: created.id,
-          clickupUrl: created.url ?? buildClickUpTaskUrl(created.id),
-        });
+        if (linkResult === 'linked') {
+          results.push({
+            taskId,
+            status: 'synced',
+            clickupTaskId: created.id,
+            clickupUrl: createdUrl,
+          });
+        } else {
+          results.push({ taskId, status: 'failed', reason: `clickup-task-created-but-${linkResult}` });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error('[clickup-sync-create] task push failed', { taskId, message });
@@ -190,6 +254,7 @@ export async function POST(request: NextRequest) {
           await taskRef.update({
             clickupSyncError: message.slice(0, 500),
             clickupSyncFailedAt: Timestamp.now(),
+            clickupSyncInFlightAt: FieldValue.delete(),
             updatedAt: Timestamp.now(),
           });
         } catch (markErr) {

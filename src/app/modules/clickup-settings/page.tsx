@@ -208,9 +208,9 @@ export default function ClickUpSettingsPage() {
             ClickUp Sync
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            One-way sync from ClickUp into the in-app task list. Tasks must be linked individually
-            from the Tasks tab. Once linked, ClickUp owns the title, status, priority, due date,
-            and assignee — they re-sync on every ClickUp change via webhook.
+            Sync ClickUp tasks into the in-app task list and push local task changes back to
+            linked ClickUp tasks. The Tasks tab can link a list, create ClickUp tasks from local
+            tasks, or attach an existing ClickUp task by URL.
           </p>
         </div>
 

@@ -704,17 +704,15 @@ export interface Task {
   clickupSyncError?: string;
   /** Timestamp of the last failed outbound push. Cleared on success. */
   clickupSyncFailedAt?: Date;
+  /** Timestamp while a local task is being created in ClickUp. Prevents duplicate pushes. */
+  clickupSyncInFlightAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   completedAt?: Date;
   createdBy: string;
 }
 
-/** Fields owned by ClickUp once a task is linked. The TaskTable disables inline editing for these.
- *
- *  `assignee` is intentionally NOT in this list: assignee is bidirectional
- *  (app ↔ ClickUp), so the cell stays editable on linked tasks and edits are
- *  pushed to ClickUp via /api/clickup/sync-assignee. */
+/** Fields mirrored from ClickUp during inbound sync once a task is linked. */
 export const CLICKUP_SYNCED_FIELDS = [
   'title',
   'description',
@@ -747,6 +745,7 @@ export type UpdateTaskInput = Partial<
     | 'clickupSyncedAt'
     | 'clickupSyncError'
     | 'clickupSyncFailedAt'
+    | 'clickupSyncInFlightAt'
   >
 >;
 

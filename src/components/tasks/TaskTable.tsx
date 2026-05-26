@@ -20,6 +20,8 @@ import {
   Sparkles,
   Link2,
   Link2Off,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -69,6 +71,7 @@ import {
   TaskStatusBadge,
 } from './TaskBadges';
 import { ClickUpLinkDialog } from './ClickUpLinkDialog';
+import { isClickUpCreateSyncPending } from './clickupSyncState';
 
 interface TaskTableProps {
   tasks: Task[];
@@ -83,6 +86,9 @@ interface TaskTableProps {
   /** Render cells as static (no inline editing, no delete, no ClickUp link
    *  dialog). Used by the public share view. */
   readOnly?: boolean;
+  /** Project-level ClickUp list binding. Enables local task create/link actions. */
+  clickupListId?: string;
+  clickupListName?: string;
 }
 
 type StatusFilter = TaskStatus | 'all' | 'open';
@@ -96,7 +102,7 @@ const SOURCE_LABEL: Record<Task['source'], string> = {
   clickup: 'ClickUp',
 };
 
-/** Once a task is linked to ClickUp, ClickUp owns these fields. */
+/** Linked tasks have a ClickUp id and can sync in both directions. */
 const isLinkedToClickUp = (t: Task) => Boolean(t.clickupTaskId);
 
 export function TaskTable({
@@ -105,6 +111,8 @@ export function TaskTable({
   loading,
   previousViewedAt = 0,
   userEmail,
+  clickupListId,
+  clickupListName,
   readOnly = false,
 }: TaskTableProps) {
   const isNewSinceLastVisit = (t: Task): boolean => {
@@ -462,6 +470,25 @@ export function TaskTable({
         cell: ({ row }) => {
           const task = row.original;
           const synced = isLinkedToClickUp(task);
+          const pending = !synced && isClickUpCreateSyncPending(task);
+          const failed = Boolean(task.clickupSyncError);
+          const label = synced
+            ? 'ClickUp'
+            : pending
+              ? 'Syncing'
+              : failed
+                ? 'Sync failed'
+                : SOURCE_LABEL[task.source];
+          const SourceIcon = synced ? Link2 : pending ? Loader2 : failed ? AlertCircle : Link2Off;
+          const sourceTitle = synced
+            ? task.clickupSyncError || 'View ClickUp link'
+            : pending
+              ? 'Creating this task in ClickUp'
+              : failed
+                ? task.clickupSyncError
+                : clickupListId
+                  ? 'Sync this task to ClickUp or link an existing ClickUp task'
+                  : 'Link to an existing ClickUp task';
           return (
             <div className="flex items-center gap-1">
               {task.requestId && (
@@ -476,21 +503,16 @@ export function TaskTable({
                     'inline-flex items-center gap-1 rounded-md text-xs px-1.5 py-0.5 border',
                     synced
                       ? 'border-violet-200 bg-violet-50 text-violet-700'
+                      : pending
+                        ? 'border-blue-200 bg-blue-50 text-blue-700'
+                        : failed
+                          ? 'border-rose-200 bg-rose-50 text-rose-700'
                       : 'border-border bg-transparent text-muted-foreground',
                   )}
-                  title={synced ? 'Linked to ClickUp' : 'Not linked to ClickUp'}
+                  title={sourceTitle}
                 >
-                  {synced ? (
-                    <>
-                      <Link2 className="h-3 w-3" />
-                      ClickUp
-                    </>
-                  ) : (
-                    <>
-                      <Link2Off className="h-3 w-3" />
-                      {SOURCE_LABEL[task.source]}
-                    </>
-                  )}
+                  <SourceIcon className={cn('h-3 w-3', pending && 'animate-spin')} />
+                  {label}
                 </span>
               ) : (
                 <button
@@ -500,22 +522,25 @@ export function TaskTable({
                     'inline-flex items-center gap-1 rounded-md text-xs px-1.5 py-0.5 border transition-colors',
                     synced
                       ? 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                      : pending
+                        ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                        : failed
+                          ? 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
                       : 'border-border bg-transparent text-muted-foreground hover:bg-accent',
                   )}
-                  title={synced ? 'View ClickUp link' : 'Link to a ClickUp task'}
+                  title={sourceTitle}
                 >
-                  {synced ? (
-                    <>
-                      <Link2 className="h-3 w-3" />
-                      ClickUp
-                    </>
-                  ) : (
-                    <>
-                      <Link2Off className="h-3 w-3" />
-                      {SOURCE_LABEL[task.source]}
-                    </>
-                  )}
+                  <SourceIcon className={cn('h-3 w-3', pending && 'animate-spin')} />
+                  {label}
                 </button>
+              )}
+              {synced && failed && (
+                <span title={task.clickupSyncError}>
+                  <AlertCircle
+                    className="h-3.5 w-3.5 text-rose-500"
+                    aria-label="ClickUp sync failed"
+                  />
+                </span>
               )}
               {synced && task.clickupUrl && (
                 <a
@@ -565,7 +590,7 @@ export function TaskTable({
             } as ColumnDef<Task>,
           ]),
     ],
-    [assignees, visibleParentIds, previousViewedAt, userEmail, readOnly],
+    [assignees, visibleParentIds, previousViewedAt, userEmail, readOnly, clickupListId],
   );
 
   const table = useReactTable({
@@ -695,6 +720,8 @@ export function TaskTable({
             if (!open) setLinkDialogTask(null);
           }}
           task={linkDialogTask}
+          clickupListId={clickupListId}
+          clickupListName={clickupListName}
         />
       )}
     </div>

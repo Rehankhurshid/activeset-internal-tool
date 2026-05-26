@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, Link2, Unlink, ExternalLink } from 'lucide-react';
+import { Loader2, Link2, Unlink, ExternalLink, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,17 +13,20 @@ interface ClickUpListLinkCardProps {
   projectId: string;
   clickupListId?: string;
   clickupListName?: string;
+  syncableTaskIds?: string[];
 }
 
 export function ClickUpListLinkCard({
   projectId,
   clickupListId,
   clickupListName,
+  syncableTaskIds = [],
 }: ClickUpListLinkCardProps) {
   const [ref, setRef] = useState('');
-  const [busy, setBusy] = useState<'link' | 'unlink' | null>(null);
+  const [busy, setBusy] = useState<'link' | 'unlink' | 'sync' | null>(null);
 
   const isLinked = Boolean(clickupListId);
+  const syncableCount = syncableTaskIds.length;
 
   const handleLink = async () => {
     const value = ref.trim();
@@ -83,6 +86,51 @@ export function ClickUpListLinkCard({
     }
   };
 
+  const handleSyncLocal = async () => {
+    if (!clickupListId || syncableTaskIds.length === 0) return;
+    setBusy('sync');
+    try {
+      const res = await fetchForProject(projectId, '/api/clickup/sync-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, taskIds: syncableTaskIds }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        details?: string;
+        results?: Array<{ status: 'synced' | 'skipped' | 'failed'; reason?: string }>;
+      };
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to sync local tasks', {
+          description: data.details,
+          duration: 10_000,
+        });
+        return;
+      }
+
+      const results = data.results ?? [];
+      const synced = results.filter((r) => r.status === 'synced').length;
+      const failed = results.filter((r) => r.status === 'failed').length;
+      const skipped = results.filter((r) => r.status === 'skipped').length;
+      if (failed > 0) {
+        toast.error(`Synced ${synced}; ${failed} failed`, {
+          description: skipped > 0 ? `${skipped} skipped` : undefined,
+          duration: 10_000,
+        });
+      } else if (synced > 0) {
+        toast.success(`Synced ${synced} local task${synced === 1 ? '' : 's'} to ClickUp`, {
+          description: skipped > 0 ? `${skipped} skipped` : undefined,
+        });
+      } else {
+        toast.info('No local tasks needed syncing', {
+          description: skipped > 0 ? `${skipped} skipped` : undefined,
+        });
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <Card className="border-dashed">
       <CardContent className="py-3 px-4 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -101,9 +149,27 @@ export function ClickUpListLinkCard({
                 Open <ExternalLink className="h-3 w-3 ml-0.5" />
               </a>
               <p className="text-xs text-muted-foreground mt-0.5">
-                New tasks added to that list will appear here automatically. Tasks moved out will be unlinked but kept locally.
+                New tasks added to that list will appear here automatically. Local tasks can be pushed to this list and linked back.
               </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSyncLocal}
+              disabled={busy !== null || syncableCount === 0}
+              title={
+                syncableCount === 0
+                  ? 'All local tasks are already linked or syncing'
+                  : `Create and link ${syncableCount} local task${syncableCount === 1 ? '' : 's'} in ClickUp`
+              }
+            >
+              {busy === 'sync' ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <UploadCloud className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Sync local{syncableCount > 0 ? ` (${syncableCount})` : ''}
+            </Button>
             <Button
               variant="outline"
               size="sm"

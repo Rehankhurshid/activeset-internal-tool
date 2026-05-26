@@ -17,6 +17,7 @@ import { tasksService } from '@/services/database';
 import { TaskTable } from './TaskTable';
 import { NewRequestDialog } from './NewRequestDialog';
 import { ClickUpListLinkCard } from './ClickUpListLinkCard';
+import { isClickUpCreateSyncPending } from './clickupSyncState';
 
 interface TasksTabProps {
   projectId: string;
@@ -58,6 +59,9 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName,
           return ms > previousViewedAt;
         }).length
       : 0;
+  const syncableTaskIds = tasks
+    .filter((t) => !t.clickupTaskId && !isClickUpCreateSyncPending(t))
+    .map((t) => t.id);
 
   const handleQuickAdd = async () => {
     const title = quickAddTitle.trim();
@@ -76,6 +80,11 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName,
         createdBy: userEmail,
       });
       setQuickAddTitle('');
+      toast.success(
+        clickupListId
+          ? 'Task added. Syncing to ClickUp.'
+          : 'Task added',
+      );
     } catch (err) {
       console.error('[TasksTab] quick add failed', err);
       toast.error('Failed to add task');
@@ -134,6 +143,7 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName,
           projectId={projectId}
           clickupListId={clickupListId}
           clickupListName={clickupListName}
+          syncableTaskIds={syncableTaskIds}
         />
       )}
 
@@ -144,6 +154,8 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName,
         loading={loading}
         previousViewedAt={previousViewedAt}
         userEmail={userEmail}
+        clickupListId={clickupListId}
+        clickupListName={clickupListName}
         readOnly={readOnly}
       />
 

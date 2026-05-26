@@ -804,6 +804,7 @@ function taskFromDoc(id: string, data: Record<string, unknown>): Task {
     clickupSyncedAt: data.clickupSyncedAt ? toSafeDate(data.clickupSyncedAt) : undefined,
     clickupSyncError: data.clickupSyncError as string | undefined,
     clickupSyncFailedAt: data.clickupSyncFailedAt ? toSafeDate(data.clickupSyncFailedAt) : undefined,
+    clickupSyncInFlightAt: data.clickupSyncInFlightAt ? toSafeDate(data.clickupSyncInFlightAt) : undefined,
     createdAt: data.createdAt ? toSafeDate(data.createdAt) : new Date(),
     updatedAt: data.updatedAt ? toSafeDate(data.updatedAt) : new Date(),
     completedAt: data.completedAt ? toSafeDate(data.completedAt) : undefined,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import {
   ApiAuthError,
   apiAuthErrorResponse,
@@ -141,6 +141,11 @@ export async function POST(request: NextRequest) {
         source: 'clickup' as const,
         updatedAt: now,
       };
+      const clearSyncState = {
+        clickupSyncError: FieldValue.delete(),
+        clickupSyncFailedAt: FieldValue.delete(),
+        clickupSyncInFlightAt: FieldValue.delete(),
+      };
 
       const existing = existingByClickupId.get(task.id);
       if (existing) {
@@ -150,7 +155,7 @@ export async function POST(request: NextRequest) {
           continue;
         }
         const ref = adminDb.collection(TASKS_COLLECTION).doc(existing.docId);
-        batch.update(ref, baseFields);
+        batch.update(ref, { ...baseFields, ...clearSyncState });
         updated += 1;
       } else {
         const ref = adminDb.collection(TASKS_COLLECTION).doc();

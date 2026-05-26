@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import {
   ApiAuthError,
   apiAuthErrorResponse,
@@ -98,6 +98,9 @@ export async function POST(request: NextRequest) {
       clickupTaskId,
       clickupUrl: clickupTask.url ?? buildClickUpTaskUrl(clickupTaskId),
       clickupSyncedAt: Timestamp.now(),
+      clickupSyncError: FieldValue.delete(),
+      clickupSyncFailedAt: FieldValue.delete(),
+      clickupSyncInFlightAt: FieldValue.delete(),
       updatedAt: Timestamp.now(),
     });
 
@@ -149,6 +152,9 @@ export async function DELETE(request: NextRequest) {
       clickupTaskId: null,
       clickupUrl: null,
       clickupSyncedAt: null,
+      clickupSyncError: FieldValue.delete(),
+      clickupSyncFailedAt: FieldValue.delete(),
+      clickupSyncInFlightAt: FieldValue.delete(),
       source: 'manual',
       updatedAt: Timestamp.now(),
     });
