@@ -40,6 +40,9 @@ import { compactAuditResult } from '@/lib/scan-utils';
 
 const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
 const LINK_AUDITS_SUBCOLLECTION = 'link_audits';
+const LOCAL_PROJECTS_STORAGE_KEY = 'activeset.local-project-bypass.projects';
+const LOCAL_PROJECTS_UPDATED_EVENT = 'activeset-local-projects-updated';
+const LOCAL_PROJECT_ID = 'test-project';
 
 const generateLinkId = (): string => `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 const generatePublicShareToken = (): string => {
@@ -49,6 +52,149 @@ const generatePublicShareToken = (): string => {
 
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
 };
+
+type SerializedProject = Omit<Project, 'createdAt' | 'updatedAt'> & {
+  createdAt: string;
+  updatedAt: string;
+};
+
+function isLocalProjectBypassEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (process.env.NODE_ENV === 'production') return false;
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+}
+
+function createLocalBypassProject(overrides: Partial<Project> = {}): Project {
+  const now = new Date();
+  return {
+    id: LOCAL_PROJECT_ID,
+    name: 'Revpack',
+    status: 'current',
+    tags: ['maintenance'],
+    links: [
+      {
+        id: 'local-link-project-tracker',
+        title: 'Project Tracker',
+        url: 'https://app.clickup.com/',
+        order: 0,
+        isDefault: true,
+        source: 'manual',
+      },
+      {
+        id: 'local-link-staging',
+        title: 'Staging Website URL',
+        url: 'https://staging.revpack.com',
+        order: 1,
+        isDefault: true,
+        source: 'manual',
+      },
+      {
+        id: 'local-link-live',
+        title: 'Live Website URL',
+        url: 'https://revpack.com',
+        order: 2,
+        isDefault: true,
+        source: 'manual',
+      },
+      {
+        id: 'local-link-feedback',
+        title: 'Feedback URL',
+        url: 'https://app.slack.com/',
+        order: 3,
+        isDefault: true,
+        source: 'manual',
+      },
+    ],
+    createdAt: now,
+    updatedAt: now,
+    userId: 'local-dev-mock',
+    client: 'Revpack',
+    ...overrides,
+  };
+}
+
+function serializeLocalProject(project: Project): SerializedProject {
+  return {
+    ...project,
+    createdAt: project.createdAt.toISOString(),
+    updatedAt: project.updatedAt.toISOString(),
+  };
+}
+
+function hydrateLocalProject(project: SerializedProject): Project {
+  return sanitizeProjectData({
+    ...project,
+    createdAt: toSafeDate(project.createdAt),
+    updatedAt: toSafeDate(project.updatedAt),
+  }) as Project;
+}
+
+function readLocalProjects(): Project[] {
+  if (!isLocalProjectBypassEnabled()) return [];
+
+  try {
+    const raw = window.localStorage.getItem(LOCAL_PROJECTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as SerializedProject[];
+      const projects = parsed.map(hydrateLocalProject);
+      if (projects.length > 0) {
+        if (projects.some((project) => project.id === LOCAL_PROJECT_ID)) return projects;
+        const seededProjects = [createLocalBypassProject(), ...projects];
+        writeLocalProjects(seededProjects);
+        return seededProjects;
+      }
+    }
+  } catch (error) {
+    console.warn('[projectsService] Failed to read local project bypass data:', error);
+  }
+
+  const seededProjects = [createLocalBypassProject()];
+  writeLocalProjects(seededProjects);
+  return seededProjects;
+}
+
+function writeLocalProjects(projects: Project[]): void {
+  if (!isLocalProjectBypassEnabled()) return;
+
+  window.localStorage.setItem(
+    LOCAL_PROJECTS_STORAGE_KEY,
+    JSON.stringify(projects.map(serializeLocalProject))
+  );
+  window.dispatchEvent(new Event(LOCAL_PROJECTS_UPDATED_EVENT));
+}
+
+function subscribeToLocalProjects(callback: (projects: Project[]) => void): () => void {
+  const emit = () => callback(readLocalProjects().sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()));
+  emit();
+
+  const handleChange = () => emit();
+  window.addEventListener(LOCAL_PROJECTS_UPDATED_EVENT, handleChange);
+  window.addEventListener('storage', handleChange);
+
+  return () => {
+    window.removeEventListener(LOCAL_PROJECTS_UPDATED_EVENT, handleChange);
+    window.removeEventListener('storage', handleChange);
+  };
+}
+
+function updateLocalProject(projectId: string, updater: (project: Project) => Project): void {
+  const projects = readLocalProjects();
+  let found = false;
+  const updatedProjects = projects.map((project) => {
+    if (project.id !== projectId) return project;
+    found = true;
+    return {
+      ...updater(project),
+      updatedAt: new Date(),
+    };
+  });
+
+  if (!found) {
+    throw new DatabaseError('Project not found');
+  }
+
+  writeLocalProjects(updatedProjects);
+}
 
 /**
  * Belt-and-braces: scrub any legacy apiToken that predates the server-side
@@ -193,6 +339,20 @@ const getDefaultLinks = (): ProjectLink[] => [
 export const projectsService = {
   // Create a new project
   async createProject(userId: string, name: string): Promise<string> {
+    if (isLocalProjectBypassEnabled()) {
+      const now = new Date();
+      const project = createLocalBypassProject({
+        id: `local-project-${Date.now().toString(36)}`,
+        name,
+        userId,
+        createdAt: now,
+        updatedAt: now,
+        links: getDefaultLinks(),
+      });
+      writeLocalProjects([project, ...readLocalProjects()]);
+      return project.id;
+    }
+
     try {
       const projectRef = await addDoc(collection(db, PROJECTS_COLLECTION), {
         name,
@@ -213,6 +373,10 @@ export const projectsService = {
   // Get all projects for a user
   // Get all projects (admin/cron use)
   async getAllProjects(): Promise<Project[]> {
+    if (isLocalProjectBypassEnabled()) {
+      return readLocalProjects();
+    }
+
     try {
       const querySnapshot = await getDocs(collection(db, PROJECTS_COLLECTION));
       const projects = querySnapshot.docs.map(d => sanitizeProjectData({
@@ -237,6 +401,10 @@ export const projectsService = {
   },
 
   async getUserProjects(userId: string): Promise<Project[]> {
+    if (isLocalProjectBypassEnabled()) {
+      return readLocalProjects().filter((project) => project.userId === userId);
+    }
+
     try {
       const q = query(
         collection(db, PROJECTS_COLLECTION),
@@ -266,6 +434,10 @@ export const projectsService = {
 
   // Get a single project
   async getProject(projectId: string): Promise<Project | null> {
+    if (isLocalProjectBypassEnabled()) {
+      return readLocalProjects().find((project) => project.id === projectId) ?? null;
+    }
+
     const docRef = doc(db, PROJECTS_COLLECTION, projectId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
@@ -285,6 +457,11 @@ export const projectsService = {
 
   // Update project name
   async updateProjectName(projectId: string, name: string): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({ ...project, name }));
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       name,
@@ -294,6 +471,17 @@ export const projectsService = {
 
   // Update the project's client (group label). Empty string clears it.
   async updateProjectClient(projectId: string, client: string): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      const trimmed = client.trim();
+      updateLocalProject(projectId, (project) => {
+        if (trimmed.length > 0) return { ...project, client: trimmed };
+        const nextProject = { ...project };
+        delete nextProject.client;
+        return nextProject;
+      });
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     const trimmed = client.trim();
     await updateDoc(projectRef, {
@@ -305,6 +493,17 @@ export const projectsService = {
   // Link/unlink a proposal to drive "Import from proposal" on the Invoices
   // tab. Pass null/empty to clear the link.
   async updateProjectProposalId(projectId: string, proposalId: string | null): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      const trimmed = (proposalId ?? '').trim();
+      updateLocalProject(projectId, (project) => {
+        if (trimmed.length > 0) return { ...project, proposalId: trimmed };
+        const nextProject = { ...project };
+        delete nextProject.proposalId;
+        return nextProject;
+      });
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     const trimmed = (proposalId ?? '').trim();
     await updateDoc(projectRef, {
@@ -315,6 +514,11 @@ export const projectsService = {
 
   // Update project status (current / closed / paid)
   async updateProjectStatus(projectId: string, status: ProjectStatus): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({ ...project, status }));
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       status,
@@ -324,6 +528,11 @@ export const projectsService = {
 
   // Update project tags
   async updateProjectTags(projectId: string, tags: ProjectTag[]): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({ ...project, tags }));
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       tags,
@@ -336,6 +545,11 @@ export const projectsService = {
     projectId: string,
     flags: { disableAuditBadge?: boolean; disableDropdown?: boolean; enableSpellcheck?: boolean }
   ): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({ ...project, ...flags }));
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       ...flags,
@@ -345,6 +559,16 @@ export const projectsService = {
 
   // Set or clear the project's custom logo (URL or compressed data URL)
   async updateProjectLogo(projectId: string, logoUrl: string | null): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => {
+        if (logoUrl) return { ...project, logoUrl };
+        const nextProject = { ...project };
+        delete nextProject.logoUrl;
+        return nextProject;
+      });
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       logoUrl: logoUrl ? logoUrl : deleteField(),
@@ -354,6 +578,11 @@ export const projectsService = {
 
   // Update project sitemap URL
   async updateProjectSitemap(projectId: string, sitemapUrl: string): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({ ...project, sitemapUrl }));
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       sitemapUrl,
@@ -369,6 +598,11 @@ export const projectsService = {
       pathToLocaleMap: Record<string, string>;
     }
   ): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({ ...project, ...localeData }));
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       detectedLocales: localeData.detectedLocales,
@@ -379,6 +613,11 @@ export const projectsService = {
 
   // Delete a project
   async deleteProject(projectId: string): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      writeLocalProjects(readLocalProjects().filter((project) => project.id !== projectId));
+      return;
+    }
+
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await deleteDoc(projectRef);
   },
@@ -441,6 +680,16 @@ export const projectsService = {
   // Image-scan job lifecycle — persisted on the project doc so bulk-scan
   // progress survives refreshes and is visible to every subscribed tab.
   async setImageScanJob(projectId: string, job: ImageScanJob | null): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => {
+        if (job) return { ...project, imageScanJob: job };
+        const nextProject = { ...project };
+        delete nextProject.imageScanJob;
+        return nextProject;
+      });
+      return;
+    }
+
     try {
       const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
       await updateDoc(projectRef, {
@@ -455,6 +704,11 @@ export const projectsService = {
 
   // Update project links — audit results go to subcollection, link metadata to project doc
   async updateProjectLinks(projectId: string, links: ProjectLink[]): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({ ...project, links }));
+      return;
+    }
+
     // Save audit results to subcollection (non-blocking — don't fail the whole save if this errors)
     try {
       await saveLinkAudits(projectId, links);
@@ -480,6 +734,15 @@ export const projectsService = {
 
   // Add a new link to a project
   async addLinkToProject(projectId: string, link: CreateProjectLinkInput): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      const newLink: ProjectLink = {
+        ...link,
+        id: generateLinkId(),
+      };
+      updateLocalProject(projectId, (project) => ({ ...project, links: [...project.links, newLink] }));
+      return;
+    }
+
     try {
       const project = await this.getProject(projectId);
       if (!project) throw new DatabaseError('Project not found');
@@ -500,6 +763,16 @@ export const projectsService = {
 
   // Update a specific link
   async updateLink(projectId: string, linkId: string, updates: UpdateProjectLinkInput): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({
+        ...project,
+        links: project.links.map(link =>
+          link.id === linkId ? { ...link, ...updates } : link
+        ),
+      }));
+      return;
+    }
+
     try {
       const project = await this.getProject(projectId);
       if (!project) throw new DatabaseError('Project not found');
@@ -617,6 +890,14 @@ export const projectsService = {
 
   // Delete a link
   async deleteLink(projectId: string, linkId: string): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({
+        ...project,
+        links: project.links.filter(link => link.id !== linkId),
+      }));
+      return;
+    }
+
     const project = await this.getProject(projectId);
     if (!project) throw new Error('Project not found');
 
@@ -626,6 +907,12 @@ export const projectsService = {
 
   // Real-time subscription to user projects
   subscribeToUserProjects(userId: string, callback: (projects: Project[]) => void): () => void {
+    if (isLocalProjectBypassEnabled()) {
+      return subscribeToLocalProjects((projects) => {
+        callback(projects.filter((project) => project.userId === userId));
+      });
+    }
+
     const q = query(
       collection(db, PROJECTS_COLLECTION),
       where('userId', '==', userId)
@@ -652,6 +939,10 @@ export const projectsService = {
 
   // Real-time subscription to all projects (merges audit data from subcollections)
   subscribeToAllProjects(callback: (projects: Project[]) => void): () => void {
+    if (isLocalProjectBypassEnabled()) {
+      return subscribeToLocalProjects(callback);
+    }
+
     const q = query(collection(db, PROJECTS_COLLECTION));
 
     return onSnapshot(
@@ -686,6 +977,13 @@ export const projectsService = {
 
   // Real-time subscription to a single project (merges audit data from subcollection)
   subscribeToProject(projectId: string, callback: (project: Project | null) => void): () => void {
+    if (isLocalProjectBypassEnabled()) {
+      const emitProject = (projects: Project[]) => {
+        callback(projects.find((project) => project.id === projectId) ?? null);
+      };
+      return subscribeToLocalProjects(emitProject);
+    }
+
     const docRef = doc(db, PROJECTS_COLLECTION, projectId);
 
     return onSnapshot(

@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, Plus, Share2, GanttChartSquare, Receipt, ListTodo, ChevronDown } from 'lucide-react';
+import { Building2, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, MoreHorizontal, Plus, Share2, GanttChartSquare, Receipt, ListTodo, ChevronDown } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
@@ -29,12 +29,15 @@ import { TasksTab } from '@/components/tasks/TasksTab';
 import { AddLinkDialog } from '@/components/projects/AddLinkDialog';
 import { LinkList } from '@/components/projects/LinkList';
 import { toast } from 'sonner';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 
 interface PageProps {
     params: Promise<{ id: string }>;
 }
+
+const PRIMARY_DESKTOP_TAB_VALUES = new Set(['audit', 'links', 'tasks', 'webflow']);
 
 export default function ProjectDetailPage({ params }: PageProps) {
     const { id } = use(params);
@@ -280,15 +283,17 @@ export default function ProjectDetailPage({ params }: PageProps) {
         : { label: 'Not Set', tone: 'unset' };
 
     const tabOptions: TabOption[] = [
-        { value: 'audit', label: 'Audit Dashboard', icon: <LayoutDashboard className="h-4 w-4" />, stat: auditStat },
+        { value: 'audit', label: 'Audit Dashboard', compactLabel: 'Audit', icon: <LayoutDashboard className="h-4 w-4" />, stat: auditStat },
         { value: 'links', label: 'Links', icon: <Link2 className="h-4 w-4" />, stat: linksStat },
         { value: 'tasks', label: 'Tasks', icon: <ListTodo className="h-4 w-4" />, stat: tasksStat },
-        { value: 'webflow', label: 'Webflow Pages', icon: <Globe className="h-4 w-4" />, stat: webflowStat },
+        { value: 'webflow', label: 'Webflow Pages', compactLabel: 'Webflow', icon: <Globe className="h-4 w-4" />, stat: webflowStat },
         { value: 'images', label: 'Image Library', icon: <ImageIcon className="h-4 w-4" /> },
         { value: 'checklist', label: 'Checklist', icon: <ListChecks className="h-4 w-4" />, stat: checklistStat },
         { value: 'timeline', label: 'Timeline', icon: <GanttChartSquare className="h-4 w-4" />, stat: timelineStat },
         ...(isAdmin ? [{ value: 'invoices', label: 'Invoices', icon: <Receipt className="h-4 w-4" /> }] : []),
     ];
+    const primaryDesktopTabs = tabOptions.filter(opt => PRIMARY_DESKTOP_TAB_VALUES.has(opt.value));
+    const overflowDesktopTabs = tabOptions.filter(opt => !PRIMARY_DESKTOP_TAB_VALUES.has(opt.value));
     const activeTabOption = tabOptions.find(t => t.value === activeTab) ?? tabOptions[0];
 
     return (
@@ -360,18 +365,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             />
                         </div>
 
-                        {/* Desktop: scrollable horizontal tabs */}
-                        <div className="hidden sm:block max-w-full overflow-x-auto -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                            <TabsList className="w-auto inline-flex">
-                                {tabOptions.map(opt => (
-                                    <TabsTrigger key={opt.value} value={opt.value} className="gap-2">
-                                        {opt.icon}
-                                        <span>{opt.label}</span>
-                                        {opt.stat && <TabStatBadge stat={opt.stat} />}
-                                    </TabsTrigger>
-                                ))}
-                            </TabsList>
-                        </div>
+                        <DesktopTabSelector
+                            primaryOptions={primaryDesktopTabs}
+                            overflowOptions={overflowDesktopTabs}
+                            value={activeTab}
+                            onChange={setActiveTab}
+                        />
 
                         {/* Show Scan Sitemap when in audit tab */}
                         {activeTab === 'audit' && (
@@ -515,7 +514,73 @@ function TabStatBadge({ stat, className }: { stat: TabStat; className?: string }
     );
 }
 
-type TabOption = { value: string; label: string; icon: React.ReactNode; stat?: TabStat };
+type TabOption = { value: string; label: string; compactLabel?: string; icon: React.ReactNode; stat?: TabStat };
+
+interface DesktopTabSelectorProps {
+    primaryOptions: TabOption[];
+    overflowOptions: TabOption[];
+    value: string;
+    onChange: (value: string) => void;
+}
+
+function DesktopTabSelector({ primaryOptions, overflowOptions, value, onChange }: DesktopTabSelectorProps) {
+    const activeOverflowOption = overflowOptions.find(opt => opt.value === value);
+    const overflowLabel = activeOverflowOption?.compactLabel ?? activeOverflowOption?.label ?? 'More';
+
+    return (
+        <div className="hidden sm:block max-w-full overflow-x-auto -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <TabsList className="w-auto inline-flex">
+                {primaryOptions.map(opt => (
+                    <TabsTrigger key={opt.value} value={opt.value} className="gap-2 px-3">
+                        {opt.icon}
+                        <span>{opt.compactLabel ?? opt.label}</span>
+                        {opt.stat && <TabStatBadge stat={opt.stat} />}
+                    </TabsTrigger>
+                ))}
+                {overflowOptions.length > 0 && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                className={cn(
+                                    'inline-flex h-[calc(100%-1px)] items-center justify-center gap-1.5 rounded-md border border-transparent px-3 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:outline-1',
+                                    activeOverflowOption
+                                        ? 'bg-background text-foreground shadow-sm dark:bg-input/30'
+                                        : 'text-foreground hover:bg-background/60 dark:text-muted-foreground dark:hover:text-foreground',
+                                )}
+                                aria-label="Open more project sections"
+                            >
+                                {activeOverflowOption ? activeOverflowOption.icon : <MoreHorizontal className="h-4 w-4" />}
+                                <span>{overflowLabel}</span>
+                                {activeOverflowOption?.stat && <TabStatBadge stat={activeOverflowOption.stat} />}
+                                <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56">
+                            {overflowOptions.map(opt => {
+                                const isActive = opt.value === value;
+                                return (
+                                    <DropdownMenuItem
+                                        key={opt.value}
+                                        onSelect={() => onChange(opt.value)}
+                                        className={cn('gap-3 py-2', isActive && 'bg-accent text-accent-foreground')}
+                                    >
+                                        <span className={cn('shrink-0', isActive ? 'text-foreground' : 'text-muted-foreground')}>
+                                            {opt.icon}
+                                        </span>
+                                        <span className="flex-1">{opt.label}</span>
+                                        {opt.stat && <TabStatBadge stat={opt.stat} />}
+                                        {isActive && <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />}
+                                    </DropdownMenuItem>
+                                );
+                            })}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+            </TabsList>
+        </div>
+    );
+}
 
 interface MobileTabSelectorProps {
     options: TabOption[];

@@ -77,6 +77,8 @@ Single project page with tabbed interface for different features:
 - Uses the same manual link records shown on project cards and in the embedded widget
 - Preserves auto-discovered audit links when manual links are filtered or reordered
 
+Project detail navigation keeps high-frequency areas visible on desktop (`Audit`, `Links`, `Tasks`, `Webflow`) and groups secondary sections (`Image Library`, `Checklist`, `Timeline`, `Invoices`) under a `More` menu. The mobile selector still lists every section in a bottom sheet.
+
 ##### **Audit Dashboard Tab** (Default)
 - Displays content quality audit results for all auto-discovered pages
 - Shows pages scanned via sitemap with quality scores
@@ -124,6 +126,12 @@ Links can be added two ways:
 - `LinkItem` - Individual link with drag-and-drop reordering (src/components/projects/LinkItem.tsx)
 - `AddLinkDialog` - Modal for adding new manual links (src/components/projects/AddLinkDialog.tsx)
 - `ScanSitemapDialog` - Sitemap scanning interface (src/components/scan-sitemap-dialog.tsx)
+
+---
+
+### Local Development Bypass
+
+On localhost in non-production builds, `projectsService` can serve a local `test-project` fixture from `localStorage` when Firebase project reads are blocked. This keeps `/modules/project-links/test-project?tab=links` usable for UI development without changing production Firestore rules or exposing project data publicly.
 
 ---
 
