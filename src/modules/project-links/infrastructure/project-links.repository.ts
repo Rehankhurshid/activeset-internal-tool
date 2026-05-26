@@ -10,6 +10,13 @@ export interface ProjectLinksRepository {
   updateProjectName: (projectId: string, name: string) => Promise<void>;
   updateProjectClient: (projectId: string, client: string) => Promise<void>;
   updateProjectProposalId: (projectId: string, proposalId: string | null) => Promise<void>;
+  updateProjectControlSettings: (
+    projectId: string,
+    settings: Pick<
+      Project,
+      'slackChannelIds' | 'qaUrlSource' | 'qaUrls' | 'reviewOwnerEmail' | 'clientUpdatePreferences'
+    >,
+  ) => Promise<void>;
   createAuditShareLink: (projectId: string) => Promise<string>;
 }
 
@@ -21,5 +28,7 @@ export const projectLinksRepository: ProjectLinksRepository = {
   updateProjectName: (projectId, name) => projectsService.updateProjectName(projectId, name),
   updateProjectClient: (projectId, client) => projectsService.updateProjectClient(projectId, client),
   updateProjectProposalId: (projectId, proposalId) => projectsService.updateProjectProposalId(projectId, proposalId),
+  updateProjectControlSettings: (projectId, settings) =>
+    projectsService.updateProjectControlSettings(projectId, settings),
   createAuditShareLink: (projectId) => projectsService.createAuditShareLink(projectId),
 };

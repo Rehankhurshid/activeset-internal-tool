@@ -99,7 +99,7 @@ export function DailyReviewBanner({ projects, className }: DailyReviewBannerProp
   // Clamp the displayed pending project to the bounds of the current pending list.
   const safeIndex = Math.min(reviewIndex, Math.max(0, pending.length - 1));
   const focused = pending[safeIndex];
-  const focusedTasksHref = focused ? `/modules/project-links/${focused.id}?tab=tasks` : '#';
+  const focusedControlHref = focused ? `/modules/project-links/${focused.id}?tab=control` : '#';
 
   const progress = total === 0 ? 0 : Math.round((reviewedTodayCount / total) * 100);
 
@@ -176,9 +176,9 @@ export function DailyReviewBanner({ projects, className }: DailyReviewBannerProp
                 <p className="mt-2 text-xs text-muted-foreground">
                   Up next:{' '}
                   <Link
-                    href={focusedTasksHref}
+                    href={focusedControlHref}
                     className="font-medium text-foreground underline-offset-4 hover:underline hover:text-primary inline-flex items-center gap-0.5"
-                    aria-label={`Open ${focused.name} on the Tasks tab`}
+                    aria-label={`Open ${focused.name} control tab`}
                   >
                     {focused.name}
                     <ChevronRight className="h-3 w-3 opacity-70" />
@@ -191,8 +191,8 @@ export function DailyReviewBanner({ projects, className }: DailyReviewBannerProp
           {focused && (
             <div className="flex items-center gap-2 shrink-0">
               <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-                <Link href={focusedTasksHref}>
-                  Open Tasks
+                <Link href={focusedControlHref}>
+                  Open Control
                   <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
                 </Link>
               </Button>

@@ -557,6 +557,52 @@ export const projectsService = {
     });
   },
 
+  // Update daily-control configuration. These are non-secret operational
+  // settings; Slack tokens remain server-side in env vars.
+  async updateProjectControlSettings(
+    projectId: string,
+    settings: Pick<
+      Project,
+      'slackChannelIds' | 'qaUrlSource' | 'qaUrls' | 'reviewOwnerEmail' | 'clientUpdatePreferences'
+    >,
+  ): Promise<void> {
+    const slackChannelIds = (settings.slackChannelIds ?? [])
+      .map((id) => id.trim())
+      .filter(Boolean);
+    const qaUrls = (settings.qaUrls ?? [])
+      .map((url) => url.trim())
+      .filter(Boolean);
+    const reviewOwnerEmail = settings.reviewOwnerEmail?.trim();
+    const clientUpdatePreferences = settings.clientUpdatePreferences
+      ? stripUndefined({
+        ...settings.clientUpdatePreferences,
+        notes: settings.clientUpdatePreferences.notes?.trim() || undefined,
+      })
+      : undefined;
+
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({
+        ...project,
+        slackChannelIds,
+        qaUrlSource: settings.qaUrlSource ?? 'auto_links',
+        qaUrls,
+        reviewOwnerEmail: reviewOwnerEmail || undefined,
+        clientUpdatePreferences,
+      }));
+      return;
+    }
+
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+      slackChannelIds,
+      qaUrlSource: settings.qaUrlSource ?? 'auto_links',
+      qaUrls,
+      reviewOwnerEmail: reviewOwnerEmail || deleteField(),
+      clientUpdatePreferences: clientUpdatePreferences ?? deleteField(),
+      updatedAt: Timestamp.now(),
+    });
+  },
+
   // Set or clear the project's custom logo (URL or compressed data URL)
   async updateProjectLogo(projectId: string, logoUrl: string | null): Promise<void> {
     if (isLocalProjectBypassEnabled()) {
@@ -1094,6 +1140,13 @@ function taskFromDoc(id: string, data: Record<string, unknown>): Task {
     tags: (data.tags as string[] | undefined) ?? [],
     source: (data.source as Task['source']) ?? 'manual',
     sourceLink: data.sourceLink as string | undefined,
+    slack: data.slack as Task['slack'],
+    dedupeKey: data.dedupeKey as string | undefined,
+    pageUrl: data.pageUrl as string | undefined,
+    qaStatus: data.qaStatus as Task['qaStatus'],
+    isBlocker: data.isBlocker as boolean | undefined,
+    needsClientInput: data.needsClientInput as boolean | undefined,
+    confidence: data.confidence as number | undefined,
     assignee: data.assignee as string | undefined,
     order: (data.order as number | undefined) ?? 0,
     clickupTaskId: data.clickupTaskId as string | undefined,
@@ -1117,6 +1170,14 @@ function requestFromDoc(id: string, data: Record<string, unknown>): ProjectReque
     rawText: data.rawText as string,
     source: data.source as ProjectRequest['source'],
     sender: data.sender as string | undefined,
+    sourceLink: data.sourceLink as string | undefined,
+    slack: data.slack as ProjectRequest['slack'],
+    dedupeKey: data.dedupeKey as string | undefined,
+    pageUrl: data.pageUrl as string | undefined,
+    isActionable: data.isActionable as boolean | undefined,
+    needsClientInput: data.needsClientInput as boolean | undefined,
+    isBlocker: data.isBlocker as boolean | undefined,
+    confidence: data.confidence as number | undefined,
     receivedAt: data.receivedAt ? toSafeDate(data.receivedAt) : new Date(),
     parsedAt: data.parsedAt ? toSafeDate(data.parsedAt) : undefined,
     status: data.status as ProjectRequest['status'],
@@ -1378,6 +1439,14 @@ export const requestsService = {
     rawText: string;
     source: RequestSource;
     sender?: string;
+    sourceLink?: string;
+    slack?: ProjectRequest['slack'];
+    dedupeKey?: string;
+    pageUrl?: string;
+    isActionable?: boolean;
+    needsClientInput?: boolean;
+    isBlocker?: boolean;
+    confidence?: number;
     createdBy: string;
   }): Promise<string> {
     try {

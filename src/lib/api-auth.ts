@@ -4,6 +4,8 @@ import { auth as adminAuth, db as adminDb, hasFirebaseAdminCredentials } from '@
 import { COLLECTIONS } from '@/lib/constants';
 
 const ADMIN_EMAILS = ['rehan@activeset.co', 'salman@activeset.co'];
+const LOCAL_DEV_EMAIL = 'local-dev@activeset.co';
+const LOCAL_DEV_PROJECT_ID = 'test-project';
 
 export interface AuthedCaller {
   uid: string;
@@ -29,6 +31,38 @@ function extractBearerToken(req: NextRequest): string | null {
   return token.trim();
 }
 
+function isLocalDevApiAuthEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
+  return (
+    process.env.ACTIVESET_LOCAL_DEV_API_AUTH === 'true' ||
+    process.env.NEXT_PUBLIC_ACTIVESET_LOCAL_DEV_API_AUTH === 'true'
+  );
+}
+
+function isLocalhostRequest(req: NextRequest): boolean {
+  const host =
+    req.headers.get('host') ||
+    req.headers.get('x-forwarded-host') ||
+    (() => {
+      try {
+        return new URL(req.url).host;
+      } catch {
+        return '';
+      }
+    })();
+  const hostname = host.split(':')[0]?.toLowerCase();
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+}
+
+function getLocalDevCaller(req: NextRequest): AuthedCaller | null {
+  if (!isLocalDevApiAuthEnabled() || !isLocalhostRequest(req)) return null;
+  return {
+    uid: 'local-dev-mock',
+    email: LOCAL_DEV_EMAIL,
+    isAdmin: true,
+  };
+}
+
 /**
  * Verifies the `Authorization: Bearer <firebase-id-token>` header and returns
  * the caller. Throws {@link ApiAuthError} on any failure — routes should catch
@@ -38,6 +72,8 @@ function extractBearerToken(req: NextRequest): string | null {
  */
 export async function requireCaller(req: NextRequest): Promise<AuthedCaller> {
   if (!hasFirebaseAdminCredentials) {
+    const localCaller = getLocalDevCaller(req);
+    if (localCaller) return localCaller;
     throw new ApiAuthError(500, 'Server auth is not configured');
   }
   const idToken = extractBearerToken(req);
@@ -99,6 +135,12 @@ export async function requireProjectAccess(
   const caller = await requireCaller(req);
   if (!projectId) {
     throw new ApiAuthError(400, 'Missing projectId');
+  }
+  if (!hasFirebaseAdminCredentials && getLocalDevCaller(req)) {
+    if (projectId === LOCAL_DEV_PROJECT_ID || projectId.startsWith('local-project-')) {
+      return caller;
+    }
+    throw new ApiAuthError(404, 'Project not found');
   }
   const projectSnap = await adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId).get();
   if (!projectSnap.exists) {

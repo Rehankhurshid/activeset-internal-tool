@@ -60,7 +60,6 @@ export interface AuditResult {
       status: 'passed' | 'failed' | 'warning' | 'info';
       issues: { word: string; suggestion?: string }[];
       score: number;
-      skippedReason?: string;
     };
     readability: {
       status: 'passed' | 'failed' | 'warning' | 'info';
@@ -323,6 +322,23 @@ export function normalizeProjectStatus(raw: unknown): ProjectStatus {
   return 'current';
 }
 
+export type DailyControlQaUrlSource = 'auto_links' | 'manual_links' | 'custom';
+
+export interface ClientUpdatePreferences {
+  cadence?: 'daily' | 'weekly' | 'manual';
+  channel?: 'slack' | 'email' | 'other';
+  notes?: string;
+}
+
+export interface SlackSourceMetadata {
+  channelId: string;
+  messageTs: string;
+  threadTs?: string;
+  userId?: string;
+  username?: string;
+  permalink?: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -348,16 +364,27 @@ export interface Project {
   publicAuditShareToken?: string;
   publicAuditShareEnabled?: boolean;
   publicAuditShareUpdatedAt?: string;
-  // Embedded widget settings
+  // Embedded widget display flags
   disableAuditBadge?: boolean; // Hide the floating score badge on the right
   disableDropdown?: boolean; // Hide the bottom-right project-links dropdown
-  enableSpellcheck?: boolean; // Run the embedded widget spell checker. Defaults to true.
+  enableSpellcheck?: boolean; // Toggle the embedded spellcheck/audit overlay
   // Persisted bulk image-scan job so progress survives page refresh.
   imageScanJob?: ImageScanJob;
   /** ClickUp list bound to this project. New tasks created in this list auto-import as
    *  pre-linked Tasks; updates flow in via webhook the same way per-task linking does. */
   clickupListId?: string;
   clickupListName?: string;
+  // --- Daily control loop configuration ---
+  /** Slack channels this project should import operational request signals from. */
+  slackChannelIds?: string[];
+  /** Which URLs the Control tab should use when deciding QA coverage. */
+  qaUrlSource?: DailyControlQaUrlSource;
+  /** Custom URLs for QA when qaUrlSource is "custom". */
+  qaUrls?: string[];
+  /** Internal owner responsible for the daily project review. */
+  reviewOwnerEmail?: string;
+  /** Draft-only client update preferences for the Control tab. */
+  clientUpdatePreferences?: ClientUpdatePreferences;
   // --- Daily review tracking ---
   /** UTC date (YYYY-MM-DD) of the most recent review. Primary "is it reviewed today" check. */
   lastReviewDate?: string;
@@ -688,6 +715,20 @@ export interface Task {
   source: TaskSource;
   /** Optional URL back to the originating Slack message / email thread. */
   sourceLink?: string;
+  /** Structured Slack source metadata when this task came from Slack. */
+  slack?: SlackSourceMetadata;
+  /** Import or parse dedupe key, usually channelId:messageTs for Slack. */
+  dedupeKey?: string;
+  /** Page or asset URL this task is about, when detected. */
+  pageUrl?: string;
+  /** Lightweight QA state attached to the task. */
+  qaStatus?: 'not_run' | 'passed' | 'failed' | 'needs_review';
+  /** True when the task blocks release or client progress. */
+  isBlocker?: boolean;
+  /** True when ActiveSet is waiting on client input. */
+  needsClientInput?: boolean;
+  /** 0-1 confidence for AI/deterministic extraction. */
+  confidence?: number;
   /** Email of the assigned team member. */
   assignee?: string;
   /** Manual order within a status bucket (for future kanban / drag-drop). */
@@ -736,6 +777,13 @@ export type UpdateTaskInput = Partial<
     | 'dueDate'
     | 'tags'
     | 'sourceLink'
+    | 'slack'
+    | 'dedupeKey'
+    | 'pageUrl'
+    | 'qaStatus'
+    | 'isBlocker'
+    | 'needsClientInput'
+    | 'confidence'
     | 'assignee'
     | 'order'
     | 'source'
@@ -759,6 +807,22 @@ export interface ProjectRequest {
   source: RequestSource;
   /** Optional sender name/email if known (e.g. who sent the Slack message). */
   sender?: string;
+  /** Optional source link back to Slack/email/feedback system. */
+  sourceLink?: string;
+  /** Structured Slack source metadata when this request came from Slack. */
+  slack?: SlackSourceMetadata;
+  /** Import dedupe key, usually channelId:messageTs for Slack. */
+  dedupeKey?: string;
+  /** Page or asset URL detected from the request. */
+  pageUrl?: string;
+  /** Whether deterministic filtering thinks this request should become work. */
+  isActionable?: boolean;
+  /** True when the message indicates client input is needed. */
+  needsClientInput?: boolean;
+  /** True when the message indicates release/client progress is blocked. */
+  isBlocker?: boolean;
+  /** 0-1 confidence for AI/deterministic extraction. */
+  confidence?: number;
   /** When the request was received (ISO). */
   receivedAt: Date;
   /** When AI parsing finished (ISO). */
@@ -775,4 +839,116 @@ export interface ParsedTaskSuggestion {
   description?: string;
   category: TaskCategory;
   priority: TaskPriority;
+}
+
+export type DailyControlSnapshotStatus =
+  | 'empty'
+  | 'active'
+  | 'blocked'
+  | 'qa_failed'
+  | 'all_clear';
+
+export type DailyControlSeverity = 'info' | 'warning' | 'critical';
+
+export interface DailyControlSignal {
+  id: string;
+  requestId?: string;
+  summary: string;
+  rawText: string;
+  source: RequestSource;
+  sender?: string;
+  receivedAt: string;
+  sourceLink?: string;
+  slack?: SlackSourceMetadata;
+  dedupeKey?: string;
+  pageUrl?: string;
+  isBlocker?: boolean;
+  needsClientInput?: boolean;
+  confidence?: number;
+}
+
+export interface DailyControlTaskRef {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assignee?: string;
+  dueDate?: string;
+  sourceLink?: string;
+  clickupUrl?: string;
+  pageUrl?: string;
+  isBlocker?: boolean;
+  needsClientInput?: boolean;
+}
+
+export interface DailyControlChecklistGap {
+  checklistId: string;
+  itemId: string;
+  checklistName: string;
+  sectionTitle: string;
+  title: string;
+  status: ChecklistItemStatus;
+  assignee?: string;
+  referenceLink?: string;
+}
+
+export interface DailyControlTimelineRisk {
+  milestoneId: string;
+  title: string;
+  status: TimelineItemStatus;
+  startDate: string;
+  endDate: string;
+  assignee?: string;
+  reason: string;
+}
+
+export interface DailyControlQaResult {
+  id: string;
+  label: string;
+  status: 'not_run' | 'passed' | 'failed' | 'needs_review';
+  severity: DailyControlSeverity;
+  url?: string;
+  details?: string;
+  lastRun?: string;
+}
+
+export interface DailyControlSummary {
+  signalCount: number;
+  openTaskCount: number;
+  blockerCount: number;
+  overdueTaskCount: number;
+  noDateTaskCount: number;
+  checklistGapCount: number;
+  timelineRiskCount: number;
+  qaFailedCount: number;
+  completedTodayCount: number;
+}
+
+export interface DailyControlClientUpdateDraft {
+  status: 'draft';
+  text: string;
+  generatedAt: string;
+  redactions?: string[];
+}
+
+export interface DailyControlSnapshot {
+  id: string;
+  projectId: string;
+  projectName: string;
+  dateKey: string;
+  status: DailyControlSnapshotStatus;
+  summary: DailyControlSummary;
+  signals: DailyControlSignal[];
+  openBlockers: DailyControlTaskRef[];
+  overdueTasks: DailyControlTaskRef[];
+  noDateTasks: DailyControlTaskRef[];
+  clientInputTasks: DailyControlTaskRef[];
+  completedToday: DailyControlTaskRef[];
+  inProgressTasks: DailyControlTaskRef[];
+  checklistGaps: DailyControlChecklistGap[];
+  timelineRisks: DailyControlTimelineRisk[];
+  qaResults: DailyControlQaResult[];
+  clientUpdateDraft?: DailyControlClientUpdateDraft;
+  generatedAt: string;
+  updatedAt: string;
 }

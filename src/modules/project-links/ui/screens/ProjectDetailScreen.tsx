@@ -26,6 +26,7 @@ import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { AppNavigation } from '@/shared/ui';
 import { TasksTab } from '@/components/tasks/TasksTab';
+import { ProjectControlCenter } from '@/components/control/ProjectControlCenter';
 import { AddLinkDialog } from '@/components/projects/AddLinkDialog';
 import { LinkList } from '@/components/projects/LinkList';
 import { toast } from 'sonner';
@@ -37,7 +38,7 @@ interface PageProps {
     params: Promise<{ id: string }>;
 }
 
-const PRIMARY_DESKTOP_TAB_VALUES = new Set(['audit', 'links', 'tasks', 'webflow']);
+const PRIMARY_DESKTOP_TAB_VALUES = new Set(['control', 'audit', 'links', 'tasks', 'webflow']);
 
 export default function ProjectDetailPage({ params }: PageProps) {
     const { id } = use(params);
@@ -49,12 +50,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
 
     // Default to 'audit' tab, or whatever ?tab=… in the URL points at (lets the
-    // dashboard's daily-review banner land directly on Tasks). The list of valid
+    // dashboard's daily-review banner land directly on Control). The list of valid
     // tab values is enforced below in tabOptions; falling back to 'audit' is safe.
     const searchParams = useSearchParams();
     const initialTab = (() => {
         const fromUrl = searchParams?.get('tab');
-        const valid = ['audit', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
+        const valid = ['control', 'audit', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
         return fromUrl && valid.includes(fromUrl) ? fromUrl : 'audit';
     })();
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -283,6 +284,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         : { label: 'Not Set', tone: 'unset' };
 
     const tabOptions: TabOption[] = [
+        { value: 'control', label: 'Control', icon: <RefreshCw className="h-4 w-4" />, stat: project.slackChannelIds?.length ? { label: String(project.slackChannelIds.length), tone: 'set' } : { label: 'Set Up', tone: 'unset' } },
         { value: 'audit', label: 'Audit Dashboard', compactLabel: 'Audit', icon: <LayoutDashboard className="h-4 w-4" />, stat: auditStat },
         { value: 'links', label: 'Links', icon: <Link2 className="h-4 w-4" />, stat: linksStat },
         { value: 'tasks', label: 'Tasks', icon: <ListTodo className="h-4 w-4" />, stat: tasksStat },
@@ -401,6 +403,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             detectedLocales={project.detectedLocales}
                             pathToLocaleMap={project.pathToLocaleMap}
                             imageScanJob={project.imageScanJob}
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="control" className="mt-4 sm:mt-6">
+                        <ProjectControlCenter
+                            project={project}
+                            userEmail={user?.email ?? ''}
                         />
                     </TabsContent>
 
