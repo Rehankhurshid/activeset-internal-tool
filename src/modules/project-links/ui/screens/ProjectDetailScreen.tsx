@@ -20,12 +20,14 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Code, ImageIcon, LayoutDashboard, Globe, ListChecks, RefreshCw, Loader2, Share2, GanttChartSquare, Receipt, ListTodo, ChevronDown } from 'lucide-react';
+import { Building2, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, Plus, Share2, GanttChartSquare, Receipt, ListTodo, ChevronDown } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { AppNavigation } from '@/shared/ui';
 import { TasksTab } from '@/components/tasks/TasksTab';
+import { AddLinkDialog } from '@/components/projects/AddLinkDialog';
+import { LinkList } from '@/components/projects/LinkList';
 import { toast } from 'sonner';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
@@ -49,7 +51,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const searchParams = useSearchParams();
     const initialTab = (() => {
         const fromUrl = searchParams?.get('tab');
-        const valid = ['audit', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
+        const valid = ['audit', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
         return fromUrl && valid.includes(fromUrl) ? fromUrl : 'audit';
     })();
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -106,6 +108,18 @@ export default function ProjectDetailPage({ params }: PageProps) {
             console.error('Failed to update client:', error);
             toast.error('Failed to update client');
         }
+    };
+
+    const handleAddProjectLink = async (title: string, url: string) => {
+        if (!project) return;
+        await projectLinksRepository.addLinkToProject(project.id, {
+            title,
+            url,
+            order: project.links.length,
+            isDefault: false,
+            source: 'manual',
+        });
+        toast.success('Link added');
     };
 
     const handleSaveWebflowConfig = async (config: WebflowConfigInput) => {
@@ -244,6 +258,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     }
 
     const autoLinksCount = project.links.filter(l => l.source === 'auto').length;
+    const manualLinksCount = project.links.filter(l => l.source !== 'auto').length;
     const openTaskCount = tasks.filter(t => t.status !== 'done').length;
     const checklistItems = checklists.flatMap(c => c.sections.flatMap(s => s.items));
     const checklistDone = checklistItems.filter(i => i.status === 'completed' || i.status === 'skipped').length;
@@ -252,6 +267,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const timelinePhases = timeline?.phases?.length ?? 0;
 
     const auditStat: TabStat = { label: String(autoLinksCount), tone: autoLinksCount > 0 ? 'set' : 'unset' };
+    const linksStat: TabStat = { label: String(manualLinksCount), tone: manualLinksCount > 0 ? 'set' : 'unset' };
     const tasksStat: TabStat = { label: String(openTaskCount), tone: openTaskCount > 0 ? 'set' : 'unset' };
     const webflowStat: TabStat = hasWebflowSync
         ? { label: 'Set', tone: 'set' }
@@ -265,6 +281,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
     const tabOptions: TabOption[] = [
         { value: 'audit', label: 'Audit Dashboard', icon: <LayoutDashboard className="h-4 w-4" />, stat: auditStat },
+        { value: 'links', label: 'Links', icon: <Link2 className="h-4 w-4" />, stat: linksStat },
         { value: 'tasks', label: 'Tasks', icon: <ListTodo className="h-4 w-4" />, stat: tasksStat },
         { value: 'webflow', label: 'Webflow Pages', icon: <Globe className="h-4 w-4" />, stat: webflowStat },
         { value: 'images', label: 'Image Library', icon: <ImageIcon className="h-4 w-4" /> },
@@ -305,8 +322,15 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight"
                         />
                         <div className="flex flex-wrap items-center gap-2 text-muted-foreground mt-1">
-                            <Badge variant="secondary" className="font-mono text-xs">
-                                {project.links.filter(l => l.source !== 'auto').length} links
+                            <Badge asChild variant="secondary" className="font-mono text-xs">
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab('links')}
+                                    className="cursor-pointer"
+                                    aria-label="Open project links"
+                                >
+                                    {manualLinksCount} links
+                                </button>
                             </Badge>
                             <div className="flex items-center gap-1 text-xs">
                                 <Building2 className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
@@ -379,6 +403,36 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             pathToLocaleMap={project.pathToLocaleMap}
                             imageScanJob={project.imageScanJob}
                         />
+                    </TabsContent>
+
+                    <TabsContent value="links" className="mt-4 sm:mt-6">
+                        <section className="rounded-lg border bg-card">
+                            <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <h2 className="text-base font-semibold">Project Links</h2>
+                                    <p className="text-sm text-muted-foreground">
+                                        Manual bookmarks available from the project dashboard and embedded widget.
+                                    </p>
+                                </div>
+                                <AddLinkDialog
+                                    onAddLink={handleAddProjectLink}
+                                    trigger={(
+                                        <Button size="sm" className="gap-2">
+                                            <Plus className="h-4 w-4" />
+                                            Add Link
+                                        </Button>
+                                    )}
+                                />
+                            </div>
+                            <div className="p-4">
+                                <LinkList
+                                    projectId={project.id}
+                                    links={project.links}
+                                    sources={['manual']}
+                                    emptyMessage="No project links yet. Add a link to make it available from this dashboard and widget."
+                                />
+                            </div>
+                        </section>
                     </TabsContent>
 
                     <TabsContent value="tasks" className="mt-4 sm:mt-6">

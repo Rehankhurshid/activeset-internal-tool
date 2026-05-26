@@ -12,9 +12,15 @@ interface LinkListProps {
   projectId: string;
   links: ProjectLink[];
   limit?: number;
+  sources?: Array<NonNullable<ProjectLink['source']>>;
+  emptyMessage?: string;
 }
 
-export function LinkList({ projectId, links, limit }: LinkListProps) {
+function normalizedSource(link: ProjectLink): NonNullable<ProjectLink['source']> {
+  return link.source ?? 'manual';
+}
+
+export function LinkList({ projectId, links, limit, sources, emptyMessage }: LinkListProps) {
   const [sortedLinks, setSortedLinks] = useState<ProjectLink[]>([]);
   const [filter, setFilter] = useState('');
   const { execute: executeDragEnd } = useAsyncOperation();
@@ -26,7 +32,14 @@ export function LinkList({ projectId, links, limit }: LinkListProps) {
     setSortedLinks(validLinks);
   }, [links]);
 
-  const filteredLinks = sortedLinks.filter(link =>
+  const sourceMatches = useCallback((link: ProjectLink) => {
+    if (!sources || sources.length === 0) return true;
+    return sources.includes(normalizedSource(link));
+  }, [sources]);
+
+  const visibleLinks = sortedLinks.filter(sourceMatches);
+
+  const filteredLinks = visibleLinks.filter(link =>
     link.title.toLowerCase().includes(filter.toLowerCase()) ||
     link.url.toLowerCase().includes(filter.toLowerCase())
   );
@@ -39,13 +52,21 @@ export function LinkList({ projectId, links, limit }: LinkListProps) {
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
     if (active.id !== over?.id) {
-      const oldIndex = sortedLinks.findIndex((link) => link.id === active.id);
-      const newIndex = sortedLinks.findIndex((link) => link.id === over?.id);
+      const reorderableLinks = sortedLinks.filter(sourceMatches);
+      const oldIndex = reorderableLinks.findIndex((link) => link.id === active.id);
+      const newIndex = reorderableLinks.findIndex((link) => link.id === over?.id);
 
       if (oldIndex === -1 || newIndex === -1) return;
 
-      const newLinks = arrayMove(sortedLinks, oldIndex, newIndex);
-      const updatedLinks = newLinks.map((link, index) => ({ ...link, order: index }));
+      const reorderedVisibleLinks = arrayMove(reorderableLinks, oldIndex, newIndex);
+      let nextVisibleIndex = 0;
+      const mergedLinks = sortedLinks.map((link) => {
+        if (!sourceMatches(link)) return link;
+        const nextLink = reorderedVisibleLinks[nextVisibleIndex];
+        nextVisibleIndex += 1;
+        return nextLink;
+      });
+      const updatedLinks = mergedLinks.map((link, index) => ({ ...link, order: index }));
 
       // Optimistically update UI
       setSortedLinks(updatedLinks);
@@ -53,7 +74,7 @@ export function LinkList({ projectId, links, limit }: LinkListProps) {
       // Update database
       await executeDragEnd(() => projectsService.updateProjectLinks(projectId, updatedLinks));
     }
-  }, [sortedLinks, projectId, executeDragEnd]);
+  }, [sortedLinks, projectId, executeDragEnd, sourceMatches]);
 
   const handleEdit = useCallback(async (linkId: string, title: string, url: string) => {
     await projectsService.updateLink(projectId, linkId, { title, url });
@@ -63,18 +84,18 @@ export function LinkList({ projectId, links, limit }: LinkListProps) {
     await projectsService.deleteLink(projectId, linkId);
   }, [projectId]);
 
-  if (links.length === 0) {
+  if (visibleLinks.length === 0) {
     return (
       <div className="text-center py-6 text-sm text-muted-foreground">
-        No links yet. Add one to get started.
+        {emptyMessage ?? 'No links yet. Add one to get started.'}
       </div>
     );
   }
 
   // If limiting, show plain list (no drag)
-  if (limit && sortedLinks.length > 0) {
-    const displayLinks = sortedLinks.slice(0, limit);
-    const remaining = sortedLinks.length - limit;
+  if (limit && visibleLinks.length > 0) {
+    const displayLinks = visibleLinks.slice(0, limit);
+    const remaining = visibleLinks.length - limit;
 
     return (
       <div className="space-y-1">
@@ -90,7 +111,7 @@ export function LinkList({ projectId, links, limit }: LinkListProps) {
         {remaining > 0 && (
           <div className="pt-2 text-center">
             <a
-              href={`/modules/project-links/${projectId}`}
+              href={`/modules/project-links/${projectId}?tab=links`}
               className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
             >
               View {remaining} more links
@@ -112,7 +133,7 @@ export function LinkList({ projectId, links, limit }: LinkListProps) {
         strategy={verticalListSortingStrategy}
       >
         <div className="space-y-4">
-          {links.length > 5 && (
+          {visibleLinks.length > 5 && (
             <div className="relative">
               <input
                 type="text"
@@ -142,4 +163,4 @@ export function LinkList({ projectId, links, limit }: LinkListProps) {
       </SortableContext>
     </DndContext>
   );
-} 
+}

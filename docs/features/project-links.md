@@ -71,6 +71,12 @@ Single project page with tabbed interface for different features:
 
 #### Tabs:
 
+##### **Links Tab**
+- Displays manual project links directly inside the project detail dashboard
+- Supports adding, editing, deleting, filtering, previewing, opening, and drag-and-drop reordering
+- Uses the same manual link records shown on project cards and in the embedded widget
+- Preserves auto-discovered audit links when manual links are filtered or reordered
+
 ##### **Audit Dashboard Tab** (Default)
 - Displays content quality audit results for all auto-discovered pages
 - Shows pages scanned via sitemap with quality scores
@@ -103,6 +109,7 @@ Links can be added two ways:
 #### Manual Links
 - User-created via "Add Link" dialog
 - Used for custom bookmarks or important pages
+- Managed from project cards, the project detail Links tab, and the embedded widget
 - Displayed in embedded widget
 - `source: 'manual'`
 
@@ -181,6 +188,9 @@ ProjectDetailPage ([id]/page.tsx)
 │   ├── EmbedDialog (widget code)
 │   └── ModeToggle (dark/light theme)
 └── Tabs
+    ├── Links Tab
+    │   ├── AddLinkDialog
+    │   └── LinkList
     ├── Audit Dashboard Tab
     │   ├── ScanSitemapDialog
     │   └── WebsiteAuditDashboard
