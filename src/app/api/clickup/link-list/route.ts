@@ -138,6 +138,7 @@ export async function POST(request: NextRequest) {
         clickupTaskId: task.id,
         clickupUrl: task.url ?? buildClickUpTaskUrl(task.id),
         clickupSyncedAt: now,
+        clickupLastSyncedRequestId: null,
         source: 'clickup' as const,
         updatedAt: now,
       };

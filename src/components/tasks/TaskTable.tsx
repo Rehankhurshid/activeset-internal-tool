@@ -22,6 +22,8 @@ import {
   Link2Off,
   Loader2,
   AlertCircle,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -126,6 +128,7 @@ export function TaskTable({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [linkDialogTask, setLinkDialogTask] = useState<Task | null>(null);
+  const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
@@ -213,6 +216,19 @@ export function TaskTable({
     } catch (err) {
       console.error('[TaskTable] delete failed', err);
       toast.error('Failed to delete task');
+    }
+  };
+
+  const handleRetryClickUp = async (task: Task) => {
+    setRetryingTaskId(task.id);
+    try {
+      await tasksService.retryClickUpSync(task);
+      toast.success('ClickUp sync retry started');
+    } catch (err) {
+      console.error('[TaskTable] ClickUp retry failed', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to retry ClickUp sync');
+    } finally {
+      setRetryingTaskId((current) => (current === task.id ? null : current));
     }
   };
 
@@ -565,6 +581,27 @@ export function TaskTable({
                   <ExternalLink className="h-3 w-3" />
                 </a>
               )}
+              {!readOnly && task.clickupSyncError && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[11px] text-amber-700 hover:text-amber-800 hover:bg-amber-500/10 dark:text-amber-400"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRetryClickUp(task);
+                  }}
+                  disabled={retryingTaskId === task.id}
+                  title={task.clickupSyncError}
+                >
+                  {retryingTaskId === task.id ? (
+                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                  )}
+                  Retry
+                </Button>
+              )}
             </div>
           );
         },
@@ -590,7 +627,7 @@ export function TaskTable({
             } as ColumnDef<Task>,
           ]),
     ],
-    [assignees, visibleParentIds, previousViewedAt, userEmail, readOnly, clickupListId],
+    [assignees, visibleParentIds, previousViewedAt, userEmail, readOnly, clickupListId, retryingTaskId],
   );
 
   const table = useReactTable({

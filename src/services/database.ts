@@ -196,6 +196,13 @@ function updateLocalProject(projectId: string, updater: (project: Project) => Pr
   writeLocalProjects(updatedProjects);
 }
 
+const generateClickUpSyncRequestId = (): string => {
+  if (typeof globalThis !== 'undefined' && globalThis.crypto && 'randomUUID' in globalThis.crypto) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `cu_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+};
+
 /**
  * Belt-and-braces: scrub any legacy apiToken that predates the server-side
  * secrets collection. Newly written docs never include it, but old projects
@@ -1240,6 +1247,7 @@ function pushUpdateToClickUp(
   projectId: string,
   taskId: string,
   patch: Partial<Pick<UpdateTaskInput, ClickUpPushableField>>,
+  expectedRequestId: string | null,
 ): void {
   if (typeof window === 'undefined') return;
   if (!projectId || !taskId) return;
@@ -1256,7 +1264,7 @@ function pushUpdateToClickUp(
           Authorization: `Bearer ${idToken}`,
           'x-project-id': projectId,
         },
-        body: JSON.stringify({ projectId, taskId, patch }),
+        body: JSON.stringify({ projectId, taskId, patch, expectedRequestId }),
       }),
     )
     .catch((err) => {
@@ -1272,6 +1280,8 @@ export const tasksService = {
       const payload = stripUndefined({
         ...input,
         order: input.order ?? Date.now(),
+        clickupSyncRequestId: generateClickUpSyncRequestId(),
+        clickupSyncRequestedAt: now,
         createdAt: now,
         updatedAt: now,
       });
@@ -1301,6 +1311,8 @@ export const tasksService = {
         const payload = stripUndefined({
           ...input,
           order: input.order ?? baseOrder + idx,
+          clickupSyncRequestId: generateClickUpSyncRequestId(),
+          clickupSyncRequestedAt: now,
           createdAt: now,
           updatedAt: now,
         });
@@ -1350,18 +1362,28 @@ export const tasksService = {
         }
       }
       const wantsClickUpPush = Object.keys(clickupPatch).length > 0;
+      const syncRequestId = wantsClickUpPush ? generateClickUpSyncRequestId() : null;
+      const now = Timestamp.now();
 
       // Auto-stamp completedAt when status flips to done; clear when leaving done.
       const completedAtUpdate =
         updates.status === 'done'
-          ? { completedAt: Timestamp.now() }
+          ? { completedAt: now }
           : updates.status
             ? { completedAt: deleteField() }
             : {};
       await updateDoc(ref, {
         ...cleaned,
         ...completedAtUpdate,
-        updatedAt: Timestamp.now(),
+        ...(syncRequestId
+          ? {
+              clickupSyncRequestId: syncRequestId,
+              clickupSyncRequestedAt: now,
+              clickupSyncError: deleteField(),
+              clickupSyncFailedAt: deleteField(),
+            }
+          : {}),
+        updatedAt: now,
       });
 
       // If any pushable field changed AND the task is linked to ClickUp,
@@ -1372,7 +1394,7 @@ export const tasksService = {
           .then((s) => {
             const d = s.data() as { projectId?: string; clickupTaskId?: string } | undefined;
             if (d?.projectId && d?.clickupTaskId) {
-              pushUpdateToClickUp(d.projectId, taskId, clickupPatch);
+              pushUpdateToClickUp(d.projectId, taskId, clickupPatch, syncRequestId);
             }
           })
           .catch((err) => {
@@ -1391,6 +1413,52 @@ export const tasksService = {
     } catch (error) {
       logError(error, 'deleteTask');
       throw new DatabaseError('Failed to delete task');
+    }
+  },
+
+  async retryClickUpSync(task: Task): Promise<void> {
+    try {
+      const user = auth?.currentUser;
+      if (!user) throw new Error('Not signed in');
+      const idToken = await user.getIdToken();
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+        'x-project-id': task.projectId,
+      };
+      const res = task.clickupTaskId
+        ? await fetch('/api/clickup/sync-update', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              projectId: task.projectId,
+              taskId: task.id,
+              forceFullState: true,
+            }),
+          })
+        : await fetch('/api/clickup/sync-create', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ projectId: task.projectId, taskIds: [task.id] }),
+          });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        details?: string;
+        reason?: string;
+        results?: Array<{ taskId: string; status: string; reason?: string }>;
+      };
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.details || data.error || data.reason || 'ClickUp sync failed');
+      }
+      const result = data.results?.find((item) => item.taskId === task.id);
+      if (result?.status === 'failed') {
+        throw new Error(result.reason || 'ClickUp sync failed');
+      }
+    } catch (error) {
+      logError(error, 'retryClickUpSync');
+      throw new DatabaseError(error instanceof Error ? error.message : 'Failed to retry ClickUp sync');
     }
   },
 

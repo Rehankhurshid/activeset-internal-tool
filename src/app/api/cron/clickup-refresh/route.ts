@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { isCronAuthorized } from '@/lib/cron-auth';
 import {
   buildClickUpTaskUrl,
@@ -16,6 +16,7 @@ import {
   hasFirebaseAdminCredentials,
 } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
+import { syncTaskUpdateToClickUp } from '@/lib/clickup-sync-update';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -134,10 +135,30 @@ export async function GET(request: NextRequest) {
   let errors = 0;
 
   for (const doc of linked.docs) {
-    const taskId = (doc.data() as { clickupTaskId?: string }).clickupTaskId;
+    const docData = doc.data() as {
+      projectId?: string;
+      clickupTaskId?: string;
+      clickupSyncRequestId?: string;
+      clickupLastSyncedRequestId?: string | null;
+    };
+    const taskId = docData.clickupTaskId;
     if (!taskId) continue;
 
     try {
+      const pendingLocalRequest =
+        docData.clickupSyncRequestId &&
+        docData.clickupLastSyncedRequestId !== docData.clickupSyncRequestId;
+      if (docData.projectId && pendingLocalRequest) {
+        const result = await syncTaskUpdateToClickUp(docData.projectId, doc.id, {
+          expectedRequestId: docData.clickupSyncRequestId,
+          forceFullState: true,
+        });
+        if (result.ok) synced += 1;
+        else errors += 1;
+        await sleep(REQUEST_INTERVAL_MS);
+        continue;
+      }
+
       const task = await fetchClickUpTask(taskId);
       const patch = clickUpTaskToUpdate(task);
       const completedAtUpdate =
@@ -147,6 +168,10 @@ export async function GET(request: NextRequest) {
         ...completedAtUpdate,
         clickupUrl: task.url ?? buildClickUpTaskUrl(taskId),
         clickupSyncedAt: Timestamp.now(),
+        clickupLastSyncedRequestId: docData.clickupSyncRequestId ?? null,
+        clickupSyncError: FieldValue.delete(),
+        clickupSyncFailedAt: FieldValue.delete(),
+        clickupSyncInFlightAt: FieldValue.delete(),
         updatedAt: Timestamp.now(),
       });
       synced += 1;
@@ -158,6 +183,10 @@ export async function GET(request: NextRequest) {
           clickupTaskId: null,
           clickupUrl: null,
           clickupSyncedAt: null,
+          clickupLastSyncedRequestId: null,
+          clickupSyncError: FieldValue.delete(),
+          clickupSyncFailedAt: FieldValue.delete(),
+          clickupSyncInFlightAt: FieldValue.delete(),
           source: 'manual',
           updatedAt: Timestamp.now(),
         });
