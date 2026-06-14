@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import {
   buildClickUpTaskUrl,
   ClickUpError,
@@ -13,6 +13,7 @@ import {
   hasFirebaseAdminCredentials,
 } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
+import { syncTaskUpdateToClickUp } from '@/lib/clickup-sync-update';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -120,6 +121,10 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
       clickupTaskId: null,
       clickupUrl: null,
       clickupSyncedAt: null,
+      clickupLastSyncedRequestId: null,
+      clickupSyncError: FieldValue.delete(),
+      clickupSyncFailedAt: FieldValue.delete(),
+      clickupSyncInFlightAt: FieldValue.delete(),
       source: 'manual',
       updatedAt: Timestamp.now(),
     });
@@ -139,6 +144,10 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
           clickupTaskId: null,
           clickupUrl: null,
           clickupSyncedAt: null,
+          clickupLastSyncedRequestId: null,
+          clickupSyncError: FieldValue.delete(),
+          clickupSyncFailedAt: FieldValue.delete(),
+          clickupSyncInFlightAt: FieldValue.delete(),
           source: 'manual',
           updatedAt: Timestamp.now(),
         });
@@ -157,7 +166,11 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
   if (existing) {
     // Update path. If the task moved OUT of a linked list, unlink it (option A
     // behavior — keep the local row, drop the ClickUp link).
-    const localData = existing.data() as { projectId?: string };
+    const localData = existing.data() as {
+      projectId?: string;
+      clickupSyncRequestId?: string;
+      clickupLastSyncedRequestId?: string | null;
+    };
     const projectId = localData.projectId;
     let movedOutOfLinkedList = false;
     if (projectId) {
@@ -177,10 +190,25 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
         clickupTaskId: null,
         clickupUrl: null,
         clickupSyncedAt: null,
+        clickupLastSyncedRequestId: null,
+        clickupSyncError: FieldValue.delete(),
+        clickupSyncFailedAt: FieldValue.delete(),
+        clickupSyncInFlightAt: FieldValue.delete(),
         source: 'manual',
         updatedAt: Timestamp.now(),
       });
       return NextResponse.json({ ok: true, action: 'unlinked-list-moved-out' });
+    }
+
+    const pendingLocalRequest =
+      localData.clickupSyncRequestId &&
+      localData.clickupLastSyncedRequestId !== localData.clickupSyncRequestId;
+    if (projectId && pendingLocalRequest) {
+      await syncTaskUpdateToClickUp(projectId, existing.id, {
+        expectedRequestId: localData.clickupSyncRequestId,
+        forceFullState: true,
+      });
+      return NextResponse.json({ ok: true, action: 'deferred-local-pending', event });
     }
 
     await existing.ref.update({
@@ -188,6 +216,10 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
       ...completedAtUpdate,
       clickupUrl: task.url ?? buildClickUpTaskUrl(taskId),
       clickupSyncedAt: Timestamp.now(),
+      clickupLastSyncedRequestId: localData.clickupSyncRequestId ?? null,
+      clickupSyncError: FieldValue.delete(),
+      clickupSyncFailedAt: FieldValue.delete(),
+      clickupSyncInFlightAt: FieldValue.delete(),
       updatedAt: Timestamp.now(),
     });
     return NextResponse.json({ ok: true, action: 'synced', event });
@@ -219,6 +251,7 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
     parentClickupTaskId: patch.parentClickupTaskId,
     clickupUrl: task.url ?? buildClickUpTaskUrl(taskId),
     clickupSyncedAt: now,
+    clickupLastSyncedRequestId: null,
     order: Date.now(),
     completedAt: patch.status === 'done' ? now : null,
     createdAt: now,
