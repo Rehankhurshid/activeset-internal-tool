@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -103,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const localMockActiveRef = useRef(false);
 
   useEffect(() => {
     // On localhost, kick off a real Firebase Auth sign-in via the dev-only
@@ -113,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInForLocalDev().catch((err) => {
         console.warn('[useAuth] dev-token sign-in failed, falling back to mock user', err);
         const mockUser = buildLocalDevMockUser();
+        localMockActiveRef.current = true;
         setUser(mockUser);
         setIsAdmin(true);
         setLoading(false);
@@ -134,6 +137,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           setIsAdmin(accessControlService.isAdmin(firebaseUser.email));
         }
+      } else if (isLocalDevelopment() && localMockActiveRef.current) {
+        setLoading(false);
       } else {
         setUser(null);
         setIsAdmin(false);

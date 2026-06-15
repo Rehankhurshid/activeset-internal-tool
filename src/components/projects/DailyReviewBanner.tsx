@@ -110,7 +110,7 @@ export function DailyReviewBanner({ projects, className }: DailyReviewBannerProp
       onClick={togglePosition}
       aria-label={position === 'top' ? 'Move banner to bottom' : 'Move banner to top'}
       title={position === 'top' ? 'Move to bottom' : 'Move to top'}
-      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+      className="h-9 w-9 text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
     >
       {position === 'top' ? (
         <ArrowDownToLine className="h-3.5 w-3.5" />

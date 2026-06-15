@@ -109,6 +109,8 @@ function createLocalBypassProject(overrides: Partial<Project> = {}): Project {
     updatedAt: now,
     userId: 'local-dev-mock',
     client: 'Revpack',
+    reviewOwnerEmail: 'ops@activeset.co',
+    assigneeEmails: ['designer@activeset.co', 'developer@activeset.co'],
     ...overrides,
   };
 }
@@ -224,7 +226,19 @@ function sanitizeProjectData<T extends Record<string, unknown>>(data: T): T {
       (data as { status?: unknown }).status,
     );
   }
+  if ('assigneeEmails' in data && !Array.isArray((data as { assigneeEmails?: unknown }).assigneeEmails)) {
+    delete (data as { assigneeEmails?: unknown }).assigneeEmails;
+  }
   return data;
+}
+
+function normalizeProjectAssignees(assigneeEmails: string[] | undefined): string[] {
+  const seen = new Set<string>();
+  for (const email of assigneeEmails ?? []) {
+    const normalized = email.trim().toLowerCase();
+    if (normalized) seen.add(normalized);
+  }
+  return Array.from(seen).sort((a, b) => a.localeCompare(b));
 }
 
 /** Recursively strip undefined values from objects/arrays — Firestore rejects them. */
@@ -543,6 +557,27 @@ export const projectsService = {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       tags,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // Attach/detach people from a project.
+  async updateProjectAssignees(projectId: string, assigneeEmails: string[]): Promise<void> {
+    const normalized = normalizeProjectAssignees(assigneeEmails);
+
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => {
+        if (normalized.length > 0) return { ...project, assigneeEmails: normalized };
+        const nextProject = { ...project };
+        delete nextProject.assigneeEmails;
+        return nextProject;
+      });
+      return;
+    }
+
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+      assigneeEmails: normalized.length > 0 ? normalized : deleteField(),
       updatedAt: Timestamp.now(),
     });
   },

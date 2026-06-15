@@ -25,6 +25,8 @@ import {
     SlidersHorizontal,
     DollarSign,
     Activity,
+    Radar,
+    UserCheck,
 } from 'lucide-react';
 import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS, PROJECT_STATUS_LABELS } from '@/types';
 import { projectsService } from '@/services/database';
@@ -45,6 +47,7 @@ import {
 import { AddLinkDialog } from './AddLinkDialog';
 import { ChecklistProgressBadge } from '@/components/checklist/ChecklistProgressBadge';
 import { ProjectReviewToggle } from './ProjectReviewToggle';
+import { ProjectPeoplePicker } from './ProjectPeoplePicker';
 
 const TAG_COLORS: Record<ProjectTag, { bg: string; text: string; border: string }> = {
     retainer: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
@@ -114,6 +117,17 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const disableAuditBadge = project.disableAuditBadge === true;
     const disableDropdown = project.disableDropdown === true;
     const spellcheckEnabled = project.enableSpellcheck !== false;
+    const assigneeEmails = project.assigneeEmails ?? [];
+    const autoLinksCount = project.links?.filter(l => l.source === 'auto').length ?? 0;
+    const runningImageScan = project.imageScanJob?.status === 'running';
+    const peopleCount = assigneeEmails.length;
+    const workSignal = runningImageScan
+        ? 'Scanning'
+        : hasClickUp
+            ? 'Tasks live'
+            : hasScanning
+                ? 'QA ready'
+                : 'Setup';
 
     const handleDelete = async () => {
         setIsDeleting(true);
@@ -191,8 +205,8 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                 role="article"
                 aria-label={`Project: ${project.name}`}
                 className={cn(
-                    "group relative flex flex-col h-full overflow-hidden border transition-all duration-300",
-                    "hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-0.5",
+                    "project-work-card group relative flex flex-col h-full overflow-hidden border transition-[border-color,box-shadow,transform,opacity] duration-200",
+                    "motion-safe:hover:shadow-xl motion-safe:hover:shadow-primary/5 motion-safe:hover:-translate-y-0.5",
                     "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
                     isCurrent
                         ? "border-border/60 bg-gradient-to-br from-card via-card to-card/80"
@@ -201,14 +215,14 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             >
                 {/* Accent stripe */}
                 <div className={cn(
-                    "absolute top-0 left-0 right-0 h-[3px] transition-all duration-300",
+                    "work-sweep-line absolute top-0 left-0 right-0 h-[3px] transition-[background-color,opacity] duration-200",
                     isCurrent
                         ? "bg-gradient-to-r from-primary via-primary/80 to-primary/40"
                         : "bg-gradient-to-r from-muted-foreground/30 via-muted-foreground/20 to-transparent"
                 )} />
 
                 {/* Header */}
-                <div className="flex items-start justify-between p-4 pb-2 pt-5">
+                <div className="flex items-start justify-between p-3 pb-2 pt-5 sm:p-4 sm:pb-2 sm:pt-5">
                     <div className="flex items-start gap-3 overflow-hidden flex-1 min-w-0">
                         {/* Status dot + Project logo / initial */}
                         <ProjectLogoDialog
@@ -220,7 +234,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                     type="button"
                                     aria-label={`Set logo for ${project.name}`}
                                     className={cn(
-                                        "relative flex items-center justify-center w-10 h-10 rounded-xl text-sm font-bold shrink-0 transition-all duration-300 overflow-hidden",
+                                        "relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl text-sm font-bold shrink-0 transition-[box-shadow,border-color,transform] duration-200 sm:h-10 sm:w-10",
                                         "shadow-sm border cursor-pointer hover:ring-2 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                         isCurrent
                                             ? "bg-primary/10 text-primary border-primary/20"
@@ -323,7 +337,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 text-muted-foreground/50 hover:text-foreground -mr-1 mt-0.5 shrink-0"
+                                className="h-9 w-9 text-muted-foreground/50 hover:text-foreground -mr-1 mt-0.5 shrink-0 sm:h-7 sm:w-7"
                                 aria-label={`Actions for ${project.name}`}
                             >
                                 <MoreVertical className="h-3.5 w-3.5" />
@@ -428,7 +442,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
 
                 {/* Tag pills */}
                 {tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 px-4 pb-1">
+                    <div className="flex flex-wrap gap-1 px-3 pb-1 sm:px-4">
                         {tags.map(tag => {
                             const colors = TAG_COLORS[tag];
                             return (
@@ -447,8 +461,39 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                     </div>
                 )}
 
+                <div className="px-3 pb-2 sm:px-4">
+                    <ProjectPeoplePicker
+                        projectId={project.id}
+                        projectName={project.name}
+                        assigneeEmails={assigneeEmails}
+                        reviewOwnerEmail={project.reviewOwnerEmail}
+                        className="w-full justify-start"
+                    />
+                </div>
+
+                <div className="px-3 pb-2 sm:px-4">
+                    <div className="grid grid-cols-3 gap-1.5 rounded-lg border border-border/50 bg-muted/20 p-1.5">
+                        <WorkSignal
+                            icon={<Radar className="h-3 w-3" />}
+                            label="Flow"
+                            value={workSignal}
+                            live={isCurrent && (runningImageScan || hasClickUp || hasScanning)}
+                        />
+                        <WorkSignal
+                            icon={<LinkIcon className="h-3 w-3" />}
+                            label="Pages"
+                            value={autoLinksCount > 0 ? String(autoLinksCount) : String(manualLinks.length)}
+                        />
+                        <WorkSignal
+                            icon={<UserCheck className="h-3 w-3" />}
+                            label="Crew"
+                            value={peopleCount > 0 ? String(peopleCount) : 'Open'}
+                        />
+                    </div>
+                </div>
+
                 {/* Content — Links */}
-                <div className="flex-1 px-3 py-2 space-y-0.5">
+                <div className="flex-1 px-2.5 py-1.5 space-y-0.5 sm:px-3 sm:py-2">
                     {manualLinks.length > 0 ? (
                         <>
                             {displayLinks.map((link) => (
@@ -470,7 +515,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                         onClick={() => setIsExpanded(v => !v)}
                                         aria-expanded={isExpanded}
                                         aria-label={isExpanded ? 'Show fewer links' : `Show ${remainingCount} more links`}
-                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted/50 hover:bg-muted text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        className="inline-flex min-h-8 items-center gap-1 rounded-md bg-muted/50 px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0 sm:px-1.5 sm:py-0.5"
                                     >
                                         {isExpanded ? (
                                             <>
@@ -490,7 +535,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 <AddLinkDialog
                                     onAddLink={handleAddLink}
                                     trigger={
-                                        <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] gap-1.5 text-muted-foreground hover:text-primary justify-start px-2">
+                                        <Button variant="ghost" size="sm" className="w-full h-9 sm:h-7 text-xs sm:text-[10px] gap-1.5 text-muted-foreground hover:text-primary justify-start px-2">
                                             <div className="flex items-center justify-center w-4 h-4 rounded-full border border-current opacity-60">
                                                 <Plus className="w-2.5 h-2.5" />
                                             </div>
@@ -506,7 +551,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                             <AddLinkDialog
                                 onAddLink={handleAddLink}
                                 trigger={
-                                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
+                                    <Button variant="outline" size="sm" className="h-9 sm:h-7 text-xs gap-1.5">
                                         <Plus className="w-3.5 h-3.5" />
                                         Add Link
                                     </Button>
@@ -523,7 +568,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                             variant="default"
                             size="sm"
                             className={cn(
-                                "w-full h-8 text-xs justify-center group/btn shadow-sm hover:shadow transition-all",
+                                "w-full h-10 sm:h-8 text-xs justify-center group/btn shadow-sm hover:shadow transition-[background-color,box-shadow,transform]",
                                 isCurrent
                                     ? "bg-primary/90 hover:bg-primary"
                                     : "bg-muted hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground"
@@ -546,6 +591,31 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                 variant="destructive"
             />
         </>
+    );
+}
+
+function WorkSignal({
+    icon,
+    label,
+    value,
+    live = false,
+}: {
+    icon: React.ReactNode;
+    label: string;
+    value: string;
+    live?: boolean;
+}) {
+    return (
+        <div className="min-w-0 rounded-md bg-background/70 px-2 py-1.5">
+            <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                <span className={cn('shrink-0', live && 'text-emerald-500')}>{icon}</span>
+                <span className="truncate">{label}</span>
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5">
+                {live && <span className="work-live-dot size-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />}
+                <span className="truncate text-xs font-semibold tabular-nums">{value}</span>
+            </div>
+        </div>
     );
 }
 
@@ -607,7 +677,7 @@ function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDe
 
     return (
         <div
-            className="group/item relative flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/50 transition-all duration-200 cursor-pointer"
+            className="group/item relative flex min-h-12 items-center gap-2.5 rounded-lg p-2 hover:bg-muted/50 transition-[background-color,transform] duration-200 cursor-pointer"
             onClick={onOpen}
             role="link"
             tabIndex={0}
@@ -633,7 +703,7 @@ function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDe
             </div>
 
             {/* Content */}
-            <div className="flex-1 min-w-0 pr-6">
+            <div className="flex-1 min-w-0 pr-16 sm:pr-6">
                 <div className="text-sm font-medium truncate text-foreground/90 group-hover/item:text-primary transition-colors leading-none mb-0.5">
                     {link.title}
                 </div>
@@ -649,11 +719,11 @@ function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDe
             </div>
 
             {/* Hover Actions */}
-            <div className="absolute right-1 opacity-0 group-hover/item:opacity-100 transition-all duration-200 flex items-center bg-background/90 backdrop-blur-sm rounded-md shadow-sm border px-0.5">
+            <div className="absolute right-1 flex items-center rounded-md border bg-background/90 px-0.5 shadow-sm backdrop-blur-sm opacity-100 transition-[opacity,transform] duration-200 sm:opacity-0 sm:group-hover/item:opacity-100">
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground sm:h-6 sm:w-6"
                     aria-label={`Edit ${link.title}`}
                     onClick={(e) => {
                         e.stopPropagation();
@@ -666,7 +736,7 @@ function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDe
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive sm:h-6 sm:w-6"
                     aria-label={`Delete ${link.title}`}
                     onClick={(e) => {
                         e.stopPropagation();

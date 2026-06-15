@@ -294,4 +294,98 @@
   .animate-today-glow {
     animation: today-glow 3s ease-in-out infinite;
   }
+
+  @keyframes work-live-pulse {
+    0%, 100% {
+      opacity: 0.65;
+      transform: scale(0.92);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes work-sweep {
+    from {
+      transform: translateX(-110%);
+    }
+    to {
+      transform: translateX(110%);
+    }
+  }
+
+  @keyframes work-card-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .work-live-dot {
+    animation: work-live-pulse 1.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+    box-shadow: 0 0 0 4px color-mix(in oklab, currentColor 12%, transparent);
+  }
+
+  .work-sweep-line {
+    overflow: hidden;
+  }
+
+  .work-sweep-line::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 42%;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.7), transparent);
+    animation: work-sweep 2.8s linear infinite;
+  }
+
+  .project-work-card,
+  .project-mobile-panel,
+  .project-ops-panel {
+    animation: work-card-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  .work-activity-step {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .work-activity-step::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 34%;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+    opacity: 0.75;
+    animation: work-sweep 3.4s linear infinite;
+  }
+
+  .work-activity-step:nth-child(2)::after {
+    animation-delay: 180ms;
+  }
+
+  .work-activity-step:nth-child(3)::after {
+    animation-delay: 360ms;
+  }
+
+  .work-activity-step:nth-child(4)::after {
+    animation-delay: 540ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .work-live-dot,
+    .work-sweep-line::after,
+    .project-work-card,
+    .project-mobile-panel,
+    .project-ops-panel,
+    .work-activity-step::after {
+      animation-duration: 1ms;
+      animation-iteration-count: 1;
+    }
+  }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/modules/auth-access';
 import { EmbedDialog } from '@/modules/project-links';
@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, MoreHorizontal, Plus, Share2, GanttChartSquare, Receipt, ListTodo, ChevronDown } from 'lucide-react';
+import { Activity, Building2, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, MoreHorizontal, Plus, Share2, GanttChartSquare, Receipt, ListTodo, ChevronDown, RadioTower, UserCheck } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
@@ -29,6 +29,7 @@ import { TasksTab } from '@/components/tasks/TasksTab';
 import { ProjectControlCenter } from '@/components/control/ProjectControlCenter';
 import { AddLinkDialog } from '@/components/projects/AddLinkDialog';
 import { LinkList } from '@/components/projects/LinkList';
+import { ProjectPeoplePicker } from '@/components/projects/ProjectPeoplePicker';
 import { toast } from 'sonner';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -269,6 +270,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const checklistTotal = checklistItems.length;
     const timelineMilestones = timeline?.milestones?.length ?? 0;
     const timelinePhases = timeline?.phases?.length ?? 0;
+    const assigneeCount = project.assigneeEmails?.length ?? 0;
+    const runningImageScan = project.imageScanJob?.status === 'running';
 
     const auditStat: TabStat = { label: String(autoLinksCount), tone: autoLinksCount > 0 ? 'set' : 'unset' };
     const linksStat: TabStat = { label: String(manualLinksCount), tone: manualLinksCount > 0 ? 'set' : 'unset' };
@@ -321,7 +324,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
             <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6 lg:space-y-8">
                 {/* Project Info */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                         <InlineEdit
                             value={project.name}
@@ -352,7 +355,26 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             </div>
                         </div>
                     </div>
+                    <div className="w-full shrink-0 sm:w-auto">
+                        <ProjectPeoplePicker
+                            projectId={project.id}
+                            projectName={project.name}
+                            assigneeEmails={project.assigneeEmails}
+                            reviewOwnerEmail={project.reviewOwnerEmail}
+                            variant="hero"
+                            className="w-full sm:min-w-[220px]"
+                        />
+                    </div>
                 </div>
+
+                <ProjectDetailWorkStrip
+                    openTaskCount={openTaskCount}
+                    autoLinksCount={autoLinksCount}
+                    checklistDone={checklistDone}
+                    checklistTotal={checklistTotal}
+                    assigneeCount={assigneeCount}
+                    runningImageScan={runningImageScan}
+                />
 
                 {/* Main Content */}
                 <Tabs defaultValue="audit" value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -520,6 +542,92 @@ function TabStatBadge({ stat, className }: { stat: TabStat; className?: string }
         >
             {stat.label}
         </Badge>
+    );
+}
+
+function ProjectDetailWorkStrip({
+    openTaskCount,
+    autoLinksCount,
+    checklistDone,
+    checklistTotal,
+    assigneeCount,
+    runningImageScan,
+}: {
+    openTaskCount: number;
+    autoLinksCount: number;
+    checklistDone: number;
+    checklistTotal: number;
+    assigneeCount: number;
+    runningImageScan: boolean;
+}) {
+    const checklistLabel = checklistTotal > 0 ? `${checklistDone}/${checklistTotal}` : 'Open';
+
+    return (
+        <section className="project-ops-panel relative overflow-hidden rounded-lg border bg-card/80 p-2.5 shadow-sm sm:p-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <DetailPulseMetric
+                    icon={<Activity className="h-3.5 w-3.5" />}
+                    label="Tasks"
+                    value={openTaskCount > 0 ? String(openTaskCount) : 'Clear'}
+                    tone={openTaskCount > 0 ? 'emerald' : 'muted'}
+                    live={openTaskCount > 0}
+                />
+                <DetailPulseMetric
+                    icon={<RadioTower className="h-3.5 w-3.5" />}
+                    label="QA pages"
+                    value={runningImageScan ? 'Scanning' : String(autoLinksCount)}
+                    tone={runningImageScan ? 'cyan' : 'violet'}
+                    live={runningImageScan}
+                />
+                <DetailPulseMetric
+                    icon={<ListChecks className="h-3.5 w-3.5" />}
+                    label="Checklist"
+                    value={checklistLabel}
+                    tone={checklistTotal > 0 ? 'amber' : 'muted'}
+                />
+                <DetailPulseMetric
+                    icon={<UserCheck className="h-3.5 w-3.5" />}
+                    label="Crew"
+                    value={assigneeCount > 0 ? String(assigneeCount) : 'Attach'}
+                    tone={assigneeCount > 0 ? 'emerald' : 'muted'}
+                />
+            </div>
+        </section>
+    );
+}
+
+function DetailPulseMetric({
+    icon,
+    label,
+    value,
+    tone,
+    live = false,
+}: {
+    icon: ReactNode;
+    label: string;
+    value: string;
+    tone: 'emerald' | 'cyan' | 'amber' | 'violet' | 'muted';
+    live?: boolean;
+}) {
+    const toneClass = {
+        emerald: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
+        cyan: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-600 dark:text-cyan-300',
+        amber: 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+        violet: 'border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300',
+        muted: 'border-border/60 bg-muted/40 text-muted-foreground',
+    }[tone];
+
+    return (
+        <div className="rounded-md border bg-background/75 p-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                <span className={cn('rounded-full border p-1', toneClass)}>{icon}</span>
+                <span className="truncate">{label}</span>
+            </div>
+            <div className="mt-1 flex items-center gap-1.5">
+                {live && <span className="work-live-dot h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />}
+                <span className="truncate text-sm font-semibold tabular-nums">{value}</span>
+            </div>
+        </div>
     );
 }
 

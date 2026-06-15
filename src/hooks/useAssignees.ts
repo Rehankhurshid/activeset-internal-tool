@@ -9,6 +9,9 @@ interface UseAssigneesResult {
   loading: boolean;
 }
 
+let cachedAssignees: string[] | null = null;
+let assigneesPromise: Promise<string[]> | null = null;
+
 async function loadFromClickUp(): Promise<string[] | null> {
   try {
     const res = await fetchAuthed('/api/clickup/members');
@@ -33,6 +36,19 @@ async function loadFromAccessControl(): Promise<string[]> {
   return Array.from(all).sort();
 }
 
+function loadAssignees(): Promise<string[]> {
+  if (cachedAssignees) return Promise.resolve(cachedAssignees);
+  assigneesPromise ??= (async () => {
+    const fromClickUp = await loadFromClickUp();
+    const list = fromClickUp ?? (await loadFromAccessControl());
+    cachedAssignees = list;
+    return list;
+  })().finally(() => {
+    assigneesPromise = null;
+  });
+  return assigneesPromise;
+}
+
 /**
  * Returns the list of emails that can be assigned to a task. Sourced from the
  * linked ClickUp workspace so the dropdown reflects the real team. Falls back
@@ -40,15 +56,14 @@ async function loadFromAccessControl(): Promise<string[]> {
  * endpoint is unreachable or the workspace isn't configured.
  */
 export function useAssignees(): UseAssigneesResult {
-  const [assignees, setAssignees] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [assignees, setAssignees] = useState<string[]>(cachedAssignees ?? []);
+  const [loading, setLoading] = useState(!cachedAssignees);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const fromClickUp = await loadFromClickUp();
-        const list = fromClickUp ?? (await loadFromAccessControl());
+        const list = await loadAssignees();
         if (!cancelled) {
           setAssignees(list);
           setLoading(false);

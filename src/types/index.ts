@@ -383,6 +383,8 @@ export interface Project {
   qaUrls?: string[];
   /** Internal owner responsible for the daily project review. */
   reviewOwnerEmail?: string;
+  /** Team members attached to the project for visible ownership across dashboards. */
+  assigneeEmails?: string[];
   /** Draft-only client update preferences for the Control tab. */
   clientUpdatePreferences?: ClientUpdatePreferences;
   // --- Daily review tracking ---
@@ -443,7 +445,7 @@ export interface WebsiteTextCheckResponse {
 }
 
 export type CreateProjectInput = Pick<Project, 'name' | 'userId'>;
-export type UpdateProjectInput = Partial<Pick<Project, 'name' | 'status' | 'tags'>>;
+export type UpdateProjectInput = Partial<Pick<Project, 'name' | 'status' | 'tags' | 'assigneeEmails'>>;
 
 export interface User {
   uid: string;

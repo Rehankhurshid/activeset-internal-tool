@@ -145,7 +145,7 @@ export function ProjectReviewToggle({
             disabled={isPending}
             aria-label={tooltipText}
             className={cn(
-              'inline-flex items-center gap-1 px-1.5 py-0 h-[18px] text-[10px] font-medium rounded-full border transition-all',
+              'inline-flex min-h-8 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium transition-all sm:h-[18px] sm:min-h-0 sm:px-1.5 sm:py-0',
               'hover:scale-105 active:scale-95 disabled:opacity-60',
               colors.bg,
               colors.text,
