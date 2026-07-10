@@ -12,7 +12,6 @@ import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Sheet,
@@ -23,7 +22,6 @@ import {
 } from "@/components/ui/sheet"
 import {
   AlertTriangle,
-  CheckCircle2,
   Loader2,
   Search,
   Play,
@@ -2070,43 +2068,7 @@ export function WebsiteAuditDashboard({
     missingAltSortMode !== "impact"
 
   return (
-    <div className="space-y-4 text-foreground">
-      <div className="rounded-lg border bg-card px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-sm font-semibold tracking-tight">Audit Inbox</h3>
-          <p className="text-xs text-muted-foreground">
-            Default view shows pages with issues first.
-          </p>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Last scan: {latestScanAt ? getRelativeTime(latestScanAt) : "Never"}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="secondary" className="h-7 px-2.5 font-normal">Pages {metrics.total}</Badge>
-        <Badge variant="secondary" className="h-7 px-2.5 font-normal">Issues {metrics.issueCount}</Badge>
-        <Badge variant="secondary" className="h-7 px-2.5 font-normal">Blocked {metrics.blocked}</Badge>
-        <Badge variant="secondary" className="h-7 px-2.5 font-normal">Changed {metrics.changed}</Badge>
-        <Badge variant="secondary" className="h-7 px-2.5 font-normal">Tech {metrics.techOnly}</Badge>
-        <Badge variant="secondary" className="h-7 px-2.5 font-normal">Avg score {metrics.avgScore}</Badge>
-      </div>
-
-      {criticalIssues.length > 0 ? (
-        <Alert className="border-red-500/40 bg-red-500/5">
-          <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-          <AlertTitle className="text-red-700 dark:text-red-400">Deployment blockers detected</AlertTitle>
-          <AlertDescription className="text-xs text-red-700 dark:text-red-400">
-            {criticalIssues.length} blocked page{criticalIssues.length !== 1 ? "s" : ""}. Open a row to review details.
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <Alert className="border-green-500/30 bg-green-500/5">
-          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-          <AlertTitle className="text-green-700 dark:text-green-400">No deployment blockers detected</AlertTitle>
-        </Alert>
-      )}
-
+    <div className="space-y-3 text-foreground">
       {/* Collection Dialog */}
       {showCollectionDialog && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
@@ -2158,26 +2120,42 @@ export function WebsiteAuditDashboard({
             }
           }
         }}
-        className="space-y-4"
+        className="space-y-3"
       >
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="pages" className="gap-2 flex-1 sm:flex-none">
-            <span>Pages</span>
-            <span className="text-xs text-muted-foreground">{filteredPages.length}</span>
-          </TabsTrigger>
-          <TabsTrigger value="missing-alt" className="gap-2 flex-1 sm:flex-none">
-            <ImageIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Missing ALT</span>
-            <span className="sm:hidden">ALT</span>
-            <span className="text-xs text-muted-foreground">{uniqueMissingAltImagesCount}</span>
-          </TabsTrigger>
-          <TabsTrigger value="broken-links" className="gap-2 flex-1 sm:flex-none">
-            <LinkIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Broken Links</span>
-            <span className="sm:hidden">Links</span>
-            <span className="text-xs text-muted-foreground">{brokenLinkIssues.length}</span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <TabsList className="w-full sm:w-auto">
+            <TabsTrigger value="pages" className="gap-2 flex-1 sm:flex-none">
+              <span>Pages</span>
+              <span className="text-xs text-muted-foreground">{filteredPages.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="missing-alt" className="gap-2 flex-1 sm:flex-none">
+              <ImageIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Missing ALT</span>
+              <span className="sm:hidden">ALT</span>
+              <span className="text-xs text-muted-foreground">{uniqueMissingAltImagesCount}</span>
+            </TabsTrigger>
+            <TabsTrigger value="broken-links" className="gap-2 flex-1 sm:flex-none">
+              <LinkIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Broken Links</span>
+              <span className="sm:hidden">Links</span>
+              <span className="text-xs text-muted-foreground">{brokenLinkIssues.length}</span>
+            </TabsTrigger>
+          </TabsList>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {metrics.total} pages · {metrics.issueCount} issues · {metrics.changed} changed · {metrics.techOnly} tech · avg {metrics.avgScore}
+            {' · '}last scan {latestScanAt ? getRelativeTime(latestScanAt) : "never"}
+          </p>
+        </div>
+
+        {criticalIssues.length > 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 text-xs text-red-700 dark:text-red-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              <span className="font-medium">{criticalIssues.length} deployment blocker{criticalIssues.length !== 1 ? "s" : ""}</span>
+              {" — open a row to review details."}
+            </span>
+          </div>
+        )}
 
         <TabsContent value="pages" className="mt-0">
           {/* Pages Table */}
@@ -2185,19 +2163,11 @@ export function WebsiteAuditDashboard({
         <CardHeader className="py-3 px-4">
           <TooltipProvider delayDuration={100}>
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Left: Title + Primary Actions */}
-              <div className="flex items-center gap-2 mr-auto">
-                <CardTitle className="text-base">Pages</CardTitle>
-                <Badge variant="secondary" className="text-xs font-normal">
-                  {filteredPages.length}
-                </Badge>
-              </div>
-
-              {/* Search */}
-              <div className="relative w-48">
+              {/* Search (title lives on the tab above; no need to repeat it) */}
+              <div className="relative w-full sm:w-56 mr-auto">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search..."
+                  placeholder="Search pages..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="h-8 pl-8 text-sm"

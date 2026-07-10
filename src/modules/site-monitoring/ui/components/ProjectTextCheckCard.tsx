@@ -56,12 +56,6 @@ export function ProjectTextCheckCard({ links }: ProjectTextCheckCardProps) {
   }, [resolvedScope, searchableLinks]);
 
   const requestTargets = selectedTargets.slice(0, MAX_TARGETS);
-  const hasTargetLimit = selectedTargets.length > MAX_TARGETS;
-
-  const checkLabel =
-    requestTargets.length === 1
-      ? 'Check page'
-      : `Check ${requestTargets.length} pages`;
 
   const handleCheck = async () => {
     if (!query.trim() || requestTargets.length === 0) return;

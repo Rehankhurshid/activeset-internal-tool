@@ -18,7 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { Building2, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, Plus, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
+import { Building2, ChevronDown, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, Plus, Search as SearchIcon, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { AppNavigation } from '@/shared/ui';
@@ -278,8 +279,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
         return <div className="p-8">Project not found</div>;
     }
 
-    const autoLinksCount = project.links.filter(l => l.source === 'auto').length;
-    const manualLinksCount = project.links.filter(l => l.source !== 'auto').length;
+    const autoLinks = project.links.filter(l => l.source === 'auto');
+    const autoLinksCount = autoLinks.length;
+    const manualLinksCount = project.links.length - autoLinksCount;
     const openTaskCount = tasks.filter(t => t.status !== 'done').length;
     const checklistItems = checklists.flatMap(c => c.sections.flatMap(s => s.items));
     const checklistDone = checklistItems.filter(i => i.status === 'completed' || i.status === 'skipped').length;
@@ -420,10 +422,25 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         )}
                     </div>
 
-                    <TabsContent value="audit" className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
-                        <ProjectTextCheckCard links={project.links.filter(l => l.source === 'auto')} />
+                    <TabsContent value="audit" className="mt-4 sm:mt-6 space-y-3">
+                        {/* Occasional tool — collapsed by default so it doesn't
+                            occupy a permanent band above the audit inbox. */}
+                        {autoLinks.length > 0 && (
+                            <Collapsible>
+                                <CollapsibleTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground">
+                                        <SearchIcon className="h-3.5 w-3.5" />
+                                        Search text across pages
+                                        <ChevronDown className="h-3 w-3 opacity-60" />
+                                    </Button>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="pt-2">
+                                    <ProjectTextCheckCard links={autoLinks} />
+                                </CollapsibleContent>
+                            </Collapsible>
+                        )}
                         <WebsiteAuditDashboardScreen
-                            links={project.links.filter(l => l.source === 'auto')}
+                            links={autoLinks}
                             projectId={project.id}
                             folderPageTypes={project.folderPageTypes}
                             detectedLocales={project.detectedLocales}
@@ -478,7 +495,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
                     <TabsContent value="images" className="mt-4 sm:mt-6">
                         <ImageLibrary
-                            links={project.links.filter(l => l.source === 'auto')}
+                            links={autoLinks}
                             projectName={project.name}
                             projectId={project.id}
                             sitemapUrl={project.sitemapUrl}
