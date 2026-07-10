@@ -67,7 +67,7 @@ interface ProjectCardProps {
     onDelete: (projectId: string) => void;
 }
 
-export function ProjectCard({ project, onDelete }: ProjectCardProps) {
+function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
     const [editingLinkId, setEditingLinkId] = React.useState<string | null>(null);
     const [isExpanded, setIsExpanded] = React.useState(false);
@@ -131,7 +131,11 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     };
 
     // ONLY manual links (source !== 'auto')
-    const manualLinks = project.links?.filter(l => l.source !== 'auto') || [];
+    const manualLinks = React.useMemo(
+        () => project.links?.filter(l => l.source !== 'auto') || [],
+        [project.links],
+    );
+    const websiteUrl = React.useMemo(() => detectWebsiteUrl(project), [project]);
     const displayLimit = 3;
     const displayLinks = isExpanded ? manualLinks : manualLinks.slice(0, displayLimit);
     const remainingCount = manualLinks.length > displayLimit ? manualLinks.length - displayLimit : 0;
@@ -176,7 +180,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                         <ProjectLogoDialog
                             projectId={project.id}
                             currentLogoUrl={project.logoUrl}
-                            autoFetchUrl={detectWebsiteUrl(project)}
+                            autoFetchUrl={websiteUrl}
                             trigger={
                                 <button
                                     type="button"
@@ -460,3 +464,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
         </>
     );
 }
+
+// Memoized: the dashboard renders 47 of these and re-renders on every keystroke
+// in the search box. onDelete is stabilized with useCallback at the call site.
+export const ProjectCard = React.memo(ProjectCardComponent);

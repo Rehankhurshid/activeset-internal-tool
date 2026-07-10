@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Plus,
@@ -79,9 +79,9 @@ export function ProjectLinksDashboardScreen() {
     }
   };
 
-  const handleDeleteProject = (projectId: string) => {
+  const handleDeleteProject = useCallback((projectId: string) => {
     setProjects(prev => prev.filter(p => p.id !== projectId));
-  };
+  }, []);
 
   const toggleTag = (tag: ProjectTag) => {
     setActiveTags(prev =>
@@ -144,28 +144,35 @@ export function ProjectLinksDashboardScreen() {
     return sortedGroups;
   }, [filteredProjects]);
 
-  // Counts
-  const maintenanceCount = projects.filter(p => {
-    const status = p.status || 'current';
-    if (status !== 'current') return false;
-    const tags = p.tags || [];
-    return MAINTENANCE_TAGS.some(t => tags.includes(t));
-  }).length;
-  const activeCount = projects.filter(p => {
-    const status = p.status || 'current';
-    if (status !== 'current') return false;
-    const tags = p.tags || [];
-    return ACTIVE_TAGS.some(t => tags.includes(t));
-  }).length;
-  const pausedCount = projects.filter(p => p.status === 'paused').length;
-  const closedCount = projects.filter(p => p.status === 'closed').length;
-  const paidCount = projects.filter(p => p.status === 'paid').length;
-  const currentCount = projects.filter(p => (p.status || 'current') === 'current').length;
-  const runningScanCount = projects.filter(p => p.imageScanJob?.status === 'running').length;
-  const connectedSystemCount = projects.filter(p => p.clickupListId || p.webflowConfig || p.sitemapUrl).length;
-  const unassignedCurrentCount = projects.filter(p =>
-    (p.status || 'current') === 'current' && (p.assigneeEmails?.length ?? 0) === 0
-  ).length;
+  // Counts — single pass over projects, recomputed only when projects change.
+  const {
+    maintenanceCount, activeCount, pausedCount, closedCount, paidCount,
+    currentCount, runningScanCount, connectedSystemCount, unassignedCurrentCount,
+  } = useMemo(() => {
+    const c = {
+      maintenanceCount: 0, activeCount: 0, pausedCount: 0, closedCount: 0, paidCount: 0,
+      currentCount: 0, runningScanCount: 0, connectedSystemCount: 0, unassignedCurrentCount: 0,
+    };
+    for (const p of projects) {
+      const status = p.status || 'current';
+      const tags = p.tags || [];
+      if (status === 'current') {
+        c.currentCount++;
+        if (MAINTENANCE_TAGS.some(t => tags.includes(t))) c.maintenanceCount++;
+        if (ACTIVE_TAGS.some(t => tags.includes(t))) c.activeCount++;
+        if ((p.assigneeEmails?.length ?? 0) === 0) c.unassignedCurrentCount++;
+      } else if (status === 'paused') {
+        c.pausedCount++;
+      } else if (status === 'closed') {
+        c.closedCount++;
+      } else if (status === 'paid') {
+        c.paidCount++;
+      }
+      if (p.imageScanJob?.status === 'running') c.runningScanCount++;
+      if (p.clickupListId || p.webflowConfig || p.sitemapUrl) c.connectedSystemCount++;
+    }
+    return c;
+  }, [projects]);
 
   const statusOptions: Array<{ value: StatusFilter; label: string; count: number }> = [
     { value: 'all', label: 'All', count: projects.length },

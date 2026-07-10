@@ -1,16 +1,14 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/modules/auth-access';
 import { EmbedDialog } from '@/modules/project-links';
 import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
 import type { Project } from '@/modules/project-links';
-import { ChecklistOverview } from '@/modules/checklists';
-import { ProjectTimelineOverview } from '@/modules/timeline';
 import { ProjectTextCheckCard, WebsiteAuditDashboardScreen } from '@/modules/site-monitoring';
-import { WebflowPagesDashboard, webflowConfigRepository } from '@/modules/webflow';
-import { InvoicesTab } from '@/modules/invoices';
+import { webflowConfigRepository } from '@/modules/webflow';
 import type { WebflowConfigInput } from '@/types/webflow';
 import type { ProjectChecklist } from '@/types';
 import { checklistService } from '@/services/ChecklistService';
@@ -22,15 +20,23 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Building2, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, Plus, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
-import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { AppNavigation } from '@/shared/ui';
-import { TasksTab } from '@/components/tasks/TasksTab';
 import { AddLinkDialog } from '@/components/projects/AddLinkDialog';
 import { LinkList } from '@/components/projects/LinkList';
 import { ProjectPeoplePicker } from '@/components/projects/ProjectPeoplePicker';
 import { toast } from 'sonner';
 import { DesktopTabSelector, MobileTabSelector, type TabOption, type TabStat } from '../components/ProjectTabs';
+
+// Non-default tabs are code-split: only the audit tab (default) is bundled into
+// the route entry; the rest load on first open. Cuts ~7.5k lines from initial JS.
+const TabLoader = () => <Skeleton className="h-40 w-full" />;
+const TasksTab = dynamic(() => import('@/components/tasks/TasksTab').then(m => m.TasksTab), { ssr: false, loading: TabLoader });
+const WebflowPagesDashboard = dynamic(() => import('@/components/webflow/WebflowPagesDashboard').then(m => m.WebflowPagesDashboard), { ssr: false, loading: TabLoader });
+const ImageLibrary = dynamic(() => import('../components/ImageLibrary').then(m => m.ImageLibrary), { ssr: false, loading: TabLoader });
+const ChecklistOverview = dynamic(() => import('@/components/checklist/ChecklistOverview').then(m => m.ChecklistOverview), { ssr: false, loading: TabLoader });
+const ProjectTimelineOverview = dynamic(() => import('@/modules/timeline/ui/screens/ProjectTimelineOverview').then(m => m.ProjectTimelineOverview), { ssr: false, loading: TabLoader });
+const InvoicesTab = dynamic(() => import('@/modules/invoices/ui/components/InvoicesTab').then(m => m.InvoicesTab), { ssr: false, loading: TabLoader });
 
 interface PageProps {
     params: Promise<{ id: string }>;
