@@ -63,10 +63,30 @@ export default function ProjectDetailPage({ params }: PageProps) {
     })();
     const [activeTab, setActiveTab] = useState(initialTab);
 
-    // Live data for tab stats — subscribed at the parent so badges update without
-    // requiring the user to open each tab first.
-    const { tasks } = useProjectTasks(project?.id);
-    const { timeline } = useProjectTimeline(project?.id);
+    // The tasks/timeline/checklist subscriptions below exist only to populate the
+    // tab-count badges. The default Audit view needs none of them, so we defer
+    // them until the browser is idle (or immediately if a non-audit tab is
+    // active) — first paint costs one listener (the project doc), not four.
+    const [badgesActive, setBadgesActive] = useState(false);
+    useEffect(() => {
+        if (badgesActive) return;
+        if (activeTab !== 'audit') { setBadgesActive(true); return; }
+        const w = window as Window & {
+            requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+            cancelIdleCallback?: (handle: number) => void;
+        };
+        if (w.requestIdleCallback) {
+            const handle = w.requestIdleCallback(() => setBadgesActive(true), { timeout: 2500 });
+            return () => w.cancelIdleCallback?.(handle);
+        }
+        const t = setTimeout(() => setBadgesActive(true), 1500);
+        return () => clearTimeout(t);
+    }, [activeTab, badgesActive]);
+
+    // Live data for tab stats — gated on badgesActive so they don't attach on
+    // first paint. The hooks no-op when passed undefined.
+    const { tasks } = useProjectTasks(badgesActive ? project?.id : undefined);
+    const { timeline } = useProjectTimeline(badgesActive ? project?.id : undefined);
     const [checklists, setChecklists] = useState<ProjectChecklist[]>([]);
 
     useEffect(() => {
@@ -81,10 +101,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
     }, [user, id]);
 
     useEffect(() => {
-        if (!project?.id) return;
+        if (!project?.id || !badgesActive) return;
         const unsub = checklistService.subscribeToProjectChecklists(project.id, setChecklists);
         return () => unsub();
-    }, [project?.id]);
+    }, [project?.id, badgesActive]);
 
     const hasWebflowSync = Boolean(project?.webflowConfig?.siteId && project?.webflowConfig?.hasApiToken);
     const canSyncProject = Boolean(project?.sitemapUrl || hasWebflowSync);
