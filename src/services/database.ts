@@ -979,7 +979,11 @@ export const projectsService = {
     });
   },
 
-  // Real-time subscription to all projects (merges audit data from subcollections)
+  // Real-time subscription to all projects. Deliberately does NOT merge per-link
+  // audit results: the dashboard renders only name/status/tags/links/logo/people,
+  // never audit data. Merging here forced a getDocs of every project's link_audits
+  // subcollection on every snapshot fire — thousands of reads per load. Audit data
+  // is merged lazily on the detail screen (see subscribeToProject).
   subscribeToAllProjects(callback: (projects: Project[]) => void): () => void {
     if (isLocalProjectBypassEnabled()) {
       return subscribeToLocalProjects(callback);
@@ -989,7 +993,7 @@ export const projectsService = {
 
     return onSnapshot(
       q,
-      async (snapshot) => {
+      (snapshot) => {
         const projects = snapshot.docs.map(d => {
           const data = d.data();
           return sanitizeProjectData({
@@ -999,13 +1003,6 @@ export const projectsService = {
             updatedAt: toSafeDate(data.updatedAt),
           }) as Project;
         });
-
-        // Merge audit results from subcollections
-        await Promise.all(
-          projects.map(async (project) => {
-            project.links = await mergeAuditResults(project.id, project.links);
-          })
-        );
 
         const sortedProjects = projects.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         callback(sortedProjects);
@@ -1017,7 +1014,10 @@ export const projectsService = {
     );
   },
 
-  // Real-time subscription to a single project (merges audit data from subcollection)
+  // Real-time subscription to a single project. Runs two listeners — the project
+  // doc and its link_audits subcollection — and merges them in memory. Firestore
+  // streams only changed audit docs after the initial sync, so a link edit no
+  // longer forces a full getDocs of every audit doc on every project-doc change.
   subscribeToProject(projectId: string, callback: (project: Project | null) => void): () => void {
     if (isLocalProjectBypassEnabled()) {
       const emitProject = (projects: Project[]) => {
@@ -1028,29 +1028,64 @@ export const projectsService = {
 
     const docRef = doc(db, PROJECTS_COLLECTION, projectId);
 
-    return onSnapshot(
+    let latestProject: Project | null = null;
+    let hasProjectSnapshot = false;
+    let auditMap = new Map<string, AuditResult>();
+
+    const emit = () => {
+      if (!hasProjectSnapshot) return;
+      if (!latestProject) {
+        callback(null);
+        return;
+      }
+      const links = latestProject.links.map((link) => {
+        const audit = auditMap.get(link.id);
+        // Fall back to any inline auditResult when the subcollection lacks one.
+        return audit ? { ...link, auditResult: audit } : link;
+      });
+      callback({ ...latestProject, links });
+    };
+
+    const unsubscribeDoc = onSnapshot(
       docRef,
-      async (docSnap) => {
+      (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          const project: Project = sanitizeProjectData({
+          latestProject = sanitizeProjectData({
             id: docSnap.id,
             ...data,
             createdAt: toSafeDate(data.createdAt),
             updatedAt: toSafeDate(data.updatedAt),
           }) as Project;
-          // Merge audit results from subcollection
-          project.links = await mergeAuditResults(projectId, project.links);
-          callback(project);
         } else {
-          callback(null);
+          latestProject = null;
         }
+        hasProjectSnapshot = true;
+        emit();
       },
       (error) => {
         console.error('subscribeToProject failed', error);
         callback(null);
       }
     );
+
+    const unsubscribeAudits = onSnapshot(
+      linkAuditsCollection(projectId),
+      (snapshot) => {
+        const next = new Map<string, AuditResult>();
+        snapshot.docs.forEach((d) => next.set(d.id, d.data() as AuditResult));
+        auditMap = next;
+        emit();
+      },
+      (error) => {
+        console.error('subscribeToProject audits failed', error);
+      }
+    );
+
+    return () => {
+      unsubscribeDoc();
+      unsubscribeAudits();
+    };
   },
 
   // NOTE: Webflow config writes are intentionally NOT exposed here. The token
