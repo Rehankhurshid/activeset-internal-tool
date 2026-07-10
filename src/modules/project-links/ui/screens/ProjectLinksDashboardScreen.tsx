@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { AppNavigation } from '@/shared/ui';
 import { toast } from 'sonner';
@@ -183,13 +184,26 @@ export function ProjectLinksDashboardScreen() {
     { value: 'paid', label: 'Paid', count: paidCount },
   ];
 
+  // Render the nav + header/grid skeleton immediately while projects load,
+  // instead of blanking the page on a centered spinner.
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="text-muted-foreground">Loading your projects...</p>
-        </div>
+      <div className="min-h-screen bg-background text-foreground flex flex-col">
+        <AppNavigation title="Client Projects" showBackButton backHref="/" />
+        <main className="flex-1">
+          <div className="container mx-auto px-3 py-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+            <div className="mb-4 sm:mb-6 space-y-2">
+              <Skeleton className="h-8 w-40" />
+              <Skeleton className="h-4 w-56" />
+            </div>
+            <Skeleton className="h-12 w-full mb-4 sm:mb-6" />
+            <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Skeleton className="h-64 w-full" />
+              <Skeleton className="h-64 w-full" />
+              <Skeleton className="h-64 w-full" />
+            </div>
+          </div>
+        </main>
       </div>
     );
   }

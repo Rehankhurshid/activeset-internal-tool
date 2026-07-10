@@ -17,13 +17,27 @@ export default function Home() {
   const { hasAccess: hasProposalAccess, loading: proposalAccessLoading } = useModuleAccess('proposal');
   const { hasAccess: hasProjectLinksAccess, loading: projectLinksAccessLoading } = useModuleAccess('project-links');
 
+  // Render the app frame (nav + content skeleton) immediately while Firebase
+  // auth resolves, instead of blanking the whole page on a centered spinner.
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="w-full max-w-md space-y-4">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-32 w-full" />
-        </div>
+      <div className="min-h-screen bg-background flex flex-col">
+        <AppNavigation
+          title="Dashboard"
+          proposalAccess={hasProposalAccess}
+          projectLinksAccess={hasProjectLinksAccess}
+          accessLoading
+        />
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+          <div className="mb-6 sm:mb-8 lg:mb-12 space-y-2">
+            <Skeleton className="h-9 w-48" />
+            <Skeleton className="h-5 w-64" />
+          </div>
+          <div className="max-w-6xl mx-auto grid gap-4 sm:gap-6 lg:grid-cols-2">
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-40 w-full" />
+          </div>
+        </main>
       </div>
     );
   }
