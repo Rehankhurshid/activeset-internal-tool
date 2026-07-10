@@ -125,6 +125,32 @@ Same pattern for `[id]/page.tsx` (server-load the project doc → pass as `initi
 | Checkpoint | Client JS total | Dashboard reads/load | Notes |
 |---|---|---|---|
 | Baseline (052a5cc) | 5.8 MB | ~47 + all link_audits (1000s) | |
-| After Phase 1 | | | |
-| After Phase 2 | | | |
-| After Phase 5 | | | |
+| After Phase 1 (14efd02) | 5.8 MB | ~47 doc reads, 0 link_audits | N+1 removed; no bundle change |
+| After Phase 2 (build) | 5.4 MB | — | dead deps + 6 tabs code-split out of route entry |
+| After Phase 3/5a/6-cfg | 5.4 MB | — | detail first paint: 1 listener not 4 |
+
+## Status (as of 2026-07-10)
+
+**Deployed to production** (app.activeset.co, verified 200 + Raycast API intact):
+- Phase 1 — Firestore N+1 eliminated (the big win).
+- Phase 2 — tabs code-split, dead deps removed, fonts swap, dashboard memoized.
+- Phase 3 — detail badge subscriptions deferred, orphaned scan badge deleted.
+- Phase 5a — nav frame renders during auth/projects loading (no blank spinner).
+- Phase 6 (partial) — date-fns in optimizePackageImports.
+
+**Prepared but NOT executed — needs owner sign-off (touches production data / architecture):**
+- Phase 4a/4b — logo-to-Storage + strip-legacy-inline-audit migrations. These
+  rewrite live Firestore documents and MUST be preceded by a Firestore export.
+  Do not run unattended. Forward-path code (new logos to Storage) also pending.
+- Phase 4c — scope the dashboard query by status. Low payoff at ~47 total
+  projects and real regression risk (Closed/Paid filter views would need a
+  separate fetch). Recommend skipping unless the project count grows large.
+- Phase 5b/5c — server-render initial data via firebase-admin + split the
+  Firestore SDK off auth-only pages. Architectural; higher regression risk;
+  land behind a checkpoint after 5a proves out in production.
+- Phase 6 (rest) — favicon proxy + next/image logos (the logo part depends on
+  4a's Storage URLs, since next/image can't optimize base64 data-URLs).
+
+**Separate security task (not performance):** Firestore rules are
+`allow read, write: if true` on most collections. Now that the app is shared
+with the team, this should be tightened — flagged for its own effort.
