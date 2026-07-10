@@ -292,7 +292,7 @@ export interface ChangeLogQueryOptions {
 
 // --- PROJECT STATUS & TAG TYPES ---
 
-export type ProjectStatus = 'current' | 'closed' | 'paid';
+export type ProjectStatus = 'current' | 'paused' | 'closed' | 'paid';
 
 export type ProjectTag =
   | 'retainer'
@@ -311,23 +311,16 @@ export const PROJECT_TAG_LABELS: Record<ProjectTag, string> = {
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   current: 'Current',
+  paused: 'Paused',
   closed: 'Closed',
   paid: 'Paid',
 };
 
 /** Legacy docs may still carry status: 'past' — read it as 'paid'. */
 export function normalizeProjectStatus(raw: unknown): ProjectStatus {
-  if (raw === 'closed' || raw === 'paid' || raw === 'current') return raw;
+  if (raw === 'closed' || raw === 'paid' || raw === 'current' || raw === 'paused') return raw;
   if (raw === 'past') return 'paid';
   return 'current';
-}
-
-export type DailyControlQaUrlSource = 'auto_links' | 'manual_links' | 'custom';
-
-export interface ClientUpdatePreferences {
-  cadence?: 'daily' | 'weekly' | 'manual';
-  channel?: 'slack' | 'email' | 'other';
-  notes?: string;
 }
 
 export interface SlackSourceMetadata {
@@ -374,19 +367,10 @@ export interface Project {
    *  pre-linked Tasks; updates flow in via webhook the same way per-task linking does. */
   clickupListId?: string;
   clickupListName?: string;
-  // --- Daily control loop configuration ---
-  /** Slack channels this project should import operational request signals from. */
-  slackChannelIds?: string[];
-  /** Which URLs the Control tab should use when deciding QA coverage. */
-  qaUrlSource?: DailyControlQaUrlSource;
-  /** Custom URLs for QA when qaUrlSource is "custom". */
-  qaUrls?: string[];
   /** Internal owner responsible for the daily project review. */
   reviewOwnerEmail?: string;
   /** Team members attached to the project for visible ownership across dashboards. */
   assigneeEmails?: string[];
-  /** Draft-only client update preferences for the Control tab. */
-  clientUpdatePreferences?: ClientUpdatePreferences;
   // --- Daily review tracking ---
   /** UTC date (YYYY-MM-DD) of the most recent review. Primary "is it reviewed today" check. */
   lastReviewDate?: string;
@@ -843,114 +827,3 @@ export interface ParsedTaskSuggestion {
   priority: TaskPriority;
 }
 
-export type DailyControlSnapshotStatus =
-  | 'empty'
-  | 'active'
-  | 'blocked'
-  | 'qa_failed'
-  | 'all_clear';
-
-export type DailyControlSeverity = 'info' | 'warning' | 'critical';
-
-export interface DailyControlSignal {
-  id: string;
-  requestId?: string;
-  summary: string;
-  rawText: string;
-  source: RequestSource;
-  sender?: string;
-  receivedAt: string;
-  sourceLink?: string;
-  slack?: SlackSourceMetadata;
-  dedupeKey?: string;
-  pageUrl?: string;
-  isBlocker?: boolean;
-  needsClientInput?: boolean;
-  confidence?: number;
-}
-
-export interface DailyControlTaskRef {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  assignee?: string;
-  dueDate?: string;
-  sourceLink?: string;
-  clickupUrl?: string;
-  pageUrl?: string;
-  isBlocker?: boolean;
-  needsClientInput?: boolean;
-}
-
-export interface DailyControlChecklistGap {
-  checklistId: string;
-  itemId: string;
-  checklistName: string;
-  sectionTitle: string;
-  title: string;
-  status: ChecklistItemStatus;
-  assignee?: string;
-  referenceLink?: string;
-}
-
-export interface DailyControlTimelineRisk {
-  milestoneId: string;
-  title: string;
-  status: TimelineItemStatus;
-  startDate: string;
-  endDate: string;
-  assignee?: string;
-  reason: string;
-}
-
-export interface DailyControlQaResult {
-  id: string;
-  label: string;
-  status: 'not_run' | 'passed' | 'failed' | 'needs_review';
-  severity: DailyControlSeverity;
-  url?: string;
-  details?: string;
-  lastRun?: string;
-}
-
-export interface DailyControlSummary {
-  signalCount: number;
-  openTaskCount: number;
-  blockerCount: number;
-  overdueTaskCount: number;
-  noDateTaskCount: number;
-  checklistGapCount: number;
-  timelineRiskCount: number;
-  qaFailedCount: number;
-  completedTodayCount: number;
-}
-
-export interface DailyControlClientUpdateDraft {
-  status: 'draft';
-  text: string;
-  generatedAt: string;
-  redactions?: string[];
-}
-
-export interface DailyControlSnapshot {
-  id: string;
-  projectId: string;
-  projectName: string;
-  dateKey: string;
-  status: DailyControlSnapshotStatus;
-  summary: DailyControlSummary;
-  signals: DailyControlSignal[];
-  openBlockers: DailyControlTaskRef[];
-  overdueTasks: DailyControlTaskRef[];
-  noDateTasks: DailyControlTaskRef[];
-  clientInputTasks: DailyControlTaskRef[];
-  completedToday: DailyControlTaskRef[];
-  inProgressTasks: DailyControlTaskRef[];
-  checklistGaps: DailyControlChecklistGap[];
-  timelineRisks: DailyControlTimelineRisk[];
-  qaResults: DailyControlQaResult[];
-  clientUpdateDraft?: DailyControlClientUpdateDraft;
-  generatedAt: string;
-  updatedAt: string;
-}

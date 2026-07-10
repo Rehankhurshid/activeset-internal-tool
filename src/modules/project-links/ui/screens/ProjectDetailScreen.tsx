@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use, type ReactNode } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/modules/auth-access';
 import { EmbedDialog } from '@/modules/project-links';
@@ -19,27 +19,24 @@ import { useProjectTimeline } from '@/hooks/useProjectTimeline';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, Building2, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, MoreHorizontal, Plus, Share2, GanttChartSquare, Receipt, ListTodo, ChevronDown, RadioTower, UserCheck } from 'lucide-react';
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Building2, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, Plus, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { ImageLibrary } from '../components/ImageLibrary';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { AppNavigation } from '@/shared/ui';
 import { TasksTab } from '@/components/tasks/TasksTab';
-import { ProjectControlCenter } from '@/components/control/ProjectControlCenter';
 import { AddLinkDialog } from '@/components/projects/AddLinkDialog';
 import { LinkList } from '@/components/projects/LinkList';
 import { ProjectPeoplePicker } from '@/components/projects/ProjectPeoplePicker';
 import { toast } from 'sonner';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { cn } from '@/lib/utils';
+import { DesktopTabSelector, MobileTabSelector, type TabOption, type TabStat } from '../components/ProjectTabs';
 
 interface PageProps {
     params: Promise<{ id: string }>;
 }
 
-const PRIMARY_DESKTOP_TAB_VALUES = new Set(['control', 'audit', 'links', 'tasks', 'webflow']);
+const PRIMARY_DESKTOP_TAB_VALUES = new Set(['audit', 'links', 'tasks', 'webflow']);
 
 export default function ProjectDetailPage({ params }: PageProps) {
     const { id } = use(params);
@@ -50,13 +47,12 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const [isSyncingSitemap, setIsSyncingSitemap] = useState(false);
     const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
 
-    // Default to 'audit' tab, or whatever ?tab=… in the URL points at (lets the
-    // dashboard's daily-review banner land directly on Control). The list of valid
-    // tab values is enforced below in tabOptions; falling back to 'audit' is safe.
+    // Default to 'audit' tab, or whatever ?tab=… in the URL points at. The list of
+    // valid tab values is enforced below in tabOptions; falling back to 'audit' is safe.
     const searchParams = useSearchParams();
     const initialTab = (() => {
         const fromUrl = searchParams?.get('tab');
-        const valid = ['control', 'audit', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
+        const valid = ['audit', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
         return fromUrl && valid.includes(fromUrl) ? fromUrl : 'audit';
     })();
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -73,12 +69,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
         const unsubscribe = projectLinksRepository.subscribeToProject(id, (updatedProject) => {
             setProject(updatedProject);
             setIsLoading(false);
-
-            // Auto-switch to audit tab if we have audit results
-            if (updatedProject?.links.some(l => l.auditResult)) {
-                // only switch if we haven't manually switched?
-                // For now, let's just default to 'audit' if not set
-            }
         });
 
         return () => unsubscribe();
@@ -270,8 +260,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const checklistTotal = checklistItems.length;
     const timelineMilestones = timeline?.milestones?.length ?? 0;
     const timelinePhases = timeline?.phases?.length ?? 0;
-    const assigneeCount = project.assigneeEmails?.length ?? 0;
-    const runningImageScan = project.imageScanJob?.status === 'running';
 
     const auditStat: TabStat = { label: String(autoLinksCount), tone: autoLinksCount > 0 ? 'set' : 'unset' };
     const linksStat: TabStat = { label: String(manualLinksCount), tone: manualLinksCount > 0 ? 'set' : 'unset' };
@@ -287,7 +275,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
         : { label: 'Not Set', tone: 'unset' };
 
     const tabOptions: TabOption[] = [
-        { value: 'control', label: 'Control', icon: <RefreshCw className="h-4 w-4" />, stat: project.slackChannelIds?.length ? { label: String(project.slackChannelIds.length), tone: 'set' } : { label: 'Set Up', tone: 'unset' } },
         { value: 'audit', label: 'Audit Dashboard', compactLabel: 'Audit', icon: <LayoutDashboard className="h-4 w-4" />, stat: auditStat },
         { value: 'links', label: 'Links', icon: <Link2 className="h-4 w-4" />, stat: linksStat },
         { value: 'tasks', label: 'Tasks', icon: <ListTodo className="h-4 w-4" />, stat: tasksStat },
@@ -325,13 +312,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
             <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6 lg:space-y-8">
                 {/* Project Info */}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 space-y-1">
                         <InlineEdit
                             value={project.name}
                             onSave={handleUpdateProjectName}
-                            className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight"
+                            className="text-xl font-bold tracking-tight"
                         />
-                        <div className="flex flex-wrap items-center gap-2 text-muted-foreground mt-1">
+                        <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
                             <Badge asChild variant="secondary" className="font-mono text-xs">
                                 <button
                                     type="button"
@@ -366,15 +353,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         />
                     </div>
                 </div>
-
-                <ProjectDetailWorkStrip
-                    openTaskCount={openTaskCount}
-                    autoLinksCount={autoLinksCount}
-                    checklistDone={checklistDone}
-                    checklistTotal={checklistTotal}
-                    assigneeCount={assigneeCount}
-                    runningImageScan={runningImageScan}
-                />
 
                 {/* Main Content */}
                 <Tabs defaultValue="audit" value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -428,41 +406,30 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         />
                     </TabsContent>
 
-                    <TabsContent value="control" className="mt-4 sm:mt-6">
-                        <ProjectControlCenter
-                            project={project}
-                            userEmail={user?.email ?? ''}
+                    <TabsContent value="links" className="mt-4 sm:mt-6 space-y-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                                <h2 className="text-base font-semibold">Project Links</h2>
+                                <p className="text-sm text-muted-foreground">
+                                    Manual bookmarks available from the project dashboard and embedded widget.
+                                </p>
+                            </div>
+                            <AddLinkDialog
+                                onAddLink={handleAddProjectLink}
+                                trigger={(
+                                    <Button size="sm" className="gap-2">
+                                        <Plus className="h-4 w-4" />
+                                        Add Link
+                                    </Button>
+                                )}
+                            />
+                        </div>
+                        <LinkList
+                            projectId={project.id}
+                            links={project.links}
+                            sources={['manual']}
+                            emptyMessage="No project links yet. Add a link to make it available from this dashboard and widget."
                         />
-                    </TabsContent>
-
-                    <TabsContent value="links" className="mt-4 sm:mt-6">
-                        <section className="rounded-lg border bg-card">
-                            <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="min-w-0">
-                                    <h2 className="text-base font-semibold">Project Links</h2>
-                                    <p className="text-sm text-muted-foreground">
-                                        Manual bookmarks available from the project dashboard and embedded widget.
-                                    </p>
-                                </div>
-                                <AddLinkDialog
-                                    onAddLink={handleAddProjectLink}
-                                    trigger={(
-                                        <Button size="sm" className="gap-2">
-                                            <Plus className="h-4 w-4" />
-                                            Add Link
-                                        </Button>
-                                    )}
-                                />
-                            </div>
-                            <div className="p-4">
-                                <LinkList
-                                    projectId={project.id}
-                                    links={project.links}
-                                    sources={['manual']}
-                                    emptyMessage="No project links yet. Add a link to make it available from this dashboard and widget."
-                                />
-                            </div>
-                        </section>
                     </TabsContent>
 
                     <TabsContent value="tasks" className="mt-4 sm:mt-6">
@@ -528,232 +495,3 @@ export default function ProjectDetailPage({ params }: PageProps) {
     );
 }
 
-type TabStat = { label: string; tone: 'set' | 'unset' };
-
-function TabStatBadge({ stat, className }: { stat: TabStat; className?: string }) {
-    return (
-        <Badge
-            variant={stat.tone === 'set' ? 'secondary' : 'outline'}
-            className={cn(
-                'h-5 px-1.5 text-[10px] font-mono leading-none tabular-nums',
-                stat.tone === 'unset' && 'text-muted-foreground/70 border-dashed',
-                className,
-            )}
-        >
-            {stat.label}
-        </Badge>
-    );
-}
-
-function ProjectDetailWorkStrip({
-    openTaskCount,
-    autoLinksCount,
-    checklistDone,
-    checklistTotal,
-    assigneeCount,
-    runningImageScan,
-}: {
-    openTaskCount: number;
-    autoLinksCount: number;
-    checklistDone: number;
-    checklistTotal: number;
-    assigneeCount: number;
-    runningImageScan: boolean;
-}) {
-    const checklistLabel = checklistTotal > 0 ? `${checklistDone}/${checklistTotal}` : 'Open';
-
-    return (
-        <section className="project-ops-panel relative overflow-hidden rounded-lg border bg-card/80 p-2.5 shadow-sm sm:p-3">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <DetailPulseMetric
-                    icon={<Activity className="h-3.5 w-3.5" />}
-                    label="Tasks"
-                    value={openTaskCount > 0 ? String(openTaskCount) : 'Clear'}
-                    tone={openTaskCount > 0 ? 'emerald' : 'muted'}
-                    live={openTaskCount > 0}
-                />
-                <DetailPulseMetric
-                    icon={<RadioTower className="h-3.5 w-3.5" />}
-                    label="QA pages"
-                    value={runningImageScan ? 'Scanning' : String(autoLinksCount)}
-                    tone={runningImageScan ? 'cyan' : 'violet'}
-                    live={runningImageScan}
-                />
-                <DetailPulseMetric
-                    icon={<ListChecks className="h-3.5 w-3.5" />}
-                    label="Checklist"
-                    value={checklistLabel}
-                    tone={checklistTotal > 0 ? 'amber' : 'muted'}
-                />
-                <DetailPulseMetric
-                    icon={<UserCheck className="h-3.5 w-3.5" />}
-                    label="Crew"
-                    value={assigneeCount > 0 ? String(assigneeCount) : 'Attach'}
-                    tone={assigneeCount > 0 ? 'emerald' : 'muted'}
-                />
-            </div>
-        </section>
-    );
-}
-
-function DetailPulseMetric({
-    icon,
-    label,
-    value,
-    tone,
-    live = false,
-}: {
-    icon: ReactNode;
-    label: string;
-    value: string;
-    tone: 'emerald' | 'cyan' | 'amber' | 'violet' | 'muted';
-    live?: boolean;
-}) {
-    const toneClass = {
-        emerald: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
-        cyan: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-600 dark:text-cyan-300',
-        amber: 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-        violet: 'border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300',
-        muted: 'border-border/60 bg-muted/40 text-muted-foreground',
-    }[tone];
-
-    return (
-        <div className="rounded-md border bg-background/75 p-2">
-            <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                <span className={cn('rounded-full border p-1', toneClass)}>{icon}</span>
-                <span className="truncate">{label}</span>
-            </div>
-            <div className="mt-1 flex items-center gap-1.5">
-                {live && <span className="work-live-dot h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />}
-                <span className="truncate text-sm font-semibold tabular-nums">{value}</span>
-            </div>
-        </div>
-    );
-}
-
-type TabOption = { value: string; label: string; compactLabel?: string; icon: React.ReactNode; stat?: TabStat };
-
-interface DesktopTabSelectorProps {
-    primaryOptions: TabOption[];
-    overflowOptions: TabOption[];
-    value: string;
-    onChange: (value: string) => void;
-}
-
-function DesktopTabSelector({ primaryOptions, overflowOptions, value, onChange }: DesktopTabSelectorProps) {
-    const activeOverflowOption = overflowOptions.find(opt => opt.value === value);
-    const overflowLabel = activeOverflowOption?.compactLabel ?? activeOverflowOption?.label ?? 'More';
-
-    return (
-        <div className="hidden sm:block max-w-full overflow-x-auto -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <TabsList className="w-auto inline-flex">
-                {primaryOptions.map(opt => (
-                    <TabsTrigger key={opt.value} value={opt.value} className="gap-2 px-3">
-                        {opt.icon}
-                        <span>{opt.compactLabel ?? opt.label}</span>
-                        {opt.stat && <TabStatBadge stat={opt.stat} />}
-                    </TabsTrigger>
-                ))}
-                {overflowOptions.length > 0 && (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                type="button"
-                                className={cn(
-                                    'inline-flex h-[calc(100%-1px)] items-center justify-center gap-1.5 rounded-md border border-transparent px-3 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:outline-1',
-                                    activeOverflowOption
-                                        ? 'bg-background text-foreground shadow-sm dark:bg-input/30'
-                                        : 'text-foreground hover:bg-background/60 dark:text-muted-foreground dark:hover:text-foreground',
-                                )}
-                                aria-label="Open more project sections"
-                            >
-                                {activeOverflowOption ? activeOverflowOption.icon : <MoreHorizontal className="h-4 w-4" />}
-                                <span>{overflowLabel}</span>
-                                {activeOverflowOption?.stat && <TabStatBadge stat={activeOverflowOption.stat} />}
-                                <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
-                            </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-56">
-                            {overflowOptions.map(opt => {
-                                const isActive = opt.value === value;
-                                return (
-                                    <DropdownMenuItem
-                                        key={opt.value}
-                                        onSelect={() => onChange(opt.value)}
-                                        className={cn('gap-3 py-2', isActive && 'bg-accent text-accent-foreground')}
-                                    >
-                                        <span className={cn('shrink-0', isActive ? 'text-foreground' : 'text-muted-foreground')}>
-                                            {opt.icon}
-                                        </span>
-                                        <span className="flex-1">{opt.label}</span>
-                                        {opt.stat && <TabStatBadge stat={opt.stat} />}
-                                        {isActive && <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />}
-                                    </DropdownMenuItem>
-                                );
-                            })}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                )}
-            </TabsList>
-        </div>
-    );
-}
-
-interface MobileTabSelectorProps {
-    options: TabOption[];
-    value: string;
-    activeOption: TabOption;
-    onChange: (value: string) => void;
-}
-
-function MobileTabSelector({ options, value, activeOption, onChange }: MobileTabSelectorProps) {
-    const [open, setOpen] = useState(false);
-    return (
-        <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger asChild>
-                <Button
-                    variant="outline"
-                    className="w-full justify-between h-11 px-3 text-base"
-                    aria-haspopup="menu"
-                >
-                    <span className="flex items-center gap-2 min-w-0">
-                        <span className="shrink-0 text-muted-foreground">{activeOption.icon}</span>
-                        <span className="font-medium truncate">{activeOption.label}</span>
-                        {activeOption.stat && <TabStatBadge stat={activeOption.stat} />}
-                    </span>
-                    <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
-                </Button>
-            </SheetTrigger>
-            <SheetContent side="bottom" className="rounded-t-xl p-0 max-h-[80vh]">
-                <SheetHeader className="border-b">
-                    <SheetTitle className="text-base">Select section</SheetTitle>
-                </SheetHeader>
-                <div className="p-2">
-                    {options.map(opt => {
-                        const isActive = opt.value === value;
-                        return (
-                            <button
-                                key={opt.value}
-                                onClick={() => {
-                                    onChange(opt.value);
-                                    setOpen(false);
-                                }}
-                                className={cn(
-                                    "w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors",
-                                    isActive
-                                        ? "bg-accent text-accent-foreground"
-                                        : "hover:bg-accent/60 active:bg-accent"
-                                )}
-                            >
-                                <span className={cn("shrink-0", isActive ? "text-foreground" : "text-muted-foreground")}>{opt.icon}</span>
-                                <span className="text-sm font-medium flex-1">{opt.label}</span>
-                                {opt.stat && <TabStatBadge stat={opt.stat} />}
-                                {isActive && <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />}
-                            </button>
-                        );
-                    })}
-                </div>
-            </SheetContent>
-        </Sheet>
-    );
-}

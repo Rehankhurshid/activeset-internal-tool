@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import {
+  FieldValue,
+  Timestamp,
+  type DocumentData,
+  type DocumentReference,
+  type UpdateData,
+} from 'firebase-admin/firestore';
 import {
   ApiAuthError,
   apiAuthErrorResponse,
@@ -18,6 +24,13 @@ import {
   hasFirebaseAdminCredentials,
 } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
+import {
+  buildClickUpUnlinkPatch,
+  chooseCanonicalClickUpDoc,
+  isDisposableClickUpMirror,
+  localClickUpTaskDocFromSnapshot,
+  type LocalClickUpTaskDoc,
+} from '@/lib/clickup-local-mirrors';
 
 export const runtime = 'nodejs';
 // Bulk import a large list can take a minute. Vercel's default is now 300s, so
@@ -101,12 +114,13 @@ export async function POST(request: NextRequest) {
     let created = 0;
     let updated = 0;
     let skipped = 0;
+    let deduped = 0;
     let nextOrder = Date.now();
 
     // Pre-load any local tasks already linked to ids in this list so we don't
     // double-create on re-link.
     const taskIds = tasks.map((t) => t.id);
-    const existingByClickupId = new Map<string, { docId: string; projectId: string }>();
+    const existingByClickupId = new Map<string, LocalClickUpTaskDoc[]>();
     // `where('clickupTaskId', 'in', [...])` caps at 30 values per query, so chunk.
     for (let i = 0; i < taskIds.length; i += 30) {
       const chunk = taskIds.slice(i, i + 30);
@@ -115,19 +129,39 @@ export async function POST(request: NextRequest) {
         .where('clickupTaskId', 'in', chunk)
         .get();
       snap.docs.forEach((d) => {
-        const data = d.data() as { clickupTaskId?: string; projectId?: string };
-        if (data.clickupTaskId) {
-          existingByClickupId.set(data.clickupTaskId, {
-            docId: d.id,
-            projectId: data.projectId ?? '',
-          });
-        }
+        const mirror = localClickUpTaskDocFromSnapshot(d);
+        const clickupTaskId = mirror.data.clickupTaskId;
+        if (!clickupTaskId) return;
+        const list = existingByClickupId.get(clickupTaskId) ?? [];
+        list.push(mirror);
+        existingByClickupId.set(clickupTaskId, list);
       });
     }
 
     let batch = adminDb.batch();
     let writesInBatch = 0;
     const now = Timestamp.now();
+    const commitIfNeeded = async () => {
+      if (writesInBatch < 400) return;
+      await batch.commit();
+      batch = adminDb.batch();
+      writesInBatch = 0;
+    };
+    const queueSet = async (ref: DocumentReference, data: Record<string, unknown>) => {
+      batch.set(ref, data);
+      writesInBatch += 1;
+      await commitIfNeeded();
+    };
+    const queueUpdate = async (ref: DocumentReference, data: UpdateData<DocumentData>) => {
+      batch.update(ref, data);
+      writesInBatch += 1;
+      await commitIfNeeded();
+    };
+    const queueDelete = async (ref: DocumentReference) => {
+      batch.delete(ref);
+      writesInBatch += 1;
+      await commitIfNeeded();
+    };
 
     for (const task of tasks) {
       const patch = clickUpTaskToUpdate(task);
@@ -139,7 +173,6 @@ export async function POST(request: NextRequest) {
         clickupUrl: task.url ?? buildClickUpTaskUrl(task.id),
         clickupSyncedAt: now,
         clickupLastSyncedRequestId: null,
-        source: 'clickup' as const,
         updatedAt: now,
       };
       const clearSyncState = {
@@ -148,35 +181,42 @@ export async function POST(request: NextRequest) {
         clickupSyncInFlightAt: FieldValue.delete(),
       };
 
-      const existing = existingByClickupId.get(task.id);
+      const existingDocs = existingByClickupId.get(task.id) ?? [];
+      const projectDocs = existingDocs.filter((doc) => doc.data.projectId === projectId);
+      const existing = chooseCanonicalClickUpDoc(projectDocs);
       if (existing) {
-        if (existing.projectId !== projectId) {
-          // Already mirrored under a different project — skip rather than steal it.
-          skipped += 1;
-          continue;
+        await queueUpdate(existing.ref, {
+          ...baseFields,
+          ...clearSyncState,
+          ...(existing.data.source ? {} : { source: 'clickup' as const }),
+        });
+        const duplicateDocs = projectDocs.filter((doc) => doc.id !== existing.id);
+        for (const duplicate of duplicateDocs) {
+          if (isDisposableClickUpMirror(duplicate)) {
+            await queueDelete(duplicate.ref);
+          } else {
+            await queueUpdate(duplicate.ref, buildClickUpUnlinkPatch(now));
+          }
+          deduped += 1;
         }
-        const ref = adminDb.collection(TASKS_COLLECTION).doc(existing.docId);
-        batch.update(ref, { ...baseFields, ...clearSyncState });
         updated += 1;
+      } else if (existingDocs.length > 0) {
+        // Already mirrored under a different project — skip rather than steal it.
+        skipped += 1;
+        continue;
       } else {
         const ref = adminDb.collection(TASKS_COLLECTION).doc();
-        batch.set(ref, {
+        await queueSet(ref, {
           ...baseFields,
           projectId,
           tags: patch.tags ?? [],
           category: 'other',
+          source: 'clickup' as const,
           createdAt: now,
           createdBy: caller.email,
           order: nextOrder++,
         });
         created += 1;
-      }
-
-      writesInBatch += 1;
-      if (writesInBatch >= 400) {
-        await batch.commit();
-        batch = adminDb.batch();
-        writesInBatch = 0;
       }
     }
 
@@ -192,6 +232,7 @@ export async function POST(request: NextRequest) {
       created,
       updated,
       skipped,
+      deduped,
     });
   } catch (err) {
     if (err instanceof ApiAuthError) return apiAuthErrorResponse(err);

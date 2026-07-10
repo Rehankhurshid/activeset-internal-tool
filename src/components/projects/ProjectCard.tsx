@@ -8,11 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
 import {
     Trash2,
-    ChevronRight,
     ChevronDown,
     ChevronUp,
-    Link as LinkIcon,
-    Edit,
     MoreVertical,
     Plus,
     Circle,
@@ -20,18 +17,15 @@ import {
     Archive,
     Tag,
     Check,
-    Globe,
-    ListTodo,
+    CirclePause,
     SlidersHorizontal,
     DollarSign,
     Activity,
-    Radar,
-    UserCheck,
 } from 'lucide-react';
-import { Project, ProjectLink, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS, PROJECT_STATUS_LABELS } from '@/types';
+import { Project, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS, PROJECT_STATUS_LABELS } from '@/types';
 import { projectsService } from '@/services/database';
 import { cn } from '@/lib/utils';
-import { ProjectScanBadge } from './ProjectScanBadge';
+import { PROJECT_TAG_TONES, PROJECT_STATUS_TONES } from '@/lib/ui-tones';
 import { ProjectLogoDialog } from './ProjectLogoDialog';
 import {
     DropdownMenu,
@@ -45,46 +39,18 @@ import {
     DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { AddLinkDialog } from './AddLinkDialog';
-import { ChecklistProgressBadge } from '@/components/checklist/ChecklistProgressBadge';
 import { ProjectReviewToggle } from './ProjectReviewToggle';
 import { ProjectPeoplePicker } from './ProjectPeoplePicker';
-
-const TAG_COLORS: Record<ProjectTag, { bg: string; text: string; border: string }> = {
-    retainer: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
-    one_time: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
-    subscription: { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
-    maintenance: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
-    consulting: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20' },
-};
+import { CardLinkItem } from './CardLinkItem';
 
 const ALL_TAGS: ProjectTag[] = ['retainer', 'one_time', 'subscription', 'maintenance', 'consulting'];
 
 const STATUS_OPTIONS: { value: ProjectStatus; icon: React.ComponentType<{ className?: string }>; description: string }[] = [
     { value: 'current', icon: Activity, description: 'Work in progress' },
+    { value: 'paused', icon: CirclePause, description: 'Quiet maintenance' },
     { value: 'closed', icon: Archive, description: 'Done — payment pending' },
     { value: 'paid', icon: DollarSign, description: 'Payment received' },
 ];
-
-const STATUS_BADGE_STYLES: Record<ProjectStatus, { text: string; border: string; bg: string; dot: string }> = {
-    current: {
-        text: 'text-emerald-400',
-        border: 'border-emerald-500/30',
-        bg: 'bg-emerald-500/5',
-        dot: 'text-emerald-500',
-    },
-    closed: {
-        text: 'text-amber-400',
-        border: 'border-amber-500/30',
-        bg: 'bg-amber-500/5',
-        dot: 'text-amber-500',
-    },
-    paid: {
-        text: 'text-sky-400',
-        border: 'border-sky-500/30',
-        bg: 'bg-sky-500/5',
-        dot: 'text-sky-500',
-    },
-};
 
 function detectWebsiteUrl(project: Project): string | undefined {
     const custom = project.webflowConfig?.customDomain;
@@ -103,39 +69,23 @@ interface ProjectCardProps {
 
 export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
-    const [isDeleting, setIsDeleting] = React.useState(false);
     const [editingLinkId, setEditingLinkId] = React.useState<string | null>(null);
     const [isExpanded, setIsExpanded] = React.useState(false);
 
     const status: ProjectStatus = project.status || 'current';
     const tags: ProjectTag[] = project.tags || [];
     const isCurrent = status === 'current';
-    const statusStyles = STATUS_BADGE_STYLES[status];
-    const hasScanning = !!project.sitemapUrl || project.links?.some(l => l.source === 'auto');
-    const hasWebflow = !!project.webflowConfig;
-    const hasClickUp = !!project.clickupListId;
+    const statusStyles = PROJECT_STATUS_TONES[status];
     const disableAuditBadge = project.disableAuditBadge === true;
     const disableDropdown = project.disableDropdown === true;
     const spellcheckEnabled = project.enableSpellcheck !== false;
     const assigneeEmails = project.assigneeEmails ?? [];
-    const autoLinksCount = project.links?.filter(l => l.source === 'auto').length ?? 0;
-    const runningImageScan = project.imageScanJob?.status === 'running';
-    const peopleCount = assigneeEmails.length;
-    const workSignal = runningImageScan
-        ? 'Scanning'
-        : hasClickUp
-            ? 'Tasks live'
-            : hasScanning
-                ? 'QA ready'
-                : 'Setup';
 
     const handleDelete = async () => {
-        setIsDeleting(true);
         try {
             await projectsService.deleteProject(project.id);
             onDelete(project.id);
         } finally {
-            setIsDeleting(false);
             setIsDeleteOpen(false);
         }
     };
@@ -199,32 +149,30 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
         if (url) window.open(url, '_blank');
     };
 
+    const visibleTags = tags.slice(0, 2);
+    const hiddenTagCount = tags.length - visibleTags.length;
+
     return (
         <>
             <Card
                 role="article"
                 aria-label={`Project: ${project.name}`}
                 className={cn(
-                    "project-work-card group relative flex flex-col h-full overflow-hidden border transition-[border-color,box-shadow,transform,opacity] duration-200",
-                    "motion-safe:hover:shadow-xl motion-safe:hover:shadow-primary/5 motion-safe:hover:-translate-y-0.5",
+                    "group relative flex h-full flex-col overflow-hidden border transition-colors",
+                    "hover:border-foreground/20",
                     "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
                     isCurrent
-                        ? "border-border/60 bg-gradient-to-br from-card via-card to-card/80"
+                        ? "border-border/60 bg-card"
                         : "border-border/30 bg-card/60 opacity-75 hover:opacity-100"
                 )}
             >
-                {/* Accent stripe */}
-                <div className={cn(
-                    "work-sweep-line absolute top-0 left-0 right-0 h-[3px] transition-[background-color,opacity] duration-200",
-                    isCurrent
-                        ? "bg-gradient-to-r from-primary via-primary/80 to-primary/40"
-                        : "bg-gradient-to-r from-muted-foreground/30 via-muted-foreground/20 to-transparent"
-                )} />
-
-                {/* Header */}
-                <div className="flex items-start justify-between p-3 pb-2 pt-5 sm:p-4 sm:pb-2 sm:pt-5">
-                    <div className="flex items-start gap-3 overflow-hidden flex-1 min-w-0">
-                        {/* Status dot + Project logo / initial */}
+                {/* Row 1 — identity */}
+                <div className="flex items-start justify-between gap-2 p-3 pb-2 sm:p-4 sm:pb-2">
+                    <Link
+                        href={`/modules/project-links/${project.id}`}
+                        aria-label={`Open ${project.name}`}
+                        className="group/header flex min-w-0 flex-1 items-start gap-3 overflow-hidden"
+                    >
                         <ProjectLogoDialog
                             projectId={project.id}
                             currentLogoUrl={project.logoUrl}
@@ -233,8 +181,15 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 <button
                                     type="button"
                                     aria-label={`Set logo for ${project.name}`}
+                                    onClick={(e) => {
+                                        // Nested inside the header Link — stop this click from also
+                                        // triggering navigation while the logo popover still opens
+                                        // (Radix composes its own trigger onClick after this one).
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                    }}
                                     className={cn(
-                                        "relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl text-sm font-bold shrink-0 transition-[box-shadow,border-color,transform] duration-200 sm:h-10 sm:w-10",
+                                        "flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-sm font-bold transition-colors sm:h-10 sm:w-10",
                                         "shadow-sm border cursor-pointer hover:ring-2 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                         isCurrent
                                             ? "bg-primary/10 text-primary border-primary/20"
@@ -252,11 +207,6 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                     ) : (
                                         project.name.charAt(0).toUpperCase()
                                     )}
-                                    {/* Live dot */}
-                                    <div className={cn(
-                                        "absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card transition-colors",
-                                        isCurrent ? "bg-emerald-500" : "bg-muted-foreground/40"
-                                    )} />
                                 </button>
                             }
                         />
@@ -265,71 +215,17 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                             <h3 className={cn(
                                 "font-semibold text-base leading-tight truncate transition-colors",
                                 isCurrent
-                                    ? "text-foreground group-hover:text-primary"
-                                    : "text-muted-foreground group-hover:text-foreground"
+                                    ? "text-foreground group-hover/header:text-primary"
+                                    : "text-muted-foreground group-hover/header:text-foreground"
                             )}>
                                 {project.name}
                             </h3>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                                {/* Status badge */}
-                                <Badge
-                                    variant="outline"
-                                    className={cn(
-                                        "text-[10px] px-1.5 py-0 h-[18px] font-medium border transition-colors cursor-default",
-                                        statusStyles.text, statusStyles.border, statusStyles.bg
-                                    )}
-                                >
-                                    <Circle className={cn(
-                                        "w-1.5 h-1.5 mr-1 fill-current",
-                                        statusStyles.dot
-                                    )} />
-                                    {PROJECT_STATUS_LABELS[status]}
-                                </Badge>
-
-                                {/* Link count */}
-                                <span className="text-[10px] text-muted-foreground">
-                                    · {manualLinks.length} {manualLinks.length === 1 ? 'link' : 'links'}
-                                </span>
-
-                                <ChecklistProgressBadge projectId={project.id} className="ml-0.5" />
-
-                                {/* Daily review pill — only on "live" (current + tagged) projects, mirroring the dashboard banner */}
-                                {isCurrent && tags.length > 0 && (
-                                    <ProjectReviewToggle project={project} variant="pill" className="ml-0.5" />
-                                )}
-
-                                {hasScanning && (
-                                    <ProjectScanBadge
-                                        projectId={project.id}
-                                        links={project.links}
-                                        className="ml-0.5"
-                                    />
-                                )}
-
-                                {hasWebflow && (
-                                    <Badge
-                                        variant="outline"
-                                        className="text-[10px] px-1.5 py-0 h-[18px] font-medium border border-indigo-500/30 bg-indigo-500/5 text-indigo-400"
-                                        title="Webflow connected"
-                                    >
-                                        <Globe className="w-2.5 h-2.5 mr-0.5" />
-                                        WF
-                                    </Badge>
-                                )}
-
-                                {hasClickUp && (
-                                    <Badge
-                                        variant="outline"
-                                        className="text-[10px] px-1.5 py-0 h-[18px] font-medium border border-violet-500/30 bg-violet-500/5 text-violet-400"
-                                        title={project.clickupListName ? `ClickUp list: ${project.clickupListName}` : 'ClickUp list bound'}
-                                    >
-                                        <ListTodo className="w-2.5 h-2.5 mr-0.5" />
-                                        CU
-                                    </Badge>
-                                )}
-                            </div>
+                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Circle className={cn("h-2 w-2 fill-current", statusStyles.dot)} />
+                                {PROJECT_STATUS_LABELS[status]}
+                            </span>
                         </div>
-                    </div>
+                    </Link>
 
                     {/* Dropdown menu */}
                     <DropdownMenu>
@@ -344,6 +240,15 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-52">
+                            {isCurrent && tags.length > 0 && (
+                                <>
+                                    <DropdownMenuItem asChild>
+                                        <ProjectReviewToggle project={project} variant="button" className="w-full justify-start" />
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                </>
+                            )}
+
                             {/* Status sub-menu */}
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
@@ -352,7 +257,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
                                     {STATUS_OPTIONS.map(({ value, icon: Icon, description }) => {
-                                        const styles = STATUS_BADGE_STYLES[value];
+                                        const styles = PROJECT_STATUS_TONES[value];
                                         return (
                                             <DropdownMenuItem
                                                 key={value}
@@ -392,7 +297,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                         >
                                             <span className={cn(
                                                 "inline-block w-2 h-2 rounded-full mr-1.5",
-                                                TAG_COLORS[tag].bg.replace('/10', ''),
+                                                PROJECT_TAG_TONES[tag].bg.replace('/10', ''),
                                             )} style={{ backgroundColor: `hsl(var(--${tag === 'retainer' ? 'primary' : 'muted-foreground'}))` }} />
                                             {PROJECT_TAG_LABELS[tag]}
                                         </DropdownMenuCheckboxItem>
@@ -440,59 +345,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                     </DropdownMenu>
                 </div>
 
-                {/* Tag pills */}
-                {tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 px-3 pb-1 sm:px-4">
-                        {tags.map(tag => {
-                            const colors = TAG_COLORS[tag];
-                            return (
-                                <Badge
-                                    key={tag}
-                                    variant="outline"
-                                    className={cn(
-                                        "text-[10px] px-1.5 py-0 h-[18px] font-medium border rounded-full",
-                                        colors.bg, colors.text, colors.border
-                                    )}
-                                >
-                                    {PROJECT_TAG_LABELS[tag]}
-                                </Badge>
-                            );
-                        })}
-                    </div>
-                )}
-
-                <div className="px-3 pb-2 sm:px-4">
-                    <ProjectPeoplePicker
-                        projectId={project.id}
-                        projectName={project.name}
-                        assigneeEmails={assigneeEmails}
-                        reviewOwnerEmail={project.reviewOwnerEmail}
-                        className="w-full justify-start"
-                    />
-                </div>
-
-                <div className="px-3 pb-2 sm:px-4">
-                    <div className="grid grid-cols-3 gap-1.5 rounded-lg border border-border/50 bg-muted/20 p-1.5">
-                        <WorkSignal
-                            icon={<Radar className="h-3 w-3" />}
-                            label="Flow"
-                            value={workSignal}
-                            live={isCurrent && (runningImageScan || hasClickUp || hasScanning)}
-                        />
-                        <WorkSignal
-                            icon={<LinkIcon className="h-3 w-3" />}
-                            label="Pages"
-                            value={autoLinksCount > 0 ? String(autoLinksCount) : String(manualLinks.length)}
-                        />
-                        <WorkSignal
-                            icon={<UserCheck className="h-3 w-3" />}
-                            label="Crew"
-                            value={peopleCount > 0 ? String(peopleCount) : 'Open'}
-                        />
-                    </div>
-                </div>
-
-                {/* Content — Links */}
+                {/* Row 2 — links */}
                 <div className="flex-1 px-2.5 py-1.5 space-y-0.5 sm:px-3 sm:py-2">
                     {manualLinks.length > 0 ? (
                         <>
@@ -561,23 +414,37 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="p-3 pt-2 mt-auto">
-                    <Link href={`/modules/project-links/${project.id}`} className="block">
-                        <Button
-                            variant="default"
-                            size="sm"
-                            className={cn(
-                                "w-full h-10 sm:h-8 text-xs justify-center group/btn shadow-sm hover:shadow transition-[background-color,box-shadow,transform]",
-                                isCurrent
-                                    ? "bg-primary/90 hover:bg-primary"
-                                    : "bg-muted hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground"
-                            )}
-                        >
-                            Open Project
-                            <ChevronRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover/btn:translate-x-1" />
-                        </Button>
-                    </Link>
+                {/* Row 3 — footer: tags + people */}
+                <div className="flex items-center justify-between gap-2 p-3 pt-2 mt-auto">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1">
+                        {visibleTags.map(tag => {
+                            const tone = PROJECT_TAG_TONES[tag];
+                            return (
+                                <Badge
+                                    key={tag}
+                                    variant="outline"
+                                    className={cn(
+                                        "text-[10px] px-1.5 py-0 h-[18px] font-medium border rounded-full",
+                                        tone.bg, tone.text, tone.border
+                                    )}
+                                >
+                                    {PROJECT_TAG_LABELS[tag]}
+                                </Badge>
+                            );
+                        })}
+                        {hiddenTagCount > 0 && (
+                            <span className="text-[10px] font-medium text-muted-foreground">
+                                +{hiddenTagCount}
+                            </span>
+                        )}
+                    </div>
+                    <ProjectPeoplePicker
+                        projectId={project.id}
+                        projectName={project.name}
+                        assigneeEmails={assigneeEmails}
+                        reviewOwnerEmail={project.reviewOwnerEmail}
+                        className="shrink-0"
+                    />
                 </div>
             </Card>
 
@@ -591,161 +458,5 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                 variant="destructive"
             />
         </>
-    );
-}
-
-function WorkSignal({
-    icon,
-    label,
-    value,
-    live = false,
-}: {
-    icon: React.ReactNode;
-    label: string;
-    value: string;
-    live?: boolean;
-}) {
-    return (
-        <div className="min-w-0 rounded-md bg-background/70 px-2 py-1.5">
-            <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                <span className={cn('shrink-0', live && 'text-emerald-500')}>{icon}</span>
-                <span className="truncate">{label}</span>
-            </div>
-            <div className="mt-0.5 flex items-center gap-1.5">
-                {live && <span className="work-live-dot size-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />}
-                <span className="truncate text-xs font-semibold tabular-nums">{value}</span>
-            </div>
-        </div>
-    );
-}
-
-interface CardLinkItemProps {
-    link: ProjectLink;
-    isEditing: boolean;
-    onStartEdit: () => void;
-    onCancelEdit: () => void;
-    onSave: (title: string, url: string) => Promise<void>;
-    onDelete: () => void;
-    onOpen: () => void;
-}
-
-function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSave, onDelete, onOpen }: CardLinkItemProps) {
-    const [title, setTitle] = React.useState(link.title);
-    const [url, setUrl] = React.useState(link.url);
-    const [isSaving, setIsSaving] = React.useState(false);
-
-    React.useEffect(() => {
-        setTitle(link.title);
-        setUrl(link.url);
-    }, [link]);
-
-    const handleSave = async () => {
-        setIsSaving(true);
-        await onSave(title, url);
-        setIsSaving(false);
-    };
-
-    if (isEditing) {
-        return (
-            <div className="p-2 bg-muted/40 rounded-lg space-y-1.5 border border-border/50 shadow-sm animate-in fade-in zoom-in-95 duration-200">
-                <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Link title"
-                    className="w-full px-2 py-1 text-xs bg-background/50 border rounded-md focus:outline-none focus:ring-1 focus:ring-ring"
-                    autoFocus
-                />
-                <input
-                    type="text"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full px-2 py-1 text-[10px] bg-background/50 border rounded-md focus:outline-none focus:ring-1 focus:ring-ring text-muted-foreground"
-                />
-                <div className="flex gap-2 pt-0.5">
-                    <Button size="sm" onClick={handleSave} disabled={isSaving} className="h-6 text-[10px] px-2">
-                        {isSaving ? 'Saving...' : 'Save'}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={onCancelEdit} className="h-6 text-[10px] px-2">
-                        Cancel
-                    </Button>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div
-            className="group/item relative flex min-h-12 items-center gap-2.5 rounded-lg p-2 hover:bg-muted/50 transition-[background-color,transform] duration-200 cursor-pointer"
-            onClick={onOpen}
-            role="link"
-            tabIndex={0}
-            aria-label={`Open ${link.title}`}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
-        >
-            {/* Favicon */}
-            <div className="flex items-center justify-center w-7 h-7 rounded-md bg-background/80 border shadow-sm shrink-0 group-hover/item:border-primary/20 transition-colors">
-                {link.url ? (
-                    <img
-                        src={`https://www.google.com/s2/favicons?domain=${link.url}&sz=32`}
-                        alt=""
-                        className="w-3.5 h-3.5 opacity-80"
-                        loading="lazy"
-                        decoding="async"
-                        onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                        }}
-                    />
-                ) : null}
-                <LinkIcon className={`w-3.5 h-3.5 text-muted-foreground/70 ${link.url ? 'hidden' : ''}`} />
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 min-w-0 pr-16 sm:pr-6">
-                <div className="text-sm font-medium truncate text-foreground/90 group-hover/item:text-primary transition-colors leading-none mb-0.5">
-                    {link.title}
-                </div>
-                <div className="text-[10px] text-muted-foreground/60 truncate group-hover/item:text-muted-foreground transition-colors leading-none">
-                    {(() => {
-                        try {
-                            return new URL(link.url).hostname.replace('www.', '');
-                        } catch {
-                            return link.url;
-                        }
-                    })()}
-                </div>
-            </div>
-
-            {/* Hover Actions */}
-            <div className="absolute right-1 flex items-center rounded-md border bg-background/90 px-0.5 shadow-sm backdrop-blur-sm opacity-100 transition-[opacity,transform] duration-200 sm:opacity-0 sm:group-hover/item:opacity-100">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground sm:h-6 sm:w-6"
-                    aria-label={`Edit ${link.title}`}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onStartEdit();
-                    }}
-                >
-                    <Edit className="h-3 w-3" />
-                </Button>
-                <div className="w-[1px] h-2.5 bg-border mx-0.5" />
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive sm:h-6 sm:w-6"
-                    aria-label={`Delete ${link.title}`}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete();
-                    }}
-                >
-                    <Trash2 className="h-3 w-3" />
-                </Button>
-            </div>
-        </div>
     );
 }

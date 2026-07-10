@@ -71,12 +71,6 @@ Single project page with tabbed interface for different features:
 
 #### Tabs:
 
-##### **Control Tab**
-- Daily operating view for active projects
-- Imports configured project Slack channels into reviewable requests
-- Surfaces blockers, overdue/no-date tasks, checklist gaps, timeline risk, QA gate results, and client-update drafts
-- Integrated with the [Daily Control Loop](./daily-control.md) feature
-
 ##### **Links Tab**
 - Displays manual project links directly inside the project detail dashboard
 - Supports adding, editing, deleting, filtering, previewing, opening, and drag-and-drop reordering

@@ -533,7 +533,7 @@ export const projectsService = {
     });
   },
 
-  // Update project status (current / closed / paid)
+  // Update project status (current / paused / closed / paid)
   async updateProjectStatus(projectId: string, status: ProjectStatus): Promise<void> {
     if (isLocalProjectBypassEnabled()) {
       updateLocalProject(projectId, (project) => ({ ...project, status }));
@@ -595,52 +595,6 @@ export const projectsService = {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       ...flags,
-      updatedAt: Timestamp.now(),
-    });
-  },
-
-  // Update daily-control configuration. These are non-secret operational
-  // settings; Slack tokens remain server-side in env vars.
-  async updateProjectControlSettings(
-    projectId: string,
-    settings: Pick<
-      Project,
-      'slackChannelIds' | 'qaUrlSource' | 'qaUrls' | 'reviewOwnerEmail' | 'clientUpdatePreferences'
-    >,
-  ): Promise<void> {
-    const slackChannelIds = (settings.slackChannelIds ?? [])
-      .map((id) => id.trim())
-      .filter(Boolean);
-    const qaUrls = (settings.qaUrls ?? [])
-      .map((url) => url.trim())
-      .filter(Boolean);
-    const reviewOwnerEmail = settings.reviewOwnerEmail?.trim();
-    const clientUpdatePreferences = settings.clientUpdatePreferences
-      ? stripUndefined({
-        ...settings.clientUpdatePreferences,
-        notes: settings.clientUpdatePreferences.notes?.trim() || undefined,
-      })
-      : undefined;
-
-    if (isLocalProjectBypassEnabled()) {
-      updateLocalProject(projectId, (project) => ({
-        ...project,
-        slackChannelIds,
-        qaUrlSource: settings.qaUrlSource ?? 'auto_links',
-        qaUrls,
-        reviewOwnerEmail: reviewOwnerEmail || undefined,
-        clientUpdatePreferences,
-      }));
-      return;
-    }
-
-    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
-    await updateDoc(projectRef, {
-      slackChannelIds,
-      qaUrlSource: settings.qaUrlSource ?? 'auto_links',
-      qaUrls,
-      reviewOwnerEmail: reviewOwnerEmail || deleteField(),
-      clientUpdatePreferences: clientUpdatePreferences ?? deleteField(),
       updatedAt: Timestamp.now(),
     });
   },
@@ -1307,6 +1261,52 @@ function pushUpdateToClickUp(
     });
 }
 
+function taskDateMs(date?: Date): number {
+  return date instanceof Date ? date.getTime() : 0;
+}
+
+function shouldPreferClickUpMirror(candidate: Task, current: Task): boolean {
+  const candidateHealthy = candidate.clickupSyncError ? 0 : 1;
+  const currentHealthy = current.clickupSyncError ? 0 : 1;
+  if (candidateHealthy !== currentHealthy) return candidateHealthy > currentHealthy;
+
+  const candidateSyncedAt = taskDateMs(candidate.clickupSyncedAt);
+  const currentSyncedAt = taskDateMs(current.clickupSyncedAt);
+  if (candidateSyncedAt !== currentSyncedAt) return candidateSyncedAt > currentSyncedAt;
+
+  const candidateUpdatedAt = taskDateMs(candidate.updatedAt);
+  const currentUpdatedAt = taskDateMs(current.updatedAt);
+  if (candidateUpdatedAt !== currentUpdatedAt) return candidateUpdatedAt > currentUpdatedAt;
+
+  return taskDateMs(candidate.createdAt) > taskDateMs(current.createdAt);
+}
+
+function dedupeClickUpMirrors(tasks: Task[]): Task[] {
+  const deduped: Task[] = [];
+  const indexByClickUpId = new Map<string, number>();
+
+  for (const task of tasks) {
+    if (!task.clickupTaskId) {
+      deduped.push(task);
+      continue;
+    }
+
+    const existingIndex = indexByClickUpId.get(task.clickupTaskId);
+    if (existingIndex === undefined) {
+      indexByClickUpId.set(task.clickupTaskId, deduped.length);
+      deduped.push(task);
+      continue;
+    }
+
+    const existing = deduped[existingIndex];
+    if (shouldPreferClickUpMirror(task, existing)) {
+      deduped[existingIndex] = task;
+    }
+  }
+
+  return deduped;
+}
+
 export const tasksService = {
   /** Create a single task. Returns the new task id. */
   async createTask(input: CreateTaskInput): Promise<string> {
@@ -1509,7 +1509,7 @@ export const tasksService = {
     return onSnapshot(
       q,
       (snap) => {
-        const tasks = snap.docs.map((d) => taskFromDoc(d.id, d.data()));
+        const tasks = dedupeClickUpMirrors(snap.docs.map((d) => taskFromDoc(d.id, d.data())));
         // Sort: incomplete first, then by status order, then by `order` field
         const statusOrder: Record<Task['status'], number> = {
           in_progress: 0,

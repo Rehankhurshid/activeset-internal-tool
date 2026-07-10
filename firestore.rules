@@ -82,12 +82,6 @@ service cloud.firestore {
     match /scan_jobs/{id}                 { allow read, write: if true; }
     match /site_alerts/{id}               { allow read, write: if true; }
     match /health_reports/{id}            { allow read, write: if true; }
-    match /daily_control_snapshots/{id}   {
-      allow read: if request.auth != null
-        && request.auth.token.email is string
-        && request.auth.token.email.matches('.*@activeset\\.co$');
-      allow write: if false;
-    }
     match /scan_notifications/{id}        { allow read, write: if true; }
     match /audit_logs/{id}                { allow read, write: if true; }
     match /content_changes/{id}           { allow read, write: if true; }

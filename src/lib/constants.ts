@@ -9,7 +9,6 @@ export const COLLECTIONS = {
   SITE_ALERTS: 'site_alerts',
   HEALTH_REPORTS: 'health_reports',
   SCAN_NOTIFICATIONS: 'scan_notifications',
-  DAILY_CONTROL_SNAPSHOTS: 'daily_control_snapshots',
   // Server-only: stores third-party API tokens (e.g. Webflow). NEVER readable
   // from the client — access must go through firebase-admin and an authenticated
   // server route that verifies project ownership.

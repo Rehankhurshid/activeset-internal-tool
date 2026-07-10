@@ -14,6 +14,13 @@ import {
 } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
 import { syncTaskUpdateToClickUp } from '@/lib/clickup-sync-update';
+import {
+  buildClickUpUnlinkPatch,
+  chooseCanonicalClickUpDoc,
+  isDisposableClickUpMirror,
+  localClickUpTaskDocFromSnapshot,
+  type LocalClickUpTaskDoc,
+} from '@/lib/clickup-local-mirrors';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -43,6 +50,39 @@ async function findProjectForList(listId: string): Promise<string | null> {
     .limit(1)
     .get();
   return snap.empty ? null : snap.docs[0].id;
+}
+
+async function cleanupLocalClickUpMirrors(
+  mirrors: LocalClickUpTaskDoc[],
+  keepId: string | null,
+  now: Timestamp,
+): Promise<number> {
+  let batch = adminDb.batch();
+  let writes = 0;
+  let cleaned = 0;
+
+  for (const mirror of mirrors) {
+    if (keepId && mirror.id === keepId) continue;
+    if (isDisposableClickUpMirror(mirror)) {
+      batch.delete(mirror.ref);
+    } else {
+      batch.update(mirror.ref, buildClickUpUnlinkPatch(now));
+    }
+    writes += 1;
+    cleaned += 1;
+
+    if (writes >= 450) {
+      await batch.commit();
+      batch = adminDb.batch();
+      writes = 0;
+    }
+  }
+
+  if (writes > 0) {
+    await batch.commit();
+  }
+
+  return cleaned;
 }
 
 export async function POST(request: NextRequest) {
@@ -108,27 +148,17 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
   const matches = await adminDb
     .collection(TASKS_COLLECTION)
     .where('clickupTaskId', '==', taskId)
-    .limit(1)
     .get();
-  const existing = matches.empty ? null : matches.docs[0];
+  const localMirrors = matches.docs.map(localClickUpTaskDocFromSnapshot);
+  const existing = chooseCanonicalClickUpDoc(localMirrors);
 
   // taskDeleted is the easy case — no need to refetch.
   if (event === 'taskDeleted') {
     if (!existing) {
       return NextResponse.json({ ok: true, ignored: 'unlinked-and-deleted' });
     }
-    await existing.ref.update({
-      clickupTaskId: null,
-      clickupUrl: null,
-      clickupSyncedAt: null,
-      clickupLastSyncedRequestId: null,
-      clickupSyncError: FieldValue.delete(),
-      clickupSyncFailedAt: FieldValue.delete(),
-      clickupSyncInFlightAt: FieldValue.delete(),
-      source: 'manual',
-      updatedAt: Timestamp.now(),
-    });
-    return NextResponse.json({ ok: true, action: 'unlinked-on-delete' });
+    const cleaned = await cleanupLocalClickUpMirrors(localMirrors, null, Timestamp.now());
+    return NextResponse.json({ ok: true, action: 'removed-on-delete', cleaned });
   }
 
   // For create/update/move/etc, fetch the current ClickUp state — gives us the
@@ -140,18 +170,8 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
     if (err instanceof ClickUpError && err.status === 404) {
       // Task disappeared between webhook fire and our fetch — treat as delete.
       if (existing) {
-        await existing.ref.update({
-          clickupTaskId: null,
-          clickupUrl: null,
-          clickupSyncedAt: null,
-          clickupLastSyncedRequestId: null,
-          clickupSyncError: FieldValue.delete(),
-          clickupSyncFailedAt: FieldValue.delete(),
-          clickupSyncInFlightAt: FieldValue.delete(),
-          source: 'manual',
-          updatedAt: Timestamp.now(),
-        });
-        return NextResponse.json({ ok: true, action: 'unlinked-on-404' });
+        const cleaned = await cleanupLocalClickUpMirrors(localMirrors, null, Timestamp.now());
+        return NextResponse.json({ ok: true, action: 'removed-on-404', cleaned });
       }
       return NextResponse.json({ ok: true, ignored: '404-unmatched' });
     }
@@ -166,11 +186,7 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
   if (existing) {
     // Update path. If the task moved OUT of a linked list, unlink it (option A
     // behavior — keep the local row, drop the ClickUp link).
-    const localData = existing.data() as {
-      projectId?: string;
-      clickupSyncRequestId?: string;
-      clickupLastSyncedRequestId?: string | null;
-    };
+    const localData = existing.data;
     const projectId = localData.projectId;
     let movedOutOfLinkedList = false;
     if (projectId) {
@@ -186,20 +202,11 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
     }
 
     if (movedOutOfLinkedList) {
-      await existing.ref.update({
-        clickupTaskId: null,
-        clickupUrl: null,
-        clickupSyncedAt: null,
-        clickupLastSyncedRequestId: null,
-        clickupSyncError: FieldValue.delete(),
-        clickupSyncFailedAt: FieldValue.delete(),
-        clickupSyncInFlightAt: FieldValue.delete(),
-        source: 'manual',
-        updatedAt: Timestamp.now(),
-      });
-      return NextResponse.json({ ok: true, action: 'unlinked-list-moved-out' });
+      const cleaned = await cleanupLocalClickUpMirrors(localMirrors, null, Timestamp.now());
+      return NextResponse.json({ ok: true, action: 'removed-list-moved-out', cleaned });
     }
 
+    const deduped = await cleanupLocalClickUpMirrors(localMirrors, existing.id, Timestamp.now());
     const pendingLocalRequest =
       localData.clickupSyncRequestId &&
       localData.clickupLastSyncedRequestId !== localData.clickupSyncRequestId;
@@ -222,7 +229,7 @@ async function handleVerifiedEvent(rawBody: string): Promise<NextResponse> {
       clickupSyncInFlightAt: FieldValue.delete(),
       updatedAt: Timestamp.now(),
     });
-    return NextResponse.json({ ok: true, action: 'synced', event });
+    return NextResponse.json({ ok: true, action: 'synced', event, deduped });
   }
 
   // No local task. If the current list is bound to a project, auto-create the

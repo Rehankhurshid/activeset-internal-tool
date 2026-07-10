@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 
 import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { useProjectRequests } from '@/hooks/useProjectRequests';
@@ -62,6 +61,14 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName,
   const syncableTaskIds = tasks
     .filter((t) => !t.clickupTaskId && !isClickUpCreateSyncPending(t))
     .map((t) => t.id);
+  const clickupTaskCount = new Set(
+    tasks
+      .map((t) => t.clickupTaskId)
+      .filter((id): id is string => Boolean(id)),
+  ).size;
+  const localTaskCount = tasks.filter((t) => !t.clickupTaskId).length;
+  const pendingSyncCount = tasks.filter((t) => isClickUpCreateSyncPending(t)).length;
+  const failedSyncCount = tasks.filter((t) => Boolean(t.clickupSyncError)).length;
 
   const handleQuickAdd = async () => {
     const title = quickAddTitle.trim();
@@ -96,12 +103,12 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName,
   return (
     <div className="space-y-4">
       {/* Summary strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <SummaryCard label="Open" value={openCount} />
-        <SummaryCard label="Urgent" value={urgentCount} accent="rose" />
-        <SummaryCard label="Assigned to me" value={myCount} accent="blue" />
-        <SummaryCard label="Requests" value={requestCount} accent="violet" />
-        <SummaryCard label="New since last visit" value={newCount} accent="emerald" />
+      <div className="grid grid-cols-2 divide-x divide-border rounded-lg border sm:grid-cols-5">
+        <SummaryStat label="Open" value={openCount} />
+        <SummaryStat label="Urgent" value={urgentCount} accent="rose" />
+        <SummaryStat label="Assigned to me" value={myCount} accent="blue" />
+        <SummaryStat label="Requests" value={requestCount} accent="violet" />
+        <SummaryStat label="New since last visit" value={newCount} accent="emerald" />
       </div>
 
       {/* Action row — hidden in read-only share view */}
@@ -144,6 +151,10 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName,
           clickupListId={clickupListId}
           clickupListName={clickupListName}
           syncableTaskIds={syncableTaskIds}
+          clickupTaskCount={clickupTaskCount}
+          localTaskCount={localTaskCount}
+          pendingSyncCount={pendingSyncCount}
+          failedSyncCount={failedSyncCount}
         />
       )}
 
@@ -178,7 +189,7 @@ const ACCENT_CLASSES: Record<string, string> = {
   emerald: 'text-emerald-600 dark:text-emerald-400',
 };
 
-function SummaryCard({
+function SummaryStat({
   label,
   value,
   accent,
@@ -188,19 +199,17 @@ function SummaryCard({
   accent?: keyof typeof ACCENT_CLASSES;
 }) {
   return (
-    <Card>
-      <CardContent className="py-3 px-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p
-          className={
-            accent
-              ? `text-2xl font-bold ${ACCENT_CLASSES[accent]}`
-              : 'text-2xl font-bold'
-          }
-        >
-          {value}
-        </p>
-      </CardContent>
-    </Card>
+    <div className="px-4 py-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={
+          accent
+            ? `text-lg font-semibold ${ACCENT_CLASSES[accent]}`
+            : 'text-lg font-semibold'
+        }
+      >
+        {value}
+      </p>
+    </div>
   );
 }

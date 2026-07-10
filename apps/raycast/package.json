@@ -1,0 +1,81 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "activeset-projects",
+  "title": "ActiveSet Projects",
+  "description": "Manage ActiveSet client projects, links, reviews, scans, and tasks from Raycast.",
+  "icon": "extension-icon.png",
+  "version": "0.1.0",
+  "author": "activeset",
+  "license": "MIT",
+  "scripts": {
+    "dev": "ray develop",
+    "build": "ray build",
+    "lint": "ray lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "commands": [
+    {
+      "name": "manage-projects",
+      "title": "Manage Projects",
+      "description": "Search and manage ActiveSet projects.",
+      "icon": "extension-icon.png",
+      "mode": "view",
+      "keywords": ["projects", "clients", "activeset"]
+    },
+    {
+      "name": "create-task",
+      "title": "Create Project Task",
+      "description": "Create a dashboard task and sync it to ClickUp when the project is linked.",
+      "icon": "extension-icon.png",
+      "mode": "view",
+      "keywords": ["task", "clickup", "todo"]
+    },
+    {
+      "name": "open-project-link",
+      "title": "Open Project Link",
+      "description": "Open or copy manual links from any project.",
+      "icon": "extension-icon.png",
+      "mode": "view",
+      "keywords": ["links", "bookmarks"]
+    },
+    {
+      "name": "running-scans",
+      "title": "Running Project Scans",
+      "description": "View active project scan jobs.",
+      "icon": "extension-icon.png",
+      "mode": "view",
+      "keywords": ["scan", "audit"]
+    }
+  ],
+  "preferences": [
+    {
+      "name": "baseUrl",
+      "title": "App Base URL",
+      "description": "Base URL of the ActiveSet web app.",
+      "type": "textfield",
+      "required": true,
+      "default": "https://app.activeset.co"
+    },
+    {
+      "name": "apiToken",
+      "title": "Raycast API Token",
+      "description": "Private token matching RAYCAST_API_TOKEN on the web app.",
+      "type": "password",
+      "required": true
+    },
+    {
+      "name": "userEmail",
+      "title": "User Email",
+      "description": "Your @activeset.co email for task attribution and review updates.",
+      "type": "textfield",
+      "required": false
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.102.0",
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3"
+  }
+}

@@ -17,11 +17,19 @@ import {
 } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
 import { syncTaskUpdateToClickUp } from '@/lib/clickup-sync-update';
+import {
+  buildClickUpUnlinkPatch,
+  chooseCanonicalClickUpDoc,
+  isDisposableClickUpMirror,
+  localClickUpTaskDocFromSnapshot,
+  type LocalClickUpTaskDoc,
+} from '@/lib/clickup-local-mirrors';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 const TASKS_COLLECTION = COLLECTIONS.TASKS;
+const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
 const APP_SECRETS_COLLECTION = COLLECTIONS.APP_SECRETS;
 
 // Hard ceiling per run so a noisy refresh doesn't burn through the ClickUp rate
@@ -30,6 +38,39 @@ const MAX_REFRESHED_PER_RUN = 200;
 const REQUEST_INTERVAL_MS = 200;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function cleanupLocalClickUpMirrors(
+  mirrors: LocalClickUpTaskDoc[],
+  keepId: string | null,
+  now: Timestamp,
+): Promise<number> {
+  let batch = adminDb.batch();
+  let writes = 0;
+  let cleaned = 0;
+
+  for (const mirror of mirrors) {
+    if (keepId && mirror.id === keepId) continue;
+    if (isDisposableClickUpMirror(mirror)) {
+      batch.delete(mirror.ref);
+    } else {
+      batch.update(mirror.ref, buildClickUpUnlinkPatch(now));
+    }
+    writes += 1;
+    cleaned += 1;
+
+    if (writes >= 450) {
+      await batch.commit();
+      batch = adminDb.batch();
+      writes = 0;
+    }
+  }
+
+  if (writes > 0) {
+    await batch.commit();
+  }
+
+  return cleaned;
+}
 
 interface WebhookHealthResult {
   status: 'healthy' | 'recovered' | 'no-config' | 'check-failed' | 'recovery-failed';
@@ -132,15 +173,43 @@ export async function GET(request: NextRequest) {
 
   let synced = 0;
   let unlinked = 0;
+  let deduped = 0;
   let errors = 0;
+  const projectListCache = new Map<string, string | null>();
+  const linkedMirrors = linked.docs.map(localClickUpTaskDocFromSnapshot);
+  const mirrorsByClickUpId = new Map<string, LocalClickUpTaskDoc[]>();
+  for (const mirror of linkedMirrors) {
+    const taskId = mirror.data.clickupTaskId;
+    if (!taskId) continue;
+    const mirrors = mirrorsByClickUpId.get(taskId) ?? [];
+    mirrors.push(mirror);
+    mirrorsByClickUpId.set(taskId, mirrors);
+  }
 
-  for (const doc of linked.docs) {
-    const docData = doc.data() as {
-      projectId?: string;
-      clickupTaskId?: string;
-      clickupSyncRequestId?: string;
-      clickupLastSyncedRequestId?: string | null;
-    };
+  const canonicalMirrors: LocalClickUpTaskDoc[] = [];
+  for (const mirrors of mirrorsByClickUpId.values()) {
+    const canonical = chooseCanonicalClickUpDoc(mirrors);
+    if (!canonical) continue;
+    canonicalMirrors.push(canonical);
+    deduped += await cleanupLocalClickUpMirrors(mirrors, canonical.id, Timestamp.now());
+  }
+
+  async function getProjectClickUpListId(projectId: string): Promise<string | null> {
+    if (projectListCache.has(projectId)) {
+      return projectListCache.get(projectId) ?? null;
+    }
+    const projectSnap = await adminDb
+      .collection(PROJECTS_COLLECTION)
+      .doc(projectId)
+      .get();
+    const listId = (projectSnap.data() as { clickupListId?: string | null } | undefined)
+      ?.clickupListId ?? null;
+    projectListCache.set(projectId, listId);
+    return listId;
+  }
+
+  for (const doc of canonicalMirrors) {
+    const docData = doc.data;
     const taskId = docData.clickupTaskId;
     if (!taskId) continue;
 
@@ -160,6 +229,14 @@ export async function GET(request: NextRequest) {
       }
 
       const task = await fetchClickUpTask(taskId);
+      if (docData.projectId && task.list?.id) {
+        const linkedListId = await getProjectClickUpListId(docData.projectId);
+        if (linkedListId && linkedListId !== task.list.id) {
+          unlinked += await cleanupLocalClickUpMirrors([doc], null, Timestamp.now());
+          await sleep(REQUEST_INTERVAL_MS);
+          continue;
+        }
+      }
       const patch = clickUpTaskToUpdate(task);
       const completedAtUpdate =
         patch.status === 'done' ? { completedAt: Timestamp.now() } : { completedAt: null };
@@ -176,21 +253,10 @@ export async function GET(request: NextRequest) {
       });
       synced += 1;
     } catch (err) {
-      // 404 → ClickUp task deleted on their side. Unlink locally so the row stays
-      // editable but no longer syncs.
+      // 404 → ClickUp task deleted on their side. Remove imported mirrors and
+      // unlink manual-origin tasks so local-only work is not silently lost.
       if (err instanceof ClickUpError && err.status === 404) {
-        await doc.ref.update({
-          clickupTaskId: null,
-          clickupUrl: null,
-          clickupSyncedAt: null,
-          clickupLastSyncedRequestId: null,
-          clickupSyncError: FieldValue.delete(),
-          clickupSyncFailedAt: FieldValue.delete(),
-          clickupSyncInFlightAt: FieldValue.delete(),
-          source: 'manual',
-          updatedAt: Timestamp.now(),
-        });
-        unlinked += 1;
+        unlinked += await cleanupLocalClickUpMirrors([doc], null, Timestamp.now());
       } else {
         errors += 1;
         console.error('[clickup-refresh] failed to sync', taskId, err);
@@ -205,6 +271,7 @@ export async function GET(request: NextRequest) {
     examined: linked.size,
     synced,
     unlinked,
+    deduped,
     errors,
     webhook: webhookHealth,
   });
