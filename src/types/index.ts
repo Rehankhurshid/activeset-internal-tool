@@ -316,6 +316,24 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   paid: 'Paid',
 };
 
+/**
+ * How a project is billed. Drives the task → line-item → invoice flow:
+ * `adhoc` projects surface per-task billable hours and a "generate invoice
+ * from tasks" action. Missing/legacy docs are treated as `fixed`.
+ */
+export type BillingType = 'fixed' | 'retainer' | 'adhoc';
+
+export const BILLING_TYPE_LABELS: Record<BillingType, string> = {
+  fixed: 'Fixed price',
+  retainer: 'Retainer',
+  adhoc: 'Ad-hoc / hourly',
+};
+
+export function normalizeBillingType(raw: unknown): BillingType {
+  if (raw === 'adhoc' || raw === 'retainer' || raw === 'fixed') return raw;
+  return 'fixed';
+}
+
 /** Legacy docs may still carry status: 'past' — read it as 'paid'. */
 export function normalizeProjectStatus(raw: unknown): ProjectStatus {
   if (raw === 'closed' || raw === 'paid' || raw === 'current' || raw === 'paused') return raw;
@@ -342,6 +360,17 @@ export interface Project {
   updatedAt: Date;
   userId: string;
   client?: string; // Optional client/company name used to group projects together
+  // --- Billing ---
+  /** How the project is billed. Missing = 'fixed'. `adhoc` unlocks the
+   *  per-task billable hours + "generate invoice from tasks" flow. */
+  billingType?: BillingType;
+  /** Default hourly rate applied to billable tasks (per-task override wins). */
+  hourlyRate?: number;
+  /** ISO 4217 currency for ad-hoc invoices, e.g. 'USD' / 'INR'. Default 'USD'. */
+  billingCurrency?: string;
+  /** Email used for the Refrens invoice `billedTo`. The billedTo name reuses
+   *  `client` (falling back to the project name). */
+  billingContactEmail?: string;
   /** Optional logo for the project — either a remote URL or a small data URL. */
   logoUrl?: string;
   /** Optional link to a proposal — drives "Import from proposal" on the
@@ -719,6 +748,20 @@ export interface Task {
   assignee?: string;
   /** Manual order within a status bucket (for future kanban / drag-drop). */
   order: number;
+  // --- Ad-hoc billing (only meaningful on `adhoc` projects) ---
+  /** Marks the task as a billable line item. */
+  billable?: boolean;
+  /** Hours worked, used as the line item quantity. Defaults to 1 if unset. */
+  billedHours?: number;
+  /** Per-task rate override. Falls back to the project's `hourlyRate`. */
+  billedRate?: number;
+  /** Set once the task has been rolled into an invoice. Points at the
+   *  `project_invoices` mirror row. Locks the task's billing fields. */
+  invoiceId?: string;
+  /** Human-facing invoice number for display on the task, when known. */
+  invoiceNumber?: string;
+  /** ISO timestamp the task was invoiced. */
+  invoicedAt?: Date;
   /** ClickUp task ID when this task is linked to a ClickUp task. Sync source of truth. */
   clickupTaskId?: string;
   /** ClickUp task ID of the parent task when this is a subtask in ClickUp. */
@@ -773,6 +816,9 @@ export type UpdateTaskInput = Partial<
     | 'assignee'
     | 'order'
     | 'source'
+    | 'billable'
+    | 'billedHours'
+    | 'billedRate'
     | 'clickupTaskId'
     | 'parentClickupTaskId'
     | 'clickupUrl'

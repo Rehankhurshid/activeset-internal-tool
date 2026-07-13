@@ -26,6 +26,8 @@ import { AppNavigation } from '@/shared/ui';
 import { AddLinkDialog } from '@/components/projects/AddLinkDialog';
 import { LinkList } from '@/components/projects/LinkList';
 import { ProjectPeoplePicker } from '@/components/projects/ProjectPeoplePicker';
+import { ProjectBillingButton } from '@/components/projects/ProjectBillingButton';
+import { normalizeBillingType } from '@/types';
 import { toast } from 'sonner';
 import { DesktopTabSelector, MobileTabSelector, type TabOption, type TabStat } from '../components/ProjectTabs';
 
@@ -279,6 +281,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         return <div className="p-8">Project not found</div>;
     }
 
+    const isAdhoc = normalizeBillingType(project.billingType) === 'adhoc';
     const autoLinks = project.links.filter(l => l.source === 'auto');
     const autoLinksCount = autoLinks.length;
     const manualLinksCount = project.links.length - autoLinksCount;
@@ -368,6 +371,15 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                     inputClassName="h-7 text-xs w-48"
                                 />
                             </div>
+                            {isAdmin && (
+                                <ProjectBillingButton
+                                    projectId={project.id}
+                                    billingType={project.billingType}
+                                    hourlyRate={project.hourlyRate}
+                                    billingCurrency={project.billingCurrency}
+                                    billingContactEmail={project.billingContactEmail}
+                                />
+                            )}
                         </div>
                     </div>
                     <div className="w-full shrink-0 sm:w-auto">
@@ -481,6 +493,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             userEmail={user?.email ?? ''}
                             clickupListId={project.clickupListId}
                             clickupListName={project.clickupListName}
+                            billingEnabled={isAdhoc}
+                            hourlyRate={project.hourlyRate}
+                            billingCurrency={project.billingCurrency}
                         />
                     </TabsContent>
 
@@ -522,6 +537,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                 projectId={project.id}
                                 proposalId={project.proposalId}
                                 projectTags={project.tags}
+                                billingType={normalizeBillingType(project.billingType)}
+                                hourlyRate={project.hourlyRate}
+                                billingCurrency={project.billingCurrency}
+                                clientName={project.client}
+                                billingContactEmail={project.billingContactEmail}
                             />
                         </TabsContent>
                     )}

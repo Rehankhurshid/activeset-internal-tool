@@ -13,6 +13,7 @@ import { SlotDialog } from './SlotDialog';
 import { MapInvoiceDialog } from './MapInvoiceDialog';
 import { ApplyTemplateDialog, type ApplyTemplateInitialValues } from './ApplyTemplateDialog';
 import { LinkProposalDialog } from './LinkProposalDialog';
+import { GenerateFromTasksCard } from './GenerateFromTasksCard';
 import { proposalService } from '@/app/modules/proposal/services/ProposalService';
 import { describeTemplate, addDaysIso } from '@/lib/payment-templates';
 import type { Proposal } from '@/app/modules/proposal/types/Proposal';
@@ -24,6 +25,15 @@ interface InvoicesTabProps {
   /** Used to detect subscription/retainer projects so we can nudge for the
    *  next billing cycle when the last slot is approaching its due date. */
   projectTags?: ReadonlyArray<string>;
+  /** When 'adhoc', show the "generate invoice from billable tasks" panel. */
+  billingType?: string;
+  /** Project default hourly rate for the task → invoice flow. */
+  hourlyRate?: number;
+  /** Currency for ad-hoc invoices. Defaults to USD. */
+  billingCurrency?: string;
+  /** Prefills the Refrens bill-to name/email on generated invoices. */
+  clientName?: string;
+  billingContactEmail?: string;
 }
 
 interface ConfigStatus {
@@ -48,7 +58,16 @@ function summarize(invoices: ProjectInvoice[]): string {
   return parts.join(' · ');
 }
 
-export function InvoicesTab({ projectId, proposalId, projectTags }: InvoicesTabProps) {
+export function InvoicesTab({
+  projectId,
+  proposalId,
+  projectTags,
+  billingType,
+  hourlyRate,
+  billingCurrency,
+  clientName,
+  billingContactEmail,
+}: InvoicesTabProps) {
   const [config, setConfig] = useState<ConfigStatus | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [invoices, setInvoices] = useState<ProjectInvoice[]>([]);
@@ -352,6 +371,18 @@ export function InvoicesTab({ projectId, proposalId, projectTags }: InvoicesTabP
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* Ad-hoc: roll billable tasks into an invoice */}
+      {billingType === 'adhoc' && (
+        <GenerateFromTasksCard
+          projectId={projectId}
+          hourlyRate={hourlyRate ?? null}
+          currency={(billingCurrency ?? 'USD').toUpperCase()}
+          clientName={clientName}
+          billingEmail={billingContactEmail}
+          onGenerated={handleSaved}
+        />
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">

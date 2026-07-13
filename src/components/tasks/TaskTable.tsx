@@ -52,7 +52,9 @@ import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
 import { InlineEdit } from '@/components/ui/inline-edit';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { formatMoney } from '@/lib/format-money';
 
 import { tasksService } from '@/services/database';
 import {
@@ -91,6 +93,13 @@ interface TaskTableProps {
   /** Project-level ClickUp list binding. Enables local task create/link actions. */
   clickupListId?: string;
   clickupListName?: string;
+  /** Ad-hoc billing config. When `enabled`, the table shows Billable / Hours /
+   *  Amount / Invoiced columns so tasks can become invoice line items. */
+  billing?: {
+    enabled: boolean;
+    hourlyRate: number | null;
+    currency: string;
+  };
 }
 
 type StatusFilter = TaskStatus | 'all' | 'open';
@@ -115,8 +124,12 @@ export function TaskTable({
   userEmail,
   clickupListId,
   clickupListName,
+  billing,
   readOnly = false,
 }: TaskTableProps) {
+  const billingEnabled = Boolean(billing?.enabled) && !readOnly;
+  const billingRate = billing?.hourlyRate ?? null;
+  const billingCurrency = billing?.currency ?? 'USD';
   const isNewSinceLastVisit = (t: Task): boolean => {
     if (previousViewedAt <= 0) return false;
     if (userEmail && t.createdBy === userEmail) return false;
@@ -479,6 +492,100 @@ export function TaskTable({
           );
         },
       },
+      ...(billingEnabled
+        ? ([
+            {
+              id: 'billable',
+              header: 'Billable',
+              enableSorting: false,
+              cell: ({ row }) => {
+                const task = row.original;
+                const invoiced = Boolean(task.invoiceId);
+                return (
+                  <div className="flex items-center justify-center">
+                    <Checkbox
+                      checked={Boolean(task.billable)}
+                      disabled={invoiced}
+                      onCheckedChange={(v) =>
+                        handleUpdate(task.id, { billable: Boolean(v) })
+                      }
+                      aria-label="Billable"
+                      title={invoiced ? 'Already invoiced' : 'Mark as billable'}
+                    />
+                  </div>
+                );
+              },
+            },
+            {
+              id: 'hours',
+              header: 'Hours',
+              enableSorting: false,
+              cell: ({ row }) => {
+                const task = row.original;
+                if (!task.billable) {
+                  return <span className="text-xs text-muted-foreground">—</span>;
+                }
+                return (
+                  <BillingHoursCell
+                    value={task.billedHours}
+                    disabled={Boolean(task.invoiceId)}
+                    onCommit={(n) => handleUpdate(task.id, { billedHours: n })}
+                  />
+                );
+              },
+            },
+            {
+              id: 'amount',
+              header: 'Amount',
+              enableSorting: false,
+              cell: ({ row }) => {
+                const task = row.original;
+                if (!task.billable) {
+                  return <span className="text-xs text-muted-foreground">—</span>;
+                }
+                const rate = task.billedRate ?? billingRate;
+                if (rate == null || rate <= 0) {
+                  return (
+                    <span className="text-xs text-amber-600 dark:text-amber-400">
+                      Set rate
+                    </span>
+                  );
+                }
+                const hours =
+                  task.billedHours != null && task.billedHours > 0 ? task.billedHours : 1;
+                return (
+                  <span className="text-xs font-medium tabular-nums">
+                    {formatMoney(hours * rate, billingCurrency)}
+                  </span>
+                );
+              },
+            },
+            {
+              id: 'invoiced',
+              header: 'Invoiced',
+              enableSorting: false,
+              cell: ({ row }) => {
+                const task = row.original;
+                if (!task.invoiceId) {
+                  return <span className="text-xs text-muted-foreground">—</span>;
+                }
+                return (
+                  <Badge
+                    variant="outline"
+                    className="h-5 px-1.5 text-[10px] font-medium border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    title={
+                      task.invoicedAt
+                        ? `Invoiced ${task.invoicedAt.toLocaleString()}`
+                        : 'Invoiced'
+                    }
+                  >
+                    {task.invoiceNumber ? `#${task.invoiceNumber}` : 'Invoiced'}
+                  </Badge>
+                );
+              },
+            },
+          ] as ColumnDef<Task>[])
+        : []),
       {
         accessorKey: 'source',
         header: 'Source',
@@ -627,7 +734,7 @@ export function TaskTable({
             } as ColumnDef<Task>,
           ]),
     ],
-    [assignees, visibleParentIds, previousViewedAt, userEmail, readOnly, clickupListId, retryingTaskId],
+    [assignees, visibleParentIds, previousViewedAt, userEmail, readOnly, clickupListId, retryingTaskId, billingEnabled, billingRate, billingCurrency],
   );
 
   const table = useReactTable({
@@ -762,6 +869,72 @@ export function TaskTable({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Inline hours editor for a billable task. Commits on blur / Enter; an empty
+ * value clears the hours (falls back to a quantity of 1 downstream).
+ */
+function BillingHoursCell({
+  value,
+  disabled = false,
+  onCommit,
+}: {
+  value?: number;
+  disabled?: boolean;
+  onCommit: (next: number | undefined) => void;
+}) {
+  const [draft, setDraft] = useState(value != null ? String(value) : '');
+
+  // Keep the local draft in sync when the underlying value changes elsewhere.
+  const lastValueRef = value != null ? String(value) : '';
+  const [lastSeen, setLastSeen] = useState(lastValueRef);
+  if (lastSeen !== lastValueRef) {
+    setLastSeen(lastValueRef);
+    setDraft(lastValueRef);
+  }
+
+  if (disabled) {
+    return (
+      <span className="text-xs tabular-nums text-muted-foreground">
+        {value != null ? value : 1}
+      </span>
+    );
+  }
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      onCommit(undefined);
+      return;
+    }
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 0) {
+      setDraft(value != null ? String(value) : '');
+      return;
+    }
+    onCommit(n);
+  };
+
+  return (
+    <Input
+      type="number"
+      min={0}
+      step="0.25"
+      inputMode="decimal"
+      value={draft}
+      placeholder="1"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="h-8 w-16 text-xs tabular-nums"
+    />
   );
 }
 

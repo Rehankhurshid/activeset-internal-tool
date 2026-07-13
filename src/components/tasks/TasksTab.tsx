@@ -23,12 +23,28 @@ interface TasksTabProps {
   userEmail: string;
   clickupListId?: string;
   clickupListName?: string;
+  /** When true (ad-hoc projects), show per-task billable hours + amount so
+   *  tasks can be rolled into an invoice from the Invoices tab. */
+  billingEnabled?: boolean;
+  /** Project default hourly rate, used when a task has no per-task override. */
+  hourlyRate?: number;
+  /** Currency for the computed amounts. Defaults to USD. */
+  billingCurrency?: string;
   /** Hide quick-add, new request, ClickUp link, and table editors. Used by
    *  the public share view so guests can browse but not modify tasks. */
   readOnly?: boolean;
 }
 
-export function TasksTab({ projectId, userEmail, clickupListId, clickupListName, readOnly = false }: TasksTabProps) {
+export function TasksTab({
+  projectId,
+  userEmail,
+  clickupListId,
+  clickupListName,
+  billingEnabled = false,
+  hourlyRate,
+  billingCurrency = 'USD',
+  readOnly = false,
+}: TasksTabProps) {
   const { tasks, loading } = useProjectTasks(projectId);
   const { requests } = useProjectRequests(projectId);
   const { assignees } = useAssignees();
@@ -167,6 +183,11 @@ export function TasksTab({ projectId, userEmail, clickupListId, clickupListName,
         userEmail={userEmail}
         clickupListId={clickupListId}
         clickupListName={clickupListName}
+        billing={
+          billingEnabled
+            ? { enabled: true, hourlyRate: hourlyRate ?? null, currency: billingCurrency }
+            : undefined
+        }
         readOnly={readOnly}
       />
 

@@ -23,6 +23,7 @@ import {
   ProjectLink,
   ProjectStatus,
   ProjectTag,
+  BillingType,
   CreateProjectLinkInput,
   UpdateProjectLinkInput,
   AuditResult,
@@ -557,6 +558,49 @@ export const projectsService = {
     const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
     await updateDoc(projectRef, {
       tags,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // Update ad-hoc billing configuration (billing type, default hourly rate,
+  // currency, billed-to email). Empty/nullish values clear the stored field.
+  async updateProjectBilling(
+    projectId: string,
+    config: {
+      billingType?: BillingType;
+      hourlyRate?: number | null;
+      billingCurrency?: string | null;
+      billingContactEmail?: string | null;
+    },
+  ): Promise<void> {
+    const hourlyRate =
+      config.hourlyRate != null && Number.isFinite(config.hourlyRate) && config.hourlyRate >= 0
+        ? config.hourlyRate
+        : null;
+    const billingCurrency = config.billingCurrency?.trim().toUpperCase() || null;
+    const billingContactEmail = config.billingContactEmail?.trim() || null;
+
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => {
+        const next = { ...project };
+        if (config.billingType) next.billingType = config.billingType;
+        if (hourlyRate != null) next.hourlyRate = hourlyRate;
+        else delete next.hourlyRate;
+        if (billingCurrency) next.billingCurrency = billingCurrency;
+        else delete next.billingCurrency;
+        if (billingContactEmail) next.billingContactEmail = billingContactEmail;
+        else delete next.billingContactEmail;
+        return next;
+      });
+      return;
+    }
+
+    const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+      ...(config.billingType ? { billingType: config.billingType } : {}),
+      hourlyRate: hourlyRate ?? deleteField(),
+      billingCurrency: billingCurrency ?? deleteField(),
+      billingContactEmail: billingContactEmail ?? deleteField(),
       updatedAt: Timestamp.now(),
     });
   },
@@ -1180,6 +1224,12 @@ function taskFromDoc(id: string, data: Record<string, unknown>): Task {
     confidence: data.confidence as number | undefined,
     assignee: data.assignee as string | undefined,
     order: (data.order as number | undefined) ?? 0,
+    billable: data.billable as boolean | undefined,
+    billedHours: data.billedHours as number | undefined,
+    billedRate: data.billedRate as number | undefined,
+    invoiceId: data.invoiceId as string | undefined,
+    invoiceNumber: data.invoiceNumber as string | undefined,
+    invoicedAt: data.invoicedAt ? toSafeDate(data.invoicedAt) : undefined,
     clickupTaskId: data.clickupTaskId as string | undefined,
     parentClickupTaskId: data.parentClickupTaskId as string | undefined,
     clickupUrl: data.clickupUrl as string | undefined,
@@ -1420,6 +1470,12 @@ export const tasksService = {
       }
       if ('dueDate' in updates && updates.dueDate === undefined) {
         cleaned.dueDate = deleteField();
+      }
+      if ('billedHours' in updates && updates.billedHours === undefined) {
+        cleaned.billedHours = deleteField();
+      }
+      if ('billedRate' in updates && updates.billedRate === undefined) {
+        cleaned.billedRate = deleteField();
       }
 
       // Build the ClickUp patch (subset of CLICKUP_PUSHABLE_FIELDS that the
