@@ -24,7 +24,8 @@ import {
   Lock,
   Loader2,
   MonitorSmartphone,
-  PenLine
+  PenLine,
+  Search
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -129,6 +130,21 @@ export function AppNavigation({
         <div className="flex items-center gap-2 sm:gap-3">
           <AlertIndicator />
           <ScanActivityIndicator />
+
+          {/* Command palette trigger — the ⌘K palette itself is mounted globally */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.dispatchEvent(new Event('commandk:open'))}
+            className="hidden sm:inline-flex h-8 gap-2 text-muted-foreground"
+            title="Search projects (⌘K)"
+          >
+            <Search className="h-4 w-4" />
+            <span className="hidden lg:inline">Search</span>
+            <kbd className="hidden lg:inline pointer-events-none select-none rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
+              ⌘K
+            </kbd>
+          </Button>
 
           {/* User Info - Desktop */}
           <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
