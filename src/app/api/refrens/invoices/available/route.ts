@@ -20,6 +20,7 @@ export interface AvailableInvoiceItem {
   invoiceDate: string | null;
   dueDate: string | null;
   billedToName: string | null;
+  billedToEmail: string | null;
   shareLink: string | null;
   pdfLink: string | null;
   mapping:
@@ -36,7 +37,7 @@ interface RefrensListItem {
   currency?: string;
   invoiceDate?: string;
   dueDate?: string;
-  billedTo?: { name?: string };
+  billedTo?: { name?: string; email?: string };
   share?: { link?: string; pdf?: string };
 }
 
@@ -115,6 +116,7 @@ export async function GET(req: NextRequest) {
         invoiceDate: raw.invoiceDate ?? null,
         dueDate: raw.dueDate ?? null,
         billedToName: raw.billedTo?.name ?? null,
+        billedToEmail: raw.billedTo?.email ?? null,
         shareLink: raw.share?.link ?? null,
         pdfLink: raw.share?.pdf ?? null,
         mapping,

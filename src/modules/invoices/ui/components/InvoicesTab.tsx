@@ -207,6 +207,13 @@ export function InvoicesTab({
     setMapDialogOpen(true);
   };
 
+  // Attach an existing Refrens invoice to this project without a target slot —
+  // creates an ad-hoc mirror row.
+  const openAttachInvoice = () => {
+    setMapTargetSlot(null);
+    setMapDialogOpen(true);
+  };
+
   const openEditForSlot = (invoice: ProjectInvoice) => {
     setEditingSlot(invoice);
     setSlotDialogOpen(true);
@@ -381,7 +388,6 @@ export function InvoicesTab({
           currency={(billingCurrency ?? 'USD').toUpperCase()}
           clientName={clientName}
           billingEmail={billingContactEmail}
-          pastInvoices={invoices}
           onGenerated={handleSaved}
         />
       )}
@@ -399,6 +405,10 @@ export function InvoicesTab({
           <Button variant="outline" size="sm" onClick={() => setTemplateDialogOpen(true)}>
             <Layers className="mr-2 h-4 w-4" />
             Apply template
+          </Button>
+          <Button variant="outline" size="sm" onClick={openAttachInvoice}>
+            <Link2 className="mr-2 h-4 w-4" />
+            Attach invoice
           </Button>
           <Button size="sm" onClick={openAddSlot}>
             <Plus className="mr-2 h-4 w-4" />

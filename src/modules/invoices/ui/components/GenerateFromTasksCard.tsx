@@ -39,9 +39,6 @@ interface GenerateFromTasksCardProps {
   clientName?: string;
   /** Prefills the Refrens bill-to email. */
   billingEmail?: string;
-  /** The project's existing invoices — used to copy bill-to details from a
-   *  past invoice instead of retyping them. */
-  pastInvoices?: ProjectInvoice[];
   /** Called with the mirrored invoice row so the parent can add it to the list. */
   onGenerated: (invoice: ProjectInvoice) => void;
 }
@@ -52,6 +49,15 @@ interface PastOption {
   name: string;
   email: string;
   currency: string;
+}
+
+/** Subset of the /available response we use to copy bill-to details. */
+interface AvailableInvoiceItem {
+  refrensInvoiceId: string;
+  invoiceNumber: string | null;
+  billedToName: string | null;
+  billedToEmail: string | null;
+  currency: string | null;
 }
 
 function todayIso(): string {
@@ -69,7 +75,6 @@ export function GenerateFromTasksCard({
   currency: currencyProp,
   clientName,
   billingEmail,
-  pastInvoices,
   onGenerated,
 }: GenerateFromTasksCardProps) {
   const { tasks, loading } = useProjectTasks(projectId);
@@ -79,20 +84,40 @@ export function GenerateFromTasksCard({
     [tasks],
   );
 
-  // Past invoices with bill-to details we can copy from.
-  const pastOptions = useMemo<PastOption[]>(
-    () =>
-      (pastInvoices ?? [])
-        .filter((inv) => inv.refrensInvoiceId && (inv.billedToName || inv.billedToEmail))
-        .map((inv) => ({
-          id: inv.id,
-          label: inv.invoiceNumber ? `#${inv.invoiceNumber}` : inv.label ?? 'Invoice',
-          name: inv.billedToName ?? '',
-          email: inv.billedToEmail ?? '',
-          currency: inv.currency ?? inv.expectedCurrency ?? '',
-        })),
-    [pastInvoices],
-  );
+  // Past invoices (account-wide) we can copy bill-to details from. Loaded
+  // lazily the first time the generate dialog opens.
+  const [pastOptions, setPastOptions] = useState<PastOption[]>([]);
+  const [pastLoaded, setPastLoaded] = useState(false);
+  const [pastLoading, setPastLoading] = useState(false);
+
+  const loadPastInvoices = async () => {
+    if (pastLoaded || pastLoading) return;
+    setPastLoading(true);
+    try {
+      const res = await fetchAuthed(
+        `/api/refrens/invoices/available?projectId=${encodeURIComponent(projectId)}`,
+      );
+      const data = (await res.json()) as { items?: AvailableInvoiceItem[] };
+      if (res.ok && Array.isArray(data.items)) {
+        const opts = data.items
+          .filter((i) => i.billedToName || i.billedToEmail)
+          .slice(0, 50)
+          .map((i) => ({
+            id: i.refrensInvoiceId,
+            label: `#${i.invoiceNumber ?? '—'}${i.billedToName ? ` · ${i.billedToName}` : ''}`,
+            name: i.billedToName ?? '',
+            email: i.billedToEmail ?? '',
+            currency: i.currency ?? '',
+          }));
+        setPastOptions(opts);
+      }
+      setPastLoaded(true);
+    } catch {
+      // Non-fatal — the picker just stays empty and the user types manually.
+    } finally {
+      setPastLoading(false);
+    }
+  };
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -138,6 +163,7 @@ export function GenerateFromTasksCard({
     setDueDate('');
     setCopyFromId('');
     setDialogOpen(true);
+    void loadPastInvoices();
   };
 
   const handleCopyFrom = (id: string) => {
@@ -291,27 +317,36 @@ export function GenerateFromTasksCard({
           </DialogHeader>
 
           <div className="space-y-3">
-            {pastOptions.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Copy details from a past invoice</Label>
-                <Select value={copyFromId} onValueChange={handleCopyFrom}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a past invoice…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pastOptions.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {o.label}
-                        {o.name ? ` · ${o.name}` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-muted-foreground">
-                  Fills the bill-to name, email, and currency below.
-                </p>
-              </div>
-            )}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Copy details from a past invoice</Label>
+              <Select
+                value={copyFromId}
+                onValueChange={handleCopyFrom}
+                disabled={pastLoading || pastOptions.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      pastLoading
+                        ? 'Loading past invoices…'
+                        : pastOptions.length === 0
+                          ? 'No past invoices to copy from'
+                          : 'Select a past invoice…'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {pastOptions.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Fills the bill-to name, email, and currency below.
+              </p>
+            </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs">Bill to (name)</Label>
