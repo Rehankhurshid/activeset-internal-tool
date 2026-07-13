@@ -14,13 +14,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Receipt, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchAuthed } from '@/lib/api-client';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { formatMoney } from '@/lib/format-money';
-import type { Task } from '@/types';
+import { taskBillAmount, resolveTaskBillingMode } from '@/lib/task-billing';
 import type { ProjectInvoice } from '@/modules/invoices/domain/types';
 
 interface GenerateFromTasksCardProps {
@@ -32,23 +39,19 @@ interface GenerateFromTasksCardProps {
   clientName?: string;
   /** Prefills the Refrens bill-to email. */
   billingEmail?: string;
+  /** The project's existing invoices — used to copy bill-to details from a
+   *  past invoice instead of retyping them. */
+  pastInvoices?: ProjectInvoice[];
   /** Called with the mirrored invoice row so the parent can add it to the list. */
   onGenerated: (invoice: ProjectInvoice) => void;
 }
 
-function resolveRate(task: Task, fallback: number | null): number | null {
-  const rate = task.billedRate != null ? task.billedRate : fallback;
-  return rate != null && Number.isFinite(rate) && rate > 0 ? rate : null;
-}
-
-function resolveHours(task: Task): number {
-  return task.billedHours != null && task.billedHours > 0 ? task.billedHours : 1;
-}
-
-function lineAmount(task: Task, fallback: number | null): number | null {
-  const rate = resolveRate(task, fallback);
-  if (rate == null) return null;
-  return resolveHours(task) * rate;
+interface PastOption {
+  id: string;
+  label: string;
+  name: string;
+  email: string;
+  currency: string;
 }
 
 function todayIso(): string {
@@ -57,15 +60,16 @@ function todayIso(): string {
 
 /**
  * Lists the project's billable, not-yet-invoiced tasks and rolls the selected
- * ones into a single Refrens invoice (one line item per task). Rendered on the
- * Invoices tab for ad-hoc projects only.
+ * ones into a single Refrens invoice (one line item per task — hourly or
+ * fixed). Rendered on the Invoices tab for ad-hoc projects only.
  */
 export function GenerateFromTasksCard({
   projectId,
   hourlyRate,
-  currency,
+  currency: currencyProp,
   clientName,
   billingEmail,
+  pastInvoices,
   onGenerated,
 }: GenerateFromTasksCardProps) {
   const { tasks, loading } = useProjectTasks(projectId);
@@ -75,15 +79,32 @@ export function GenerateFromTasksCard({
     [tasks],
   );
 
+  // Past invoices with bill-to details we can copy from.
+  const pastOptions = useMemo<PastOption[]>(
+    () =>
+      (pastInvoices ?? [])
+        .filter((inv) => inv.refrensInvoiceId && (inv.billedToName || inv.billedToEmail))
+        .map((inv) => ({
+          id: inv.id,
+          label: inv.invoiceNumber ? `#${inv.invoiceNumber}` : inv.label ?? 'Invoice',
+          name: inv.billedToName ?? '',
+          email: inv.billedToEmail ?? '',
+          currency: inv.currency ?? inv.expectedCurrency ?? '',
+        })),
+    [pastInvoices],
+  );
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Bill-to / date fields (initialized when the dialog opens).
+  // Bill-to / date / currency fields (initialized when the dialog opens).
   const [billName, setBillName] = useState('');
   const [billEmail, setBillEmail] = useState('');
+  const [currency, setCurrency] = useState((currencyProp || 'USD').toUpperCase());
   const [invoiceDate, setInvoiceDate] = useState(todayIso());
   const [dueDate, setDueDate] = useState('');
+  const [copyFromId, setCopyFromId] = useState<string>('');
 
   // Drop stale ids (e.g. a task that just got invoiced elsewhere) from the set.
   const validSelectedIds = useMemo(() => {
@@ -92,8 +113,8 @@ export function GenerateFromTasksCard({
   }, [selected, billable]);
 
   const selectedTasks = billable.filter((t) => validSelectedIds.includes(t.id));
-  const total = selectedTasks.reduce((sum, t) => sum + (lineAmount(t, hourlyRate) ?? 0), 0);
-  const missingRateCount = selectedTasks.filter((t) => resolveRate(t, hourlyRate) == null).length;
+  const total = selectedTasks.reduce((sum, t) => sum + (taskBillAmount(t, hourlyRate) ?? 0), 0);
+  const unpricedCount = selectedTasks.filter((t) => taskBillAmount(t, hourlyRate) == null).length;
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -112,15 +133,26 @@ export function GenerateFromTasksCard({
   const openDialog = () => {
     setBillName(clientName ?? '');
     setBillEmail(billingEmail ?? '');
+    setCurrency((currencyProp || 'USD').toUpperCase());
     setInvoiceDate(todayIso());
     setDueDate('');
+    setCopyFromId('');
     setDialogOpen(true);
+  };
+
+  const handleCopyFrom = (id: string) => {
+    setCopyFromId(id);
+    const opt = pastOptions.find((o) => o.id === id);
+    if (!opt) return;
+    if (opt.name) setBillName(opt.name);
+    setBillEmail(opt.email);
+    if (opt.currency) setCurrency(opt.currency.toUpperCase());
   };
 
   const handleGenerate = async () => {
     if (validSelectedIds.length === 0) return;
-    if (missingRateCount > 0) {
-      toast.error('Some selected tasks have no rate. Set a project or per-task rate first.');
+    if (unpricedCount > 0) {
+      toast.error('Some selected tasks have no price. Set a rate or fixed amount first.');
       return;
     }
     setSubmitting(true);
@@ -133,7 +165,7 @@ export function GenerateFromTasksCard({
           taskIds: validSelectedIds,
           invoiceDate: invoiceDate || undefined,
           dueDate: dueDate || undefined,
-          currency,
+          currency: currency || undefined,
           billedTo: {
             name: billName.trim() || undefined,
             email: billEmail.trim() || undefined,
@@ -192,8 +224,8 @@ export function GenerateFromTasksCard({
             <span>Select all ({billable.length})</span>
           </label>
           {billable.map((task) => {
-            const rate = resolveRate(task, hourlyRate);
-            const amount = lineAmount(task, hourlyRate);
+            const mode = resolveTaskBillingMode(task);
+            const amount = taskBillAmount(task, hourlyRate);
             const checked = validSelectedIds.includes(task.id);
             return (
               <label
@@ -207,11 +239,15 @@ export function GenerateFromTasksCard({
                 />
                 <span className="flex-1 min-w-0 truncate">{task.title}</span>
                 <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                  {resolveHours(task)}h
+                  {mode === 'fixed'
+                    ? 'fixed'
+                    : `${task.billedHours != null && task.billedHours > 0 ? task.billedHours : 1}h`}
                 </span>
                 <span className="w-24 text-right text-xs font-medium tabular-nums shrink-0">
-                  {rate == null ? (
-                    <span className="text-amber-600 dark:text-amber-400">Set rate</span>
+                  {amount == null ? (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      {mode === 'fixed' ? 'Set price' : 'Set rate'}
+                    </span>
                   ) : (
                     formatMoney(amount, currency)
                   )}
@@ -234,11 +270,11 @@ export function GenerateFromTasksCard({
           </Button>
         </div>
 
-        {missingRateCount > 0 && validSelectedIds.length > 0 && (
+        {unpricedCount > 0 && validSelectedIds.length > 0 && (
           <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
             <AlertTriangle className="h-3.5 w-3.5" />
-            {missingRateCount} selected task{missingRateCount === 1 ? '' : 's'} need a rate — set
-            the project hourly rate or a per-task rate.
+            {unpricedCount} selected task{unpricedCount === 1 ? '' : 's'} need a price — set an
+            hourly rate or a fixed amount.
           </p>
         )}
       </CardContent>
@@ -255,6 +291,28 @@ export function GenerateFromTasksCard({
           </DialogHeader>
 
           <div className="space-y-3">
+            {pastOptions.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Copy details from a past invoice</Label>
+                <Select value={copyFromId} onValueChange={handleCopyFrom}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a past invoice…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pastOptions.map((o) => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {o.label}
+                        {o.name ? ` · ${o.name}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Fills the bill-to name, email, and currency below.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label className="text-xs">Bill to (name)</Label>
               <Input
@@ -272,7 +330,7 @@ export function GenerateFromTasksCard({
                 placeholder="accounts@client.com"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Invoice date</Label>
                 <Input
@@ -282,11 +340,20 @@ export function GenerateFromTasksCard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Due date (optional)</Label>
+                <Label className="text-xs">Due date</Label>
                 <Input
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Currency</Label>
+                <Input
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                  maxLength={3}
+                  className="uppercase"
                 />
               </div>
             </div>
@@ -296,7 +363,7 @@ export function GenerateFromTasksCard({
             <Button variant="ghost" onClick={() => setDialogOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button onClick={handleGenerate} disabled={submitting || missingRateCount > 0}>
+            <Button onClick={handleGenerate} disabled={submitting || unpricedCount > 0}>
               {submitting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               Create invoice
             </Button>

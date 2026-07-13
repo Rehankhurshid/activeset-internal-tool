@@ -76,9 +76,11 @@ export function ProjectBillingButton({
 
   const handleSave = async () => {
     const parsedRate = rate.trim() ? Number(rate) : null;
-    if (draftType === 'adhoc') {
-      if (parsedRate == null || !Number.isFinite(parsedRate) || parsedRate <= 0) {
-        toast.error('Enter a valid hourly rate for ad-hoc billing');
+    // Rate is optional for ad-hoc (tasks can be fixed-price), but if one is
+    // entered it must be a positive number.
+    if (draftType === 'adhoc' && parsedRate != null) {
+      if (!Number.isFinite(parsedRate) || parsedRate <= 0) {
+        toast.error('Hourly rate must be a positive number');
         return;
       }
     }
@@ -142,7 +144,7 @@ export function ProjectBillingButton({
                   inputMode="decimal"
                   value={rate}
                   onChange={(e) => setRate(e.target.value)}
-                  placeholder="50"
+                  placeholder="optional"
                   className="h-9"
                 />
               </div>

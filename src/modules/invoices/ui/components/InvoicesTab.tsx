@@ -381,6 +381,7 @@ export function InvoicesTab({
           currency={(billingCurrency ?? 'USD').toUpperCase()}
           clientName={clientName}
           billingEmail={billingContactEmail}
+          pastInvoices={invoices}
           onGenerated={handleSaved}
         />
       )}

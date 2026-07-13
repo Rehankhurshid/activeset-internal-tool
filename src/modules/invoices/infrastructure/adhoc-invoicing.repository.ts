@@ -1,7 +1,7 @@
 import 'server-only';
 import { db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
-import { normalizeBillingType, type BillingType } from '@/types';
+import { normalizeBillingType, type BillingType, type TaskBillingMode } from '@/types';
 
 /**
  * Server-only reads/writes backing the "generate an invoice from tasks" flow
@@ -35,8 +35,10 @@ export interface BillableTask {
   projectId: string;
   title: string;
   billable: boolean;
+  billingMode: TaskBillingMode;
   billedHours: number | null;
   billedRate: number | null;
+  billedAmount: number | null;
   invoiceId: string | null;
 }
 
@@ -74,8 +76,10 @@ export async function getTasksByIds(taskIds: string[]): Promise<BillableTask[]> 
       projectId: String(d.projectId ?? ''),
       title: String(d.title ?? ''),
       billable: Boolean(d.billable),
+      billingMode: d.billingMode === 'fixed' ? 'fixed' : 'hourly',
       billedHours: typeof d.billedHours === 'number' ? d.billedHours : null,
       billedRate: typeof d.billedRate === 'number' ? d.billedRate : null,
+      billedAmount: typeof d.billedAmount === 'number' ? d.billedAmount : null,
       invoiceId: (d.invoiceId as string | undefined) ?? null,
     });
   }

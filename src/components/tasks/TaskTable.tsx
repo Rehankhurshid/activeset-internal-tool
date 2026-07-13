@@ -55,6 +55,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { formatMoney } from '@/lib/format-money';
+import { taskBillAmount, resolveTaskBillingMode } from '@/lib/task-billing';
 
 import { tasksService } from '@/services/database';
 import {
@@ -65,6 +66,7 @@ import {
   TASK_STATUSES,
   TASK_STATUS_LABELS,
   type Task,
+  type TaskBillingMode,
   type TaskCategory,
   type TaskPriority,
   type TaskStatus,
@@ -517,12 +519,46 @@ export function TaskTable({
               },
             },
             {
+              id: 'billMode',
+              header: 'Type',
+              enableSorting: false,
+              cell: ({ row }) => {
+                const task = row.original;
+                if (!task.billable) {
+                  return <span className="text-xs text-muted-foreground">—</span>;
+                }
+                const invoiced = Boolean(task.invoiceId);
+                const mode = resolveTaskBillingMode(task);
+                if (invoiced) {
+                  return (
+                    <span className="text-xs capitalize text-muted-foreground">{mode}</span>
+                  );
+                }
+                return (
+                  <Select
+                    value={mode}
+                    onValueChange={(v) =>
+                      handleUpdate(task.id, { billingMode: v as TaskBillingMode })
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-[92px] border-0 bg-transparent shadow-none px-1 text-xs hover:bg-accent">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="hourly">Hourly</SelectItem>
+                      <SelectItem value="fixed">Fixed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                );
+              },
+            },
+            {
               id: 'hours',
               header: 'Hours',
               enableSorting: false,
               cell: ({ row }) => {
                 const task = row.original;
-                if (!task.billable) {
+                if (!task.billable || resolveTaskBillingMode(task) !== 'hourly') {
                   return <span className="text-xs text-muted-foreground">—</span>;
                 }
                 return (
@@ -543,19 +579,35 @@ export function TaskTable({
                 if (!task.billable) {
                   return <span className="text-xs text-muted-foreground">—</span>;
                 }
-                const rate = task.billedRate ?? billingRate;
-                if (rate == null || rate <= 0) {
+                // Fixed-price tasks: the amount is entered directly.
+                if (resolveTaskBillingMode(task) === 'fixed') {
+                  if (task.invoiceId) {
+                    return (
+                      <span className="text-xs font-medium tabular-nums">
+                        {formatMoney(task.billedAmount ?? null, billingCurrency)}
+                      </span>
+                    );
+                  }
+                  return (
+                    <BillingAmountCell
+                      value={task.billedAmount}
+                      currency={billingCurrency}
+                      onCommit={(n) => handleUpdate(task.id, { billedAmount: n })}
+                    />
+                  );
+                }
+                // Hourly tasks: computed from hours × rate.
+                const amount = taskBillAmount(task, billingRate);
+                if (amount == null) {
                   return (
                     <span className="text-xs text-amber-600 dark:text-amber-400">
                       Set rate
                     </span>
                   );
                 }
-                const hours =
-                  task.billedHours != null && task.billedHours > 0 ? task.billedHours : 1;
                 return (
                   <span className="text-xs font-medium tabular-nums">
-                    {formatMoney(hours * rate, billingCurrency)}
+                    {formatMoney(amount, billingCurrency)}
                   </span>
                 );
               },
@@ -935,6 +987,66 @@ function BillingHoursCell({
       }}
       className="h-8 w-16 text-xs tabular-nums"
     />
+  );
+}
+
+/**
+ * Inline flat-price editor for a fixed-price billable task. Commits on
+ * blur / Enter; an empty value clears the amount.
+ */
+function BillingAmountCell({
+  value,
+  currency,
+  onCommit,
+}: {
+  value?: number;
+  currency: string;
+  onCommit: (next: number | undefined) => void;
+}) {
+  const [draft, setDraft] = useState(value != null ? String(value) : '');
+
+  const lastValueRef = value != null ? String(value) : '';
+  const [lastSeen, setLastSeen] = useState(lastValueRef);
+  if (lastSeen !== lastValueRef) {
+    setLastSeen(lastValueRef);
+    setDraft(lastValueRef);
+  }
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      onCommit(undefined);
+      return;
+    }
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 0) {
+      setDraft(value != null ? String(value) : '');
+      return;
+    }
+    onCommit(n);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[10px] text-muted-foreground">{currency}</span>
+      <Input
+        type="number"
+        min={0}
+        step="1"
+        inputMode="decimal"
+        value={draft}
+        placeholder="0"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        className="h-8 w-20 text-xs tabular-nums"
+      />
+    </div>
   );
 }
 

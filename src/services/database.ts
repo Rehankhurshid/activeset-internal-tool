@@ -1225,8 +1225,10 @@ function taskFromDoc(id: string, data: Record<string, unknown>): Task {
     assignee: data.assignee as string | undefined,
     order: (data.order as number | undefined) ?? 0,
     billable: data.billable as boolean | undefined,
+    billingMode: data.billingMode as Task['billingMode'],
     billedHours: data.billedHours as number | undefined,
     billedRate: data.billedRate as number | undefined,
+    billedAmount: data.billedAmount as number | undefined,
     invoiceId: data.invoiceId as string | undefined,
     invoiceNumber: data.invoiceNumber as string | undefined,
     invoicedAt: data.invoicedAt ? toSafeDate(data.invoicedAt) : undefined,
@@ -1476,6 +1478,9 @@ export const tasksService = {
       }
       if ('billedRate' in updates && updates.billedRate === undefined) {
         cleaned.billedRate = deleteField();
+      }
+      if ('billedAmount' in updates && updates.billedAmount === undefined) {
+        cleaned.billedAmount = deleteField();
       }
 
       // Build the ClickUp patch (subset of CLICKUP_PUSHABLE_FIELDS that the

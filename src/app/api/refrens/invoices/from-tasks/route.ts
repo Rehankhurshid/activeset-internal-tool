@@ -16,6 +16,7 @@ import {
   getTasksByIds,
   markTasksInvoiced,
 } from '@/modules/invoices/infrastructure/adhoc-invoicing.repository';
+import { taskToLineItem } from '@/lib/task-billing';
 
 export const runtime = 'nodejs';
 
@@ -100,24 +101,19 @@ export async function POST(req: NextRequest) {
     const currency =
       body.currency?.trim().toUpperCase() || project.billingCurrency?.toUpperCase() || 'USD';
 
-    // Build one line item per task; require a positive rate (per-task override
-    // falls back to the project's default hourly rate).
+    // Build one line item per task. Hourly tasks need a resolvable rate
+    // (per-task override or the project default); fixed tasks need a price.
     const items: CreateInvoiceItem[] = [];
     for (const t of tasks) {
-      const rate = t.billedRate != null ? t.billedRate : project.hourlyRate;
-      if (rate == null || !Number.isFinite(rate) || rate <= 0) {
-        return NextResponse.json(
-          {
-            error: `No rate set for task "${t.title || t.id}". Set an hourly rate on the project or on the task.`,
-          },
-          { status: 400 },
-        );
+      const item = taskToLineItem(t, project.hourlyRate);
+      if (!item) {
+        const message =
+          t.billingMode === 'fixed'
+            ? `Set a fixed price for task "${t.title || t.id}".`
+            : `No rate set for task "${t.title || t.id}". Set an hourly rate on the project or on the task.`;
+        return NextResponse.json({ error: message }, { status: 400 });
       }
-      const quantity =
-        t.billedHours != null && Number.isFinite(t.billedHours) && t.billedHours > 0
-          ? t.billedHours
-          : 1;
-      items.push({ name: t.title || 'Task', rate, quantity });
+      items.push({ name: item.name, rate: item.rate, quantity: item.quantity });
     }
 
     const billedToName = body.billedTo?.name?.trim() || project.client?.trim() || project.name;

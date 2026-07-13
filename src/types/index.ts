@@ -684,6 +684,9 @@ export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export type TaskSource = 'manual' | 'paste' | 'slack' | 'email' | 'clickup';
 
+/** How a billable ad-hoc task is priced: by the hour or a flat fee. */
+export type TaskBillingMode = 'hourly' | 'fixed';
+
 export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
   fix: 'Fix',
   feature: 'Feature',
@@ -751,10 +754,14 @@ export interface Task {
   // --- Ad-hoc billing (only meaningful on `adhoc` projects) ---
   /** Marks the task as a billable line item. */
   billable?: boolean;
-  /** Hours worked, used as the line item quantity. Defaults to 1 if unset. */
+  /** How this billable task is priced. Defaults to 'hourly'. */
+  billingMode?: TaskBillingMode;
+  /** Hours worked (hourly mode), used as the line item quantity. Defaults to 1. */
   billedHours?: number;
-  /** Per-task rate override. Falls back to the project's `hourlyRate`. */
+  /** Per-task hourly rate override (hourly mode). Falls back to the project's `hourlyRate`. */
   billedRate?: number;
+  /** Flat price for the task (fixed mode). Used as the line item amount. */
+  billedAmount?: number;
   /** Set once the task has been rolled into an invoice. Points at the
    *  `project_invoices` mirror row. Locks the task's billing fields. */
   invoiceId?: string;
@@ -817,8 +824,10 @@ export type UpdateTaskInput = Partial<
     | 'order'
     | 'source'
     | 'billable'
+    | 'billingMode'
     | 'billedHours'
     | 'billedRate'
+    | 'billedAmount'
     | 'clickupTaskId'
     | 'parentClickupTaskId'
     | 'clickupUrl'
