@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Receipt, Loader2, AlertTriangle } from 'lucide-react';
+import { Receipt, Loader2, AlertTriangle, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchAuthed } from '@/lib/api-client';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
@@ -39,15 +39,20 @@ interface GenerateFromTasksCardProps {
   clientName?: string;
   /** Prefills the Refrens bill-to email. */
   billingEmail?: string;
+  /** Prefills the Refrens bill-to country (Refrens requires one). */
+  billingCountry?: string;
+  /** This project's invoices — the targets for "link to existing invoice". */
+  projectInvoices?: ProjectInvoice[];
   /** Called with the mirrored invoice row so the parent can add it to the list. */
   onGenerated: (invoice: ProjectInvoice) => void;
 }
 
 interface PastOption {
-  id: string;
+  id: string; // Refrens invoice id
   label: string;
   name: string;
   email: string;
+  country: string;
   currency: string;
 }
 
@@ -57,6 +62,7 @@ interface AvailableInvoiceItem {
   invoiceNumber: string | null;
   billedToName: string | null;
   billedToEmail: string | null;
+  billedToCountry: string | null;
   currency: string | null;
 }
 
@@ -65,9 +71,9 @@ function todayIso(): string {
 }
 
 /**
- * Lists the project's billable, not-yet-invoiced tasks and rolls the selected
- * ones into a single Refrens invoice (one line item per task — hourly or
- * fixed). Rendered on the Invoices tab for ad-hoc projects only.
+ * Lists the project's billable, not-yet-invoiced tasks. They can either be
+ * rolled into a brand-new Refrens invoice (one line item per task) or linked
+ * to an invoice that already exists on the project.
  */
 export function GenerateFromTasksCard({
   projectId,
@@ -75,6 +81,8 @@ export function GenerateFromTasksCard({
   currency: currencyProp,
   clientName,
   billingEmail,
+  billingCountry,
+  projectInvoices,
   onGenerated,
 }: GenerateFromTasksCardProps) {
   const { tasks, loading } = useProjectTasks(projectId);
@@ -84,7 +92,13 @@ export function GenerateFromTasksCard({
     [tasks],
   );
 
-  // Past invoices (account-wide) we can copy bill-to details from. Loaded
+  // Existing invoices on this project that tasks can be linked to.
+  const linkTargets = useMemo(
+    () => (projectInvoices ?? []).filter((inv) => inv.refrensInvoiceId),
+    [projectInvoices],
+  );
+
+  // Past invoices (account-wide) we can clone bill-to details from. Loaded
   // lazily the first time the generate dialog opens.
   const [pastOptions, setPastOptions] = useState<PastOption[]>([]);
   const [pastLoaded, setPastLoaded] = useState(false);
@@ -99,17 +113,19 @@ export function GenerateFromTasksCard({
       );
       const data = (await res.json()) as { items?: AvailableInvoiceItem[] };
       if (res.ok && Array.isArray(data.items)) {
-        const opts = data.items
-          .filter((i) => i.billedToName || i.billedToEmail)
-          .slice(0, 50)
-          .map((i) => ({
-            id: i.refrensInvoiceId,
-            label: `#${i.invoiceNumber ?? '—'}${i.billedToName ? ` · ${i.billedToName}` : ''}`,
-            name: i.billedToName ?? '',
-            email: i.billedToEmail ?? '',
-            currency: i.currency ?? '',
-          }));
-        setPastOptions(opts);
+        setPastOptions(
+          data.items
+            .filter((i) => i.billedToName || i.billedToEmail)
+            .slice(0, 50)
+            .map((i) => ({
+              id: i.refrensInvoiceId,
+              label: `#${i.invoiceNumber ?? '—'}${i.billedToName ? ` · ${i.billedToName}` : ''}`,
+              name: i.billedToName ?? '',
+              email: i.billedToEmail ?? '',
+              country: i.billedToCountry ?? '',
+              currency: i.currency ?? '',
+            })),
+        );
       }
       setPastLoaded(true);
     } catch {
@@ -126,10 +142,16 @@ export function GenerateFromTasksCard({
   // Bill-to / date / currency fields (initialized when the dialog opens).
   const [billName, setBillName] = useState('');
   const [billEmail, setBillEmail] = useState('');
+  const [billCountry, setBillCountry] = useState('');
   const [currency, setCurrency] = useState((currencyProp || 'USD').toUpperCase());
   const [invoiceDate, setInvoiceDate] = useState(todayIso());
   const [dueDate, setDueDate] = useState('');
   const [copyFromId, setCopyFromId] = useState<string>('');
+
+  // "Link to existing invoice" flow.
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkInvoiceId, setLinkInvoiceId] = useState('');
+  const [linking, setLinking] = useState(false);
 
   // Drop stale ids (e.g. a task that just got invoiced elsewhere) from the set.
   const validSelectedIds = useMemo(() => {
@@ -158,6 +180,7 @@ export function GenerateFromTasksCard({
   const openDialog = () => {
     setBillName(clientName ?? '');
     setBillEmail(billingEmail ?? '');
+    setBillCountry(billingCountry ?? '');
     setCurrency((currencyProp || 'USD').toUpperCase());
     setInvoiceDate(todayIso());
     setDueDate('');
@@ -172,6 +195,7 @@ export function GenerateFromTasksCard({
     if (!opt) return;
     if (opt.name) setBillName(opt.name);
     setBillEmail(opt.email);
+    if (opt.country) setBillCountry(opt.country);
     if (opt.currency) setCurrency(opt.currency.toUpperCase());
   };
 
@@ -192,9 +216,11 @@ export function GenerateFromTasksCard({
           invoiceDate: invoiceDate || undefined,
           dueDate: dueDate || undefined,
           currency: currency || undefined,
+          copyFromRefrensInvoiceId: copyFromId || undefined,
           billedTo: {
             name: billName.trim() || undefined,
             email: billEmail.trim() || undefined,
+            country: billCountry.trim() || undefined,
           },
         }),
       });
@@ -214,6 +240,37 @@ export function GenerateFromTasksCard({
       toast.error(err instanceof Error ? err.message : 'Failed to generate invoice');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleLink = async () => {
+    if (validSelectedIds.length === 0 || !linkInvoiceId) return;
+    setLinking(true);
+    try {
+      const res = await fetchAuthed('/api/refrens/invoices/link-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          taskIds: validSelectedIds,
+          invoiceId: linkInvoiceId,
+        }),
+      });
+      const data = (await res.json()) as { invoice?: ProjectInvoice; error?: string };
+      if (!res.ok || !data.invoice) {
+        throw new Error(data.error || `Failed (${res.status})`);
+      }
+      setSelected(new Set());
+      setLinkOpen(false);
+      toast.success(
+        `Linked ${validSelectedIds.length} task${
+          validSelectedIds.length === 1 ? '' : 's'
+        } to #${data.invoice.invoiceNumber ?? '—'}`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to link tasks');
+    } finally {
+      setLinking(false);
     }
   };
 
@@ -240,7 +297,8 @@ export function GenerateFromTasksCard({
           Billable tasks ready to invoice
         </CardTitle>
         <CardDescription>
-          Select tasks to roll into a single invoice — one line item per task.
+          Select tasks to roll into a single invoice — one line item per task. Already made the
+          invoice? Link them to it instead.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -275,7 +333,7 @@ export function GenerateFromTasksCard({
                       {mode === 'fixed' ? 'Set price' : 'Set rate'}
                     </span>
                   ) : (
-                    formatMoney(amount, currency)
+                    formatMoney(amount, currencyProp)
                   )}
                 </span>
               </label>
@@ -287,13 +345,30 @@ export function GenerateFromTasksCard({
           <div className="text-sm text-muted-foreground">
             {validSelectedIds.length} selected ·{' '}
             <span className="font-medium text-foreground tabular-nums">
-              {formatMoney(total, currency)}
+              {formatMoney(total, currencyProp)}
             </span>
           </div>
-          <Button size="sm" onClick={openDialog} disabled={validSelectedIds.length === 0}>
-            <Receipt className="mr-1.5 h-3.5 w-3.5" />
-            Generate invoice
-          </Button>
+          <div className="flex items-center gap-2">
+            {linkTargets.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLinkInvoiceId('');
+                  setLinkOpen(true);
+                }}
+                disabled={validSelectedIds.length === 0}
+                title="Link these tasks to an invoice that already exists"
+              >
+                <Link2 className="mr-1.5 h-3.5 w-3.5" />
+                Link to existing
+              </Button>
+            )}
+            <Button size="sm" onClick={openDialog} disabled={validSelectedIds.length === 0}>
+              <Receipt className="mr-1.5 h-3.5 w-3.5" />
+              Generate invoice
+            </Button>
+          </div>
         </div>
 
         {unpricedCount > 0 && validSelectedIds.length > 0 && (
@@ -305,6 +380,7 @@ export function GenerateFromTasksCard({
         )}
       </CardContent>
 
+      {/* Generate a brand-new Refrens invoice */}
       <Dialog open={dialogOpen} onOpenChange={(o) => !submitting && setDialogOpen(o)}>
         <DialogContent>
           <DialogHeader>
@@ -344,7 +420,8 @@ export function GenerateFromTasksCard({
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">
-                Fills the bill-to name, email, and currency below.
+                Clones that invoice&apos;s full bill-to block (address and tax details included),
+                not just the fields shown here.
               </p>
             </div>
 
@@ -356,14 +433,24 @@ export function GenerateFromTasksCard({
                 placeholder="Client name"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Bill to (email)</Label>
-              <Input
-                type="email"
-                value={billEmail}
-                onChange={(e) => setBillEmail(e.target.value)}
-                placeholder="accounts@client.com"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Bill to (email)</Label>
+                <Input
+                  type="email"
+                  value={billEmail}
+                  onChange={(e) => setBillEmail(e.target.value)}
+                  placeholder="accounts@client.com"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Country</Label>
+                <Input
+                  value={billCountry}
+                  onChange={(e) => setBillCountry(e.target.value)}
+                  placeholder="France"
+                />
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-1.5">
@@ -401,6 +488,48 @@ export function GenerateFromTasksCard({
             <Button onClick={handleGenerate} disabled={submitting || unpricedCount > 0}>
               {submitting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               Create invoice
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link the selected tasks to an invoice that already exists */}
+      <Dialog open={linkOpen} onOpenChange={(o) => !linking && setLinkOpen(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Link tasks to an existing invoice</DialogTitle>
+            <DialogDescription>
+              Marks {validSelectedIds.length} task
+              {validSelectedIds.length === 1 ? '' : 's'} as invoiced against an invoice already on
+              this project. Nothing new is created on Refrens.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Invoice</Label>
+            <Select value={linkInvoiceId} onValueChange={setLinkInvoiceId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select an invoice…" />
+              </SelectTrigger>
+              <SelectContent>
+                {linkTargets.map((inv) => (
+                  <SelectItem key={inv.id} value={inv.id}>
+                    #{inv.invoiceNumber ?? '—'}
+                    {inv.amount != null ? ` · ${formatMoney(inv.amount, inv.currency)}` : ''}
+                    {inv.status ? ` · ${inv.status.toLowerCase()}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setLinkOpen(false)} disabled={linking}>
+              Cancel
+            </Button>
+            <Button onClick={handleLink} disabled={linking || !linkInvoiceId}>
+              {linking && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              Link tasks
             </Button>
           </DialogFooter>
         </DialogContent>

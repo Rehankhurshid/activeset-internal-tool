@@ -27,6 +27,7 @@ export interface BillingProject {
   hourlyRate: number | null;
   billingCurrency: string | null;
   billingContactEmail: string | null;
+  billingCountry: string | null;
 }
 
 /** Slim projection of the task fields the invoicing flow needs. */
@@ -55,6 +56,7 @@ export async function getBillingProject(projectId: string): Promise<BillingProje
     hourlyRate: typeof d.hourlyRate === 'number' ? d.hourlyRate : null,
     billingCurrency: (d.billingCurrency as string | undefined) ?? null,
     billingContactEmail: (d.billingContactEmail as string | undefined) ?? null,
+    billingCountry: (d.billingCountry as string | undefined) ?? null,
   };
 }
 

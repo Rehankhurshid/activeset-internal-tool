@@ -154,6 +154,10 @@ export interface RefrensInvoiceSummary {
   billedTo?: {
     name?: string;
     email?: string;
+    country?: string;
+    /** Refrens carries more here (address, city, gstin, …). Kept open so we
+     *  can copy an existing invoice's bill-to block verbatim. */
+    [key: string]: unknown;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -260,11 +264,34 @@ export interface CreateInvoiceItem {
   quantity: number;
 }
 
+/**
+ * Bill-to block for a new invoice. Refrens requires at least `name` and
+ * `country`. Extra keys (address, city, gstin, …) are passed through verbatim
+ * so we can clone the bill-to of an existing invoice without knowing every
+ * field Refrens supports.
+ */
+export interface RefrensBilledTo {
+  name: string;
+  email?: string;
+  country?: string;
+  [key: string]: unknown;
+}
+
+/** Keys Refrens owns — never echo them back on create. */
+const BILLED_TO_READONLY_KEYS = new Set(['_id', 'id', '__v', 'createdAt', 'updatedAt']);
+
+function sanitizeBilledTo(billedTo: RefrensBilledTo): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(billedTo)) {
+    if (BILLED_TO_READONLY_KEYS.has(key)) continue;
+    if (value === undefined || value === null || value === '') continue;
+    out[key] = value;
+  }
+  return out;
+}
+
 export interface CreateInvoicePayload {
-  billedTo: {
-    name: string;
-    email?: string;
-  };
+  billedTo: RefrensBilledTo;
   items: CreateInvoiceItem[];
   invoiceDate: string;       // ISO date
   dueDate?: string;          // ISO date (optional)
@@ -283,10 +310,7 @@ export async function createInvoice(
   const body: Record<string, unknown> = {
     invoiceType: payload.invoiceType ?? 'INVOICE',
     invoiceDate: payload.invoiceDate,
-    billedTo: {
-      name: payload.billedTo.name,
-      ...(payload.billedTo.email ? { email: payload.billedTo.email } : {}),
-    },
+    billedTo: sanitizeBilledTo(payload.billedTo),
     items: payload.items.map((item) => ({
       name: item.name,
       rate: item.rate,

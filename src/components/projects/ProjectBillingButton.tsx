@@ -29,6 +29,7 @@ interface ProjectBillingButtonProps {
   hourlyRate?: number;
   billingCurrency?: string;
   billingContactEmail?: string;
+  billingCountry?: string;
 }
 
 const BILLING_TYPES: BillingType[] = ['fixed', 'retainer', 'adhoc'];
@@ -45,6 +46,7 @@ export function ProjectBillingButton({
   hourlyRate,
   billingCurrency,
   billingContactEmail,
+  billingCountry,
 }: ProjectBillingButtonProps) {
   const current = normalizeBillingType(billingType);
 
@@ -53,6 +55,7 @@ export function ProjectBillingButton({
   const [rate, setRate] = useState(hourlyRate != null ? String(hourlyRate) : '');
   const [currency, setCurrency] = useState((billingCurrency ?? 'USD').toUpperCase());
   const [email, setEmail] = useState(billingContactEmail ?? '');
+  const [country, setCountry] = useState(billingCountry ?? '');
   const [saving, setSaving] = useState(false);
 
   // Sync the draft from the latest props whenever the popover opens — the
@@ -63,6 +66,7 @@ export function ProjectBillingButton({
       setRate(hourlyRate != null ? String(hourlyRate) : '');
       setCurrency((billingCurrency ?? 'USD').toUpperCase());
       setEmail(billingContactEmail ?? '');
+      setCountry(billingCountry ?? '');
     }
     setOpen(next);
   };
@@ -91,6 +95,7 @@ export function ProjectBillingButton({
         hourlyRate: draftType === 'adhoc' ? parsedRate : null,
         billingCurrency: draftType === 'adhoc' ? currency : null,
         billingContactEmail: draftType === 'adhoc' ? email : null,
+        billingCountry: draftType === 'adhoc' ? country : null,
       });
       toast.success('Billing updated');
       setOpen(false);
@@ -168,8 +173,18 @@ export function ProjectBillingButton({
                 placeholder="accounts@client.com"
                 className="h-9"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Bill-to country</Label>
+              <Input
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                placeholder="France"
+                className="h-9"
+              />
               <p className="text-[11px] text-muted-foreground">
-                Used on generated invoices. The bill-to name uses the project&apos;s client name.
+                Refrens requires a country on every invoice. The bill-to name uses the
+                project&apos;s client name.
               </p>
             </div>
           </>

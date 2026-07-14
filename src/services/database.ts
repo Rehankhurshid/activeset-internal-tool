@@ -571,6 +571,7 @@ export const projectsService = {
       hourlyRate?: number | null;
       billingCurrency?: string | null;
       billingContactEmail?: string | null;
+      billingCountry?: string | null;
     },
   ): Promise<void> {
     const hourlyRate =
@@ -579,6 +580,7 @@ export const projectsService = {
         : null;
     const billingCurrency = config.billingCurrency?.trim().toUpperCase() || null;
     const billingContactEmail = config.billingContactEmail?.trim() || null;
+    const billingCountry = config.billingCountry?.trim() || null;
 
     if (isLocalProjectBypassEnabled()) {
       updateLocalProject(projectId, (project) => {
@@ -590,6 +592,8 @@ export const projectsService = {
         else delete next.billingCurrency;
         if (billingContactEmail) next.billingContactEmail = billingContactEmail;
         else delete next.billingContactEmail;
+        if (billingCountry) next.billingCountry = billingCountry;
+        else delete next.billingCountry;
         return next;
       });
       return;
@@ -601,6 +605,7 @@ export const projectsService = {
       hourlyRate: hourlyRate ?? deleteField(),
       billingCurrency: billingCurrency ?? deleteField(),
       billingContactEmail: billingContactEmail ?? deleteField(),
+      billingCountry: billingCountry ?? deleteField(),
       updatedAt: Timestamp.now(),
     });
   },

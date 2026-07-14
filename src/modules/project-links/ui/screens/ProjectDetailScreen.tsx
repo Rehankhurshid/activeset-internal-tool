@@ -378,6 +378,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                     hourlyRate={project.hourlyRate}
                                     billingCurrency={project.billingCurrency}
                                     billingContactEmail={project.billingContactEmail}
+                                    billingCountry={project.billingCountry}
                                 />
                             )}
                         </div>
@@ -542,6 +543,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                 billingCurrency={project.billingCurrency}
                                 clientName={project.client}
                                 billingContactEmail={project.billingContactEmail}
+                                billingCountry={project.billingCountry}
                             />
                         </TabsContent>
                     )}

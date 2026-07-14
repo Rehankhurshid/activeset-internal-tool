@@ -371,6 +371,8 @@ export interface Project {
   /** Email used for the Refrens invoice `billedTo`. The billedTo name reuses
    *  `client` (falling back to the project name). */
   billingContactEmail?: string;
+  /** Country for the Refrens invoice `billedTo` — Refrens requires it. */
+  billingCountry?: string;
   /** Optional logo for the project — either a remote URL or a small data URL. */
   logoUrl?: string;
   /** Optional link to a proposal — drives "Import from proposal" on the

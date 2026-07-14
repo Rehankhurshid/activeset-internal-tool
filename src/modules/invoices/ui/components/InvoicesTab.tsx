@@ -31,9 +31,10 @@ interface InvoicesTabProps {
   hourlyRate?: number;
   /** Currency for ad-hoc invoices. Defaults to USD. */
   billingCurrency?: string;
-  /** Prefills the Refrens bill-to name/email on generated invoices. */
+  /** Prefills the Refrens bill-to name/email/country on generated invoices. */
   clientName?: string;
   billingContactEmail?: string;
+  billingCountry?: string;
 }
 
 interface ConfigStatus {
@@ -67,6 +68,7 @@ export function InvoicesTab({
   billingCurrency,
   clientName,
   billingContactEmail,
+  billingCountry,
 }: InvoicesTabProps) {
   const [config, setConfig] = useState<ConfigStatus | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
@@ -388,6 +390,8 @@ export function InvoicesTab({
           currency={(billingCurrency ?? 'USD').toUpperCase()}
           clientName={clientName}
           billingEmail={billingContactEmail}
+          billingCountry={billingCountry}
+          projectInvoices={invoices}
           onGenerated={handleSaved}
         />
       )}

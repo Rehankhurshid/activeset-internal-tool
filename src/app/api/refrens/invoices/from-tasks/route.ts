@@ -4,8 +4,10 @@ import {
   RefrensApiError,
   RefrensNotConfiguredError,
   createInvoice,
+  getInvoice,
   invalidateInvoiceListCache,
   type CreateInvoiceItem,
+  type RefrensBilledTo,
 } from '@/services/RefrensService';
 import {
   updateSlotFields,
@@ -26,7 +28,10 @@ interface FromTasksBody {
   invoiceDate?: string;
   dueDate?: string;
   currency?: string;
-  billedTo?: { name?: string; email?: string };
+  billedTo?: { name?: string; email?: string; country?: string };
+  /** Refrens invoice id to clone the full bill-to block from (country,
+   *  address, tax ids — everything Refrens needs but we don't model). */
+  copyFromRefrensInvoiceId?: string;
 }
 
 function todayIso(): string {
@@ -116,20 +121,68 @@ export async function POST(req: NextRequest) {
       items.push({ name: item.name, rate: item.rate, quantity: item.quantity });
     }
 
-    const billedToName = body.billedTo?.name?.trim() || project.client?.trim() || project.name;
-    const billedToEmail = body.billedTo?.email?.trim() || project.billingContactEmail?.trim();
+    // Bill-to: start from a past invoice's block when one was picked (carries
+    // country/address/tax fields we don't model), then apply explicit overrides.
+    let baseBilledTo: Record<string, unknown> = {};
+    const copyFromId = body.copyFromRefrensInvoiceId?.trim();
+    if (copyFromId) {
+      try {
+        const source = await getInvoice(copyFromId);
+        if (source?.billedTo && typeof source.billedTo === 'object') {
+          baseBilledTo = { ...(source.billedTo as Record<string, unknown>) };
+        }
+      } catch (err) {
+        // Non-fatal: fall back to the explicit fields below.
+        console.warn('[from-tasks] could not clone billedTo from invoice', copyFromId, err);
+      }
+    }
+
+    const asString = (v: unknown): string | undefined =>
+      typeof v === 'string' && v.trim() ? v.trim() : undefined;
+
+    const billedToName =
+      body.billedTo?.name?.trim() ||
+      asString(baseBilledTo.name) ||
+      project.client?.trim() ||
+      project.name;
+    const billedToEmail =
+      body.billedTo?.email?.trim() ||
+      asString(baseBilledTo.email) ||
+      project.billingContactEmail?.trim();
+    const billedToCountry =
+      body.billedTo?.country?.trim() ||
+      asString(baseBilledTo.country) ||
+      project.billingCountry?.trim();
+
     if (!billedToName) {
       return NextResponse.json(
         { error: 'A client name is required to bill the invoice to.' },
         { status: 400 },
       );
     }
+    if (!billedToCountry) {
+      return NextResponse.json(
+        {
+          error:
+            'Refrens requires a bill-to country. Pick a past invoice to copy from, enter a country, or set one in the project billing settings.',
+        },
+        { status: 400 },
+      );
+    }
+
+    const billedTo: RefrensBilledTo = {
+      ...baseBilledTo,
+      name: billedToName,
+      country: billedToCountry,
+      ...(billedToEmail ? { email: billedToEmail } : {}),
+    };
+
     const invoiceDate = body.invoiceDate?.trim() || todayIso();
     const dueDate = body.dueDate?.trim() || undefined;
 
     // Create the real invoice on Refrens.
     const created = await createInvoice({
-      billedTo: { name: billedToName, email: billedToEmail || undefined },
+      billedTo,
       items,
       invoiceDate,
       dueDate,
