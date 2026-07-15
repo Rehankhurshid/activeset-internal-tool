@@ -5,6 +5,10 @@
       "schedule": "30 0 * * *"
     },
     {
+      "path": "/api/cron/webflow-sitemap-diff",
+      "schedule": "0 1 * * *"
+    },
+    {
       "path": "/api/cron/scan-jobs",
       "schedule": "* * * * *"
     },

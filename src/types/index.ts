@@ -350,6 +350,25 @@ export interface SlackSourceMetadata {
   permalink?: string;
 }
 
+/**
+ * Snapshot of the daily Webflow ↔ sitemap drift check. Compares the live list
+ * of Webflow static pages against the URLs in the project's configured sitemap.
+ * Useful for reverse-proxy projects where the sitemap is hand-maintained and can
+ * fall out of sync with what's actually published in Webflow.
+ */
+export interface WebflowSitemapDiff {
+  checkedAt: string;              // ISO timestamp of the last check
+  sitemapUrl: string;            // sitemap that was compared against
+  // NOTE: these lists are RAW (before the ignore list is applied). Ignored paths
+  // are filtered out at render time (UI) and before notifying (cron), so that
+  // un-ignoring a path resurfaces it without needing to re-run the check.
+  missingFromSitemap: string[];  // normalized paths in Webflow (static) but not in the sitemap
+  missingFromWebflow: string[];  // normalized paths in the sitemap (static) but not in Webflow
+  webflowStaticCount: number;    // total static Webflow pages considered
+  sitemapStaticCount: number;    // total static sitemap URLs considered
+  error?: string;                // set when the check could not run (e.g. sitemap fetch failed)
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -381,6 +400,12 @@ export interface Project {
   webflowConfig?: WebflowConfig;
   sitemapUrl?: string; // For daily scheduled scans
   folderPageTypes?: FolderPageTypes; // Simple folder → CMS/Static mapping
+  /** Normalized paths (e.g. "/style-guide") the user has chosen to exclude from
+   *  the Webflow↔sitemap drift check. Applies to both directions. */
+  sitemapIgnorePaths?: string[];
+  /** Last Webflow↔sitemap drift snapshot. Written by the on-demand endpoint and
+   *  the daily cron; rendered in the Webflow dashboard's "Sitemap Sync" tab. */
+  webflowSitemapDiff?: WebflowSitemapDiff;
   // Locale data extracted from sitemap hreflang
   detectedLocales?: string[]; // Canonical list of locales, e.g., ["en", "da", "es-ar", "pt-br"]
   pathToLocaleMap?: Record<string, string>; // Path prefix to locale mapping, e.g., { "/es": "es-ar", "/pt": "pt-br" }

@@ -473,6 +473,167 @@ export async function sendHealthReportNotifications(
   }
 }
 
+// ─── Webflow ↔ Sitemap Drift Notifications ───
+
+export interface SitemapDriftNotice {
+  projectId: string;
+  projectName: string;
+  /** Newly-appeared paths that exist in Webflow but are missing from the sitemap. */
+  newMissingFromSitemap: string[];
+  /** Newly-appeared paths that exist in the sitemap but not in Webflow. */
+  newMissingFromWebflow: string[];
+}
+
+function driftListHtml(paths: string[]): string {
+  const rows = paths
+    .slice(0, 15)
+    .map(
+      (p) =>
+        `<li style="margin:3px 0;font-size:13px;color:#475569;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${p}</li>`
+    )
+    .join('');
+  const more =
+    paths.length > 15
+      ? `<li style="font-size:12px;color:#94a3b8;list-style:none;">+${paths.length - 15} more</li>`
+      : '';
+  return rows + more;
+}
+
+function driftListSlack(paths: string[]): string {
+  const rows = paths.slice(0, 10).map((p) => `• \`${p}\``);
+  if (paths.length > 10) rows.push(`_+${paths.length - 10} more_`);
+  return rows.join('\n');
+}
+
+async function sendSitemapDriftEmail(
+  notices: SitemapDriftNotice[],
+  baseUrl: string
+): Promise<void> {
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword || !email.notifyEmail) {
+    console.log('[notifications] Email not configured, skipping');
+    return;
+  }
+
+  const projectBlocks = notices
+    .map((n) => {
+      const projectUrl = `${baseUrl}/modules/project-links/${n.projectId}`;
+      const sitemapSection =
+        n.newMissingFromSitemap.length > 0
+          ? `<p style="margin:8px 0 4px;font-size:13px;font-weight:600;color:#1e293b;">In Webflow, missing from sitemap (${n.newMissingFromSitemap.length})</p><ul style="margin:0;padding-left:20px;">${driftListHtml(n.newMissingFromSitemap)}</ul>`
+          : '';
+      const webflowSection =
+        n.newMissingFromWebflow.length > 0
+          ? `<p style="margin:12px 0 4px;font-size:13px;font-weight:600;color:#1e293b;">In sitemap, not in Webflow (${n.newMissingFromWebflow.length})</p><ul style="margin:0;padding-left:20px;">${driftListHtml(n.newMissingFromWebflow)}</ul>`
+          : '';
+      return `
+        <div style="background:white;border:1px solid #e2e8f0;border-left:4px solid #f59e0b;border-radius:8px;padding:16px;margin-bottom:12px;">
+          <h3 style="margin:0 0 8px;font-size:15px;color:#1e293b;">${n.projectName}</h3>
+          ${sitemapSection}${webflowSection}
+          <div style="margin-top:12px;"><a href="${projectUrl}" style="font-size:13px;color:#3b82f6;text-decoration:none;font-weight:600;">Review in dashboard →</a></div>
+        </div>`;
+    })
+    .join('');
+
+  const emailHtml = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+      <div style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:20px;">Sitemap Drift Detected</h1>
+        <p style="color:rgba(255,255,255,0.9);margin:8px 0 0;font-size:14px;">${notices.length} project(s) with new differences between Webflow and the sitemap</p>
+      </div>
+      <div style="background:#f8fafc;padding:24px;border:1px solid #e2e8f0;border-top:none;">
+        ${projectBlocks}
+      </div>
+      <div style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">
+        <p>Automated check from ActiveSet Site Monitor · new (previously unseen) drift only</p>
+      </div>
+    </div>`;
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
+  });
+
+  await transporter.sendMail({
+    from: `"ActiveSet Alerts" <${email.gmailUser}>`,
+    to: email.notifyEmail,
+    subject: `⚠️ Sitemap drift — ${notices.length} project(s) with new differences`,
+    html: emailHtml,
+  });
+
+  console.log(`[notifications] Sitemap drift email sent (${notices.length} projects)`);
+}
+
+async function sendSitemapDriftSlack(
+  notices: SitemapDriftNotice[],
+  baseUrl: string
+): Promise<void> {
+  const slack = getSlackConfig();
+  if (!slack.webhookUrl && !(slack.botToken && slack.channelId)) {
+    console.log('[notifications] Slack not configured, skipping');
+    return;
+  }
+
+  const blocks: Record<string, unknown>[] = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `⚠️ Sitemap drift — ${notices.length} project(s)`,
+        emoji: true,
+      },
+    },
+  ];
+
+  for (const n of notices.slice(0, 10)) {
+    const projectUrl = `${baseUrl}/modules/project-links/${n.projectId}`;
+    const parts: string[] = [`*<${projectUrl}|${n.projectName}>*`];
+    if (n.newMissingFromSitemap.length > 0) {
+      parts.push(
+        `_In Webflow, missing from sitemap (${n.newMissingFromSitemap.length}):_\n${driftListSlack(n.newMissingFromSitemap)}`
+      );
+    }
+    if (n.newMissingFromWebflow.length > 0) {
+      parts.push(
+        `_In sitemap, not in Webflow (${n.newMissingFromWebflow.length}):_\n${driftListSlack(n.newMissingFromWebflow)}`
+      );
+    }
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: parts.join('\n') },
+    });
+  }
+
+  await postSlackMessage({
+    text: `Sitemap drift detected for ${notices.length} project(s)`,
+    blocks,
+  });
+  console.log(`[notifications] Sitemap drift Slack sent (${notices.length} projects)`);
+}
+
+/**
+ * Send a digest of NEW Webflow↔sitemap drift across all affected projects.
+ * No-op when there is nothing new to report.
+ */
+export async function sendSitemapDriftNotifications(
+  notices: SitemapDriftNotice[],
+  baseUrl: string
+): Promise<void> {
+  if (notices.length === 0) return;
+
+  const results = await Promise.allSettled([
+    sendSitemapDriftEmail(notices, baseUrl),
+    sendSitemapDriftSlack(notices, baseUrl),
+  ]);
+
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.error('[notifications] Sitemap drift channel failed:', result.reason);
+    }
+  }
+}
+
 // ─── Per-Project Scan Completion Notification ───
 
 interface ScanCompletionContext {

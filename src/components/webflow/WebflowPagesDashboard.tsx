@@ -42,6 +42,7 @@ import {
   ArchiveRestore,
   Image as ImageIcon,
   Sparkles,
+  GitCompareArrows,
 } from 'lucide-react';
 import {
   Table,
@@ -62,6 +63,7 @@ import { WebflowCredentialsDialog } from './WebflowCredentialsDialog';
 import { WebflowAssetsDashboard } from './WebflowAssetsDashboard';
 import { CmsImagesDashboard } from './CmsImagesDashboard';
 import { WebflowSchemaDashboard } from './WebflowSchemaDashboard';
+import { WebflowSitemapSync } from './WebflowSitemapSync';
 import { webflowService } from '@/services/WebflowService';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -445,6 +447,13 @@ export function WebflowPagesDashboard({
             <Sparkles className="h-4 w-4" />
             Schema
           </TabsTrigger>
+          <TabsTrigger
+            value="sitemap"
+            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
+          >
+            <GitCompareArrows className="h-4 w-4" />
+            Sitemap Sync
+          </TabsTrigger>
         </TabsList>
 
         <div className="flex-1 min-w-0">
@@ -777,6 +786,13 @@ export function WebflowPagesDashboard({
                 pages={pages}
               />
             )}
+          </TabsContent>
+
+          <TabsContent
+            value="sitemap"
+            className="mt-0 data-[state=inactive]:hidden"
+          >
+            <WebflowSitemapSync projectId={projectId} />
           </TabsContent>
         </div>
       </Tabs>
