@@ -15,7 +15,7 @@ import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { ListItemNode, ListNode } from '@lexical/list';
 import { CodeNode, $createCodeNode } from '@lexical/code';
 import { LinkNode, AutoLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link';
-import { TRANSFORMERS } from '@lexical/markdown';
+import { TRANSFORMERS, $convertToMarkdownString, $convertFromMarkdownString } from '@lexical/markdown';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import {
     $getSelection,
@@ -224,7 +224,7 @@ const ToolbarPlugin = ({ simple }: { simple: boolean }) => {
     }, [editor, isLink]);
 
     return (
-        <div className="border-b border-input bg-muted/30 p-1.5 flex gap-0.5 items-center flex-wrap">
+        <div className="flex-1 p-1.5 flex gap-0.5 items-center flex-wrap">
             {/* History */}
             <div className="flex gap-0.5 border-r pr-1 mr-1">
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)} disabled={!canUndo} title="Undo">
@@ -458,6 +458,93 @@ const HtmlSyncPlugin = ({ value, onChange }: { value: string, onChange: (val: st
     return null;
 }
 
+// --- Markdown Mode Plugin (raw markdown textarea view) ---
+// Markdown is a *view* over the Lexical state: entering the mode snapshots the
+// editor as markdown; edits are converted back into the editor (debounced), so
+// HtmlSyncPlugin keeps exporting HTML — the persisted format — as usual.
+const MarkdownModePlugin = ({ active, placeholder }: { active: boolean; placeholder?: string }) => {
+    const [editor] = useLexicalComposerContext();
+    const [markdown, setMarkdown] = useState('');
+    const markdownRef = useRef('');
+    const lastAppliedRef = useRef<string | null>(null);
+    const isApplyingRef = useRef(false);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const wasActiveRef = useRef(false);
+
+    const applyMarkdown = useCallback((md: string) => {
+        // Skip if nothing changed since the last apply — this also makes a
+        // toggle-in/toggle-out without edits non-destructive (no lossy round-trip).
+        if (md === lastAppliedRef.current) return;
+        lastAppliedRef.current = md;
+        isApplyingRef.current = true;
+        editor.update(() => {
+            $convertFromMarkdownString(md, TRANSFORMERS);
+        }, { discrete: true });
+        isApplyingRef.current = false;
+    }, [editor]);
+
+    // Entering markdown mode: snapshot editor state as markdown.
+    // Leaving: flush any pending edit so the rich view shows the latest text.
+    useEffect(() => {
+        if (active) {
+            editor.getEditorState().read(() => {
+                const md = $convertToMarkdownString(TRANSFORMERS);
+                markdownRef.current = md;
+                lastAppliedRef.current = md;
+                setMarkdown(md);
+            });
+        } else if (wasActiveRef.current) {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            applyMarkdown(markdownRef.current);
+        }
+        wasActiveRef.current = active;
+    }, [active, editor, applyMarkdown]);
+
+    // While in markdown mode, external editor updates (AI fill, template load)
+    // refresh the textarea — unless the user is typing in it.
+    useEffect(() => {
+        if (!active) return;
+        return editor.registerUpdateListener(({ dirtyElements, dirtyLeaves }) => {
+            if (isApplyingRef.current) return;
+            if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
+            if (document.activeElement === textareaRef.current) return;
+            editor.getEditorState().read(() => {
+                const md = $convertToMarkdownString(TRANSFORMERS);
+                markdownRef.current = md;
+                lastAppliedRef.current = md;
+                setMarkdown(md);
+            });
+        });
+    }, [active, editor]);
+
+    useEffect(() => () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+    }, []);
+
+    if (!active) return null;
+
+    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const md = e.target.value;
+        markdownRef.current = md;
+        setMarkdown(md);
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => applyMarkdown(md), 400);
+    };
+
+    return (
+        <textarea
+            ref={textareaRef}
+            value={markdown}
+            onChange={handleChange}
+            placeholder={placeholder || 'Start typing markdown...'}
+            spellCheck={false}
+            aria-label="Markdown source"
+            className="w-full min-h-[120px] px-3 py-2 font-mono text-sm bg-transparent outline-none resize-y"
+        />
+    );
+};
+
 // AutoLink Matchers regex (defined outside to avoid re-creation)
 const URL_MATCHER = /((https?:\/\/(www\.)?)|(www\.))[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/;
 const EMAIL_MATCHER = /(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))/;
@@ -483,6 +570,7 @@ interface RichTextEditorProps {
 }
 
 const RichTextEditor = ({ value, onChange, placeholder, className, simple = false }: RichTextEditorProps) => {
+    const [markdownMode, setMarkdownMode] = useState(false);
 
     const initialConfig = {
         namespace: 'ProposalEditor',
@@ -503,10 +591,31 @@ const RichTextEditor = ({ value, onChange, placeholder, className, simple = fals
         <div className={`flex flex-col border border-input rounded-md overflow-hidden bg-transparent ${className}`}>
             <LexicalComposer initialConfig={initialConfig}>
 
-                <ToolbarPlugin simple={simple} />
+                <div className="flex items-start border-b border-input bg-muted/30">
+                    {markdownMode ? (
+                        <div className="flex-1 self-stretch flex items-center px-3 py-1.5 text-xs text-muted-foreground">
+                            Markdown mode — underline and alignment aren&apos;t preserved
+                        </div>
+                    ) : (
+                        <ToolbarPlugin simple={simple} />
+                    )}
+                    <div className="p-1.5 border-l border-input">
+                        <Toggle
+                            size="sm"
+                            pressed={markdownMode}
+                            onPressedChange={setMarkdownMode}
+                            aria-label="Edit as Markdown"
+                            title="Edit as Markdown"
+                            className="h-8 px-2 font-mono text-xs"
+                        >
+                            MD
+                        </Toggle>
+                    </div>
+                </div>
 
                 <div className="relative">
-                    <div className="px-3 py-2 relative">
+                    {/* Rich view stays mounted (plugins live here) — just hidden in markdown mode */}
+                    <div className={markdownMode ? 'hidden' : 'px-3 py-2 relative'}>
                         <RichTextPlugin
                             contentEditable={
                                 <ContentEditable className="outline-none resize-none prose prose-sm max-w-none dark:prose-invert min-h-[60px]" />
@@ -529,6 +638,8 @@ const RichTextEditor = ({ value, onChange, placeholder, className, simple = fals
                         {/* Sync */}
                         <HtmlSyncPlugin value={value} onChange={onChange} />
                     </div>
+
+                    <MarkdownModePlugin active={markdownMode} placeholder={placeholder} />
                 </div>
             </LexicalComposer>
         </div>

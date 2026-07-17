@@ -363,6 +363,7 @@ Lexical-based rich text editor with clean, input-matching styling.
 - **Lists**: Ordered and unordered lists with proper HTML rendering
 - **Links**: Auto-link detection and manual link insertion
 - **Markdown Shortcuts**: Type markdown syntax for quick formatting
+- **Markdown Mode**: "MD" toggle in the toolbar switches to a raw markdown textarea. Markdown is a view over the Lexical state — edits convert back into the editor (debounced), so HTML stays the persisted format and the live preview keeps updating. Toggling in and out without edits is non-destructive; underline and alignment are not representable in markdown and are dropped if the markdown is edited
 - **HTML Import/Export**: Seamless HTML persistence
 - **Simple Mode**: Simplified toolbar for inline editing
 - **Bullet Conversion**: Automatically converts plain text bullets (•) to HTML lists
