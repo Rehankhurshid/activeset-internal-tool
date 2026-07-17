@@ -150,6 +150,7 @@ Team-wide view of all proposals with filtering and actions.
 - **Search**: Filter by client name or proposal title
 - **Quick Actions**: View, Edit, Share, Mark as Lost (for active), Restore (for lost), Delete
 - **Template Library**: Create proposals from pre-saved templates
+- **Compose from Markdown**: "New → From Markdown" opens a dialog where one complete markdown document generates the entire proposal. `# Title`, `Client:`/`Agency:` metadata, and `## Overview` (with optional `### Client Description` / `### Services` / `### Final Deliverable`), `## About Us`, `## Pricing (CUR)`, `## Timeline`, and `## Terms` map to proposal sections. Pricing and timeline rows use `- Name | value | description`. Prose sections are converted to the editor's HTML via a headless Lexical instance (`utils/markdownProposal.ts`), the pricing total is auto-computed, and the draft opens in the regular editor for fine-tuning.
 
 **Components**:
 - `ProposalCard` - Individual proposal card with status badge

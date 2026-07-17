@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
-import { Plus, FileText, Trash2, Pencil, Settings, ChevronDown, ArrowUpDown, Calendar, Check, FolderOpen, XCircle } from "lucide-react";
+import { Plus, FileText, FileCode2, Trash2, Pencil, Settings, ChevronDown, ArrowUpDown, Calendar, Check, FolderOpen, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Proposal, ProposalTemplate } from "../types/Proposal";
 import StatisticsCards from "./StatisticsCards";
@@ -25,6 +25,7 @@ interface DashboardProps {
     actionLoading: string | null;
     onCreateProposal: () => void;
     onCreateContract: () => void;
+    onCreateFromMarkdown: () => void;
     onCreateFromTemplate: (template: ProposalTemplate) => void;
     onEditTemplate: (template: ProposalTemplate) => void;
     onDeleteTemplate: (templateId: string) => void;
@@ -41,6 +42,7 @@ export default function Dashboard({
     actionLoading,
     onCreateProposal,
     onCreateContract,
+    onCreateFromMarkdown,
     onCreateFromTemplate,
     onEditTemplate,
     onDeleteTemplate,
@@ -246,6 +248,10 @@ export default function Dashboard({
                                     <DropdownMenuItem onClick={onCreateContract}>
                                         <FileText className="w-4 h-4 mr-2" />
                                         Retainer Contract
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={onCreateFromMarkdown}>
+                                        <FileCode2 className="w-4 h-4 mr-2" />
+                                        From Markdown
                                     </DropdownMenuItem>
 
                                     {templates.length > 0 && (

@@ -9,6 +9,7 @@ import ContractEditor from '@/app/modules/proposal/components/ContractEditor';
 import ContractViewer from '@/app/modules/proposal/components/ContractViewer';
 import LoadingScreen from '@/app/modules/proposal/components/LoadingScreen';
 import NewProposalWizard from '@/app/modules/proposal/components/NewProposalWizard';
+import ComposeMarkdownDialog from '@/app/modules/proposal/components/ComposeMarkdownDialog';
 import { proposalService } from '@/app/modules/proposal/services/ProposalService';
 import { templateService } from '@/app/modules/proposal/services/TemplateService';
 import { buildBlankContract } from '@/app/modules/proposal/lib/contractTemplate';
@@ -31,6 +32,7 @@ export default function ProposalPage() {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [wizardOpen, setWizardOpen] = useState(false);
+    const [markdownComposeOpen, setMarkdownComposeOpen] = useState(false);
 
     // All useEffect hooks must be called before any early returns
     useEffect(() => {
@@ -131,6 +133,16 @@ export default function ProposalPage() {
     };
 
     const handleWizardCreate = (draft: Proposal) => {
+        setSelectedProposal(draft);
+        setCurrentView('editor');
+    };
+
+    const handleCreateFromMarkdown = () => {
+        setMarkdownComposeOpen(true);
+    };
+
+    const handleMarkdownCreate = (draft: Proposal) => {
+        setEditingTemplate(null);
         setSelectedProposal(draft);
         setCurrentView('editor');
     };
@@ -392,6 +404,7 @@ export default function ProposalPage() {
                 actionLoading={actionLoading}
                 onCreateProposal={handleCreateProposal}
                 onCreateContract={handleCreateContract}
+                onCreateFromMarkdown={handleCreateFromMarkdown}
                 onCreateFromTemplate={handleCreateFromTemplate}
                 onEditTemplate={handleEditTemplate}
                 onDeleteTemplate={handleDeleteTemplate}
@@ -405,6 +418,11 @@ export default function ProposalPage() {
                 open={wizardOpen}
                 onOpenChange={setWizardOpen}
                 onCreate={handleWizardCreate}
+            />
+            <ComposeMarkdownDialog
+                open={markdownComposeOpen}
+                onOpenChange={setMarkdownComposeOpen}
+                onCreate={handleMarkdownCreate}
             />
             <Toaster />
         </>
