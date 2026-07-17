@@ -1,6 +1,7 @@
 'use client';
 
 import { Proposal } from "../types/Proposal";
+import { convertBulletsToHtmlLists } from "../utils/proposalUtils";
 
 interface LivePreviewProps {
     proposal: Proposal;
@@ -78,7 +79,7 @@ export default function LivePreview({ proposal }: LivePreviewProps) {
                                 <div>
                                     <div
                                         className="text-gray-600 leading-relaxed whitespace-pre-wrap"
-                                        dangerouslySetInnerHTML={{ __html: proposal.data.overview }}
+                                        dangerouslySetInnerHTML={{ __html: convertBulletsToHtmlLists(proposal.data.overview) }}
                                     />
                                 </div>
                             </section>
@@ -95,7 +96,7 @@ export default function LivePreview({ proposal }: LivePreviewProps) {
                                 <div>
                                     <div
                                         className="text-gray-600 leading-relaxed prose prose-sm"
-                                        dangerouslySetInnerHTML={{ __html: proposal.data.aboutUs }}
+                                        dangerouslySetInnerHTML={{ __html: convertBulletsToHtmlLists(proposal.data.aboutUs) }}
                                     />
                                 </div>
                             </section>
@@ -230,7 +231,7 @@ export default function LivePreview({ proposal }: LivePreviewProps) {
                                 <div>
                                     <div
                                         className="text-gray-600 leading-relaxed prose prose-sm"
-                                        dangerouslySetInnerHTML={{ __html: proposal.data.terms }}
+                                        dangerouslySetInnerHTML={{ __html: convertBulletsToHtmlLists(proposal.data.terms) }}
                                     />
                                 </div>
                             </section>
