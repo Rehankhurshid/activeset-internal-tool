@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Save, Loader2, Settings, X, ImageIcon, Upload, FileText, AlertTriangle, Sparkles, ChevronDown, ChevronUp, GripVertical, History, Lock, Menu, Clock } from "lucide-react";
+import { Plus, Trash2, Save, Loader2, Settings, X, ImageIcon, Upload, FileText, FileCode2, AlertTriangle, Sparkles, ChevronDown, ChevronUp, GripVertical, History, Lock, Menu, Clock } from "lucide-react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -22,6 +22,9 @@ import RichTextEditor from "./RichTextEditor";
 import { generateProposalDraft, generateProposalBlock } from "../services/aiClient";
 import { DatePicker } from "@/components/ui/date-picker";
 import HistoryPanel from "./HistoryPanel";
+import ComposeMarkdownDialog from "./ComposeMarkdownDialog";
+import { serializeProposalToMarkdown, mergeParsedIntoProposal } from "../utils/markdownProposal";
+import { toast } from "sonner";
 import { PaymentTermsCard } from "./PaymentTermsCard";
 import { Badge } from "@/components/ui/badge";
 
@@ -128,6 +131,11 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
 
   // History Panel State
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+
+  // Edit-as-Markdown state: the whole proposal serialized to one markdown
+  // document, re-parsed and merged back on apply.
+  const [markdownEditOpen, setMarkdownEditOpen] = useState(false);
+  const [markdownDraft, setMarkdownDraft] = useState('');
 
   // Mobile menu state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -1043,6 +1051,19 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
               >
                 <Sparkles className="w-4 h-4 text-purple-400" />
                 <span className="hidden lg:inline">AI Fill</span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setMarkdownDraft(serializeProposalToMarkdown(formData));
+                  setMarkdownEditOpen(true);
+                }}
+                size="icon"
+                className="h-8 w-8"
+                title="Edit as Markdown"
+                disabled={isLocked}
+              >
+                <FileCode2 className="w-4 h-4" />
               </Button>
               {proposal && (
                 <Button
@@ -2645,6 +2666,19 @@ Example:
           onClose={() => setShowHistoryPanel(false)}
         />
       )}
+
+      {/* Edit as Markdown */}
+      <ComposeMarkdownDialog
+        open={markdownEditOpen}
+        onOpenChange={setMarkdownEditOpen}
+        initialMarkdown={markdownDraft}
+        dialogTitle="Edit as Markdown"
+        submitLabel="Apply Changes"
+        onCreate={(parsed, declared) => {
+          setFormData(prev => mergeParsedIntoProposal(prev, parsed, declared));
+          toast.success('Markdown changes applied');
+        }}
+      />
     </div>
   );
 }

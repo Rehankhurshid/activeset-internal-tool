@@ -150,7 +150,17 @@ Team-wide view of all proposals with filtering and actions.
 - **Search**: Filter by client name or proposal title
 - **Quick Actions**: View, Edit, Share, Mark as Lost (for active), Restore (for lost), Delete
 - **Template Library**: Create proposals from pre-saved templates
-- **Compose from Markdown**: "New → From Markdown" opens a dialog where one complete markdown document generates the entire proposal. `# Title`, `Client:`/`Agency:` metadata, and `## Overview` (with optional `### Client Description` / `### Services` / `### Final Deliverable`), `## About Us`, `## Pricing (CUR)`, `## Timeline`, and `## Terms` map to proposal sections. Pricing and timeline rows use `- Name | value | description`. Prose sections are converted to the editor's HTML via a headless Lexical instance (`utils/markdownProposal.ts`), the pricing total is auto-computed, and the draft opens in the regular editor for fine-tuning.
+- **Compose from Markdown**: "New → From Markdown" opens a dialog where one complete markdown document generates the entire proposal. Every field is supported (`utils/markdownProposal.ts` holds the format reference):
+  - Metadata: `# Title`, `Client:`, `Agency:`, `Status:` (draft/sent/approved/rejected/lost), `Hero:` (image URL)
+  - `## Overview` with `### Client Description` / `### Services` / `### Final Deliverable`
+  - `## About Us`, `## Terms` — free-form markdown prose
+  - `## Pricing (CUR)` — rows `- Name | 5000 | description` or hourly `- Name | 10h x 50 | description`
+  - `## Payment Terms` — `Template:` (`one-time`, `split 50/50`, `monthly N`, `quarterly N`, `hourly H x R`), `Total:`, `Currency:`, `Start:`
+  - `## Timeline` — rows `- Phase | duration | description | 2026-01-01..2026-01-14 | after:1`
+  - `## Signatures` — `Agency: Name <email>` / `Client: Name <email>`
+  - Prose converts to the editor's HTML via a headless Lexical instance; the pricing total auto-computes; unknown `##` headings are kept as content under the previous section. The draft opens in the regular editor for fine-tuning.
+- **Copy AI Instructions**: Button in the compose dialog copies a self-contained prompt (`AI_FORMAT_INSTRUCTIONS`) to the clipboard — paste it into any AI together with meeting notes and it returns a document in exactly this format.
+- **Edit as Markdown (re-edit)**: The proposal editor header has an "Edit as Markdown" button that serializes the current proposal back into the markdown document (`serializeProposalToMarkdown`), lets you re-edit it as one document, and applies it via `mergeParsedIntoProposal` — drawn signature data, timestamps, embedded hero images, and anything the document doesn't declare (status/hero/signatures/payment terms) are preserved from the current proposal.
 
 **Components**:
 - `ProposalCard` - Individual proposal card with status badge
