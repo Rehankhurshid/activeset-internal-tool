@@ -116,6 +116,18 @@ export interface SignatureAudit {
     os?: string;
 }
 
+// A related link attached to the proposal — audit dashboard share, client
+// website, Figma file, staging URL, repo, docs. `kind` is auto-detected from
+// the URL when not set; it only drives the icon/badge, never behaviour.
+export type ProposalResourceKind = 'audit' | 'website' | 'figma' | 'staging' | 'repo' | 'doc' | 'other';
+
+export interface ProposalResource {
+    id: string;
+    label: string;
+    url: string;
+    kind?: ProposalResourceKind;
+}
+
 export interface Proposal {
     id: string;
     createdBy?: {
@@ -165,6 +177,8 @@ export interface Proposal {
             phases: TimelinePhase[];
         };
         terms: string;
+        /** Related links (audit dashboard, website, Figma, staging, …). */
+        resources?: ProposalResource[];
         signatures: {
             agency: {
                 name: string;

@@ -24,6 +24,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import HistoryPanel from "./HistoryPanel";
 import ComposeMarkdownDialog from "./ComposeMarkdownDialog";
 import { serializeProposalToMarkdown, mergeParsedIntoProposal } from "../utils/markdownProposal";
+import { RESOURCE_KIND_META, resolveResourceKind } from "../lib/proposalResources";
 import { toast } from "sonner";
 import { PaymentTermsCard } from "./PaymentTermsCard";
 import { Badge } from "@/components/ui/badge";
@@ -977,6 +978,7 @@ export default function ProposalEditor({ proposal, editingTemplate, onSave, onSa
     { id: 'pricing', label: 'Pricing', icon: '💰', complete: formData.data.pricing.items.some(i => i.name && i.price) },
     { id: 'timeline', label: 'Timeline', icon: '📅', complete: formData.data.timeline.phases.some(p => p.title) },
     { id: 'terms', label: 'Terms', icon: '📄', complete: !!formData.data.terms },
+    { id: 'links', label: 'Links', icon: '🔗', complete: !!formData.data.resources?.some(r => r.url) },
     { id: 'signatures', label: 'Signatures', icon: '✍️', complete: !!(formData.data.signatures.agency.name || formData.data.signatures.client.name) },
   ];
 
@@ -2374,6 +2376,101 @@ Example:
                         placeholder="Enter terms and conditions..."
                       />
                     </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+
+            {/* Linked Resources */}
+            <Card id="section-links" className="border-border/50">
+              <CardHeader className="cursor-pointer select-none hover:bg-muted/50 transition-colors" onClick={() => toggleSection('section-links')}>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Linked Resources</CardTitle>
+                  {collapsedSections['section-links'] ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+                </div>
+              </CardHeader>
+              {!collapsedSections['section-links'] && (
+                <CardContent>
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Attach related links — audit report, client website, Figma, staging, docs.
+                      The icon is picked automatically from the URL. Shown as cards in the proposal.
+                    </p>
+                    {(formData.data.resources || []).map((resource, index) => {
+                      const kind = resolveResourceKind(resource);
+                      const meta = RESOURCE_KIND_META[kind];
+                      const KindIcon = meta.icon;
+                      return (
+                        <div key={resource.id} className="flex items-center gap-2">
+                          <div
+                            className="h-9 w-9 shrink-0 rounded-md flex items-center justify-center"
+                            style={{ backgroundColor: meta.bg, color: meta.color }}
+                            title={meta.label}
+                          >
+                            <KindIcon className="w-4 h-4" />
+                          </div>
+                          <Input
+                            value={resource.label}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              data: {
+                                ...prev.data,
+                                resources: (prev.data.resources || []).map((r, i) =>
+                                  i === index ? { ...r, label: e.target.value } : r),
+                              },
+                            }))}
+                            placeholder="Label (e.g. Website Audit)"
+                            className="w-1/3"
+                          />
+                          <Input
+                            value={resource.url}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              data: {
+                                ...prev.data,
+                                resources: (prev.data.resources || []).map((r, i) =>
+                                  i === index ? { ...r, url: e.target.value } : r),
+                              },
+                            }))}
+                            placeholder="https://..."
+                            className="flex-1 font-mono text-sm"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 shrink-0 text-destructive hover:text-destructive"
+                            onClick={() => setFormData(prev => ({
+                              ...prev,
+                              data: {
+                                ...prev.data,
+                                resources: (prev.data.resources || []).filter((_, i) => i !== index),
+                              },
+                            }))}
+                            title="Remove link"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setFormData(prev => ({
+                        ...prev,
+                        data: {
+                          ...prev.data,
+                          resources: [
+                            ...(prev.data.resources || []),
+                            { id: `res-${Date.now()}-${(prev.data.resources || []).length}`, label: '', url: '' },
+                          ],
+                        },
+                      }))}
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Link
+                    </Button>
                   </div>
                 </CardContent>
               )}

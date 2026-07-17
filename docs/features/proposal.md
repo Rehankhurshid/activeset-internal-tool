@@ -157,6 +157,7 @@ Team-wide view of all proposals with filtering and actions.
   - `## Pricing (CUR)` — rows `- Name | 5000 | description` or hourly `- Name | 10h x 50 | description`
   - `## Payment Terms` — `Template:` (`one-time`, `split 50/50`, `monthly N`, `quarterly N`, `hourly H x R`), `Total:`, `Currency:`, `Start:`
   - `## Timeline` — rows `- Phase | duration | description | 2026-01-01..2026-01-14 | after:1`
+  - `## Links` — rows `- Label | https://url` (audit report, website, Figma, staging, repo, docs)
   - `## Signatures` — `Agency: Name <email>` / `Client: Name <email>`
   - Prose converts to the editor's HTML via a headless Lexical instance; the pricing total auto-computes; unknown `##` headings are kept as content under the previous section. The draft opens in the regular editor for fine-tuning.
 - **Copy AI Instructions**: Button in the compose dialog copies a self-contained prompt (`AI_FORMAT_INSTRUCTIONS`) to the clipboard — paste it into any AI together with meeting notes and it returns a document in exactly this format.
@@ -207,6 +208,12 @@ Full-featured editor with live preview and template support.
 - Phase title, description, duration, dates
 - Dependency tracking (phases can depend on previous phases)
 - Visual timeline rendering
+
+##### **Linked Resources**
+- Attach related links to a proposal: audit dashboard share URL, client website, Figma, staging, repo, docs
+- Icon/badge auto-detected from the URL (`lib/proposalResources.ts` — explicit `kind` on the resource wins)
+- Edited in a "Linked Resources" section (between Terms and Signatures); rendered as a card grid ("Resources") in the viewer between About Us and Pricing, only when links exist
+- Stored as `data.resources: ProposalResource[]`; round-trips through the markdown workflow via `## Links`
 
 ##### **Terms & Conditions**
 - Rich text terms editor

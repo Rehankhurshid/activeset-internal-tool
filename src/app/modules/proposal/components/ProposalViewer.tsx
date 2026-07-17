@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Share2, Mail, X, Copy, ExternalLink, PenLine, MessageSquare, FileDown } from "lucide-react";
 import { Proposal, ProposalSectionId } from "../types/Proposal";
+import { RESOURCE_KIND_META, resolveResourceKind, resourceHostname } from "../lib/proposalResources";
 import { proposalService } from "../services/ProposalService";
 import { downloadProposalPDF } from "../utils/pdfGenerator";
 import { toast } from "sonner";
@@ -661,6 +662,48 @@ ${proposal.agencyName}`;
                   />
                 </div>
               </section>
+
+              {/* Linked Resources */}
+              {(proposal.data.resources || []).filter(r => r.url).length > 0 && (
+                <section className="grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4">
+                  <div className="flex items-start justify-between">
+                    <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#111827', fontFamily: FONT_TITLE }}>Resources</h2>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
+                    {(proposal.data.resources || []).filter(r => r.url).map(resource => {
+                      const kind = resolveResourceKind(resource);
+                      const meta = RESOURCE_KIND_META[kind];
+                      const KindIcon = meta.icon;
+                      return (
+                        <a
+                          key={resource.id}
+                          href={resource.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 rounded-xl p-4 transition-shadow hover:shadow-md"
+                          style={{ border: '1px solid #e5e7eb', backgroundColor: '#f9fafb', textDecoration: 'none' }}
+                        >
+                          <span
+                            className="h-10 w-10 shrink-0 rounded-lg flex items-center justify-center"
+                            style={{ backgroundColor: meta.bg, color: meta.color }}
+                          >
+                            <KindIcon className="w-5 h-5" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block font-semibold truncate" style={{ color: '#111827', fontFamily: FONT_BODY }}>
+                              {resource.label || meta.label}
+                            </span>
+                            <span className="block text-sm truncate" style={{ color: '#6b7280' }}>
+                              {resourceHostname(resource.url)}
+                            </span>
+                          </span>
+                          <ExternalLink className="w-4 h-4 ml-auto shrink-0" style={{ color: '#9ca3af' }} data-html2canvas-ignore />
+                        </a>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
               {/* Pricing */}
               <section className={`grid grid-cols-1 md:grid-cols-[1fr_3fr] gap-8 group relative p-4 -m-4 ${getSectionHighlightClass('pricing')}`}>

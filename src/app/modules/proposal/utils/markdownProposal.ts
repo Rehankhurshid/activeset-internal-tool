@@ -9,7 +9,7 @@ import { CodeNode } from '@lexical/code';
 import { LinkNode, AutoLinkNode } from '@lexical/link';
 import { $getRoot, $isElementNode, $isDecoratorNode, $createParagraphNode } from 'lexical';
 import type { PaymentTemplate } from '@/lib/payment-templates';
-import { Proposal, PricingItem, TimelinePhase } from '../types/Proposal';
+import { Proposal, PricingItem, TimelinePhase, ProposalResource } from '../types/Proposal';
 
 // ---------------------------------------------------------------------------
 // Format reference
@@ -27,6 +27,7 @@ import { Proposal, PricingItem, TimelinePhase } from '../types/Proposal';
 //   ## Payment Terms      Template: / Total: / Currency: / Start:
 //   ## Timeline           - Phase | duration | description | 2026-01-01..2026-01-14 | after:1
 //   ## Terms
+//   ## Links              - Label | https://url        (audit report, Figma, staging, …)
 //   ## Signatures         Agency: Name <email>  /  Client: Name <email>
 // ---------------------------------------------------------------------------
 
@@ -79,6 +80,11 @@ Start: 2026-08-01
 ## Terms
 
 Payment is due within 30 days of invoice. 50% upfront, 50% on delivery.
+
+## Links
+
+- Website Audit | https://app.activeset.co/share/audit-token
+- Current Website | https://acme.com
 
 ## Signatures
 
@@ -141,6 +147,10 @@ Start: <YYYY-MM-DD>
 
 <payment and legal terms as prose>
 
+## Links
+
+- <Label, e.g. "Website Audit"> | <https URL>
+
 ## Signatures
 
 Agency: <name> <<email>>
@@ -163,6 +173,7 @@ export interface ParsedProposalMarkdown {
         hero: boolean;
         signatures: boolean;
         paymentTerms: boolean;
+        links: boolean;
     };
 }
 
@@ -231,7 +242,7 @@ interface Section {
     lines: string[];
 }
 
-const KNOWN_SECTIONS = ['overview', 'about us', 'pricing', 'payment terms', 'timeline', 'terms', 'signatures'];
+const KNOWN_SECTIONS = ['overview', 'about us', 'pricing', 'payment terms', 'timeline', 'terms', 'links', 'signatures'];
 
 // Split the document into the preamble (before the first known "## " section)
 // and top-level sections. Only KNOWN_SECTIONS headings start a section — any
@@ -363,7 +374,7 @@ const serializePaymentTemplate = (template: PaymentTemplate): string => {
 export const parseProposalMarkdown = (md: string): ParsedProposalMarkdown => {
     const warnings: string[] = [];
     const { preamble, sections } = splitSections(md);
-    const declared = { status: false, hero: false, signatures: false, paymentTerms: false };
+    const declared = { status: false, hero: false, signatures: false, paymentTerms: false, links: false };
 
     let title = '';
     let clientName = '';
@@ -405,6 +416,7 @@ export const parseProposalMarkdown = (md: string): ParsedProposalMarkdown => {
     let pricingItems: PricingItem[] = [];
     let phases: TimelinePhase[] = [];
     let paymentTerms: Proposal['data']['paymentTerms'];
+    let resources: ProposalResource[] = [];
     let agencySignatory = { name: '', email: '' };
     let clientSignatory = { name: '', email: '' };
 
@@ -478,6 +490,25 @@ export const parseProposalMarkdown = (md: string): ParsedProposalMarkdown => {
                 }
                 break;
             }
+            case 'links': {
+                // "- Label | url" rows; a bare "- url" row gets an empty label
+                // (the viewer falls back to the detected kind's name).
+                resources = parsePipeRows(body)
+                    .map(({ cols }, i) => {
+                        const hasLabel = cols.length > 1;
+                        return {
+                            id: `res-md-${i}`,
+                            label: hasLabel ? cols[0] : '',
+                            url: (hasLabel ? cols[1] : cols[0]) || '',
+                        };
+                    })
+                    .filter(r => r.url);
+                if (resources.length > 0) declared.links = true;
+                else if (body.some(l => l.trim())) {
+                    warnings.push('Links section found but no "- Label | url" rows could be parsed.');
+                }
+                break;
+            }
             case 'signatures': {
                 const kv = parseKeyValues(body);
                 if (kv['agency'] || kv['client']) {
@@ -539,6 +570,7 @@ export const parseProposalMarkdown = (md: string): ParsedProposalMarkdown => {
             ...(paymentTerms ? { paymentTerms } : {}),
             timeline: { phases },
             terms: termsHtml,
+            ...(resources.length ? { resources } : {}),
             signatures: {
                 agency: agencySignatory,
                 client: clientSignatory,
@@ -628,6 +660,12 @@ export const serializeProposalToMarkdown = (p: Proposal): string => {
         '',
         htmlToMarkdown(d.terms),
         '',
+        ...((d.resources || []).filter(r => r.url).length ? [
+            '## Links',
+            '',
+            ...(d.resources || []).filter(r => r.url).map(r => `- ${toCell(r.label)} | ${r.url.trim()}`),
+            '',
+        ] : []),
         '## Signatures',
         '',
         `Agency: ${person(sig.agency)}`,
@@ -678,6 +716,7 @@ export const mergeParsedIntoProposal = (
                 total: parsed.data.pricing.total,
             },
             paymentTerms: declared.paymentTerms ? parsed.data.paymentTerms : current.data.paymentTerms,
+            resources: declared.links ? parsed.data.resources : current.data.resources,
             timeline: { phases },
             signatures: declared.signatures
                 ? {
