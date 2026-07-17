@@ -4,6 +4,24 @@ import { doc, setDoc, getDoc, getDocs, collection, deleteDoc, query, orderBy } f
 import { User } from 'firebase/auth';
 import { historyService } from './HistoryService';
 
+// Firestore's setDoc rejects any explicitly-undefined field value
+// ("Unsupported field value: undefined"). Optional fields (heroImage,
+// paymentTerms, resources, phase dates, createdBy.displayName, …) can end up
+// as undefined keys after spreads/merges, so strip them from every write.
+const stripUndefinedDeep = <T>(value: T): T => {
+    if (Array.isArray(value)) {
+        return value.map(stripUndefinedDeep) as unknown as T;
+    }
+    if (value !== null && typeof value === 'object') {
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>)
+                .filter(([, v]) => v !== undefined)
+                .map(([k, v]) => [k, stripUndefinedDeep(v)])
+        ) as T;
+    }
+    return value;
+};
+
 class ProposalService {
     private readonly COLLECTION_NAME = 'proposals';
     private readonly SHARED_COLLECTION = 'shared_proposals';
@@ -58,14 +76,14 @@ class ProposalService {
         try {
             // Save to Firestore as primary storage
             const docRef = doc(db, this.COLLECTION_NAME, newProposal.id);
-            await setDoc(docRef, newProposal);
+            await setDoc(docRef, stripUndefinedDeep(newProposal));
 
             // Also sync to shared_proposals for public access
             const sharedDocRef = doc(db, this.SHARED_COLLECTION, newProposal.id);
-            await setDoc(sharedDocRef, {
+            await setDoc(sharedDocRef, stripUndefinedDeep({
                 ...newProposal,
                 sharedAt: new Date().toISOString()
-            });
+            }));
 
             // Record creation in history
             historyService.recordCreation(
@@ -112,10 +130,10 @@ class ProposalService {
             // edit. id is fixed; drop it from the payload to avoid a no-op write.
             const { id: _omitId, ...writableChanges } = proposalData;
             void _omitId;
-            const writePayload = {
+            const writePayload = stripUndefinedDeep({
                 ...writableChanges,
                 updatedAt: updatedProposal.updatedAt,
-            };
+            });
 
             // setDoc(..., {merge: true}) does a field-level merge and creates
             // the shared_proposals doc if it doesn't yet exist (older proposals).
@@ -370,10 +388,10 @@ class ProposalService {
 
             // Sync to shared_proposals collection for public access
             const sharedDocRef = doc(db, this.SHARED_COLLECTION, proposalId);
-            await setDoc(sharedDocRef, {
+            await setDoc(sharedDocRef, stripUndefinedDeep({
                 ...proposal,
                 sharedAt: new Date().toISOString()
-            });
+            }));
 
             // Return the public URL
             return `${window.location.origin}/view/${proposalId}`;
@@ -439,11 +457,11 @@ class ProposalService {
             };
 
             // Save to shared_proposals
-            await setDoc(sharedDocRef, updatedProposal);
+            await setDoc(sharedDocRef, stripUndefinedDeep(updatedProposal));
 
             // Also update the main proposals collection
             const mainDocRef = doc(db, this.COLLECTION_NAME, id);
-            await setDoc(mainDocRef, updatedProposal);
+            await setDoc(mainDocRef, stripUndefinedDeep(updatedProposal));
 
             // Record signature in history
             historyService.recordSigned(
@@ -504,11 +522,11 @@ class ProposalService {
             // Deep merge keeps client signature, analytics counters and all
             // other proposal data untouched.
             await Promise.all([
-                setDoc(docRef, writePayload, { merge: true }),
-                setDoc(doc(db, this.SHARED_COLLECTION, id), {
+                setDoc(docRef, stripUndefinedDeep(writePayload), { merge: true }),
+                setDoc(doc(db, this.SHARED_COLLECTION, id), stripUndefinedDeep({
                     ...writePayload,
                     sharedAt: updatedAt,
-                }, { merge: true }),
+                }), { merge: true }),
             ]);
 
             const agency = proposal.data.signatures.agency;

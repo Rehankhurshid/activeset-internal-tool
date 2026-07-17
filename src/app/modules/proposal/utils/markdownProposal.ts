@@ -687,22 +687,30 @@ export const mergeParsedIntoProposal = (
     parsed: Proposal,
     declared: ParsedProposalMarkdown['declared'],
 ): Proposal => {
+    // NOTE: never assign explicitly-undefined keys here — Firestore's setDoc
+    // rejects undefined field values, which breaks the next save.
     const phases: TimelinePhase[] = parsed.data.timeline.phases.map((phase, i) => {
         const prev = current.data.timeline.phases[i];
+        const startDate = phase.startDate ?? prev?.startDate;
+        const endDate = phase.endDate ?? prev?.endDate;
+        const dependsOn = phase.dependsOn ?? prev?.dependsOn;
         return {
             ...phase,
-            startDate: phase.startDate ?? prev?.startDate,
-            endDate: phase.endDate ?? prev?.endDate,
-            dependsOn: phase.dependsOn ?? prev?.dependsOn,
+            ...(startDate !== undefined ? { startDate } : {}),
+            ...(endDate !== undefined ? { endDate } : {}),
+            ...(dependsOn !== undefined ? { dependsOn } : {}),
         };
     });
+    const heroImage = declared.hero ? parsed.heroImage : current.heroImage;
+    const paymentTerms = declared.paymentTerms ? parsed.data.paymentTerms : current.data.paymentTerms;
+    const resources = declared.links ? parsed.data.resources : current.data.resources;
     return {
         ...current,
         title: parsed.title,
         clientName: parsed.clientName || current.clientName,
         agencyName: parsed.agencyName || current.agencyName,
         status: declared.status ? parsed.status : current.status,
-        heroImage: declared.hero ? parsed.heroImage : current.heroImage,
+        ...(heroImage !== undefined ? { heroImage } : {}),
         data: {
             ...current.data,
             overview: parsed.data.overview,
@@ -715,8 +723,8 @@ export const mergeParsedIntoProposal = (
                 items: parsed.data.pricing.items,
                 total: parsed.data.pricing.total,
             },
-            paymentTerms: declared.paymentTerms ? parsed.data.paymentTerms : current.data.paymentTerms,
-            resources: declared.links ? parsed.data.resources : current.data.resources,
+            ...(paymentTerms !== undefined ? { paymentTerms } : {}),
+            ...(resources !== undefined ? { resources } : {}),
             timeline: { phases },
             signatures: declared.signatures
                 ? {
