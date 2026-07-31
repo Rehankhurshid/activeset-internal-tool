@@ -568,11 +568,16 @@ export default function ContractEditor({
                                         <SelectItem value="monthly">Monthly</SelectItem>
                                         <SelectItem value="quarterly">Quarterly</SelectItem>
                                         <SelectItem value="annually">Annually</SelectItem>
+                                        <SelectItem value="hourly">Hourly rate</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label>Retainer amount</Label>
+                                <Label>
+                                    {contract.retainer.billingCycle === 'hourly'
+                                        ? 'Hourly rate'
+                                        : 'Retainer amount'}
+                                </Label>
                                 <Input
                                     type="number"
                                     min={0}
@@ -587,7 +592,11 @@ export default function ContractEditor({
                                             },
                                         }))
                                     }
-                                    placeholder="1600"
+                                    placeholder={
+                                        contract.retainer.billingCycle === 'hourly'
+                                            ? '50'
+                                            : '1600'
+                                    }
                                 />
                             </div>
                             <div className="space-y-2">

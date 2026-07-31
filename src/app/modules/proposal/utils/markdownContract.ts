@@ -254,7 +254,7 @@ Client: <client company name, as spoken about in the notes>
 Agency: <agency name — use "ActiveSet" unless the notes say otherwise>
 Status: <draft | sent | approved | rejected | lost — use draft unless told>
 Effective: <YYYY-MM-DD — the date the agreement starts>
-Retainer: <amount> <currency> <monthly | quarterly | annually>
+Retainer: <amount> <currency> <monthly | quarterly | annually | hourly>
 Lock-in: <number of months, or "none">
 Governing Law: <country>
 Jurisdiction: <city, state>
@@ -264,9 +264,12 @@ Notes on specific keys:
 - Retainer: write the amount as a plain number with no symbols or separators
   (1600, never $1,600 or 1,600 USD/mo). Currency is a 3-letter code (USD, SGD,
   EUR, GBP, INR, AUD, CAD, JPY, CHF). The three parts can be in any order, so
-  "USD 1600 monthly" is equally fine. If the notes give a weekly or per-day
-  figure, do NOT convert it — put the figure you were given in a "Retainer
-  Rollover"-style custom clause instead and omit the Retainer key.
+  "USD 1600 monthly" is equally fine. A rate-based deal ("$50/hr", "50 an
+  hour") is "Retainer: 50 USD hourly" — the amount becomes the hourly rate and
+  the standard Compensation and Term clauses adapt to rate wording on their
+  own; do not hand-write them. If the notes give a weekly or per-day figure,
+  do NOT convert it to monthly or hourly — put the figure you were given in a
+  custom clause instead and omit the Retainer key.
 - Effective: ISO format only. "start of August" with no year is not enough to
   guess — omit the key.
 - Lock-in: "6", "6 months" and "none" are all accepted. A minimum term, a
@@ -406,7 +409,7 @@ export interface ParsedContractMarkdown {
 // ─── parsing helpers ────────────────────────────────────────────────────────
 
 const CONTRACT_STATUSES: Proposal['status'][] = ['draft', 'sent', 'approved', 'rejected', 'lost'];
-const BILLING_CYCLES: BillingCycle[] = ['monthly', 'quarterly', 'annually'];
+const BILLING_CYCLES: BillingCycle[] = ['monthly', 'quarterly', 'annually', 'hourly'];
 const KNOWN_SECTIONS = ['client', 'agency', 'clauses'];
 
 interface Section {
@@ -483,6 +486,8 @@ const parseRetainerLine = (
 ): { amount?: number; currency?: string; billingCycle?: BillingCycle } => {
     const out: { amount?: number; currency?: string; billingCycle?: BillingCycle } = {};
     for (const token of value.split(/[\s/,]+/).filter(Boolean)) {
+        // Filler words in "per month" / "an hour" — never a currency code.
+        if (/^(per|a|an|at)$/i.test(token)) continue;
         const cycle = normalizeBillingCycle(token);
         if (cycle) { out.billingCycle = cycle; continue; }
         if (/^[A-Za-z]{3}$/.test(token)) { out.currency = token.toUpperCase(); continue; }
@@ -498,6 +503,7 @@ const normalizeBillingCycle = (value: string): BillingCycle | null => {
     if (v === 'month' || v === 'monthy') return 'monthly';
     if (v === 'quarter') return 'quarterly';
     if (v === 'year' || v === 'yearly' || v === 'annual') return 'annually';
+    if (v === 'hour' || v === 'hr' || v === 'hrs') return 'hourly';
     return null;
 };
 

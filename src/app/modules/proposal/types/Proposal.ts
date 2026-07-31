@@ -37,7 +37,12 @@ export interface ContractClause {
     generated?: boolean;
 }
 
-export type BillingCycle = 'monthly' | 'quarterly' | 'annually';
+/**
+ * How the fee in `retainer` is charged. The fixed cycles bill `amount` per
+ * period; 'hourly' means `amount` is a rate applied to hours actually
+ * delivered, with no fixed retainer.
+ */
+export type BillingCycle = 'monthly' | 'quarterly' | 'annually' | 'hourly';
 
 export interface ContractData {
     client: ContractParty;

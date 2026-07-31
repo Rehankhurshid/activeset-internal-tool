@@ -2,7 +2,6 @@ import type {
     Proposal,
     ContractData,
     ContractClause,
-    ContractParty,
     BillingCycle,
 } from '../types/Proposal';
 
@@ -57,12 +56,14 @@ const BILLING_NOUN: Record<BillingCycle, string> = {
     monthly: 'month',
     quarterly: 'quarter',
     annually: 'year',
+    hourly: 'hour',
 };
 
 const BILLING_ADJ: Record<BillingCycle, string> = {
     monthly: 'monthly',
     quarterly: 'quarterly',
     annually: 'annual',
+    hourly: 'hourly',
 };
 
 export function billingNoun(cycle: BillingCycle): string {
@@ -86,13 +87,20 @@ export function computeLockInEnd(effectiveDate: string, lockInMonths: number): s
 export function generateTermClauseBody(contract: ContractData): string {
     const start = formatContractDate(contract.effectiveDate);
     const fee = formatMoney(contract.retainer.amount, contract.retainer.currency);
-    const cycleNoun = billingNoun(contract.retainer.billingCycle);
+    const hourly = contract.retainer.billingCycle === 'hourly';
+    // Hourly engagements still roll month to month — "hour-to-hour basis"
+    // would be nonsense — and their fee sentence describes a rate, not a
+    // recurring retainer.
+    const cycleNoun = hourly ? 'month' : billingNoun(contract.retainer.billingCycle);
+    const feeSentence = hourly
+        ? `Services are billed at an hourly rate of <strong>${fee}</strong>, applied to hours actually delivered; no fixed ${cycleNoun}ly retainer applies.`
+        : `The retainer fee of <strong>${fee}</strong> per ${cycleNoun} is payable for each ${cycleNoun} during the term of this Agreement.`;
     const lock = contract.lockInMonths;
 
     if (!lock || lock <= 0) {
         return [
             `<p>This Agreement shall commence on <strong>${start}</strong> and shall continue on a rolling ${cycleNoun}-to-${cycleNoun} basis until terminated in accordance with the Termination section of this Agreement.</p>`,
-            `<p>The retainer fee of <strong>${fee}</strong> per ${cycleNoun} is payable for each ${cycleNoun} during the term of this Agreement.</p>`,
+            `<p>${feeSentence}</p>`,
         ].join('');
     }
 
@@ -100,8 +108,12 @@ export function generateTermClauseBody(contract: ContractData): string {
     const end = endIso ? formatContractDate(endIso) : '________________';
     return [
         `<p>This Agreement shall commence on <strong>${start}</strong> and the Company commits to a minimum, non-cancellable term of <strong>${lock} ${lock === 1 ? 'month' : 'months'}</strong> (the &ldquo;Minimum Term&rdquo;), expiring on <strong>${end}</strong>.</p>`,
-        `<p>The retainer fee of <strong>${fee}</strong> per ${cycleNoun} is payable for each ${cycleNoun} throughout the Minimum Term. Neither party may terminate this Agreement for convenience before the end of the Minimum Term; termination during the Minimum Term is permitted only for material, uncured breach as set out in the Termination section.</p>`,
-        `<p>If the Company terminates without cause prior to the expiry of the Minimum Term, the Company shall remain liable for the retainer fees that would have become due for the remainder of the Minimum Term.</p>`,
+        hourly
+            ? `<p>Services remain billable at an hourly rate of <strong>${fee}</strong> throughout the Minimum Term. Neither party may terminate this Agreement for convenience before the end of the Minimum Term; termination during the Minimum Term is permitted only for material, uncured breach as set out in the Termination section.</p>`
+            : `<p>The retainer fee of <strong>${fee}</strong> per ${cycleNoun} is payable for each ${cycleNoun} throughout the Minimum Term. Neither party may terminate this Agreement for convenience before the end of the Minimum Term; termination during the Minimum Term is permitted only for material, uncured breach as set out in the Termination section.</p>`,
+        ...(hourly
+            ? []
+            : [`<p>If the Company terminates without cause prior to the expiry of the Minimum Term, the Company shall remain liable for the retainer fees that would have become due for the remainder of the Minimum Term.</p>`]),
         `<p>After the Minimum Term this Agreement continues on a rolling ${cycleNoun}-to-${cycleNoun} basis until terminated in accordance with the Termination section.</p>`,
     ].join('');
 }
@@ -280,17 +292,27 @@ interface ClauseVars {
 }
 
 function buildVars(contract: ContractData): ClauseVars {
+    // Hourly engagements invoice on a monthly cadence, so the Payment
+    // Schedule clause keeps monthly language; the Compensation clause gets a
+    // dedicated hourly body in buildContractClauses instead of these tokens.
+    const hourly = contract.retainer.billingCycle === 'hourly';
     return {
         clientLegalName: contract.client.legalName || 'the Company',
         clientEmail: contract.client.email || '________________',
         retainerAmount: formatMoney(contract.retainer.amount, contract.retainer.currency),
-        billingAdj: BILLING_ADJ[contract.retainer.billingCycle] || 'monthly',
-        billingNoun: billingNoun(contract.retainer.billingCycle),
+        billingAdj: hourly ? 'monthly' : BILLING_ADJ[contract.retainer.billingCycle] || 'monthly',
+        billingNoun: hourly ? 'month' : billingNoun(contract.retainer.billingCycle),
         governingLawCountry: contract.governingLawCountry || '________________',
         jurisdictionCity: contract.jurisdictionCity || '________________',
         termClause: '', // term clause uses generateTermClauseBody, not token replace
     };
 }
+
+// Replaces the standard Compensation body when the engagement is hourly — the
+// retainer-fee wording ("a monthly fee of X payable for each month") is wrong
+// for rate-based work.
+const HOURLY_COMPENSATION_BODY =
+    `<p>For the Services rendered by the Consultant as outlined in the Scope of Services, the Company shall pay the Consultant at an hourly rate of <strong>{{retainerAmount}}</strong> per hour, applied to hours actually delivered. There is no fixed retainer amount; hours are recorded against individual tasks and itemized on each invoice.</p>`;
 
 function interpolate(html: string, vars: ClauseVars): string {
     const dict: Record<string, string> = { ...vars };
@@ -306,6 +328,7 @@ function interpolate(html: string, vars: ClauseVars): string {
  */
 export function buildContractClauses(contract: ContractData): ContractClause[] {
     const vars = buildVars(contract);
+    const hourly = contract.retainer.billingCycle === 'hourly';
     return STANDARD_CLAUSES.map((c) => {
         if (c.id === 'term') {
             return {
@@ -315,10 +338,11 @@ export function buildContractClauses(contract: ContractData): ContractClause[] {
                 generated: true,
             };
         }
+        const body = c.id === 'compensation' && hourly ? HOURLY_COMPENSATION_BODY : c.body;
         return {
             id: c.id,
             heading: c.heading,
-            body: interpolate(c.body, vars),
+            body: interpolate(body, vars),
             generated: false,
         };
     });

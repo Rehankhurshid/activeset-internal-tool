@@ -394,7 +394,10 @@ export default function ContractViewer({
                             The Company desires to retain the Consultant to perform the
                             Services described herein, and the Consultant desires to perform
                             such Services, subject to the terms and conditions of this
-                            Agreement. The retainer fee is{' '}
+                            Agreement.{' '}
+                            {contract.retainer.billingCycle === 'hourly'
+                                ? 'Services are billed at an hourly rate of'
+                                : 'The retainer fee is'}{' '}
                             <strong>
                                 {formatMoney(
                                     contract.retainer.amount,
@@ -402,6 +405,8 @@ export default function ContractViewer({
                                 )}
                             </strong>{' '}
                             per {contract.retainer.billingCycle.replace('ly', '')}
+                            {contract.retainer.billingCycle === 'hourly' &&
+                                ', applied to hours actually delivered'}
                             {contract.lockInMonths > 0 && (
                                 <>
                                     , with a minimum committed term of{' '}
