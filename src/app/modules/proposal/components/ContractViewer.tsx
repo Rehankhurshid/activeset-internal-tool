@@ -24,9 +24,9 @@ const AgencySignatureDialog = dynamic(() => import('./AgencySignatureDialog'), {
 
 // Document typography. next/font emits hashed family names, so the CSS
 // variables (declared in layout.tsx) are the only reliable handle.
-// Instrument Serif carries the title and clause headings, Geist the body copy,
-// Geist Mono the reference line and small caps labels.
-const FONT_TITLE = "var(--font-instrument-serif), 'Instrument Serif', Georgia, serif";
+// All Geist: the sans carries everything from title to body with weight and
+// tracking doing the hierarchy; the mono carries the reference line, field
+// labels and dates.
 const FONT_BODY = "var(--font-geist), 'Geist', system-ui, sans-serif";
 const FONT_MONO = "var(--font-geist-mono), 'Geist Mono', ui-monospace, monospace";
 
@@ -156,34 +156,34 @@ export default function ContractViewer({
             };
         }
         return {
-            cls: 'bg-stone-100/80 text-stone-700 ring-stone-500/15',
-            dot: 'bg-stone-400',
-            icon: <ScrollText className="w-4 h-4 text-stone-500" />,
+            cls: 'bg-gray-100/80 text-gray-700 ring-gray-500/15',
+            dot: 'bg-gray-400',
+            icon: <ScrollText className="w-4 h-4 text-gray-500" />,
             title: 'Draft — not yet signed',
             sub: 'Awaiting signatures from both parties.',
         };
     })();
 
     return (
-        <div className="contract-body min-h-screen bg-[#f7f6f3] print:bg-white">
+        <div className="contract-body min-h-screen bg-[#fafafa] print:bg-white">
             {/* Header — light and quiet, so the document is the loudest thing */}
-            <div className="sticky top-0 z-50 bg-[#f7f6f3]/85 backdrop-blur-xl border-b border-stone-200/70 px-4 sm:px-6 py-3 no-print">
+            <div className="sticky top-0 z-50 bg-[#fafafa]/85 backdrop-blur-xl border-b border-gray-200/70 px-4 sm:px-6 py-3 no-print">
                 <div className="max-w-3xl mx-auto flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                         {!isPublic && (
                             <Button
                                 onClick={onBack}
-                                className="flex items-center gap-2 bg-white hover:bg-stone-50 text-stone-700 border border-stone-200 shadow-sm h-9 w-9 p-0 rounded-full"
+                                className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-sm h-9 w-9 p-0 rounded-full"
                             >
                                 <ArrowLeft className="w-4 h-4" />
                                 <span className="sr-only">Back</span>
                             </Button>
                         )}
                         <div className="min-w-0">
-                            <h1 className="text-[15px] font-medium text-stone-900 leading-tight truncate">
+                            <h1 className="text-[15px] font-medium text-gray-900 leading-tight truncate">
                                 {currentProposal.title}
                             </h1>
-                            <p className="contract-mono text-[10px] tracking-[0.12em] uppercase text-stone-400 truncate">
+                            <p className="contract-mono text-[10px] tracking-[0.12em] uppercase text-gray-400 truncate">
                                 {contract.client.legalName || currentProposal.clientName}
                             </p>
                         </div>
@@ -193,14 +193,14 @@ export default function ContractViewer({
                             <>
                                 <Button
                                     onClick={handleShare}
-                                    className="flex items-center gap-2 bg-white hover:bg-stone-50 text-stone-700 border border-stone-200 shadow-sm h-9 px-4 rounded-full"
+                                    className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-sm h-9 px-4 rounded-full"
                                 >
                                     <Share2 className="w-4 h-4" />
                                     <span className="hidden sm:inline">Share</span>
                                 </Button>
                                 <Button
                                     onClick={handleEmail}
-                                    className="flex items-center gap-2 bg-white hover:bg-stone-50 text-stone-700 border border-stone-200 shadow-sm h-9 px-4 rounded-full"
+                                    className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-sm h-9 px-4 rounded-full"
                                 >
                                     <Mail className="w-4 h-4" />
                                     <span className="hidden sm:inline">Email</span>
@@ -210,7 +210,7 @@ export default function ContractViewer({
                         <Button
                             onClick={handleDownloadPDF}
                             disabled={isDownloading}
-                            className="flex items-center gap-2 bg-white hover:bg-stone-50 text-stone-700 border border-stone-200 shadow-sm h-9 px-4 rounded-full"
+                            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-sm h-9 px-4 rounded-full"
                         >
                             <FileDown
                                 className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`}
@@ -226,7 +226,7 @@ export default function ContractViewer({
                                         .getElementById('signature-section')
                                         ?.scrollIntoView({ behavior: 'smooth' })
                                 }
-                                className="flex items-center gap-2 bg-stone-900 hover:bg-stone-800 text-white border-none h-9 px-5 rounded-full shadow-sm transition-transform hover:-translate-y-px"
+                                className="flex items-center gap-2 bg-black hover:bg-gray-800 text-white border-none h-9 px-5 rounded-full shadow-sm transition-transform hover:-translate-y-px"
                             >
                                 <PenLine className="w-4 h-4" />
                                 Sign
@@ -244,7 +244,8 @@ export default function ContractViewer({
               font-feature-settings: 'ss01', 'cv05';
               -webkit-font-smoothing: antialiased;
             }
-            .contract-title, .contract-heading { font-family: ${FONT_TITLE}; letter-spacing: -0.01em; }
+            .contract-title { font-weight: 600; letter-spacing: -0.035em; }
+            .contract-heading { font-weight: 600; letter-spacing: -0.02em; }
             .contract-mono {
               font-family: ${FONT_MONO};
               font-variant-numeric: tabular-nums;
@@ -255,18 +256,18 @@ export default function ContractViewer({
               font-size: 10px;
               letter-spacing: 0.14em;
               text-transform: uppercase;
-              color: #a8a29e;
+              color: #a3a3a3;
             }
             .contract-clause ul { list-style: disc; padding-left: 1.35rem; margin: 0.7rem 0; }
             .contract-clause ol { list-style: decimal; padding-left: 1.35rem; margin: 0.7rem 0; }
             .contract-clause li { margin-bottom: 0.5rem; line-height: 1.75; padding-left: 0.15rem; }
-            .contract-clause li::marker { color: #d6d3d1; }
+            .contract-clause li::marker { color: #d4d4d4; }
             .contract-clause p { margin-bottom: 0.85rem; line-height: 1.8; }
             .contract-clause p:last-child, .contract-clause ul:last-child, .contract-clause ol:last-child { margin-bottom: 0; }
-            .contract-clause strong { font-weight: 600; color: #1c1917; }
-            .contract-clause a { color: #1c1917; text-decoration: underline; text-underline-offset: 2px; }
+            .contract-clause strong { font-weight: 600; color: #111111; }
+            .contract-clause a { color: #111111; text-decoration: underline; text-underline-offset: 2px; }
             /* Hairline rule that reads as a ruled document line, not a border. */
-            .contract-rule { height: 1px; background: linear-gradient(to right, #e7e5e4, #f5f5f4); }
+            .contract-rule { height: 1px; background: linear-gradient(to right, #e5e5e5, #f5f5f5); }
             @media print {
               html, body { background: #fff !important; }
               .no-print { display: none !important; }
@@ -304,22 +305,22 @@ export default function ContractViewer({
 
                     <div
                         id="proposal-container"
-                        className="contract-paper bg-white rounded-[20px] print:rounded-none ring-1 ring-stone-900/[0.06] shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-8px_rgba(28,25,23,0.10)] print:shadow-none px-6 py-10 sm:px-14 sm:py-16 text-[15px] text-stone-700"
+                        className="contract-paper bg-white rounded-[20px] print:rounded-none ring-1 ring-black/[0.06] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-8px_rgba(0,0,0,0.10)] print:shadow-none px-6 py-10 sm:px-14 sm:py-16 text-[15px] text-gray-700"
                     >
                         {/* Masthead */}
                         <div className="mb-10">
                             <p className="contract-label mb-4">Retainer Agreement</p>
-                            <h1 className="contract-title text-[34px] sm:text-[44px] leading-[1.08] text-stone-900 mb-5">
+                            <h1 className="contract-title text-[28px] sm:text-[36px] leading-[1.12] text-gray-900 mb-5">
                                 {currentProposal.title}
                             </h1>
                             <div className="contract-rule mb-4" />
                             {/* The reference line — the detail that makes it read as a
                                 real instrument rather than a web page. */}
-                            <div className="contract-mono flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tracking-[0.1em] uppercase text-stone-400">
+                            <div className="contract-mono flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tracking-[0.1em] uppercase text-gray-400">
                                 <span>
                                     Effective {formatContractDate(contract.effectiveDate)}
                                 </span>
-                                <span className="text-stone-300">·</span>
+                                <span className="text-gray-300">·</span>
                                 <span>
                                     {formatMoney(
                                         contract.retainer.amount,
@@ -327,7 +328,7 @@ export default function ContractViewer({
                                     )}{' '}
                                     / {contract.retainer.billingCycle.replace('ly', '')}
                                 </span>
-                                <span className="text-stone-300">·</span>
+                                <span className="text-gray-300">·</span>
                                 <span>
                                     {contract.lockInMonths > 0
                                         ? `${contract.lockInMonths} month term`
@@ -341,14 +342,14 @@ export default function ContractViewer({
                             <div>
                                 <div className="contract-rule mb-3" />
                                 <p className="contract-label mb-2">Prepared for</p>
-                                <p className="contract-heading text-[19px] leading-snug text-stone-900">
+                                <p className="contract-heading text-[16px] leading-snug text-gray-900">
                                     {contract.client.legalName || '________________'}
                                 </p>
-                                <p className="text-[13px] leading-relaxed text-stone-500 whitespace-pre-line mt-1">
+                                <p className="text-[13px] leading-relaxed text-gray-500 whitespace-pre-line mt-1">
                                     {contract.client.address}
                                 </p>
                                 {contract.client.email && (
-                                    <p className="contract-mono text-[12px] text-stone-500 mt-1.5">
+                                    <p className="contract-mono text-[12px] text-gray-500 mt-1.5">
                                         {contract.client.email}
                                     </p>
                                 )}
@@ -356,14 +357,14 @@ export default function ContractViewer({
                             <div>
                                 <div className="contract-rule mb-3" />
                                 <p className="contract-label mb-2">Prepared by</p>
-                                <p className="contract-heading text-[19px] leading-snug text-stone-900">
+                                <p className="contract-heading text-[16px] leading-snug text-gray-900">
                                     {contract.agency.legalName}
                                 </p>
-                                <p className="text-[13px] leading-relaxed text-stone-500 whitespace-pre-line mt-1">
+                                <p className="text-[13px] leading-relaxed text-gray-500 whitespace-pre-line mt-1">
                                     {contract.agency.address}
                                 </p>
                                 {contract.agency.email && (
-                                    <p className="contract-mono text-[12px] text-stone-500 mt-1.5">
+                                    <p className="contract-mono text-[12px] text-gray-500 mt-1.5">
                                         {contract.agency.email}
                                     </p>
                                 )}
@@ -427,13 +428,13 @@ export default function ContractViewer({
                                 >
                                     <span
                                         aria-hidden
-                                        className="contract-mono hidden sm:block text-[12px] text-stone-300 pt-[0.45rem] tabular-nums"
+                                        className="contract-mono hidden sm:block text-[12px] text-gray-300 pt-[0.45rem] tabular-nums"
                                     >
                                         {String(i + 1).padStart(2, '0')}
                                     </span>
                                     <div>
-                                        <h2 className="contract-heading text-[22px] leading-snug text-stone-900 mb-2.5">
-                                            <span className="contract-mono sm:hidden text-[12px] text-stone-300 mr-2 align-middle">
+                                        <h2 className="contract-heading text-[17px] leading-snug text-gray-900 mb-2.5">
+                                            <span className="contract-mono sm:hidden text-[12px] text-gray-300 mr-2 align-middle">
                                                 {String(i + 1).padStart(2, '0')}
                                             </span>
                                             <span
@@ -443,7 +444,7 @@ export default function ContractViewer({
                                             />
                                         </h2>
                                         <div
-                                            className="text-stone-600"
+                                            className="text-gray-600"
                                             dangerouslySetInnerHTML={{
                                                 __html: clause.body,
                                             }}
@@ -457,7 +458,7 @@ export default function ContractViewer({
                         <div className="mt-14 pt-10 contract-sig-block">
                             <div className="contract-rule mb-8" />
                             <p className="contract-label mb-3">In witness whereof</p>
-                            <p className="text-[14px] leading-relaxed text-stone-500 mb-10 max-w-xl">
+                            <p className="text-[14px] leading-relaxed text-gray-500 mb-10 max-w-xl">
                                 the parties have caused this Agreement to be executed by
                                 their duly authorized representatives.
                             </p>
@@ -473,26 +474,26 @@ export default function ContractViewer({
                                                 className="max-h-20 max-w-full object-contain"
                                             />
                                         ) : (
-                                            <span className="contract-mono text-[11px] tracking-[0.1em] uppercase text-stone-300">
+                                            <span className="contract-mono text-[11px] tracking-[0.1em] uppercase text-gray-300">
                                                 Awaiting signature
                                             </span>
                                         )}
                                     </div>
-                                    <div className="h-px bg-stone-300 mb-3" />
+                                    <div className="h-px bg-gray-300 mb-3" />
                                     <p className="contract-label mb-1.5">
                                         The Client
                                     </p>
-                                    <p className="contract-heading text-[19px] leading-snug text-stone-900">
+                                    <p className="contract-heading text-[16px] leading-snug text-gray-900">
                                         {contract.client.signatoryName ||
                                             sig.client.name ||
                                             '________________'}
                                     </p>
                                     {contract.client.signatoryTitle && (
-                                        <p className="text-[13px] text-stone-500 mt-0.5">
+                                        <p className="text-[13px] text-gray-500 mt-0.5">
                                             {contract.client.signatoryTitle}
                                         </p>
                                     )}
-                                    <p className="contract-mono text-[11px] tracking-[0.08em] uppercase text-stone-400 mt-2.5">
+                                    <p className="contract-mono text-[11px] tracking-[0.08em] uppercase text-gray-400 mt-2.5">
                                         Date: {formatSignedDate(sig.client.signedAt)}
                                     </p>
                                 </div>
@@ -531,26 +532,26 @@ export default function ContractViewer({
                                                 signature
                                             </button>
                                         ) : (
-                                            <span className="contract-mono text-[11px] tracking-[0.1em] uppercase text-stone-300">
+                                            <span className="contract-mono text-[11px] tracking-[0.1em] uppercase text-gray-300">
                                                 Awaiting signature
                                             </span>
                                         )}
                                     </div>
-                                    <div className="h-px bg-stone-300 mb-3" />
+                                    <div className="h-px bg-gray-300 mb-3" />
                                     <p className="contract-label mb-1.5">
                                         The Agency
                                     </p>
-                                    <p className="contract-heading text-[19px] leading-snug text-stone-900">
+                                    <p className="contract-heading text-[16px] leading-snug text-gray-900">
                                         {contract.agency.signatoryName ||
                                             sig.agency.name ||
                                             '________________'}
                                     </p>
                                     {contract.agency.signatoryTitle && (
-                                        <p className="text-[13px] text-stone-500 mt-0.5">
+                                        <p className="text-[13px] text-gray-500 mt-0.5">
                                             {contract.agency.signatoryTitle}
                                         </p>
                                     )}
-                                    <p className="contract-mono text-[11px] tracking-[0.08em] uppercase text-stone-400 mt-2.5">
+                                    <p className="contract-mono text-[11px] tracking-[0.08em] uppercase text-gray-400 mt-2.5">
                                         Date: {formatSignedDate(sig.agency.signedAt)}
                                     </p>
                                 </div>
@@ -627,14 +628,14 @@ export default function ContractViewer({
 
             {/* Mobile sign CTA */}
             {isPublic && !clientSigned && (
-                <div className="fixed bottom-0 left-0 right-0 p-4 pb-5 bg-gradient-to-t from-[#f7f6f3] via-[#f7f6f3] to-transparent md:hidden z-40 no-print">
+                <div className="fixed bottom-0 left-0 right-0 p-4 pb-5 bg-gradient-to-t from-[#fafafa] via-[#fafafa] to-transparent md:hidden z-40 no-print">
                     <Button
                         onClick={() =>
                             document
                                 .getElementById('signature-section')
                                 ?.scrollIntoView({ behavior: 'smooth' })
                         }
-                        className="w-full h-13 py-4 bg-stone-900 hover:bg-stone-800 text-white text-[15px] font-medium shadow-[0_8px_24px_-6px_rgba(28,25,23,0.45)] flex items-center justify-center gap-2.5 rounded-full"
+                        className="w-full h-13 py-4 bg-black hover:bg-gray-800 text-white text-[15px] font-medium shadow-[0_8px_24px_-6px_rgba(0,0,0,0.45)] flex items-center justify-center gap-2.5 rounded-full"
                     >
                         <PenLine className="w-5 h-5" />
                         Sign Contract Now

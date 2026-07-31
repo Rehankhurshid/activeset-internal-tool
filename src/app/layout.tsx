@@ -4,7 +4,6 @@ import {
   Funnel_Display,
   Geist,
   Geist_Mono,
-  Instrument_Serif,
 } from "next/font/google";
 import { AppProviders } from "@/components/AppProviders";
 import "./globals.css";
@@ -27,8 +26,8 @@ const funnelDisplay = Funnel_Display({
 });
 
 // Contract document typography. Scoped to the agreement viewer rather than the
-// app shell: Geist for body copy, Geist Mono for the reference/meta line, and
-// Instrument Serif for the title and clause headings.
+// app shell: Geist for body copy and headings,
+// Geist Mono for the reference/meta line.
 const geist = Geist({
   subsets: ["latin"],
   variable: "--font-geist",
@@ -38,14 +37,6 @@ const geist = Geist({
 const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
-  display: "swap",
-});
-
-const instrumentSerif = Instrument_Serif({
-  subsets: ["latin"],
-  variable: "--font-instrument-serif",
-  weight: "400",
-  style: ["normal", "italic"],
   display: "swap",
 });
 
@@ -61,7 +52,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="dark">
-      <body className={`${funnelSans.variable} ${funnelDisplay.variable} ${geist.variable} ${geistMono.variable} ${instrumentSerif.variable} font-sans antialiased bg-background text-foreground`}>
+      <body className={`${funnelSans.variable} ${funnelDisplay.variable} ${geist.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground`}>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>
