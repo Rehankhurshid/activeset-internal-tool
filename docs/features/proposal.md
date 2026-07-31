@@ -522,6 +522,61 @@ Server-side high-fidelity PDF generation that matches the browser view.
 
 ---
 
+### 10. Agreements from Markdown
+
+**Location**: `src/app/modules/proposal/utils/markdownContract.ts`, `scripts/create-contract.ts`
+
+The retainer agreement equivalent of the proposal markdown workflow: one pasted
+document produces a complete `documentType: 'contract'` record instead of
+filling the contract editor field by field. The parser is dependency-free (no
+Lexical, no DOM) so the same code runs in the browser and under Node in the CLI.
+
+**Document format** (every field optional — omissions fall back to the standard
+template defaults in `lib/contractTemplate.ts`):
+
+- Preamble: `# Title`, `Client:`, `Agency:`, `Status:` (draft/sent/approved/rejected/lost)
+- Commercial terms: `Effective: YYYY-MM-DD`, `Retainer: 1600 USD monthly` (or separate `Amount:` / `Currency:` / `Billing:`), `Lock-in: 6 months`, `Governing Law:`, `Jurisdiction:`
+- `## Client` / `## Agency` — `Legal Name:`, `Address:` (a bare `Address:` absorbs the following lines, so multi-line addresses work), `Signatory: Name <email>`, `Title:`
+- `## Clauses` — `### <heading>` blocks with the body in markdown
+
+**Clause resolution**: the Clauses section *overrides* the standard 19-clause
+set rather than replacing it. A heading matching a standard clause (compared
+entity- and punctuation-insensitively) swaps that clause's body in place, an
+unrecognised heading is appended, an empty body keeps the standard wording, and
+a body of `[remove]` drops the clause. `## Clauses (replace)` keeps only what
+the document lists, in its order. Restating a clause verbatim is a no-op, which
+is what makes serialize → edit → parse round-trips lossless — including the
+`generated` flag on Term & Minimum Commitment, so it keeps regenerating from the
+commercial fields unless the document actually rewrites it.
+
+**CLI** (`scripts/create-contract.ts`, needs `FIREBASE_SERVICE_ACCOUNT_KEY` +
+`NEXT_PUBLIC_FIREBASE_PROJECT_ID` in `.env.local`; it aborts rather than writing
+through the credential-less admin stub):
+
+```bash
+npm run --silent contract:template > agreement.md   # starter document
+npm run contract:instructions                       # AI prompt for call notes
+npm run contract:create -- --file agreement.md --author "Rehan <rehan@activeset.co>"
+pbpaste | npm run contract:create -- --dry-run      # parse + summarise only
+npm run contract:create -- --file agreement.md --update <id>
+npm run --silent contract:export -- <id> > agreement.md   # agreement → markdown
+```
+
+Use `--silent` whenever you redirect to a file — without it npm prints its own
+`> package@version script` banner to stdout and it lands in the document.
+
+Writes mirror `ProposalService`: the `proposals/{id}` record plus the
+`shared_proposals/{id}` public copy, with `undefined` stripped from the payload.
+`--update` refuses locked (signed/archived) records and merges via
+`mergeParsedIntoContract`, preserving signature data, timestamps and audit info.
+
+**Exports for UI wiring**: `CONTRACT_MARKDOWN_TEMPLATE`,
+`CONTRACT_AI_FORMAT_INSTRUCTIONS`, `parseContractMarkdown`,
+`serializeContractToMarkdown`, `mergeParsedIntoContract` — the same shape
+`ComposeMarkdownDialog` already consumes for proposals.
+
+---
+
 ## Technical Specifications
 
 ### Service Layer
