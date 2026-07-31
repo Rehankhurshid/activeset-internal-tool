@@ -213,58 +213,183 @@ Services to the Company:
 - Custom interactions, animations, and motion effects.
 `;
 
-/** Self-contained prompt for an external AI, mirroring the proposal flow. */
-export const CONTRACT_AI_FORMAT_INSTRUCTIONS = `You are helping prepare a retainer agreement for a web design/development agency.
-From the notes I give you (call notes, email thread, commercial terms), produce
-ONE markdown document in EXACTLY the format below. Output only the markdown
-document — no explanations, no code fences.
+/**
+ * Self-contained prompt for an external AI, mirroring the proposal flow. The
+ * standard clause list is interpolated from the template so the prompt can't
+ * drift out of sync when clauses are added or renamed.
+ */
+export const CONTRACT_AI_FORMAT_INSTRUCTIONS = `# Task
 
-Format:
+You are preparing a retainer agreement for ActiveSet, a web design and
+development agency. I will give you raw notes — a call transcript, an email
+thread, a deal summary, or a few scribbled commercial terms.
 
-# <Agreement title>
+Turn them into ONE markdown document in exactly the format specified below.
+That document is parsed by software, so the structure matters as much as the
+wording.
 
-Client: <client company name>
-Agency: <agency name>
-Status: draft
-Effective: <YYYY-MM-DD>
-Retainer: <amount> <3-letter currency> <monthly|quarterly|annually>
+# Output rules
+
+- Output the markdown document and nothing else. No preamble, no explanation,
+  no code fences, no "Here is the agreement".
+- Never invent a fact. If the notes don't say what the lock-in is, omit the
+  Lock-in line entirely — a sensible default fills in. A wrong value is far
+  worse than a missing one, because a missing one is obvious in review and a
+  wrong one is not.
+- Never write a placeholder like "TBD", "[client name]" or "XXX". Omit the
+  line instead.
+- Everything is optional. The shortest valid document is a title and a couple
+  of preamble lines.
+
+# Document structure
+
+## 1. Preamble
+
+Starts with the title as an H1, then "Key: value" lines. Include only the keys
+your notes actually support.
+
+# <Agreement title, e.g. "Acme Corp — Retainer Agreement">
+
+Client: <client company name, as spoken about in the notes>
+Agency: <agency name — use "ActiveSet" unless the notes say otherwise>
+Status: <draft | sent | approved | rejected | lost — use draft unless told>
+Effective: <YYYY-MM-DD — the date the agreement starts>
+Retainer: <amount> <currency> <monthly | quarterly | annually>
 Lock-in: <number of months, or "none">
 Governing Law: <country>
 Jurisdiction: <city, state>
 
+Notes on specific keys:
+
+- Retainer: write the amount as a plain number with no symbols or separators
+  (1600, never $1,600 or 1,600 USD/mo). Currency is a 3-letter code (USD, SGD,
+  EUR, GBP, INR, AUD, CAD, JPY, CHF). The three parts can be in any order, so
+  "USD 1600 monthly" is equally fine. If the notes give a weekly or per-day
+  figure, do NOT convert it — put the figure you were given in a "Retainer
+  Rollover"-style custom clause instead and omit the Retainer key.
+- Effective: ISO format only. "start of August" with no year is not enough to
+  guess — omit the key.
+- Lock-in: "6", "6 months" and "none" are all accepted. A minimum term, a
+  commitment period and a lock-in all mean the same thing here.
+
+## 2. Parties
+
+Two optional sections, same keys in each.
+
 ## Client
 
-Legal Name: <registered company name>
+Legal Name: <registered entity name, e.g. Acme Holdings PTE LTD>
 Address:
 <address line 1>
 <address line 2>
-Signatory: <name> <<email>>
-Title: <job title, e.g. Director>
+Signatory: <full name> <<email>>
+Title: <their job title, e.g. Director>
 
 ## Agency
 
-Legal Name: <agency legal name>
-Address: <agency address>
-Signatory: <name> <<email>>
+Legal Name: <agency legal entity>
+Address: <single-line address is fine too>
+Signatory: <full name> <<email>>
 Title: <job title>
+
+A bare "Address:" absorbs every following line until the next "Key:" line, so
+multi-line addresses work. Keep the email inside angle brackets on the
+Signatory line.
+
+## 3. Clauses
+
+This section is where judgement is needed, so read carefully.
+
+Omitting the Clauses section entirely gives the full standard ActiveSet
+retainer — all ${STANDARD_CLAUSE_HEADINGS.length} clauses, correctly worded. That is usually the right
+answer. Only add this section when the notes actually change something.
+
+Inside it, each clause is an H3 heading followed by its body:
 
 ## Clauses
 
-### <Clause heading>
+### Scope of Services
 
-<clause body in markdown — paragraphs, "- " bullets, **bold** all supported>
+<body in markdown>
 
-Rules:
-- Every section is optional. Omit anything the notes don't cover — the standard
-  ActiveSet retainer clauses and defaults fill the gaps. Do not invent facts.
-- The Clauses section only needs the clauses that differ from the standard
-  template (usually just Scope of Services). A heading that matches a standard
-  clause replaces that clause's text; any other heading is added as a new
-  clause at the end. A body of "[remove]" deletes a standard clause.
-- The Term & Minimum Commitment clause is generated from Effective, Retainer
-  and Lock-in — do not write it by hand.
-- Retainer amounts are plain numbers (1600, not $1,600).
-- Status is one of: draft, sent, approved, rejected, lost. Default to draft.`;
+Four behaviours, decided by the heading you use:
+
+1. REPLACE — a heading matching a standard clause swaps that clause's wording
+   in place, keeping its position. This is the common case: the notes describe
+   what the retainer covers, so you write a "### Scope of Services" block.
+2. ADD — any other heading is appended as a new clause at the end. Use this for
+   genuinely new terms ("### Retainer Rollover", "### Response Times").
+3. KEEP — a matching heading with an empty body keeps the standard wording.
+   Only useful for re-ordering.
+4. REMOVE — a body of exactly "[remove]" deletes a standard clause. Use this
+   only when the notes explicitly say a protection is being dropped.
+
+Heading matching ignores case, punctuation and "and" vs "&", so "scope of
+services" and "Scope of Services" both hit the same clause.
+
+The ${STANDARD_CLAUSE_HEADINGS.length} standard headings, in their default order:
+
+${STANDARD_CLAUSE_HEADINGS.map((h, i) => `${String(i + 1).padStart(2)}. ${h.heading}`).join('\n')}
+
+Two hard rules for clauses:
+
+- NEVER write the "Term & Minimum Commitment" clause. It is generated from
+  Effective, Retainer and Lock-in. Writing it by hand freezes the wording and
+  it will silently contradict the commercial terms when they are edited later.
+- Do not rewrite the legal boilerplate (indemnification, liability, governing
+  law, severability, and so on) unless the notes specifically negotiated that
+  clause. Lawyer-reviewed wording is better than anything you'd improvise.
+
+Clause bodies support: paragraphs, "- " bullets, "1. " numbered lists,
+**bold**, *italic*, \`code\` and [links](https://example.com). They do NOT
+support tables, images, blockquotes or raw HTML — avoid them.
+
+# Worked example
+
+Notes: "Signed Acme Holdings (Singapore entity, 8 Marina View #43-01) for 1600
+a month starting Aug 1, six month minimum. Jane Smith their director signs,
+jane@acme.com. Covers bug fixes, perf work and new page builds. They asked that
+unused hours don't roll over."
+
+Correct output:
+
+# Acme Holdings — Retainer Agreement
+
+Client: Acme Holdings PTE LTD
+Agency: ActiveSet
+Status: draft
+Effective: 2026-08-01
+Retainer: 1600 USD monthly
+Lock-in: 6 months
+
+## Client
+
+Legal Name: Acme Holdings PTE LTD
+Address:
+8 Marina View, Asia Square Tower 1
+#43-01, Singapore
+Signatory: Jane Smith <jane@acme.com>
+Title: Director
+
+## Clauses
+
+### Scope of Services
+
+Under the terms of this Agreement, the Consultant will provide the following
+Services to the Company:
+
+- Proactive technical support and bug resolution to ensure uninterrupted
+  website stability.
+- Performance optimization and audits.
+- Development and deployment of new pages, templates and sections as needed.
+
+### Retainer Rollover
+
+Unused hours in any month do not roll over to the following month.
+
+Note what the example does NOT do: it omits Governing Law and Jurisdiction
+(not mentioned), omits the Agency section (nothing said about it), leaves every
+other standard clause alone, and never writes the Term clause.`;
 
 export interface ParsedContractMarkdown {
     proposal: Proposal;
