@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
-import { Funnel_Sans, Funnel_Display } from "next/font/google";
+import {
+  Funnel_Sans,
+  Funnel_Display,
+  Geist,
+  Geist_Mono,
+  Instrument_Serif,
+} from "next/font/google";
 import { AppProviders } from "@/components/AppProviders";
 import "./globals.css";
 
@@ -20,6 +26,29 @@ const funnelDisplay = Funnel_Display({
   display: "swap",
 });
 
+// Contract document typography. Scoped to the agreement viewer rather than the
+// app shell: Geist for body copy, Geist Mono for the reference/meta line, and
+// Instrument Serif for the title and clause headings.
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+  display: "swap",
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  variable: "--font-instrument-serif",
+  weight: "400",
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Activeset Tools",
   description: "Manage your project links with real-time collaboration",
@@ -32,7 +61,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="dark">
-      <body className={`${funnelSans.variable} ${funnelDisplay.variable} font-sans antialiased bg-background text-foreground`}>
+      <body className={`${funnelSans.variable} ${funnelDisplay.variable} ${geist.variable} ${geistMono.variable} ${instrumentSerif.variable} font-sans antialiased bg-background text-foreground`}>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

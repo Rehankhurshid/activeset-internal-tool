@@ -23,6 +23,12 @@ interface SignatureSectionProps {
     signedAt?: string;
     isPublic?: boolean;
     signatureAudit?: SignatureAudit;
+    /**
+     * Visual tone. 'default' is the blue proposal treatment; 'document' is the
+     * warm neutral used by the contract viewer, so the signing panel doesn't
+     * clash with the agreement it sits under.
+     */
+    tone?: 'default' | 'document';
 
     // DocuSeal Props
     onSign?: (signatureData: string, method: SignatureAudit['method']) => Promise<void>;
@@ -124,8 +130,10 @@ export default function SignatureSection({
     signedAt,
     isPublic = false,
     signatureAudit,
+    tone = 'default',
     onSign
 }: SignatureSectionProps) {
+    const isDoc = tone === 'document';
     const containerRef = useRef<HTMLDivElement>(null);
     const defaultSign = useRef<SignatureCanvas>(null);
     const [canvasSize, setCanvasSize] = useState({ width: 500, height: 200 });
@@ -322,11 +330,24 @@ export default function SignatureSection({
     }
 
     return (
-        <div id="signature-section" className="bg-blue-50 border-t-2 border-blue-500 md:p-12 p-6 scroll-mt-24 no-print">
-            <h3 className="text-2xl font-bold text-blue-900 mb-2">
+        <div
+            id="signature-section"
+            className={
+                isDoc
+                    ? 'bg-white rounded-[20px] ring-1 ring-stone-900/[0.06] shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-8px_rgba(28,25,23,0.10)] md:p-12 p-6 mt-5 scroll-mt-24 no-print'
+                    : 'bg-blue-50 border-t-2 border-blue-500 md:p-12 p-6 scroll-mt-24 no-print'
+            }
+        >
+            <h3
+                className={
+                    isDoc
+                        ? 'contract-heading text-[26px] leading-snug text-stone-900 mb-1.5'
+                        : 'text-2xl font-bold text-blue-900 mb-2'
+                }
+            >
                 Sign to Approve
             </h3>
-            <p className="text-sm text-blue-600 mb-6">
+            <p className={isDoc ? 'text-[14px] text-stone-500 mb-7' : 'text-sm text-blue-600 mb-6'}>
                 Please review the {documentNoun.toLowerCase()} above. When you are ready, choose your preferred signing method below.
             </p>
 
@@ -384,9 +405,13 @@ export default function SignatureSection({
                                     <button
                                         key={font.name}
                                         onClick={() => setSelectedFont(font.value)}
-                                        className={`p-3 border rounded-md text-center transition-all ${selectedFont === font.value
-                                            ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-200'
-                                            : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50 text-slate-700'
+                                        className={`p-3 border text-center transition-all ${isDoc ? 'rounded-xl' : 'rounded-md'} ${selectedFont === font.value
+                                            ? isDoc
+                                                ? 'border-stone-900 bg-stone-50 text-stone-900 ring-1 ring-stone-900/10'
+                                                : 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-200'
+                                            : isDoc
+                                                ? 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50 text-stone-700'
+                                                : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50 text-slate-700'
                                             }`}
                                     >
                                         <div className="text-xl overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontFamily: font.value }}>
@@ -417,7 +442,11 @@ export default function SignatureSection({
                     <Button
                         onClick={handleClear}
                         variant="outline"
-                        className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
+                        className={
+                            isDoc
+                                ? 'flex-1 rounded-full border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-800'
+                                : 'flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800'
+                        }
                     >
                         <Eraser className="w-4 h-4 mr-2" />
                         Clear
@@ -425,7 +454,11 @@ export default function SignatureSection({
                     <Button
                         onClick={handleSave}
                         disabled={!isSigned || isSubmitting}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all"
+                        className={
+                            isDoc
+                                ? 'flex-1 rounded-full bg-stone-900 hover:bg-stone-800 text-white shadow-sm transition-all'
+                                : 'flex-1 bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all'
+                        }
                     >
                         {isSubmitting ? (
                             <span className="flex items-center gap-2">
