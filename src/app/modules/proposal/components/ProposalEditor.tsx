@@ -22,7 +22,7 @@ import RichTextEditor from "./RichTextEditor";
 import { generateProposalDraft, generateProposalBlock } from "../services/aiClient";
 import { DatePicker } from "@/components/ui/date-picker";
 import HistoryPanel from "./HistoryPanel";
-import ComposeMarkdownDialog from "./ComposeMarkdownDialog";
+import ComposeMarkdownDialog, { PROPOSAL_COMPOSE_SPEC } from "./ComposeMarkdownDialog";
 import { serializeProposalToMarkdown, mergeParsedIntoProposal } from "../utils/markdownProposal";
 import { RESOURCE_KIND_META, resolveResourceKind } from "../lib/proposalResources";
 import { toast } from "sonner";
@@ -2769,6 +2769,7 @@ Example:
         open={markdownEditOpen}
         onOpenChange={setMarkdownEditOpen}
         initialMarkdown={markdownDraft}
+        spec={PROPOSAL_COMPOSE_SPEC}
         dialogTitle="Edit as Markdown"
         submitLabel="Apply Changes"
         onCreate={(parsed, declared) => {

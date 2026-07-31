@@ -9,7 +9,10 @@ import ContractEditor from '@/app/modules/proposal/components/ContractEditor';
 import ContractViewer from '@/app/modules/proposal/components/ContractViewer';
 import LoadingScreen from '@/app/modules/proposal/components/LoadingScreen';
 import NewProposalWizard from '@/app/modules/proposal/components/NewProposalWizard';
-import ComposeMarkdownDialog from '@/app/modules/proposal/components/ComposeMarkdownDialog';
+import ComposeMarkdownDialog, {
+    PROPOSAL_COMPOSE_SPEC,
+    CONTRACT_COMPOSE_SPEC,
+} from '@/app/modules/proposal/components/ComposeMarkdownDialog';
 import { proposalService } from '@/app/modules/proposal/services/ProposalService';
 import { templateService } from '@/app/modules/proposal/services/TemplateService';
 import { buildBlankContract } from '@/app/modules/proposal/lib/contractTemplate';
@@ -33,6 +36,7 @@ export default function ProposalPage() {
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [wizardOpen, setWizardOpen] = useState(false);
     const [markdownComposeOpen, setMarkdownComposeOpen] = useState(false);
+    const [contractMarkdownOpen, setContractMarkdownOpen] = useState(false);
 
     // All useEffect hooks must be called before any early returns
     useEffect(() => {
@@ -141,6 +145,13 @@ export default function ProposalPage() {
         setMarkdownComposeOpen(true);
     };
 
+    const handleCreateContractFromMarkdown = () => {
+        setContractMarkdownOpen(true);
+    };
+
+    // Both compose dialogs hand off the same way — the draft opens in the
+    // editor (ContractEditor when documentType is 'contract') for review
+    // before it is saved.
     const handleMarkdownCreate = (draft: Proposal) => {
         setEditingTemplate(null);
         setSelectedProposal(draft);
@@ -405,6 +416,7 @@ export default function ProposalPage() {
                 onCreateProposal={handleCreateProposal}
                 onCreateContract={handleCreateContract}
                 onCreateFromMarkdown={handleCreateFromMarkdown}
+                onCreateContractFromMarkdown={handleCreateContractFromMarkdown}
                 onCreateFromTemplate={handleCreateFromTemplate}
                 onEditTemplate={handleEditTemplate}
                 onDeleteTemplate={handleDeleteTemplate}
@@ -422,6 +434,15 @@ export default function ProposalPage() {
             <ComposeMarkdownDialog
                 open={markdownComposeOpen}
                 onOpenChange={setMarkdownComposeOpen}
+                spec={PROPOSAL_COMPOSE_SPEC}
+                onCreate={handleMarkdownCreate}
+            />
+            <ComposeMarkdownDialog
+                open={contractMarkdownOpen}
+                onOpenChange={setContractMarkdownOpen}
+                spec={CONTRACT_COMPOSE_SPEC}
+                dialogTitle="Compose Agreement from Markdown"
+                submitLabel="Create Agreement"
                 onCreate={handleMarkdownCreate}
             />
             <Toaster />

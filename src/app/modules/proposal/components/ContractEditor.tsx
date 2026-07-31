@@ -37,6 +37,7 @@ import {
     Sparkles,
     Building2,
     ScrollText,
+    FileCode2,
 } from 'lucide-react';
 import {
     DndContext,
@@ -66,6 +67,11 @@ import {
     formatMoney,
     STANDARD_CLAUSE_HEADINGS,
 } from '../lib/contractTemplate';
+import {
+    serializeContractToMarkdown,
+    mergeParsedIntoContract,
+} from '../utils/markdownContract';
+import ComposeMarkdownDialog, { CONTRACT_COMPOSE_SPEC } from './ComposeMarkdownDialog';
 
 const RichTextEditor = dynamic(() => import('./RichTextEditor'), { ssr: false });
 
@@ -207,6 +213,8 @@ export default function ContractEditor({
     loading = false,
 }: ContractEditorProps) {
     const [formData, setFormData] = useState<Proposal>(() => ensureContract(proposal));
+    const [markdownEditOpen, setMarkdownEditOpen] = useState(false);
+    const [markdownDraft, setMarkdownDraft] = useState('');
 
     useEffect(() => {
         if (proposal) setFormData(ensureContract(proposal));
@@ -361,6 +369,19 @@ export default function ContractEditor({
                             </p>
                         </div>
                     </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                        onClick={() => {
+                            setMarkdownDraft(serializeContractToMarkdown(formData));
+                            setMarkdownEditOpen(true);
+                        }}
+                        disabled={isLocked}
+                        title="Edit as Markdown"
+                        className="bg-[#333] hover:bg-[#444] text-white border-none h-9 w-9 p-0"
+                    >
+                        <FileCode2 className="w-4 h-4" />
+                        <span className="sr-only">Edit as Markdown</span>
+                    </Button>
                     <Button
                         onClick={handleSave}
                         disabled={loading || isLocked}
@@ -375,8 +396,23 @@ export default function ContractEditor({
                             {isLocked ? 'Locked' : 'Save Contract'}
                         </span>
                     </Button>
+                    </div>
                 </div>
             </div>
+
+            {/* Edit as Markdown — the whole agreement as one document */}
+            <ComposeMarkdownDialog
+                open={markdownEditOpen}
+                onOpenChange={setMarkdownEditOpen}
+                initialMarkdown={markdownDraft}
+                spec={CONTRACT_COMPOSE_SPEC}
+                dialogTitle="Edit as Markdown"
+                submitLabel="Apply Changes"
+                onCreate={(parsed, declared) => {
+                    setFormData((prev) => mergeParsedIntoContract(prev, parsed, declared));
+                    toast.success('Markdown changes applied');
+                }}
+            />
 
             <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-5">
                 {isLocked && (

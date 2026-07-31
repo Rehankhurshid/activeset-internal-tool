@@ -26,6 +26,7 @@ interface DashboardProps {
     onCreateProposal: () => void;
     onCreateContract: () => void;
     onCreateFromMarkdown: () => void;
+    onCreateContractFromMarkdown: () => void;
     onCreateFromTemplate: (template: ProposalTemplate) => void;
     onEditTemplate: (template: ProposalTemplate) => void;
     onDeleteTemplate: (templateId: string) => void;
@@ -43,6 +44,7 @@ export default function Dashboard({
     onCreateProposal,
     onCreateContract,
     onCreateFromMarkdown,
+    onCreateContractFromMarkdown,
     onCreateFromTemplate,
     onEditTemplate,
     onDeleteTemplate,
@@ -245,13 +247,18 @@ export default function Dashboard({
                                         <Plus className="w-4 h-4 mr-2" />
                                         Blank Proposal
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={onCreateFromMarkdown}>
+                                        <FileCode2 className="w-4 h-4 mr-2" />
+                                        Proposal from Markdown
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={onCreateContract}>
                                         <FileText className="w-4 h-4 mr-2" />
                                         Retainer Contract
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={onCreateFromMarkdown}>
+                                    <DropdownMenuItem onClick={onCreateContractFromMarkdown}>
                                         <FileCode2 className="w-4 h-4 mr-2" />
-                                        From Markdown
+                                        Contract from Markdown
                                     </DropdownMenuItem>
 
                                     {templates.length > 0 && (

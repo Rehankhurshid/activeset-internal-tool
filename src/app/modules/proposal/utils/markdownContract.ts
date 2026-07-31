@@ -726,8 +726,13 @@ export const serializeContractToMarkdown = (p: Proposal): string => {
         ...c.clauses.flatMap(clause => [
             `### ${decodeHtmlEntities(clause.heading)}`,
             '',
-            clauseHtmlToMarkdown(clause.body),
-            '',
+            // Auto-generated clauses (Term & Minimum Commitment) are rebuilt
+            // from the commercial fields when the document is parsed back in.
+            // Writing the body out would freeze today's wording and take
+            // manual control of it, so a later edit to the retainer or lock-in
+            // would leave the clause contradicting the fields above it. An
+            // empty body means "keep the standard text" — see resolveClauses.
+            ...(clause.generated ? [] : [clauseHtmlToMarkdown(clause.body), '']),
         ]),
     ];
 

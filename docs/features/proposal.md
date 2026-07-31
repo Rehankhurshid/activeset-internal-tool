@@ -570,10 +570,19 @@ Writes mirror `ProposalService`: the `proposals/{id}` record plus the
 `--update` refuses locked (signed/archived) records and merges via
 `mergeParsedIntoContract`, preserving signature data, timestamps and audit info.
 
-**Exports for UI wiring**: `CONTRACT_MARKDOWN_TEMPLATE`,
-`CONTRACT_AI_FORMAT_INSTRUCTIONS`, `parseContractMarkdown`,
-`serializeContractToMarkdown`, `mergeParsedIntoContract` — the same shape
-`ComposeMarkdownDialog` already consumes for proposals.
+**UI entry points**: the dashboard's "New" menu has **Contract from Markdown**
+(alongside **Proposal from Markdown**), and the contract editor header has an
+**Edit as Markdown** button that serializes the current agreement, lets you
+re-edit it as one document, and applies it via `mergeParsedIntoContract` —
+signature data, timestamps and audit info are preserved.
+`ComposeMarkdownDialog` is shared by both document types and takes a
+`spec` prop (`PROPOSAL_COMPOSE_SPEC` / `CONTRACT_COMPOSE_SPEC`) carrying the
+template, AI prompt, parser and description.
+
+Serialization deliberately omits the body of auto-generated clauses (Term &
+Minimum Commitment), emitting just the heading. Writing the body out would
+freeze the current wording and flip the clause to manual, so a later edit to
+the retainer or lock-in would leave it contradicting the fields above it.
 
 ---
 
