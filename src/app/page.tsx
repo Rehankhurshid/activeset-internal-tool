@@ -1,41 +1,153 @@
 'use client';
 
-import { LoginForm, useAuth, useModuleAccess } from '@/modules/auth-access';
-import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { FolderOpen, FileText, Sparkles, Lock, ListChecks, Wrench } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowRight, Lock, Sparkle } from '@phosphor-icons/react';
+import { LoginForm, useAuth } from '@/modules/auth-access';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AppNavigation } from '@/shared/ui';
 import { DashboardAlertPanel } from '@/components/alerts/DashboardAlertPanel';
 import { DailyHealthPanel } from '@/components/alerts/DailyHealthPanel';
+import { RecentProjectsPanel } from '@/components/dashboard/RecentProjectsPanel';
+import { useNavItems, type ResolvedNavItem } from '@/components/shell';
+import { Kbd, KeyCombo, useListNavigation, useShortcut } from '@/shared/keyboard';
 import { cn } from '@/lib/utils';
 
+const MODULE_TINTS: Record<string, string> = {
+  '/modules/project-links': 'bg-sky-500/12 text-sky-400',
+  '/modules/proposal': 'bg-fuchsia-500/12 text-fuchsia-400',
+  '/modules/screenshot-runner': 'bg-amber-500/12 text-amber-400',
+  '/modules/internal-tools': 'bg-violet-500/12 text-violet-400',
+  '/modules/checklist-creator': 'bg-emerald-500/12 text-emerald-400',
+};
 
+const MODULE_TAGS: Record<string, string> = {
+  '/modules/proposal': 'AI',
+  '/modules/checklist-creator': 'New',
+};
+
+function greeting(date: Date): string {
+  const h = date.getHours();
+  if (h < 5) return 'Still up';
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function ModuleRow({
+  item,
+  index,
+  selected,
+  rowProps,
+}: {
+  item: ResolvedNavItem;
+  index: number;
+  selected: boolean;
+  rowProps: Record<string, unknown>;
+}) {
+  const router = useRouter();
+  const locked = !item.loading && !item.hasAccess;
+  const Icon = item.icon;
+  const tag = MODULE_TAGS[item.href];
+
+  // 1–9 jump straight to a module. Hidden from the sheet: the row itself shows the number.
+  useShortcut({
+    id: `home-open-${index}`,
+    keys: String(index + 1),
+    label: `Open ${item.label}`,
+    group: 'Navigation',
+    hidden: true,
+    enabled: !locked,
+    handler: () => router.push(item.href),
+  });
+
+  if (item.loading) {
+    return (
+      <div className="sh-row h-[4.25rem]">
+        <Skeleton className="size-5 rounded" />
+        <Skeleton className="size-10 rounded-lg" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-3 w-64" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={locked ? '#' : item.href}
+      aria-disabled={locked}
+      onClick={(e) => locked && e.preventDefault()}
+      className={cn('sh-row h-[4.25rem] group', locked && 'cursor-not-allowed')}
+      {...rowProps}
+    >
+      <Kbd className={cn('shrink-0', selected && 'text-primary')}>{index + 1}</Kbd>
+      <span
+        className={cn(
+          'flex size-10 shrink-0 items-center justify-center rounded-lg',
+          locked ? 'bg-muted text-muted-foreground' : MODULE_TINTS[item.href] ?? 'bg-muted text-foreground',
+        )}
+      >
+        {locked ? <Lock className="size-5" /> : <Icon className="size-5" weight="duotone" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className={cn('truncate text-sm font-medium', locked && 'text-muted-foreground')}>{item.label}</span>
+          {tag && !locked && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-medium text-primary">
+              <Sparkle className="size-2.5" weight="fill" />
+              {tag}
+            </span>
+          )}
+        </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {locked ? 'No access — ask an admin.' : item.description}
+        </span>
+      </span>
+      <span className="hidden shrink-0 items-center gap-3 sm:flex">
+        {!locked && <KeyCombo keys={item.keys} className="opacity-60 transition-opacity group-hover:opacity-100" />}
+        <ArrowRight
+          className={cn(
+            'size-4 text-muted-foreground transition-all',
+            selected ? 'translate-x-0 opacity-100 text-primary' : '-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100',
+          )}
+        />
+      </span>
+    </Link>
+  );
+}
 
 export default function Home() {
-  const { user, loading, isAdmin } = useAuth();
-  const { hasAccess: hasProposalAccess, loading: proposalAccessLoading } = useModuleAccess('proposal');
-  const { hasAccess: hasProjectLinksAccess, loading: projectLinksAccessLoading } = useModuleAccess('project-links');
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const modules = useNavItems().filter((item) => item.href !== '/');
 
-  // Render the app frame (nav + content skeleton) immediately while Firebase
-  // auth resolves, instead of blanking the whole page on a centered spinner.
+  const { index, itemProps } = useListNavigation({
+    count: modules.length,
+    onSelect: (i) => {
+      const item = modules[i];
+      if (item && (item.loading || item.hasAccess)) router.push(item.href);
+    },
+    selectLabel: 'Open module',
+    hint: true,
+  });
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <AppNavigation
-          title="Dashboard"
-          proposalAccess={hasProposalAccess}
-          projectLinksAccess={hasProjectLinksAccess}
-          accessLoading
-        />
-        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
-          <div className="mb-6 sm:mb-8 lg:mb-12 space-y-2">
-            <Skeleton className="h-9 w-48" />
-            <Skeleton className="h-5 w-64" />
+      <div className="flex min-h-screen flex-col bg-background">
+        <AppNavigation title="Home" />
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+          <div className="mb-8 space-y-2">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-8 w-64" />
           </div>
-          <div className="max-w-6xl mx-auto grid gap-4 sm:gap-6 lg:grid-cols-2">
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-40 w-full" />
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <Skeleton className="h-80 w-full rounded-xl" />
+            <div className="space-y-4">
+              <Skeleton className="h-36 w-full rounded-xl" />
+              <Skeleton className="h-36 w-full rounded-xl" />
+            </div>
           </div>
         </main>
       </div>
@@ -44,143 +156,57 @@ export default function Home() {
 
   if (!user) return <LoginForm />;
 
-  const renderModuleCard = (
-    href: string,
-    icon: React.ReactNode,
-    iconBg: string,
-    title: string,
-    description: string,
-    hasAccess: boolean,
-    accessLoading: boolean,
-    extra?: React.ReactNode
-  ) => {
-    if (accessLoading) {
-      return (
-        <Card className="h-full">
-          <CardHeader>
-            <Skeleton className="mb-4 w-12 h-12 rounded-lg" />
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-4 w-full mt-2" />
-          </CardHeader>
-        </Card>
-      );
-    }
-
-    if (!hasAccess && !isAdmin) {
-      return (
-        <Card className="h-full opacity-50 cursor-not-allowed">
-          <CardHeader>
-            <div className="mb-4 w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
-              <Lock className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <CardTitle className="text-muted-foreground">{title}</CardTitle>
-            <CardDescription>You don&apos;t have access to this module. Contact admin.</CardDescription>
-          </CardHeader>
-        </Card>
-      );
-    }
-
-    return (
-      <Link href={href} className="block group h-full">
-        <Card className="h-full transition-shadow duration-200 ease-out hover:border-primary hover:shadow-lg hover:shadow-primary/5 group-hover:scale-[1.02] group-active:scale-[0.98]">
-          <CardHeader>
-            <div className={cn(
-              "mb-4 w-12 h-12 rounded-lg flex items-center justify-center transition-transform duration-200 ease-out group-hover:scale-110",
-              iconBg
-            )}>
-              {icon}
-            </div>
-            <CardTitle className="text-xl sm:text-2xl">{title}</CardTitle>
-            <CardDescription className="text-sm sm:text-base">{description}</CardDescription>
-          </CardHeader>
-          {extra && <CardContent>{extra}</CardContent>}
-        </Card>
-      </Link>
-    );
-  };
+  const now = new Date();
+  const firstName = user.displayName?.split(' ')[0] ?? user.email?.split('@')[0] ?? 'there';
+  const dateLabel = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <AppNavigation
-        title="Dashboard"
-        proposalAccess={hasProposalAccess}
-        projectLinksAccess={hasProjectLinksAccess}
-        accessLoading={proposalAccessLoading || projectLinksAccessLoading}
-      />
+    <div className="flex min-h-screen flex-col bg-background">
+      <AppNavigation title="Home" />
 
-      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
-        <div className="mb-6 sm:mb-8 lg:mb-12">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight mb-2">
-            Welcome back
-          </h1>
-          <p className="text-muted-foreground text-sm sm:text-base">
-            Select a module to get started
-          </p>
-        </div>
+      <main className="relative flex-1">
+        <div className="sh-glow pointer-events-none absolute inset-x-0 top-0 h-64" aria-hidden />
+        <div className="relative mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+          <header className="mb-8">
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{dateLabel}</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+              {greeting(now)}, {firstName}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Press a number to open a module, or <KeyCombo keys="mod+k" className="mx-0.5" /> to go anywhere.
+            </p>
+          </header>
 
-
-
-        <div className="max-w-6xl mx-auto">
-          <DashboardAlertPanel className="mb-6" />
-          <DailyHealthPanel className="mb-6" />
-
-          <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-            {/* Client Projects Module */}
-            {renderModuleCard(
-              "/modules/project-links",
-              <FolderOpen className="h-6 w-6 text-blue-500" />,
-              "bg-blue-500/10 dark:bg-blue-500/20",
-              "Client Projects",
-              "Manage and organize all your client projects in one place.",
-              hasProjectLinksAccess,
-              projectLinksAccessLoading
-            )}
-
-            {/* Proposal Generator Module — hidden for users without access */}
-            {(proposalAccessLoading || hasProposalAccess) && renderModuleCard(
-              "/modules/proposal",
-              <FileText className="h-6 w-6 text-purple-500" />,
-              "bg-purple-500/10 dark:bg-purple-500/20",
-              "Proposal Generator",
-              "Create professional website proposals using Gemini AI.",
-              hasProposalAccess,
-              proposalAccessLoading,
-              <div className="flex items-center gap-1.5 text-xs text-purple-500 font-medium">
-                <Sparkles className="h-3 w-3" />
-                <span>AI Powered</span>
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <section aria-labelledby="modules-heading">
+              <div className="mb-2 flex items-center justify-between px-1">
+                <h2 id="modules-heading" className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Modules
+                </h2>
+                <span className="hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:flex">
+                  <Kbd>J</Kbd>
+                  <Kbd>K</Kbd>
+                  <span>move</span>
+                  <span className="mx-1 text-muted-foreground/40">·</span>
+                  <Kbd>↵</Kbd>
+                  <span>open</span>
+                </span>
               </div>
-            )}
-
-            {/* Checklist Creator Module */}
-            {/* Internal Tools Module */}
-            {renderModuleCard(
-              "/modules/internal-tools",
-              <Wrench className="h-6 w-6 text-violet-500" />,
-              "bg-violet-500/10 dark:bg-violet-500/20",
-              "Internal Tools",
-              "Screenshot Runner, Chrome extensions and setup instructions in one place.",
-              true,
-              false
-            )}
-
-            {renderModuleCard(
-              "/modules/checklist-creator",
-              <ListChecks className="h-6 w-6 text-emerald-500" />,
-              "bg-emerald-500/10 dark:bg-emerald-500/20",
-              "Checklist Creator",
-              "Generate and manage SOP templates with AI.",
-              true, // Open access for now
-              false,
-              <div className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
-                <Sparkles className="h-3 w-3" />
-                <span>New</span>
+              <div className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/70 bg-card/60">
+                {modules.map((item, i) => (
+                  <ModuleRow key={item.href} item={item} index={i} selected={i === index} rowProps={itemProps(i)} />
+                ))}
               </div>
-            )}
+            </section>
+
+            <aside className="space-y-6">
+              <RecentProjectsPanel />
+              <DashboardAlertPanel />
+              <DailyHealthPanel />
+            </aside>
           </div>
-
-
         </div>
-      </main >
-    </div >
+      </main>
+    </div>
   );
 }

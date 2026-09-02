@@ -30,6 +30,7 @@ import { ProjectBillingButton } from '@/components/projects/ProjectBillingButton
 import { normalizeBillingType } from '@/types';
 import { toast } from 'sonner';
 import { DesktopTabSelector, MobileTabSelector, type TabOption, type TabStat } from '../components/ProjectTabs';
+import { ProjectShortcuts } from '../components/ProjectShortcuts';
 
 // Non-default tabs are code-split: only the audit tab (default) is bundled into
 // the route entry; the rest load on first open. Cuts ~7.5k lines from initial JS.
@@ -339,6 +340,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     <span className="hidden sm:inline">Embed</span>
                 </Button>
             </AppNavigation>
+            <ProjectShortcuts
+                project={{ id: project.id, name: project.name, client: project.client }}
+                tabs={tabOptions}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                onShare={handleShareAuditDashboard}
+                onEmbed={() => setIsEmbedDialogOpen(true)}
+            />
 
             <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6 lg:space-y-8">
                 {/* Project Info */}

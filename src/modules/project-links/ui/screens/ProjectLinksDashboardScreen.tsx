@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   Plus,
@@ -28,9 +29,31 @@ import { cn } from '@/lib/utils';
 import { AppNavigation } from '@/shared/ui';
 import { toast } from 'sonner';
 import { DashboardToolbar, type StatusFilter } from '@/modules/project-links/ui/components/DashboardToolbar';
+import { useListNavigation, useShortcut } from '@/shared/keyboard';
 
 const MAINTENANCE_TAGS: ProjectTag[] = ['retainer', 'maintenance', 'subscription'];
 const ACTIVE_TAGS: ProjectTag[] = ['one_time', 'consulting'];
+
+/** `1`–`6` switch the status filter. One component per option keeps hook order stable. */
+function StatusShortcut({
+  option,
+  index,
+  onSelect,
+}: {
+  option: { value: StatusFilter; label: string };
+  index: number;
+  onSelect: (value: StatusFilter) => void;
+}) {
+  useShortcut({
+    id: `projects-status-${option.value}`,
+    keys: String(index + 1),
+    label: index === 0 ? 'Status filter 1–6' : `Filter: ${option.label}`,
+    group: 'Projects',
+    hidden: index > 0,
+    handler: () => onSelect(option.value),
+  });
+  return null;
+}
 
 export function ProjectLinksDashboardScreen() {
   const { user } = useAuth();
@@ -44,6 +67,13 @@ export function ProjectLinksDashboardScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('maintenance');
   const [activeTags, setActiveTags] = useState<ProjectTag[]>([]);
   const { isLoading: isCreatingProject, execute: executeCreateProject } = useAsyncOperation<string>();
+  const router = useRouter();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // `?new=1` (the command palette's "New project") opens the create form straight away.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === '1') setIsCreating(true);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -144,6 +174,52 @@ export function ProjectLinksDashboardScreen() {
     }
     return sortedGroups;
   }, [filteredProjects]);
+
+  // Keyboard cursor runs over the cards in the order they are painted.
+  const navProjects = useMemo(
+    () => (groupByClient ? groupedProjects.flatMap((g) => g.projects) : filteredProjects),
+    [groupByClient, groupedProjects, filteredProjects],
+  );
+  const { index: focusedIndex, itemProps } = useListNavigation({
+    count: navProjects.length,
+    onSelect: (i) => {
+      const p = navProjects[i];
+      if (p) router.push(`/modules/project-links/${p.id}`);
+    },
+    group: 'Projects',
+    selectLabel: 'Open project',
+    hint: true,
+  });
+  useShortcut({ id: 'projects-new', keys: 'n', label: 'New project', group: 'Projects', hint: true, handler: () => setIsCreating(true) });
+  useShortcut({ id: 'projects-search', keys: '/', label: 'Search projects', group: 'Projects', handler: () => searchInputRef.current?.focus() });
+  useShortcut({ id: 'projects-view', keys: 'v', label: 'Toggle grid / list', group: 'Projects', handler: () => setViewMode((m) => (m === 'grid' ? 'list' : 'grid')) });
+  useShortcut({ id: 'projects-group', keys: 'c', label: 'Group by client', group: 'Projects', handler: () => setGroupByClient((g) => !g) });
+  useShortcut({
+    id: 'projects-cancel',
+    keys: 'escape',
+    label: 'Cancel new project',
+    group: 'Projects',
+    hidden: true,
+    enabled: isCreating,
+    allowInInput: true,
+    handler: () => {
+      setIsCreating(false);
+      setNewProjectName('');
+    },
+  });
+
+  const renderCard = (project: Project) => {
+    const i = navProjects.indexOf(project);
+    return (
+      <div
+        key={project.id}
+        {...itemProps(i)}
+        className={cn('rounded-lg transition-shadow duration-100', i === focusedIndex && 'sh-nav-focus')}
+      >
+        <ProjectCard project={project} onDelete={handleDeleteProject} />
+      </div>
+    );
+  };
 
   // Counts — single pass over projects, recomputed only when projects change.
   const {
@@ -269,7 +345,11 @@ export function ProjectLinksDashboardScreen() {
                 </div>
               </div>
 
+              {statusOptions.map((option, i) => (
+                <StatusShortcut key={option.value} option={option} index={i} onSelect={setStatusFilter} />
+              ))}
               <DashboardToolbar
+                searchInputRef={searchInputRef}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 statusFilter={statusFilter}
@@ -364,13 +444,7 @@ export function ProjectLinksDashboardScreen() {
                           ? "grid gap-3 sm:gap-4 md:gap-6 md:grid-cols-2 xl:grid-cols-3"
                           : "space-y-3 sm:space-y-4"
                       )}>
-                        {clientProjects.map((project) => (
-                          <ProjectCard
-                            key={project.id}
-                            project={project}
-                            onDelete={handleDeleteProject}
-                          />
-                        ))}
+                        {clientProjects.map(renderCard)}
                       </div>
                     </section>
                   ))}
@@ -381,13 +455,7 @@ export function ProjectLinksDashboardScreen() {
                     ? "grid gap-3 sm:gap-4 md:gap-6 md:grid-cols-2 xl:grid-cols-3"
                     : "space-y-3 sm:space-y-4"
                 )}>
-                  {filteredProjects.map((project) => (
-                    <ProjectCard
-                      key={project.id}
-                      project={project}
-                      onDelete={handleDeleteProject}
-                    />
-                  ))}
+                  {filteredProjects.map(renderCard)}
                 </div>
               )
             ) : (
