@@ -59,8 +59,8 @@ src/modules/<module>/
 - `webflow`: Webflow dashboards and config persistence adapters
 - `checklists`: checklist overview, editor, template list, creator screen
 - `proposal`: proposal module screen over the current proposal implementation
-- `seo-engine`: SEO engine screen
 - `screenshot-runner`: screenshot runner screen
+- `internal-tools`: internal tools catalogue and setup instructions
 - `settings`: settings components public surface
 
 ## Quality Gates

@@ -24,7 +24,7 @@ import {
   Lock,
   Loader2,
   MonitorSmartphone,
-  PenLine,
+  Wrench,
   Search
 } from 'lucide-react';
 import { useState } from 'react';
@@ -116,9 +116,9 @@ export function AppNavigation({
                 loading={accessLoading}
               />
               <NavigationLink
-                href="/modules/seo-engine"
-                icon={<PenLine className="h-4 w-4" />}
-                label="SEO Engine"
+                href="/modules/internal-tools"
+                icon={<Wrench className="h-4 w-4" />}
+                label="Internal Tools"
                 hasAccess={true}
                 loading={false}
               />
@@ -245,9 +245,9 @@ export function AppNavigation({
                   onClick={() => setMobileMenuOpen(false)}
                 />
                 <MobileNavLink
-                  href="/modules/seo-engine"
-                  icon={<PenLine className="h-4 w-4" />}
-                  label="SEO Engine"
+                  href="/modules/internal-tools"
+                  icon={<Wrench className="h-4 w-4" />}
+                  label="Internal Tools"
                   hasAccess={true}
                   loading={false}
                   onClick={() => setMobileMenuOpen(false)}

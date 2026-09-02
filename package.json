@@ -27,7 +27,9 @@
     "verify:ui:staged": "npx tsx scripts/verify-ui.ts",
     "security:migrate-webflow-tokens": "tsx scripts/migrate-webflow-tokens.ts",
     "security:migrate-webflow-tokens:apply": "tsx scripts/migrate-webflow-tokens.ts --apply",
-    "security:deploy-firestore-rules": "tsx scripts/deploy-firestore-rules.ts"
+    "security:deploy-firestore-rules": "tsx scripts/deploy-firestore-rules.ts",
+    "extension:pack": "node scripts/pack-extension.mjs",
+    "extension:pack:all": "node scripts/pack-extension.mjs --all"
   },
   "dependencies": {
     "@activeset/schema-gen": "^0.1.0",
