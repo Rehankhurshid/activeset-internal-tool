@@ -97,10 +97,6 @@ Daily aggregated issue tracking across all projects:
 - Accessibility errors, low score pages (<60)
 - Per-project breakdown with worst pages
 
-### 5. SEO Engine
-
-AI-powered blog generation with Claude API and Webflow CMS publishing.
-
 ## Conventions
 
 - **SEO Data**: Stored in `seo` (WebflowSEO) and `openGraph` (WebflowOpenGraph) objects.

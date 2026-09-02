@@ -116,7 +116,7 @@ Same pattern for `[id]/page.tsx` (server-load the project doc → pass as `initi
 
 ## Explicitly out of scope
 
-- Proposal module, Webflow dashboards, SEO engine internals (they're already dynamic-imported or off the hot path).
+- Proposal module, Webflow dashboards (they're already dynamic-imported or off the hot path).
 - Rewriting the audit scan pipeline (server-side costs are a separate concern).
 - Firestore security-rules tightening (`allow read/write: if true` on most collections is a real issue, but it's a security task, not a performance one — flag it separately).
 
