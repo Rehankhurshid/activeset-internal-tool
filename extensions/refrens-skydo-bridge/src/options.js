@@ -1,31 +1,25 @@
 const $ = (id) => document.getElementById(id);
-const KEYS = ['appId', 'appSecret', 'refrensUrlKey', 'preferHostedPdf', 'sessionToken'];
 
-chrome.storage.local.get(KEYS, (s) => {
-  $('appId').value = s.appId || '';
-  $('appSecret').value = s.appSecret || '';
-  $('urlKey').value = s.refrensUrlKey || '';
-  $('preferHostedPdf').checked = !!s.preferHostedPdf;
-  $('sess').textContent = s.sessionToken
-    ? 'session token captured from a Refrens tab'
-    : 'no session token — open Refrens in a tab, or use API keys above';
-});
-
-$('save').onclick = () => {
-  chrome.storage.local.set({
-    appId: $('appId').value.trim(),
-    appSecret: $('appSecret').value.trim(),
-    refrensUrlKey: $('urlKey').value.trim(),
-    apiToken: null,        // force a fresh exchange with the new keys
-    apiTokenExp: 0
-  }, () => {
-    $('saved').textContent = 'Saved';
-    setTimeout(() => ($('saved').textContent = ''), 2000);
+function refresh() {
+  chrome.runtime.sendMessage({ type: 'STATUS' }, (res) => {
+    const s = (res && res.data) || {};
+    $('dot').className = `dot ${s.connected ? 'on' : 'off'}`;
+    $('status').textContent = s.connected ? 'Paired' : 'Not paired';
+    $('detail').textContent = s.connected
+      ? `${s.pairedAs || 'this browser'} · ${s.apiBase.replace(/^https?:\/\//, '')}` +
+        (s.pairedAt ? ` · since ${new Date(s.pairedAt).toLocaleDateString()}` : '')
+      : 'Pair from Internal Tools on app.activeset.co.';
+    $('unpair').disabled = !s.connected;
   });
-};
+}
 
+chrome.storage.local.get('preferHostedPdf', (s) => {
+  $('preferHostedPdf').checked = !!s.preferHostedPdf;
+});
 $('preferHostedPdf').onchange = () =>
   chrome.storage.local.set({ preferHostedPdf: $('preferHostedPdf').checked });
 
-$('clear').onclick = () =>
-  chrome.storage.local.remove(['sessionToken', 'sessionTokenExp', 'apiToken', 'apiTokenExp'], () => location.reload());
+$('open').onclick = () => chrome.runtime.sendMessage({ type: 'OPEN_TOOLS' });
+$('unpair').onclick = () => chrome.runtime.sendMessage({ type: 'UNPAIR' }, refresh);
+
+refresh();

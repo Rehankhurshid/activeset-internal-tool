@@ -1,39 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { ModeToggle } from '@/components/mode-toggle';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { useAuth } from '@/modules/auth-access';
-import {
-  Home,
-  LogOut,
-  User,
-  Menu,
-  FolderOpen,
-  FileText,
-  ListChecks,
-  Lock,
-  Loader2,
-  MonitorSmartphone,
-  Wrench,
-  Search
-} from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { cn } from '@/lib/utils';
-import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { CaretLeft, List, Lock, MagnifyingGlass, SignOut } from '@phosphor-icons/react';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/modules/auth-access';
+import { Kbd, KeyCombo, isTypingTarget, useShortcut } from '@/shared/keyboard';
+import { isNavItemActive, useNavItems } from '@/components/shell/nav-items';
 import { ScanActivityIndicator } from '@/components/navigation/ScanActivityIndicator';
 import { AlertIndicator } from '@/components/navigation/AlertIndicator';
+import { cn } from '@/lib/utils';
 
 interface AppNavigationProps {
   title?: string;
@@ -41,357 +21,169 @@ interface AppNavigationProps {
   backHref?: string;
   children?: React.ReactNode;
   className?: string;
+  /** Kept for call-site compatibility; module access now resolves inside the shell. */
   proposalAccess?: boolean;
   projectLinksAccess?: boolean;
   accessLoading?: boolean;
 }
 
+/** True while any overlay (dialog, menu, popover, sheet) is open. */
+function overlayIsOpen(): boolean {
+  return !!document.querySelector(
+    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"][data-state="open"], [data-slot="popover-content"][data-state="open"]',
+  );
+}
+
+/**
+ * The slim page header. Navigation between modules lives in the rail (desktop)
+ * or the sheet behind the menu button (mobile); this bar carries the page
+ * title, a back affordance and per-page actions passed as children.
+ */
 export function AppNavigation({
   title,
   showBackButton = false,
   backHref = '/',
   children,
   className,
-  proposalAccess = false,
-  projectLinksAccess = true,
-  accessLoading = false,
 }: AppNavigationProps) {
-  const pathname = usePathname();
-  const { user, logout, loading } = useAuth();
+  const router = useRouter();
+  const { user, loading } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Don't render navigation if user is not authenticated or still loading
-  if (loading || !user) {
-    return null;
-  }
+  useShortcut({
+    id: 'nav-back',
+    keys: 'escape',
+    label: 'Back',
+    group: 'Navigation',
+    enabled: showBackButton,
+    handler: (e) => {
+      // Esc inside a field just leaves the field, like Superhuman's search box.
+      if (isTypingTarget(e.target)) {
+        (e.target as HTMLElement).blur();
+        return;
+      }
+      if (overlayIsOpen()) return;
+      router.push(backHref);
+    },
+  });
 
-  const isHomePage = pathname === '/';
+  if (loading || !user) return null;
+
   return (
-    <header className={cn(
-      "sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-      className
-    )}>
-      <div className="container flex h-16 items-center px-4 sm:px-6 lg:px-8">
-        {/* Left Section */}
-        <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-          {showBackButton && (
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild>
-              <Link href={backHref}>
-                <Home className="h-4 w-4" />
-                <span className="sr-only">Back to home</span>
-              </Link>
-            </Button>
-          )}
+    <header
+      className={cn(
+        'sticky top-0 z-30 h-[var(--shell-header)] w-full border-b border-border/70 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70',
+        className,
+      )}
+    >
+      <div className="flex h-full items-center gap-1.5 px-2 sm:px-4">
+        <MobileMenu open={mobileMenuOpen} onOpenChange={setMobileMenuOpen} />
 
-          {title && (
-            <div className="flex items-center gap-2 min-w-0">
-              <h1 className="text-lg sm:text-xl font-semibold truncate">{title}</h1>
-            </div>
-          )}
+        {showBackButton && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" asChild>
+                <Link href={backHref} aria-label="Back">
+                  <CaretLeft className="size-4" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="flex items-center gap-2">
+              Back <Kbd>Esc</Kbd>
+            </TooltipContent>
+          </Tooltip>
+        )}
 
-          {/* Desktop Navigation */}
-          {isHomePage && (
-            <nav className="hidden md:flex items-center gap-1 ml-4">
-              <NavigationLink
-                href="/modules/project-links"
-                icon={<FolderOpen className="h-4 w-4" />}
-                label="Client Projects"
-                hasAccess={projectLinksAccess}
-                loading={accessLoading}
-              />
-              {(accessLoading || proposalAccess) && (
-                <NavigationLink
-                  href="/modules/proposal"
-                  icon={<FileText className="h-4 w-4" />}
-                  label="Proposals"
-                  hasAccess={proposalAccess}
-                  loading={accessLoading}
-                />
-              )}
-              <NavigationLink
-                href="/modules/screenshot-runner"
-                icon={<MonitorSmartphone className="h-4 w-4" />}
-                label="Screenshot Runner"
-                hasAccess={projectLinksAccess}
-                loading={accessLoading}
-              />
-              <NavigationLink
-                href="/modules/internal-tools"
-                icon={<Wrench className="h-4 w-4" />}
-                label="Internal Tools"
-                hasAccess={true}
-                loading={false}
-              />
-            </nav>
-          )}
-        </div>
+        {title && (
+          <h1 className="min-w-0 truncate px-1 text-sm font-medium tracking-tight sm:text-[15px]">{title}</h1>
+        )}
 
-        {/* Right Section */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <AlertIndicator />
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          {children}
           <ScanActivityIndicator />
-
-          {/* Command palette trigger — the ⌘K palette itself is mounted globally */}
+          <AlertIndicator />
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => window.dispatchEvent(new Event('commandk:open'))}
-            className="hidden sm:inline-flex h-8 gap-2 text-muted-foreground"
-            title="Search projects (⌘K)"
+            className="hidden h-8 gap-2 text-muted-foreground sm:inline-flex"
+            aria-label="Open command palette"
           >
-            <Search className="h-4 w-4" />
+            <MagnifyingGlass className="size-4" />
             <span className="hidden lg:inline">Search</span>
-            <kbd className="hidden lg:inline pointer-events-none select-none rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
-              ⌘K
-            </kbd>
+            <KeyCombo keys="mod+k" className="hidden lg:inline-flex" />
           </Button>
-
-          {/* User Info - Desktop */}
-          <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
-            <User className="h-4 w-4" />
-            <span className="max-w-[200px] truncate">{user?.email}</span>
-          </div>
-
-          <ModeToggle />
-
-          {/* User Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <User className="h-4 w-4" />
-                <span className="sr-only">User menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user?.displayName || 'User'}</p>
-                  <p className="text-xs leading-none text-muted-foreground truncate">
-                    {user?.email}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/" className="cursor-pointer">
-                  <Home className="mr-2 h-4 w-4" />
-                  Dashboard
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Mobile Menu - available on every page so users can navigate from anywhere */}
-          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden h-8 w-8">
-                <Menu className="h-4 w-4" />
-                <span className="sr-only">Toggle menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[88vw] max-w-sm p-0 flex flex-col">
-              <VisuallyHidden>
-                <SheetTitle>Navigation menu</SheetTitle>
-                <SheetDescription>Main app navigation and account actions</SheetDescription>
-              </VisuallyHidden>
-              <div className="flex items-center gap-3 p-4 pb-4 border-b">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <User className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <p className="text-sm font-medium truncate">{user?.displayName || 'User'}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                </div>
-              </div>
-
-              <nav className="flex flex-col gap-1 p-3 flex-1 overflow-y-auto">
-                <MobileNavLink
-                  href="/"
-                  icon={<Home className="h-4 w-4" />}
-                  label="Dashboard"
-                  hasAccess={true}
-                  loading={false}
-                  onClick={() => setMobileMenuOpen(false)}
-                />
-                <MobileNavLink
-                  href="/modules/project-links"
-                  icon={<FolderOpen className="h-4 w-4" />}
-                  label="Client Projects"
-                  hasAccess={projectLinksAccess}
-                  loading={accessLoading}
-                  onClick={() => setMobileMenuOpen(false)}
-                />
-                {(accessLoading || proposalAccess) && (
-                  <MobileNavLink
-                    href="/modules/proposal"
-                    icon={<FileText className="h-4 w-4" />}
-                    label="Proposals"
-                    hasAccess={proposalAccess}
-                    loading={accessLoading}
-                    onClick={() => setMobileMenuOpen(false)}
-                  />
-                )}
-                <MobileNavLink
-                  href="/modules/screenshot-runner"
-                  icon={<MonitorSmartphone className="h-4 w-4" />}
-                  label="Screenshot Runner"
-                  hasAccess={projectLinksAccess}
-                  loading={accessLoading}
-                  onClick={() => setMobileMenuOpen(false)}
-                />
-                <MobileNavLink
-                  href="/modules/internal-tools"
-                  icon={<Wrench className="h-4 w-4" />}
-                  label="Internal Tools"
-                  hasAccess={true}
-                  loading={false}
-                  onClick={() => setMobileMenuOpen(false)}
-                />
-                <MobileNavLink
-                  href="/modules/checklist-creator"
-                  icon={<ListChecks className="h-4 w-4" />}
-                  label="Checklist Creator"
-                  hasAccess={true}
-                  loading={false}
-                  onClick={() => setMobileMenuOpen(false)}
-                />
-              </nav>
-
-              <div className="p-4 border-t mt-auto">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => {
-                    logout();
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sign out
-                </Button>
-              </div>
-            </SheetContent>
-          </Sheet>
-
-          {children}
         </div>
       </div>
     </header>
   );
 }
 
-interface NavigationLinkProps {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  hasAccess: boolean;
-  loading?: boolean;
-  badge?: React.ReactNode;
-}
-
-function NavigationLink({ href, icon, label, hasAccess, loading = false, badge }: NavigationLinkProps) {
+function MobileMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const pathname = usePathname();
-  const isActive = pathname?.startsWith(href);
-
-  if (loading) {
-    return (
-      <Button variant="ghost" size="sm" className="gap-2 opacity-70" disabled>
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span className="hidden lg:inline">{label}</span>
-      </Button>
-    );
-  }
-
-  if (!hasAccess) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="gap-2 opacity-50 cursor-not-allowed"
-        disabled
-      >
-        <Lock className="h-4 w-4" />
-        <span className="hidden lg:inline">{label}</span>
-      </Button>
-    );
-  }
+  const items = useNavItems();
+  const { user, logout } = useAuth();
 
   return (
-    <Button
-      variant={isActive ? "secondary" : "ghost"}
-      size="sm"
-      className="gap-2"
-      asChild
-    >
-      <Link href={href}>
-        {icon}
-        <span className="hidden lg:inline">{label}</span>
-        {badge && (
-          <Badge variant="secondary" className="ml-1 h-4 px-1">
-            {badge}
-          </Badge>
-        )}
-      </Link>
-    </Button>
-  );
-}
-
-interface MobileNavLinkProps {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  hasAccess: boolean;
-  loading?: boolean;
-  badge?: React.ReactNode;
-  onClick?: () => void;
-}
-
-function MobileNavLink({ href, icon, label, hasAccess, loading = false, badge, onClick }: MobileNavLinkProps) {
-  const pathname = usePathname();
-  const isActive = pathname?.startsWith(href);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-3 p-3 rounded-lg opacity-70">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        <span className="text-sm font-medium">{label}</span>
-      </div>
-    );
-  }
-
-  if (!hasAccess) {
-    return (
-      <div className="flex items-center gap-3 p-3 rounded-lg opacity-50 cursor-not-allowed">
-        <Lock className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{label}</span>
-        <span className="text-xs text-muted-foreground ml-auto">No access</span>
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      href={href}
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-3 p-3 rounded-lg transition-colors",
-        isActive
-          ? "bg-accent text-accent-foreground"
-          : "hover:bg-accent hover:text-accent-foreground"
-      )}
-    >
-      {icon}
-      <span className="text-sm font-medium flex-1">{label}</span>
-      {badge && (
-        <Badge variant="secondary" className="h-5">
-          {badge}
-        </Badge>
-      )}
-    </Link>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-8 md:hidden" aria-label="Open menu">
+          <List className="size-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-72 p-0">
+        <VisuallyHidden>
+          <SheetTitle>Navigation</SheetTitle>
+          <SheetDescription>Switch between modules</SheetDescription>
+        </VisuallyHidden>
+        <div className="flex h-full flex-col">
+          <div className="flex items-center gap-3 border-b p-4">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
+              A
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">Activeset Tools</p>
+              <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+            </div>
+          </div>
+          <nav className="flex-1 space-y-0.5 p-2">
+            {items.map((item) => {
+              const active = isNavItemActive(item, pathname);
+              const locked = !item.loading && !item.hasAccess;
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={locked ? '#' : item.href}
+                  onClick={(e) => (locked ? e.preventDefault() : onOpenChange(false))}
+                  aria-disabled={locked}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
+                    active ? 'bg-accent text-primary' : 'hover:bg-accent',
+                    locked && 'cursor-not-allowed opacity-50',
+                  )}
+                >
+                  {locked ? <Lock className="size-4" /> : <Icon className="size-4" weight={active ? 'fill' : 'regular'} />}
+                  <span className="flex-1 font-medium">{item.label}</span>
+                  {locked && <span className="text-xs text-muted-foreground">No access</span>}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="border-t p-3">
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => {
+                logout();
+                onOpenChange(false);
+              }}
+            >
+              <SignOut className="size-4" /> Sign out
+            </Button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

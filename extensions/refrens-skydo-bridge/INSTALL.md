@@ -28,22 +28,20 @@ turn Refrens' rendered invoice into a real PDF, and it is only reachable through
 debugger API. You will see a debugging banner on a hidden tab for a few seconds each
 time it fetches an invoice.
 
-## 3. Connect your own Refrens
+## 3. Pair this browser
 
-**Nothing in this package contains anyone's credentials.** They live in Chrome's
-extension storage, per profile, so you need to add your own.
+**Nothing in this package contains anyone's credentials, and you will not enter any.**
+Refrens is reached through the ActiveSet internal tool, which holds the Refrens signing
+key server-side.
 
-Click the extension icon → **Settings**, then either:
+1. Open **app.activeset.co → Internal Tools**.
+2. Find this extension's card and click **Pair with this browser**.
 
-- **API keys (recommended).** In Refrens: **Settings → Integrations → Enable Refrens
-  Invoices API → Generate API Keys**. Paste the App ID and App Secret, and set
-  **Business URL key** to the slug in your Refrens URL — for
-  `refrens.com/app/your-business/invoices` that is `your-business`. This works with no
-  Refrens tab open.
-- **Or nothing at all.** Just open your Refrens dashboard in a tab; the extension borrows
-  that session while the tab exists.
+That gives your browser a token scoped to you alone. It works only while you hold the
+**Invoices** module — ask an admin to grant it in Settings → Team Access. Access is
+re-checked on every request, so it can be revoked at any time with nothing to rotate.
 
-The dot in the popup turns green once it is connected.
+If the card is not on the page, you do not have Invoices access yet.
 
 ## 4. Use it
 
@@ -74,7 +72,7 @@ logs a line starting `[rsb]`.
 Nothing hangs silently: network calls give up after 20 s, any request after 60 s, and
 both name the step that stalled.
 
-1. **Red dot on the icon** → no Refrens credentials. See step 3.
+1. **Red dot on the icon** → this browser is not paired. See step 3.
 2. **Panel missing** → reload the Skydo page. Chrome does not re-inject content scripts
    into tabs that were already open when the extension loaded.
 3. **Anything else** → right-click the icon → **Inspect service worker** → Console.

@@ -1,21 +1,23 @@
 /* Drives the service worker's message plumbing outside Chrome.
 
-   Stubs just enough of the extension APIs and the Refrens endpoints to run a real
-   FIND_MATCHES round trip, so the paths that matter -- credentials missing,
-   credentials present, network stalled -- are checked without loading the
-   extension. The point is that every one of them ANSWERS: the failure that sent
-   me here was a request that simply never settled. */
-const fs = require('fs'), vm = require('vm'), path = require('path'), assert = require('assert');
+   The extension no longer holds Refrens credentials — it calls the ActiveSet
+   proxy with a per-person pairing token. These checks pin the properties that
+   matter about that: it never reaches api.refrens.com, it sends the pairing
+   token, an unpaired browser gets told so instead of hanging, a revoked token
+   clears the pairing, and only allowlisted origins can pair it. */
+const fs = require('fs'), vm = require('vm'), path = require('path');
 const SRC = path.join(__dirname, '..', 'src');
 
-function makeWorker({ store = {}, fetchImpl }) {
+function makeWorker({ store = {}, fetchImpl, seenUrls = [] }) {
   const listeners = [];
+  const externalListeners = [];
   const ctx = {
     console: { debug() {}, error() {}, log() {} },
     setTimeout, clearTimeout, setInterval, clearInterval,
     URL, URLSearchParams, AbortController, Promise, JSON, Math, Date, Object, Array,
-    String, Number, Error, Set, Map, RegExp, atob: (b) => Buffer.from(b, 'base64').toString('binary'),
-    fetch: fetchImpl,
+    String, Number, Error, Set, Map, RegExp, Buffer,
+    atob: (b) => Buffer.from(b, 'base64').toString('binary'),
+    fetch: (url, opts) => { seenUrls.push(String(url)); return fetchImpl(url, opts); },
     importScripts: () => {},
     chrome: {
       storage: { local: {
@@ -24,178 +26,141 @@ function makeWorker({ store = {}, fetchImpl }) {
           return Object.fromEntries(list.filter((k) => k in store).map((k) => [k, store[k]]));
         },
         set: async (patch) => Object.assign(store, patch),
-        remove: async (keys) => [].concat(keys).forEach((k) => delete store[k])
+        remove: async (keys) => [].concat(keys).forEach((k) => delete store[k]),
       } },
       runtime: {
         onMessage: { addListener: (fn) => listeners.push(fn) },
+        onMessageExternal: { addListener: (fn) => externalListeners.push(fn) },
         getPlatformInfo: (cb) => cb && cb({}),
-        lastError: null
+        getManifest: () => ({ version: '3.0.0', name: 'Refrens → Skydo Invoice Bridge' }),
+        lastError: null,
       },
-      tabs: {}, debugger: {}, scripting: {}
-    }
+      tabs: {}, debugger: {}, scripting: {},
+    },
   };
   ctx.globalThis = ctx; ctx.self = ctx;
   vm.createContext(ctx);
   for (const f of ['refrens-api.js', 'match.js', 'capture.js', 'background.js']) {
     vm.runInContext(fs.readFileSync(path.join(SRC, f), 'utf8'), ctx, { filename: f });
   }
-  return (msg) => new Promise((resolve) => listeners[0](msg, {}, resolve));
+  return {
+    send: (msg) => new Promise((r) => listeners[0](msg, {}, r)),
+    sendExternal: (msg, sender) => new Promise((r) => externalListeners[0](msg, sender, r)),
+    store,
+  };
 }
 
 const INVOICE = (n, client, total, due, status, date, currency = 'USD') => ({
   _id: `id-${n}`, invoiceNumber: n, currency, status, invoiceDate: date,
   totals: { total }, balance: { due, paid: total - due },
-  billedTo: { name: client, country: 'US' }
+  billedTo: { name: client, country: 'US' },
 });
-
-const jsonRes = (body) => ({ ok: true, status: 200, json: async () => body });
-
+const jsonRes = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
 const PAYMENT = { amount: 650, currency: 'USD', payerName: 'Acme Holdings Inc', creditedAt: '2026-09-02T03:36:00Z' };
+const PAIRED = { extToken: 'tok-123', apiBase: 'https://app.activeset.co', refrensUrlKey: 'acme', pairedAs: 'a@activeset.co' };
+
 const results = [];
-const check = (name, cond, detail) => { results.push({ name, ok: !!cond, detail }); };
+const check = (name, cond, detail) => results.push({ name, ok: !!cond, detail });
 
 (async () => {
-  // 1. No credentials at all -> an immediate, actionable answer.
+  // 1. Unpaired -> an immediate, actionable answer rather than a hang.
   {
-    const send = makeWorker({ store: {}, fetchImpl: async () => { throw new Error('should not be called'); } });
+    const { send } = makeWorker({ store: {}, fetchImpl: async () => { throw new Error('must not be called'); } });
     const res = await send({ type: 'FIND_MATCHES', payment: PAYMENT });
-    check('no credentials answers instead of hanging', res && res.ok === false, JSON.stringify(res));
-    check('no credentials reports NEEDS_CONNECT', res.code === 'NEEDS_CONNECT', res.error);
+    check('unpaired answers instead of hanging', res && res.ok === false, JSON.stringify(res));
+    check('unpaired reports NEEDS_CONNECT', res.code === 'NEEDS_CONNECT', res.error);
   }
 
-  // 2. The fast path: targeted probes, not a full download.
+  // 2. Paired -> goes to the app proxy, never to Refrens, with the pairing token.
   {
+    const seenUrls = [];
+    const seenAuth = [];
     const all = [
       INVOICE('INV-0165', 'Acme Holdings', 650, 650, 'UNPAID', '2026-08-24'),
-      INVOICE('INV-0161', 'Contoso Financials, Inc.', 7000, 0, 'PAID', '2026-07-26'),
       INVOICE('INV-0099', 'Acme Holdings', 650, 0, 'PAID', '2026-01-11'),
-      INVOICE('INV-0062', 'Northwind Ltd', 800, 800, 'UNPAID', '2025-09-09')
     ];
-    /* Applies the filters the extension actually sends, so a probe that asks the
-       wrong question fails here rather than silently returning the ledger. */
-    const serve = (url) => {
-      const q = new URL(url).searchParams;
-      let rows = all.slice();
-      if (q.get('currency')) rows = rows.filter((i) => i.currency === q.get('currency'));
-      const inStatus = q.getAll('status[$in][]');
-      if (inStatus.length) rows = rows.filter((i) => inStatus.includes(i.status));
-      for (const [field, path] of [['totals.total', (i) => i.totals.total], ['balance.due', (i) => i.balance.due]]) {
-        const gte = q.get(`${field}[$gte]`), lte = q.get(`${field}[$lte]`);
-        if (gte !== null) rows = rows.filter((i) => path(i) >= Number(gte));
-        if (lte !== null) rows = rows.filter((i) => path(i) <= Number(lte));
-      }
-      const rx = q.get('billedTo.name[$regex]');
-      if (rx) {
-        const re = new RegExp(rx, q.get('billedTo.name[$options]') || '');
-        rows = rows.filter((i) => re.test(i.billedTo.name));
-      }
-      return { rows, q };
-    };
-
-    const seen = [];
-    const send = makeWorker({
-      store: { sessionToken: 'tok', sessionTokenExp: Date.now() + 3.6e6, refrensUrlKey: 'your-business' },
-      fetchImpl: async (url) => {
-        const { rows, q } = serve(url);
-        seen.push(q);
-        return jsonRes({ total: rows.length, data: rows });
-      }
-    });
-
-    const res = await send({ type: 'FIND_MATCHES', payment: PAYMENT });
-    check('fast path succeeds', res.ok === true, res.error);
-    const d = res.data || {};
-    check('ranks INV-0165 first', d.matches && d.matches[0].invoice.number === 'INV-0165',
-      d.matches && d.matches[0] && d.matches[0].invoice.number);
-    check('top match scores 100', d.matches[0].score === 100, String(d.matches[0].score));
-    check('probes run in parallel, not paged', seen.length === 4, `${seen.length} requests`);
-    check('candidates are deduped', new Set(d.candidates.map((c) => c.id)).size === d.candidates.length,
-      `${d.candidates.length} rows`);
-    check('candidate set stays small', d.candidates.length <= 4, `${d.candidates.length}`);
-    check('trims fields with $select', seen[0].getAll('$select[]').includes('invoiceNumber'), 'no $select sent');
-    check('payer regex drops the suffix', seen.some((q) => q.get('billedTo.name[$regex]') === 'acme.*holdings'),
-      String(seen.map((q) => q.get('billedTo.name[$regex]')).filter(Boolean)));
-    check('payer regex is case-insensitive', seen.some((q) => q.get('billedTo.name[$options]') === 'i'), 'no $options=i');
-    check('builds a Refrens deep link', /refrens\.com\/app\/your-business\/invoices\//.test(d.candidates[0].appUrl),
-      d.candidates[0].appUrl);
-  }
-
-  // 3. Browse is its own paged, searchable query.
-  {
-    let lastQ = null;
-    const send = makeWorker({
-      store: { sessionToken: 'tok', sessionTokenExp: Date.now() + 3.6e6, refrensUrlKey: 'your-business' },
-      fetchImpl: async (url) => {
-        lastQ = new URL(url).searchParams;
-        return jsonRes({ total: 159, data: [INVOICE('INV-0165', 'Acme Holdings', 650, 650, 'UNPAID', '2026-08-24')] });
-      }
-    });
-    const res = await send({ type: 'BROWSE', payment: PAYMENT, skip: 50, search: 'Acme' });
-    check('browse succeeds', res.ok === true, res.error);
-    check('browse reports the full total', res.data.total === 159, String(res.data.total));
-    check('browse pages with $skip', lastQ.get('$skip') === '50', lastQ.get('$skip'));
-    check('browse searches server-side', lastQ.get('$or[0][invoiceNumber][$regex]') === 'Acme',
-      lastQ.get('$or[0][invoiceNumber][$regex]'));
-    check('browse searches client names too', lastQ.get('$or[1][billedTo.name][$regex]') === 'Acme',
-      lastQ.get('$or[1][billedTo.name][$regex]'));
-  }
-
-  // 4. One failing probe must not sink the rest.
-  {
-    let n = 0;
-    const send = makeWorker({
-      store: { sessionToken: 'tok', sessionTokenExp: Date.now() + 3.6e6, refrensUrlKey: 'your-business' },
-      fetchImpl: async () => {
-        if (++n === 1) throw new Error('socket hang up');
-        return jsonRes({ total: 1, data: [INVOICE('INV-0165', 'Acme Holdings', 650, 650, 'UNPAID', '2026-08-24')] });
-      }
-    });
-    const res = await send({ type: 'FIND_MATCHES', payment: PAYMENT });
-    check('survives a single failed probe', res.ok === true, res.error);
-    check('still ranks the match', res.ok && res.data.matches[0].invoice.number === 'INV-0165', 'no match');
-  }
-
-  // 3. API keys -> exchanged for a JWT, then used as the bearer.
-  {
-    const seen = [];
-    const send = makeWorker({
-      store: { appId: 'app', appSecret: 'sec', refrensUrlKey: 'your-business' },
+    const { send } = makeWorker({
+      store: { ...PAIRED },
+      seenUrls,
       fetchImpl: async (url, opts) => {
-        const u = String(url); seen.push(u);
-        if (u.endsWith('/authentication')) return jsonRes({ accessToken: 'exchanged-jwt' });
-        check('bearer is the exchanged token', opts.headers.Authorization === 'Bearer exchanged-jwt', opts.headers.Authorization);
-        return jsonRes({ total: 0, data: [] });
-      }
+        seenAuth.push(opts.headers.Authorization);
+        const q = new URL(url).searchParams;
+        let rows = all.slice();
+        const gte = q.get('totals.total[$gte]'), lte = q.get('totals.total[$lte]');
+        if (gte) rows = rows.filter((i) => i.totals.total >= +gte && i.totals.total <= +lte);
+        const inStatus = q.getAll('status[$in][]');
+        if (inStatus.length) rows = rows.filter((i) => inStatus.includes(i.status));
+        const rx = q.get('billedTo.name[$regex]');
+        if (rx) rows = rows.filter((i) => new RegExp(rx, 'i').test(i.billedTo.name));
+        return jsonRes({ total: rows.length, data: rows });
+      },
     });
+
     const res = await send({ type: 'FIND_MATCHES', payment: PAYMENT });
-    check('api key path succeeds', res.ok === true, res.error);
-    check('exchanges keys before querying', seen[0].endsWith('/authentication'), seen[0]);
-    check('signs in once for all probes',
-      seen.filter((u) => u.endsWith('/authentication')).length === 1,
-      `${seen.filter((u) => u.endsWith('/authentication')).length} sign-ins`);
+    check('paired fast path succeeds', res.ok === true, res.error);
+    check('never calls Refrens directly', !seenUrls.some((u) => u.includes('api.refrens.com')), seenUrls[0]);
+    check('calls the app proxy', seenUrls.every((u) => u.includes('/api/extension/refrens/invoices')), seenUrls[0]);
+    check('sends the pairing token', seenAuth.every((a) => a === 'Bearer tok-123'), String(seenAuth[0]));
+    check('runs four parallel probes', seenUrls.length === 4, `${seenUrls.length} requests`);
+    check('ranks the outstanding invoice first',
+      res.data.matches[0].invoice.number === 'INV-0165', res.data.matches[0]?.invoice.number);
+    check('deep-links using the paired urlKey',
+      /refrens\.com\/app\/acme\/invoices\//.test(res.data.candidates[0].appUrl), res.data.candidates[0].appUrl);
   }
 
-  // 5. A total network failure surfaces as an error, never as a hang.
+  // 3. A revoked token clears the pairing so the panel prompts to re-pair.
   {
-    const send = makeWorker({
-      store: { sessionToken: 'tok', sessionTokenExp: Date.now() + 3.6e6, refrensUrlKey: 'your-business' },
-      fetchImpl: async () => { const e = new Error('socket hang up'); throw e; }
+    const w = makeWorker({ store: { ...PAIRED }, fetchImpl: async () => jsonRes({ error: 'revoked' }, 401) });
+    const res = await w.send({ type: 'FIND_MATCHES', payment: PAYMENT });
+    check('401 reports NEEDS_CONNECT', res.code === 'NEEDS_CONNECT', res.error);
+    check('401 clears the stored pairing', !w.store.extToken, JSON.stringify(w.store));
+  }
+
+  // 4. Losing module access is reported, not silently retried.
+  {
+    const w = makeWorker({
+      store: { ...PAIRED },
+      fetchImpl: async () => jsonRes({ error: 'Access to the invoices module has been removed' }, 403),
+    });
+    const res = await w.send({ type: 'FIND_MATCHES', payment: PAYMENT });
+    check('403 surfaces the access message', /invoices module/.test(res.error || ''), res.error);
+    check('403 keeps the token (access may be restored)', !!w.store.extToken, 'token was cleared');
+  }
+
+  // 5. Pairing is accepted only from the app's own origins.
+  {
+    const w = makeWorker({ store: {}, fetchImpl: async () => jsonRes({}) });
+    const ping = await w.sendExternal({ type: 'PING' }, { origin: 'https://app.activeset.co' });
+    check('answers PING from the app', ping.ok === true && ping.installed === true, JSON.stringify(ping));
+    check('PING reports its version', ping.version === '3.0.0', ping.version);
+
+    const paired = await w.sendExternal(
+      { type: 'PAIR', token: 't', apiBase: 'https://app.activeset.co', urlKey: 'acme', pairedAs: 'a@activeset.co' },
+      { origin: 'https://app.activeset.co' }
+    );
+    check('accepts pairing from the app', paired.ok === true, JSON.stringify(paired));
+    check('stores the pairing token', w.store.extToken === 't', JSON.stringify(w.store));
+
+    const evil = await w.sendExternal({ type: 'PAIR', token: 'evil' }, { origin: 'https://evil.example.com' });
+    check('rejects pairing from another origin', evil.ok === false, JSON.stringify(evil));
+    check('hostile origin cannot overwrite the token', w.store.extToken === 't', w.store.extToken);
+
+    const read = await w.sendExternal({ type: 'STATUS' }, { origin: 'https://app.activeset.co' });
+    check('the page cannot read the token back out', read.ok === false, JSON.stringify(read));
+  }
+
+  // 6. A network failure surfaces as an error, never as a hang.
+  {
+    const { send } = makeWorker({
+      store: { ...PAIRED },
+      fetchImpl: async () => { throw new Error('socket hang up'); },
     });
     const res = await Promise.race([
       send({ type: 'FIND_MATCHES', payment: PAYMENT }),
-      new Promise((r) => setTimeout(() => r('HUNG'), 5000))
+      new Promise((r) => setTimeout(() => r('HUNG'), 5000)),
     ]);
     check('network failure answers within 5s', res !== 'HUNG', 'still hanging');
-    check('network failure names the step', res !== 'HUNG' && /Refrens invoice query/.test(res.error), res.error);
-  }
-
-  // 6. A 401 clears the cached token so the next attempt re-authenticates.
-  {
-    const store = { sessionToken: 'stale', sessionTokenExp: Date.now() + 3.6e6, refrensUrlKey: 'your-business' };
-    const send = makeWorker({ store, fetchImpl: async () => ({ ok: false, status: 401, json: async () => ({}) }) });
-    const res = await send({ type: 'FIND_MATCHES', payment: PAYMENT });
-    check('401 reports NEEDS_CONNECT', res.code === 'NEEDS_CONNECT', res.error);
-    check('401 drops the stale token', !store.sessionToken, JSON.stringify(store));
+    check('network failure names the step', res !== 'HUNG' && /ActiveSet/.test(res.error), res.error);
   }
 
   const width = Math.max(...results.map((r) => r.name.length));

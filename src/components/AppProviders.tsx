@@ -3,7 +3,8 @@
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/hooks/useAuth";
-import { CommandPalette } from "@/components/CommandPalette";
+import { ShortcutProvider } from "@/shared/keyboard";
+import { AppFrame } from "@/components/shell";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
@@ -14,9 +15,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       <AuthProvider>
-        {children}
-        <CommandPalette />
-        <Toaster />
+        <ShortcutProvider>
+          <AppFrame>{children}</AppFrame>
+          <Toaster />
+        </ShortcutProvider>
       </AuthProvider>
     </ThemeProvider>
   );

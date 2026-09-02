@@ -4,9 +4,11 @@ import Link from 'next/link';
 import {
   ArrowRight,
   Chrome,
+  CircleCheck,
   Download,
   FolderCode,
   LayoutGrid,
+  Link2,
   TriangleAlert,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +16,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { AppNavigation } from '@/shared/ui';
-import { EXTENSIONS, MODULES, type Tool } from '../../data/tools';
+import { useModuleAccess } from '@/modules/auth-access';
+import { visibleTools, type Tool } from '../../data/tools';
+import { useExtensionPairing, type PairingState } from '../hooks/useExtensionPairing';
 
 function Steps({ steps }: { steps: string[] }) {
   return (
@@ -28,6 +32,71 @@ function Steps({ steps }: { steps: string[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * Live install + pairing state for one extension. Kept in its own component so
+ * the hook only runs for tools that actually declare a pinned extension id.
+ */
+function PairingStrip({ tool }: { tool: Tool }) {
+  const { state, version, error, busy, pair, unpair, recheck } = useExtensionPairing(
+    tool.pairingSlug!,
+    tool.extensionId!,
+    true
+  );
+
+  const label: Record<PairingState, string> = {
+    checking: 'Checking whether it is installed…',
+    'not-installed': 'Not installed in this browser',
+    installed: version ? `Installed (v${version})` : 'Installed',
+    paired: 'Paired with this browser',
+    error: 'Pairing failed',
+  };
+
+  const tone =
+    state === 'paired'
+      ? 'border-emerald-500/30 bg-emerald-500/10'
+      : state === 'installed'
+        ? 'border-sky-500/30 bg-sky-500/10'
+        : 'border-border bg-muted/40';
+
+  return (
+    <div className={`flex flex-wrap items-center gap-2 rounded-lg border p-3 ${tone}`}>
+      <span className="flex items-center gap-2 text-xs font-medium">
+        {state === 'paired' ? (
+          <CircleCheck className="h-3.5 w-3.5 text-emerald-500" />
+        ) : (
+          <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+        {label[state]}
+        {version && state !== 'not-installed' && tool.version && version !== tool.version && (
+          <span className="text-amber-600 dark:text-amber-500">
+            · v{tool.version} available
+          </span>
+        )}
+      </span>
+
+      <span className="ml-auto flex items-center gap-2">
+        {state === 'not-installed' && (
+          <Button size="sm" variant="outline" onClick={recheck}>
+            Re-check
+          </Button>
+        )}
+        {(state === 'installed' || state === 'error') && (
+          <Button size="sm" onClick={pair} disabled={busy}>
+            {busy ? 'Pairing…' : 'Pair with this browser'}
+          </Button>
+        )}
+        {state === 'paired' && (
+          <Button size="sm" variant="outline" onClick={unpair} disabled={busy}>
+            {busy ? 'Unpairing…' : 'Unpair'}
+          </Button>
+        )}
+      </span>
+
+      {error && <p className="w-full text-xs text-destructive">{error}</p>}
+    </div>
   );
 }
 
@@ -75,6 +144,8 @@ function ToolCard({ tool }: { tool: Tool }) {
             </p>
           </div>
         )}
+
+        {tool.extensionId && tool.pairingSlug && <PairingStrip tool={tool} />}
 
         <div className="flex flex-wrap items-center gap-2">
           {tool.href && (
@@ -137,6 +208,7 @@ function Section({
   description: string;
   tools: Tool[];
 }) {
+  if (!tools.length) return null;
   return (
     <section className="space-y-4">
       <div className="space-y-1">
@@ -153,6 +225,14 @@ function Section({
 }
 
 export function InternalToolsScreen() {
+  const { hasAccess: hasInvoices, loading: invoicesLoading } = useModuleAccess('invoices');
+
+  // Until the grant resolves, show nothing gated rather than flashing a card
+  // that is about to disappear.
+  const grants = { invoices: invoicesLoading ? false : hasInvoices };
+  const modules = visibleTools('module', grants);
+  const extensions = visibleTools('extension', grants);
+
   return (
     <div className="min-h-screen bg-background">
       <AppNavigation title="Internal Tools" showBackButton backHref="/" />
@@ -172,13 +252,13 @@ export function InternalToolsScreen() {
         <Section
           title="In the app"
           description="Open and use straight away — nothing to install."
-          tools={MODULES}
+          tools={modules}
         />
 
         <Section
           title="Chrome extensions"
           description="Download, then load unpacked from chrome://extensions."
-          tools={EXTENSIONS}
+          tools={extensions}
         />
       </main>
     </div>

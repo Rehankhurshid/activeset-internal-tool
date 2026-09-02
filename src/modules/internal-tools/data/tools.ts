@@ -11,6 +11,9 @@
 
 export type ToolKind = 'module' | 'extension';
 
+/** Module id from RESTRICTED_MODULES. Tools naming one are hidden without it. */
+export type ToolModule = 'invoices' | 'proposal' | 'project-links';
+
 export interface Tool {
   id: string;
   name: string;
@@ -30,6 +33,16 @@ export interface Tool {
   notes?: string[];
   /** Shown as a warning rather than a note. Use sparingly. */
   warning?: string;
+  /** When set, the tool is hidden unless the viewer holds this module. */
+  requiresModule?: ToolModule;
+  /**
+   * Pinned Chrome extension id, from the `key` field in its manifest. Its
+   * presence is what makes install detection and pairing possible — without a
+   * pinned id every unpacked install would get a different one.
+   */
+  extensionId?: string;
+  /** Slug the pairing API knows this extension by. */
+  pairingSlug?: string;
 }
 
 const LOAD_UNPACKED: string[] = [
@@ -62,18 +75,21 @@ export const TOOLS: Tool[] = [
     summary:
       'On a Skydo unmapped payment, finds the matching Refrens invoice and attaches the real Refrens PDF — no downloading and re-uploading.',
     kind: 'extension',
-    download: '/downloads/refrens-skydo-invoice-bridge-2.1.0.zip',
-    version: '2.1.0',
+    download: '/downloads/refrens-skydo-invoice-bridge-3.0.0.zip',
+    version: '3.0.0',
     source: 'extensions/refrens-skydo-bridge/',
+    requiresModule: 'invoices',
+    extensionId: 'lndfjmgghbhchfhffhniencmffdpmnfp',
+    pairingSlug: 'refrens-skydo-bridge',
     steps: [
       ...LOAD_UNPACKED,
-      'Click the extension icon → Settings, and add your own Refrens API keys (Refrens → Settings → Integrations → Generate API Keys).',
-      'Set Business URL key to the slug in your Refrens URL — for refrens.com/app/acme/invoices that is "acme".',
+      'Come back to this page and click "Pair with this browser" on this card.',
       'Open any Skydo unmapped payment. The panel appears top-right and starts matching on its own.',
     ],
     notes: [
+      'There are no credentials to enter. Refrens is reached through this app, which holds the signing key server-side — pairing gives your browser a token scoped to you alone.',
+      'Access is re-checked on every request, so losing Invoices access cuts the extension off immediately. Nothing needs rotating.',
       'Chrome will warn that it can debug your browser. That permission exists only to turn Refrens’ rendered invoice into a real PDF; you will see a debugging banner on a hidden tab for a few seconds each time.',
-      'Credentials are per-person and stored in your own browser. Nothing ships with the download.',
       'It stops at "file attached" on purpose — mapping a payment moves money, so the final confirm stays in Skydo.',
     ],
     warning:
@@ -107,5 +123,11 @@ export const TOOLS: Tool[] = [
   },
 ];
 
-export const MODULES = TOOLS.filter((t) => t.kind === 'module');
-export const EXTENSIONS = TOOLS.filter((t) => t.kind === 'extension');
+/**
+ * Tools the viewer may see. A tool naming `requiresModule` is hidden entirely
+ * from anyone without it — not shown-and-disabled, since a locked card just
+ * invites people to ask for access to something they may not need.
+ */
+export function visibleTools(kind: ToolKind, grants: Partial<Record<ToolModule, boolean>>): Tool[] {
+  return TOOLS.filter((t) => t.kind === kind && (!t.requiresModule || grants[t.requiresModule]));
+}

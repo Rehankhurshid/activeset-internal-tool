@@ -10,6 +10,7 @@ import { type ProjectTag } from '@/modules/project-links';
 import { PROJECT_TAG_LABELS } from '@/types';
 import { PROJECT_TAG_TONES } from '@/lib/ui-tones';
 import { cn } from '@/lib/utils';
+import { Kbd } from '@/shared/keyboard';
 
 export type StatusFilter = 'all' | 'maintenance' | 'active' | 'paused' | 'closed' | 'paid';
 
@@ -22,6 +23,7 @@ interface StatusFilterOption {
 }
 
 interface DashboardToolbarProps {
+  searchInputRef?: React.Ref<HTMLInputElement>;
   searchQuery: string;
   onSearchChange: (value: string) => void;
   statusFilter: StatusFilter;
@@ -34,6 +36,7 @@ interface DashboardToolbarProps {
 }
 
 export function DashboardToolbar({
+  searchInputRef,
   searchQuery,
   onSearchChange,
   statusFilter,
@@ -50,12 +53,14 @@ export function DashboardToolbar({
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Search projects..."
+            ref={searchInputRef}
+            placeholder="Search projects…"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="h-11 w-full pl-9 sm:h-9"
+            className="h-11 w-full pl-9 pr-9 sm:h-9"
             aria-label="Search projects"
           />
+          <Kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 sm:inline-flex">/</Kbd>
         </div>
 
         <div className="-mx-3 overflow-x-auto px-3 scrollbar-hidden sm:mx-0 sm:px-0">
@@ -118,9 +123,10 @@ export function DashboardToolbar({
         </Popover>
 
         <Button onClick={onNewProject} className="h-11 w-full shrink-0 sm:h-9 sm:w-auto">
-          <Plus className="h-4 w-4 sm:mr-2" />
+          <Plus className="h-4 w-4 sm:mr-1" />
           <span className="hidden sm:inline">New Project</span>
           <span className="sm:hidden">New</span>
+          <Kbd onPrimary className="ml-1 hidden sm:inline-flex">N</Kbd>
         </Button>
       </div>
 

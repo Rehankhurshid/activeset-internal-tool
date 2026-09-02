@@ -24,7 +24,7 @@ and signature. Nothing is regenerated or reconstructed.
 | Step | What happens |
 |---|---|
 | Read the payment | `GET /api/funding-invoice-mapping?fundingId=…` on Skydo (same-origin, your cookies). Falls back to the labelled blocks on the page. |
-| Authenticate | `POST https://api.refrens.com/authentication` with `{strategy:'app-secret', appId, appSecret}` → `accessToken`, cached until it expires. Falls back to the session token from an open Refrens tab. |
+| Authenticate | None locally. The extension holds a per-person pairing token issued by app.activeset.co and sends it as a bearer; the server authenticates to Refrens with its own signing key. |
 | Find the candidates | Four targeted queries in parallel — see below. Runs automatically as soon as the page opens. |
 | Rank | Currency is a hard filter. Then amount (exact / within 2% for bank charges / partial), payer-vs-client name similarity, outstanding balance, and how close the invoice date is to the credit date. Every rule prints its reasoning into the panel. |
 | Browse | A second tab, loaded only when opened: server-side search over invoice number *and* client name, an *Outstanding only* filter, an all-currencies toggle, and 50-at-a-time paging — for when you'd rather pick it yourself. |

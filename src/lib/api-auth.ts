@@ -2,6 +2,8 @@ import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth as adminAuth, db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
+import { hasModuleAccess } from '@/lib/module-access';
+import type { RestrictedModule } from '@/services/AccessControlService';
 
 const ADMIN_EMAILS = ['rehan@activeset.co', 'salman@activeset.co'];
 const LOCAL_DEV_EMAIL = 'local-dev@activeset.co';
@@ -104,6 +106,26 @@ export async function requireCaller(req: NextRequest): Promise<AuthedCaller> {
     // /api/auth/dev-token for local-dev@activeset.co so dev sessions are admin).
     isAdmin: ADMIN_EMAILS.includes(email) || decoded.admin === true,
   };
+}
+
+/**
+ * Verifies the caller (via {@link requireCaller}) AND that they have been granted
+ * the given module in `access_control/module_access`. Admins always pass.
+ *
+ * Use this instead of {@link requireAdmin} for resources the team should be able
+ * to reach once access is granted in Settings → Team Access, without the admin
+ * being in the loop for every request.
+ */
+export async function requireModule(
+  req: NextRequest,
+  module: RestrictedModule
+): Promise<AuthedCaller> {
+  const caller = await requireCaller(req);
+  if (caller.isAdmin) return caller;
+  if (!(await hasModuleAccess(caller.email, module))) {
+    throw new ApiAuthError(403, `Forbidden: no access to the ${module} module`);
+  }
+  return caller;
 }
 
 /**
