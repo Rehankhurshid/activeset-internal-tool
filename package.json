@@ -28,7 +28,8 @@
     "security:migrate-webflow-tokens": "tsx scripts/migrate-webflow-tokens.ts",
     "security:migrate-webflow-tokens:apply": "tsx scripts/migrate-webflow-tokens.ts --apply",
     "security:deploy-firestore-rules": "tsx scripts/deploy-firestore-rules.ts",
-    "extension:pack:refrens-skydo": "node scripts/pack-extension.mjs refrens-skydo-bridge"
+    "extension:pack": "node scripts/pack-extension.mjs",
+    "extension:pack:all": "node scripts/pack-extension.mjs --all"
   },
   "dependencies": {
     "@activeset/schema-gen": "^0.1.0",

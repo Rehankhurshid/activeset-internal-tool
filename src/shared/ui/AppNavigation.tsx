@@ -24,6 +24,7 @@ import {
   Lock,
   Loader2,
   MonitorSmartphone,
+  Wrench,
   Search
 } from 'lucide-react';
 import { useState } from 'react';
@@ -113,6 +114,13 @@ export function AppNavigation({
                 label="Screenshot Runner"
                 hasAccess={projectLinksAccess}
                 loading={accessLoading}
+              />
+              <NavigationLink
+                href="/modules/internal-tools"
+                icon={<Wrench className="h-4 w-4" />}
+                label="Internal Tools"
+                hasAccess={true}
+                loading={false}
               />
             </nav>
           )}
@@ -234,6 +242,14 @@ export function AppNavigation({
                   label="Screenshot Runner"
                   hasAccess={projectLinksAccess}
                   loading={accessLoading}
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+                <MobileNavLink
+                  href="/modules/internal-tools"
+                  icon={<Wrench className="h-4 w-4" />}
+                  label="Internal Tools"
+                  hasAccess={true}
+                  loading={false}
                   onClick={() => setMobileMenuOpen(false)}
                 />
                 <MobileNavLink

@@ -4,7 +4,7 @@ import { LoginForm, useAuth, useModuleAccess } from '@/modules/auth-access';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { FolderOpen, FileText, Sparkles, Lock, ListChecks } from 'lucide-react';
+import { FolderOpen, FileText, Sparkles, Lock, ListChecks, Wrench } from 'lucide-react';
 import { AppNavigation } from '@/shared/ui';
 import { DashboardAlertPanel } from '@/components/alerts/DashboardAlertPanel';
 import { DailyHealthPanel } from '@/components/alerts/DailyHealthPanel';
@@ -152,6 +152,17 @@ export default function Home() {
             )}
 
             {/* Checklist Creator Module */}
+            {/* Internal Tools Module */}
+            {renderModuleCard(
+              "/modules/internal-tools",
+              <Wrench className="h-6 w-6 text-violet-500" />,
+              "bg-violet-500/10 dark:bg-violet-500/20",
+              "Internal Tools",
+              "Screenshot Runner, Chrome extensions and setup instructions in one place.",
+              true,
+              false
+            )}
+
             {renderModuleCard(
               "/modules/checklist-creator",
               <ListChecks className="h-6 w-6 text-emerald-500" />,
