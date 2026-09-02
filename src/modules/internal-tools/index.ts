@@ -1,2 +1,3 @@
 export { InternalToolsScreen } from './ui/screens/InternalToolsScreen';
-export { TOOLS, MODULES, EXTENSIONS, type Tool, type ToolKind } from './data/tools';
+export { TOOLS, visibleTools, type Tool, type ToolKind, type ToolModule } from './data/tools';
+export { useExtensionPairing } from './ui/hooks/useExtensionPairing';

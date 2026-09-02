@@ -167,7 +167,7 @@ function render() {
 
     ${state.error ? `<div class="rsb-error">${esc(state.error)}${
       state.errorCode === 'NEEDS_CONNECT'
-        ? ' <button class="rsb-link" data-act="connect">Open Refrens</button> <button class="rsb-link" data-act="settings">Settings</button>'
+        ? ' <button class="rsb-link" data-act="connect">Open Internal Tools</button>'
         : ''
     }</div>` : ''}
 
@@ -318,7 +318,7 @@ async function busy(label, fn) {
 const onFind = () => busy('Matching…', async () => {
   const status = await send('STATUS');
   if (!status.connected) {
-    const e = new Error('Not connected to Refrens yet. Add API keys in the extension\'s settings, or open your Refrens dashboard in a tab.');
+    const e = new Error('This browser is not paired yet. Open Internal Tools on app.activeset.co and click "Pair with this browser".');
     e.code = 'NEEDS_CONNECT';
     throw e;
   }
@@ -410,8 +410,7 @@ function mount() {
     if (act === 'select') { state.selected = state.selected === id ? null : id; render(); }
     if (act === 'preview') onPreview(id);
     if (act === 'attach') onAttach();
-    if (act === 'connect') send('OPEN_REFRENS');
-    if (act === 'settings') send('OPEN_SETTINGS');
+    if (act === 'connect') send('OPEN_TOOLS');
     if (act === 'chip') {
       if (chip === 'outstanding') { state.outstandingOnly = !state.outstandingOnly; render(); }
       // Currency is a server-side filter, so flipping it means refetching.

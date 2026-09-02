@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Refrens \u2192 Skydo Invoice Bridge",
-  "version": "2.1.0",
-  "description": "Match a Skydo unmapped payment to its Refrens invoice and upload the real Refrens invoice PDF, without downloading it first.",
+  "version": "3.0.0",
+  "description": "Match a Skydo unmapped payment to its Refrens invoice and upload the real Refrens invoice PDF. Paired through the ActiveSet internal tool.",
   "permissions": [
     "storage",
     "tabs",
@@ -11,23 +11,14 @@
   ],
   "host_permissions": [
     "https://dashboard.skydo.com/*",
-    "https://api.refrens.com/*",
     "https://www.refrens.com/*",
-    "https://og.refrens.com/*"
+    "https://app.activeset.co/*",
+    "http://localhost:3000/*"
   ],
   "background": {
     "service_worker": "src/background.js"
   },
   "content_scripts": [
-    {
-      "matches": [
-        "https://www.refrens.com/app/*"
-      ],
-      "js": [
-        "src/refrens-token.js"
-      ],
-      "run_at": "document_idle"
-    },
     {
       "matches": [
         "https://dashboard.skydo.com/*"
@@ -48,5 +39,12 @@
   "options_page": "src/options.html",
   "icons": {
     "128": "icons/icon128.png"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqXK1J5yYynEIpIF6nKgTmIVBIR3hPIJTuWjkaQmbn6+uBmZW4IBxFV1WP3l8UOOydsTgw7VV+mybeuG7jLd1ygSvUum1CwCc3cfP032TI+SL1AzW6JEZPAbAwq9V0Qr5rnrnLXaTbb/dyTxj25pu0C83QBRZMS0Ci2WsgDtaM2PuLFisd0Cr/9ebHdTwC5Ljt8jSjFNOW1F0gYEqf5TIngvSSU+vCEuWnLZqC+G2Yw2RqTLeG3BWDUE41IAXArquWNfW856P8qGgEMhP/liNOT43JgX884vj449xRcKET8ZLcEoprwdRWnTJXMeIJ1PRLjit6k8VF3hnPo0HuF2tjwIDAQAB",
+  "externally_connectable": {
+    "matches": [
+      "https://app.activeset.co/*",
+      "http://localhost:3000/*"
+    ]
   }
 }

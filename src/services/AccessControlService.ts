@@ -20,7 +20,7 @@ export interface ModuleAccess {
 }
 
 // Available modules that can be restricted
-export const RESTRICTED_MODULES = ['proposal', 'project-links'] as const;
+export const RESTRICTED_MODULES = ['proposal', 'project-links', 'invoices'] as const;
 export type RestrictedModule = typeof RESTRICTED_MODULES[number];
 
 class AccessControlService {

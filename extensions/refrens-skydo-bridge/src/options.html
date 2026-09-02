@@ -2,36 +2,34 @@
 <meta charset="utf-8">
 <title>Refrens → Skydo settings</title>
 <link rel="stylesheet" href="shared.css">
-<style>
-  body { max-width: 560px; }
-  input[type=text], input[type=password] {
-    width: 100%; font: inherit; padding: 6px 9px; border: 1px solid #d1d5db;
-    border-radius: 7px; background: #fff; color: inherit;
-  }
-  .field { display: grid; gap: 4px; margin-bottom: 10px; }
-  .field label { font-weight: 600; font-size: 12px; }
-  #saved { color: #16a34a; font-size: 12px; }
-  @media (prefers-color-scheme: dark) {
-    input[type=text], input[type=password] { background: #0f172a; border-color: #334155; }
-  }
-</style>
+<style>body { max-width: 560px; }</style>
 
 <h1>Refrens → Skydo settings</h1>
-<p class="sub">Credentials stay in this browser's extension storage and are only ever sent to api.refrens.com.</p>
+<p class="sub">
+  There are no credentials to enter. This extension reaches Refrens through the ActiveSet
+  internal tool, which holds the Refrens signing key server-side — pair once and the app
+  vouches for you on every request.
+</p>
 
 <div class="row">
-  <div class="grow">
-    <b>Refrens API keys</b>
-    <p class="muted" style="margin:2px 0 9px">
-      Refrens dashboard → Settings → Integrations → <i>Enable Refrens Invoices API</i> → Generate API Keys.
-      With keys set, the extension works without a Refrens tab open. Without them it falls back to
-      the session token from an open Refrens tab.
-    </p>
-    <div class="field"><label for="appId">App ID</label><input id="appId" type="text" autocomplete="off" spellcheck="false"></div>
-    <div class="field"><label for="appSecret">App Secret</label><input id="appSecret" type="password" autocomplete="off"></div>
-    <div class="field"><label for="urlKey">Business URL key</label><input id="urlKey" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. your-business"></div>
-    <button class="primary" id="save">Save</button> <span id="saved"></span>
-  </div>
+  <span class="dot" id="dot"></span>
+  <span class="grow">
+    <b id="status">Checking…</b><br>
+    <span class="muted" id="detail"></span>
+  </span>
+  <button id="unpair">Unpair</button>
+</div>
+
+<div class="row">
+  <span class="grow">
+    <b>Pair this browser</b><br>
+    <span class="muted">
+      Open <b>Internal Tools</b> on app.activeset.co and click <i>Pair with this browser</i>.
+      You need the Invoices module; ask an admin to grant it in Settings → Team Access.
+      Access is checked on every request, so it can be revoked at any time.
+    </span>
+  </span>
+  <button class="primary" id="open">Open</button>
 </div>
 
 <div class="row">
@@ -39,16 +37,10 @@
     <input type="checkbox" id="preferHostedPdf">
     <span>
       <b>Try Refrens' hosted PDF first</b><br>
-      <span class="muted">Refrens renders PDFs on <code>og.refrens.com</code>. That service currently answers 404 for
-      this account — Refrens' own Download button hits the same dead URL — so the extension captures their
-      rendered invoice page instead. Turn this on to try the hosted PDF first (8&nbsp;s timeout, then it captures).
-      Either way you get the real Refrens document.</span>
+      <span class="muted">Refrens renders PDFs on <code>og.refrens.com</code>. That service currently
+      answers 404 — Refrens' own Download button hits the same dead URL — so the extension captures
+      their rendered invoice page instead. Either way you get the real Refrens document.</span>
     </span>
   </label>
-</div>
-
-<div class="row">
-  <span class="grow"><b>Stored session</b><br><span class="muted" id="sess">—</span></span>
-  <button id="clear">Clear</button>
 </div>
 <script src="options.js"></script>

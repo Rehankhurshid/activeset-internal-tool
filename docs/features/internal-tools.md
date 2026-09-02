@@ -36,12 +36,42 @@ The alternative — publishing to the Chrome Web Store — is worth revisiting i
 spread beyond the team, since it would bring real auto-updates. It costs a one-off
 developer-account fee and a review per version.
 
+## Access control and extension pairing
+
+Tools that name `requiresModule` are hidden from anyone without that module — hidden, not
+shown-and-locked, since a locked card just invites requests for access someone may not
+need. The Refrens → Skydo bridge requires `invoices`, granted in **Settings → Team Access**.
+
+The bridge needs Refrens data, but the Refrens account authenticates with an **ES256
+signing key that can mint tokens for the whole account** (including creating and
+cancelling invoices). That key stays in `app_secrets/refrens`, server-side, and is never
+sent to a browser. Instead:
+
+1. The page detects the extension by messaging its **pinned id** (`lndfjmgghbhchfhffhniencmffdpmnfp`,
+   fixed by the `key` field in its manifest — an unpacked install would otherwise get a
+   different id per machine) over `externally_connectable`.
+2. **Pair with this browser** calls `POST /api/extension/pair`, which checks the caller's
+   module access and mints an opaque per-person token. Only its SHA-256 is stored, in
+   `extension_tokens`.
+3. The page pushes that token into the extension. The extension can never pull one out —
+   `STATUS` is not reachable from a web page, only `PING`, `PAIR` and `UNPAIR`, and only
+   from allowlisted origins.
+4. The extension calls `/api/extension/refrens/invoices*`, which re-checks module access
+   **on every request** and forwards an allowlisted, read-only subset of the Feathers
+   query with the server's credentials.
+
+So revoking someone in Team Access cuts their extension off immediately, with no key to
+rotate. Adding a person is granting them a module, not handing out a secret.
+
+`ALLOWED_QUERY_KEYS` in `RefrensService.ts` is the contract for what the extension may
+ask for — a future extension version cannot widen its own reach by adding a parameter.
+
 ## Currently listed
 
 | Tool | Kind | Source |
 |---|---|---|
 | Screenshot Runner | in-app | `src/modules/screenshot-runner/` |
-| Refrens → Skydo Invoice Bridge | extension | `extensions/refrens-skydo-bridge/` |
+| Refrens → Skydo Invoice Bridge | extension (requires `invoices`) | `extensions/refrens-skydo-bridge/` |
 | Webflow Settings Auditor | extension | `chrome-extension/` |
 | Webflow Team Tracker | extension | `webflow-team-tracker-1.0.6/` |
 

@@ -335,3 +335,100 @@ export async function getInvoice(invoiceId: string): Promise<RefrensInvoiceSumma
   const path = `/businesses/${encodeURIComponent(creds.urlKey)}/invoices/${encodeURIComponent(invoiceId)}`;
   return (await refrensFetch(creds, path)) as RefrensInvoiceSummary;
 }
+
+/* ------------------------------------------------------------------------- */
+/*  Constrained read-only passthrough, for the Chrome extension proxy         */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Feathers query keys the extension is allowed to send. Anything else is
+ * dropped rather than rejected, so a future extension version cannot widen its
+ * own reach by adding a parameter — this list is the contract.
+ *
+ * Everything here is a read filter. `$select` is forced server-side, so the
+ * response never carries more of the invoice document than the extension needs.
+ */
+const ALLOWED_QUERY_KEYS = new Set([
+  'currency',
+  'status',
+  'status[$in][]',
+  'invoiceNumber',
+  'invoiceNumber[$regex]',
+  'invoiceNumber[$options]',
+  'billedTo.name',
+  'billedTo.name[$regex]',
+  'billedTo.name[$options]',
+  'totals.total',
+  'totals.total[$gte]',
+  'totals.total[$lte]',
+  'balance.due',
+  'balance.due[$gte]',
+  'balance.due[$lte]',
+  '$limit',
+  '$skip',
+  '$sort[invoiceDate]',
+  '$sort[createdAt]',
+  '$sort[invoiceNumber]',
+  '$or[0][invoiceNumber][$regex]',
+  '$or[0][invoiceNumber][$options]',
+  '$or[1][billedTo.name][$regex]',
+  '$or[1][billedTo.name][$options]',
+]);
+
+const PASSTHROUGH_SELECT = [
+  'invoiceNumber',
+  'currency',
+  'totals',
+  'status',
+  'billedTo',
+  'balance',
+  'invoiceDate',
+  'dueDate',
+];
+
+const MAX_PASSTHROUGH_LIMIT = 50;
+
+/**
+ * Runs an allowlisted invoice query on behalf of the extension. Read-only: no
+ * method other than GET is reachable through here.
+ */
+export async function queryInvoicesForExtension(
+  params: URLSearchParams
+): Promise<unknown> {
+  const creds = await getRefrensCredentials();
+  if (!creds) throw new RefrensNotConfiguredError();
+
+  const out = new URLSearchParams();
+  for (const [key, value] of params) {
+    if (!ALLOWED_QUERY_KEYS.has(key)) continue;
+    if (key === '$limit') {
+      const n = Math.min(Number(value) || 20, MAX_PASSTHROUGH_LIMIT);
+      out.set('$limit', String(n));
+      continue;
+    }
+    out.append(key, value);
+  }
+  if (!out.has('$limit')) out.set('$limit', '20');
+  for (const field of PASSTHROUGH_SELECT) out.append('$select[]', field);
+
+  return refrensFetch(creds, `/businesses/${creds.urlKey}/invoices?${out.toString()}`);
+}
+
+/**
+ * The full invoice document for one id, which is where `share.link` lives — the
+ * extension needs it to capture the real Refrens PDF.
+ */
+export async function getInvoiceRawForExtension(invoiceId: string): Promise<unknown> {
+  if (!/^[a-f0-9]{24}$/i.test(invoiceId)) {
+    throw new RefrensApiError(400, 'Invalid invoice id');
+  }
+  const creds = await getRefrensCredentials();
+  if (!creds) throw new RefrensNotConfiguredError();
+  return refrensFetch(creds, `/businesses/${creds.urlKey}/invoices/${invoiceId}`);
+}
+
+/** The business slug, so the extension can build deep links into Refrens. */
+export async function getRefrensUrlKey(): Promise<string | null> {
+  const creds = await getRefrensCredentials();
+  return creds?.urlKey ?? null;
+}
