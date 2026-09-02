@@ -43,3 +43,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 schema-output.json
+
+# packaged chrome extensions (build output)
+/dist

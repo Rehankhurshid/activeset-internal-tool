@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Refrens \u2192 Skydo Invoice Bridge",
+  "version": "2.1.0",
+  "description": "Match a Skydo unmapped payment to its Refrens invoice and upload the real Refrens invoice PDF, without downloading it first.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "debugger",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://dashboard.skydo.com/*",
+    "https://api.refrens.com/*",
+    "https://www.refrens.com/*",
+    "https://og.refrens.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.refrens.com/app/*"
+      ],
+      "js": [
+        "src/refrens-token.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://dashboard.skydo.com/*"
+      ],
+      "js": [
+        "src/skydo-panel.js"
+      ],
+      "css": [
+        "src/skydo-panel.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Refrens \u2192 Skydo"
+  },
+  "options_page": "src/options.html",
+  "icons": {
+    "128": "icons/icon128.png"
+  }
+}
