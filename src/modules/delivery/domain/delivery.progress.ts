@@ -9,6 +9,7 @@ import {
   type ProjectPage,
   type StackCheck,
   type StackDefinition,
+  type StackKickoffStep,
 } from './delivery.types';
 
 /**
@@ -262,5 +263,96 @@ export function buildKickoffProgress(
     total: required.length,
     outstanding,
     complete: outstanding.length === 0,
+  };
+}
+
+/** What the app already knows about our own kickoff, without anyone ticking. */
+export interface KickoffContext {
+  /** A tracker sheet has been generated for this project. */
+  hasTrackerSheet: boolean;
+  /** Pages are on the tracker, so the page list has plainly been pulled. */
+  pageCount: number;
+}
+
+/**
+ * Whether a kickoff step is done: what someone ticked, or what the project
+ * already shows. A tick always wins, so a step can be marked done even when the
+ * app cannot see it (a call held, a channel created).
+ */
+export function resolveKickoffStep(
+  step: StackKickoffStep,
+  ticked: boolean | undefined,
+  delivery: ProjectDeliveryState | undefined,
+  context: KickoffContext,
+): { done: boolean; source: 'person' | 'project' } {
+  if (ticked === true) return { done: true, source: 'person' };
+  switch (step.auto) {
+    case 'tracker_shared':
+      if (context.hasTrackerSheet) return { done: true, source: 'project' };
+      break;
+    case 'cadence_set':
+      if (delivery?.callCadence && delivery.callCadence !== 'none') return { done: true, source: 'project' };
+      break;
+    case 'pages_listed':
+      if (context.pageCount > 0) return { done: true, source: 'project' };
+      break;
+    default:
+      break;
+  }
+  return { done: false, source: 'person' };
+}
+
+export interface KickoffStepProgress {
+  done: number;
+  total: number;
+  outstanding: string[];
+  complete: boolean;
+}
+
+/** Our side of kickoff: the calls, the channel, the welcome email, the setup. */
+export function buildKickoffStepProgress(
+  stack: StackDefinition,
+  delivery: ProjectDeliveryState | undefined,
+  context: KickoffContext,
+): KickoffStepProgress {
+  const ticks = delivery?.kickoffSteps ?? {};
+  const outstanding = stack.kickoffSteps
+    .filter((step) => !resolveKickoffStep(step, ticks[step.id], delivery, context).done)
+    .map((step) => step.title);
+  return {
+    done: stack.kickoffSteps.length - outstanding.length,
+    total: stack.kickoffSteps.length,
+    outstanding,
+    complete: outstanding.length === 0,
+  };
+}
+
+/**
+ * Kickoff as a whole: what the client owes us and what we owe the project.
+ *
+ * `readyToBuild` is the narrower question — the build is blocked on the client's
+ * inputs, not on whether we have held our internal kickoff yet.
+ */
+export function buildKickoffState(
+  stack: StackDefinition,
+  delivery: ProjectDeliveryState | undefined,
+  context: KickoffContext,
+): {
+  inputs: ReturnType<typeof buildKickoffProgress>;
+  steps: KickoffStepProgress;
+  done: number;
+  total: number;
+  complete: boolean;
+  readyToBuild: boolean;
+} {
+  const inputs = buildKickoffProgress(stack, delivery);
+  const steps = buildKickoffStepProgress(stack, delivery, context);
+  return {
+    inputs,
+    steps,
+    done: inputs.done + steps.done,
+    total: inputs.total + steps.total,
+    complete: inputs.complete && steps.complete,
+    readyToBuild: inputs.complete,
   };
 }

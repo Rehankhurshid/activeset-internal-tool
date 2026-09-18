@@ -32,10 +32,28 @@ Projects with no stack fall back to Webflow.
 
 ## The four stages
 
-**Kickoff** — the inputs the client owes us (crawl, assets, Webflow account,
-domain access, analytics codes, fonts) as a checklist, the sync-call cadence,
-and a generated kickoff email the team edits and sends themselves. The build is
-"ready to start" when every non-optional input is in.
+**Kickoff** — two checklists, because kickoff has two sides.
+
+*What the client owes us*: the crawl, assets, Webflow account, domain access,
+analytics codes, fonts. The build is blocked on these, so "ready to start
+building" means every non-optional one is in.
+
+*What we do*: book the kickoff call once the deal closes, hold it, open the
+Slack channel with the client, send the welcome email, name the leads, create
+the ClickUp list and MarkUp folder, pull the page list, share the tracker, hold
+the internal kickoff. These are tracked here rather than only in the SOP
+checklist — that covers the whole build, and its kickoff section is easy to lose
+inside sixty-odd items.
+
+Three of our steps answer themselves from project state (the cadence is set, the
+tracker exists, pages are on the tracker) and show as "done in the app" with no
+checkbox, so nobody ticks a box about something the screen already shows. Steps
+that can be performed here link to the control that performs them: the welcome
+email opens the draft, the cadence scrolls to its card, the page list jumps to
+the Pages stage.
+
+Kickoff is *complete* when both sides are. It is *ready to build* when only the
+client's side is — we do not hold a build hostage to our own internal kickoff.
 
 **Build** — the page grid. One row per page, a status per discipline
 (`not_started`, `in_progress`, `blocked`, `in_review`, `completed`,

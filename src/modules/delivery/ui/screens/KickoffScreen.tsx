@@ -1,100 +1,80 @@
 'use client';
 
-import { ListChecks } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useRef } from 'react';
 import type { Project } from '@/types';
-import type { StackDefinition } from '../../domain/delivery.types';
+import type { StackDefinition, StackKickoffStep } from '../../domain/delivery.types';
+import type { KickoffContext } from '../../domain/delivery.progress';
 import { CallCadenceCard } from '../components/CallCadenceCard';
-import { KickoffEmailDialog } from '../components/KickoffEmailDialog';
+import { KickoffEmailDialog, type KickoffEmailDialogHandle } from '../components/KickoffEmailDialog';
 import { KickoffInputsList } from '../components/KickoffInputsList';
+import { KickoffStepsList } from '../components/KickoffStepsList';
 
 /**
- * Kickoff: what the client owes us, what we owe ourselves, and the two things
- * that keep a project from going quiet — a call cadence and an intro email.
+ * Kickoff has two sides and they are not the same job.
  *
- * The client's side is tracked, because the build is blocked on it and the
- * client needs to see the list. Our side is a reminder: those seven items are
- * already the project's checklist, and a second place to tick them is a second
- * place to forget.
+ * What the client owes us blocks the build, and they need to see that list.
+ * What we do — book the call, hold it, open the Slack channel, send the welcome
+ * email, set the project up — is ours, and it is tracked here rather than only
+ * in the SOP checklist: that checklist covers the whole build, and its kickoff
+ * section is easy to lose inside sixty-odd items.
  */
-
-/**
- * "Step 1: Project Planning & Kickoff" from the Website Migration SOP.
- *
- * Rendered, not stored. The Checklist tab owns the ticks; duplicating them here
- * would mean two answers to the same question and no way to tell which is true.
- */
-const INTERNAL_SETUP: string[] = [
-  'Pull the page list from the live site, including CMS collections',
-  'Name the lead developer, backup developer and project lead',
-  'Create the Slack channel with the client (Setup Channel — Webflow Migration)',
-  'Create the ClickUp task list (One Click Setup)',
-  'Create the MarkUp folder',
-  'Project lead sends the intro email introducing the team',
-  'Hold the internal kickoff: deadline, functionality, animations, strategy',
-];
-
-/** Full page load so the detail screen re-reads `?tab=` on mount. */
-function openChecklistTab(): void {
-  const url = new URL(window.location.href);
-  url.searchParams.set('tab', 'checklist');
-  window.location.assign(url.toString());
-}
 
 interface KickoffScreenProps {
   project: Project;
   stack: StackDefinition;
   userEmail: string;
+  context: KickoffContext;
+  /** Sends the team to the Pages stage, for the step about pulling the page list. */
+  onGoToPages?: () => void;
 }
 
-export function KickoffScreen({ project, stack, userEmail }: KickoffScreenProps) {
-  return (
-    <div className="grid gap-3 lg:grid-cols-3 lg:items-start">
-      <div className="lg:col-span-2">
-        <KickoffInputsList projectId={project.id} stack={stack} delivery={project.delivery} />
-      </div>
+export function KickoffScreen({ project, stack, userEmail, context, onGoToPages }: KickoffScreenProps) {
+  const emailRef = useRef<KickoffEmailDialogHandle>(null);
+  const cadenceRef = useRef<HTMLDivElement>(null);
 
+  // Each step that can be performed on this screen points at the control that
+  // performs it, so "send the welcome email" opens the draft rather than being
+  // a line of text next to a button someone has to notice.
+  const handleAction = (action: NonNullable<StackKickoffStep['action']>) => {
+    if (action === 'welcome-email') {
+      emailRef.current?.open();
+      return;
+    }
+    if (action === 'cadence') {
+      cadenceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    // Both the page list and the tracker sheet live on the Pages stage.
+    onGoToPages?.();
+  };
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
       <div className="space-y-3">
-        <CallCadenceCard projectId={project.id} delivery={project.delivery} />
+        <KickoffStepsList
+          projectId={project.id}
+          stack={stack}
+          delivery={project.delivery}
+          context={context}
+          onAction={handleAction}
+        />
+
+        <div ref={cadenceRef}>
+          <CallCadenceCard projectId={project.id} delivery={project.delivery} />
+        </div>
 
         <section className="space-y-2 rounded-lg border bg-card p-3">
           <div className="space-y-0.5">
-            <h2 className="text-sm font-semibold">Kickoff email</h2>
+            <h2 className="text-sm font-semibold">Welcome email</h2>
             <p className="text-xs text-muted-foreground">
               Drafted from the project. You send it yourself.
             </p>
           </div>
-          <KickoffEmailDialog project={project} stack={stack} userEmail={userEmail} />
-        </section>
-
-        <section className="space-y-2 rounded-lg border bg-card p-3">
-          <div className="space-y-0.5">
-            <h2 className="text-sm font-semibold">Internal setup</h2>
-            <p className="text-xs text-muted-foreground">
-              A reminder, not a tracker — tick these off on the Checklist tab.
-            </p>
-          </div>
-
-          <ul className="space-y-1.5">
-            {INTERNAL_SETUP.map((item) => (
-              <li key={item} className="flex items-start gap-2 text-xs leading-snug text-muted-foreground">
-                <span aria-hidden="true" className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground/50" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 w-full justify-start px-2 text-xs"
-            onClick={openChecklistTab}
-          >
-            <ListChecks className="h-3.5 w-3.5" />
-            Open the Checklist tab
-          </Button>
+          <KickoffEmailDialog ref={emailRef} project={project} stack={stack} userEmail={userEmail} />
         </section>
       </div>
+
+      <KickoffInputsList projectId={project.id} stack={stack} delivery={project.delivery} />
     </div>
   );
 }

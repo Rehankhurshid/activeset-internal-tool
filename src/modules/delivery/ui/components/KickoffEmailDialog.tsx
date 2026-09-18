@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import { Check, Copy, Mail, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -70,8 +70,15 @@ interface KickoffEmailDialogProps {
   portalUrl?: string;
 }
 
-export function KickoffEmailDialog({ project, stack, userEmail, portalUrl }: KickoffEmailDialogProps) {
+/** Lets the kickoff step list open this draft, rather than describing a button. */
+export interface KickoffEmailDialogHandle {
+  open: () => void;
+}
+
+export const KickoffEmailDialog = forwardRef<KickoffEmailDialogHandle, KickoffEmailDialogProps>(
+  function KickoffEmailDialog({ project, stack, userEmail, portalUrl }, ref) {
   const [open, setOpen] = useState(false);
+  useImperativeHandle(ref, () => ({ open: () => setOpen(true) }), []);
   const [copied, setCopied] = useState(false);
 
   const draft = useMemo(() => {
@@ -216,4 +223,4 @@ export function KickoffEmailDialog({ project, stack, userEmail, portalUrl }: Kic
       </DialogContent>
     </Dialog>
   );
-}
+});

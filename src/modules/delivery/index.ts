@@ -17,6 +17,7 @@ export type {
   StackDiscipline,
   StackId,
   StackKickoffInput,
+  StackKickoffStep,
 } from './domain/delivery.types';
 export {
   PAGE_WORK_STATUSES,
@@ -29,6 +30,9 @@ export { AVAILABLE_STACKS, DEFAULT_STACK_ID, getStack, isStackSupported } from '
 
 export {
   buildKickoffProgress,
+  buildKickoffState,
+  buildKickoffStepProgress,
+  resolveKickoffStep,
   buildLaunchReadiness,
   buildPageProgress,
   resolveAutoCheck,
@@ -36,6 +40,8 @@ export {
 } from './domain/delivery.progress';
 export type {
   BuildLaunchReadinessInput,
+  KickoffContext,
+  KickoffStepProgress,
   CheckProgress,
   DisciplineProgress,
   LaunchReadiness,

@@ -349,6 +349,19 @@ export const deliveryRepository = {
     }
   },
 
+  /** Our own kickoff: the calls, the channel, the welcome email, the setup. */
+  async setKickoffStep(projectId: string, stepId: string, done: boolean): Promise<void> {
+    try {
+      await updateDoc(doc(db, PROJECTS, projectId), {
+        [`delivery.kickoffSteps.${stepId}`]: done,
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'setKickoffStep');
+      throw new DatabaseError('Failed to update the kickoff list');
+    }
+  },
+
   async updateDeliveryState(
     projectId: string,
     patch: Pick<ProjectDeliveryState, 'callCadence' | 'lastSyncCallAt'>,

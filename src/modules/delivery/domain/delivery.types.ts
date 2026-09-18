@@ -117,6 +117,30 @@ export interface StackKickoffInput {
   note?: string;
 }
 
+/**
+ * Things the app can already answer about our own kickoff, so a step the
+ * project plainly shows as done does not also need a tick.
+ */
+export type KickoffStepAutoId = 'tracker_shared' | 'cadence_set' | 'pages_listed';
+
+/**
+ * Something WE do at kickoff, as opposed to something the client owes us.
+ *
+ * Tracked here rather than only in the SOP checklist because this is the screen
+ * the team is on during kickoff; the SOP holds sixty-odd items across the whole
+ * build, and the kickoff section is easy to lose inside it.
+ */
+export interface StackKickoffStep {
+  id: string;
+  title: string;
+  order: number;
+  note?: string;
+  /** Answered from project state when the app already knows. */
+  auto?: KickoffStepAutoId;
+  /** The control on the kickoff screen that performs it, so the row can point at it. */
+  action?: 'welcome-email' | 'cadence' | 'sheet' | 'pages';
+}
+
 export interface StackDefinition {
   id: StackId;
   name: string;
@@ -124,6 +148,7 @@ export interface StackDefinition {
   disciplines: StackDiscipline[];
   checks: StackCheck[];
   kickoffInputs: StackKickoffInput[];
+  kickoffSteps: StackKickoffStep[];
 }
 
 /**

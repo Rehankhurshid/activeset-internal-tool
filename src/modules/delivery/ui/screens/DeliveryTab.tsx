@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
-import { buildKickoffProgress, buildLaunchReadiness } from '../../domain/delivery.progress';
+import { buildKickoffState, buildLaunchReadiness, type KickoffContext } from '../../domain/delivery.progress';
 import { getStack } from '../../domain/stacks';
 import type { ProjectPage } from '../../domain/delivery.types';
 import { deliveryRepository } from '../../infrastructure/delivery.repository';
@@ -49,7 +49,16 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
     return deliveryRepository.subscribeToPages(project.id, setPages);
   }, [project.id]);
 
-  const kickoff = useMemo(() => buildKickoffProgress(stack, project.delivery), [stack, project.delivery]);
+  // What the app already knows about kickoff, so steps it can answer are not
+  // also asked of a person.
+  const kickoffContext: KickoffContext = useMemo(
+    () => ({ hasTrackerSheet: Boolean(project.delivery?.trackerSheetId), pageCount: pages.length }),
+    [project.delivery?.trackerSheetId, pages.length],
+  );
+  const kickoff = useMemo(
+    () => buildKickoffState(stack, project.delivery, kickoffContext),
+    [stack, project.delivery, kickoffContext],
+  );
   const readiness = useMemo(
     () => buildLaunchReadiness({ stack, pages, delivery: project.delivery }),
     [stack, pages, project.delivery],
@@ -59,10 +68,10 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
   // render would drag someone back out of the stage they just opened.
   useEffect(() => {
     if (stage !== null) return;
-    if (!kickoff.complete && pages.length === 0) setStage('kickoff');
+    if (!kickoff.readyToBuild && pages.length === 0) setStage('kickoff');
     else if (readiness.pages.total > 0 && readiness.pages.done === readiness.pages.total) setStage('launch');
     else setStage('pages');
-  }, [stage, kickoff.complete, pages.length, readiness.pages.total, readiness.pages.done]);
+  }, [stage, kickoff.readyToBuild, pages.length, readiness.pages.total, readiness.pages.done]);
 
   const current = stage ?? 'pages';
 
@@ -110,7 +119,15 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
         </p>
       </div>
 
-      {current === 'kickoff' && <KickoffScreen project={project} stack={stack} userEmail={userEmail} />}
+      {current === 'kickoff' && (
+        <KickoffScreen
+          project={project}
+          stack={stack}
+          userEmail={userEmail}
+          context={kickoffContext}
+          onGoToPages={() => setStage('pages')}
+        />
+      )}
 
       {current === 'pages' && (
         <div className="space-y-4">

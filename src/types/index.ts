@@ -941,6 +941,8 @@ export interface ProjectDeliveryState {
   siteChecks?: Record<string, CheckStatus>;
   /** Kickoff input id → whether the client has given it to us. */
   kickoffInputs?: Record<string, boolean>;
+  /** Kickoff step id → whether we have done it. Our side of kickoff. */
+  kickoffSteps?: Record<string, boolean>;
   /** How often the team and client sync; drives the "no call recently" nudge. */
   callCadence?: 'weekly' | 'biweekly' | 'none';
   lastSyncCallAt?: string;

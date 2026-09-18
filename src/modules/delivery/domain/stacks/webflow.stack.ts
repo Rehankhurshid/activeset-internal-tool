@@ -1,4 +1,10 @@
-import type { StackCheck, StackDefinition, StackDiscipline, StackKickoffInput } from '../delivery.types';
+import type {
+  StackCheck,
+  StackDefinition,
+  StackDiscipline,
+  StackKickoffInput,
+  StackKickoffStep,
+} from '../delivery.types';
 
 /**
  * Webflow, the stack this agency currently builds on.
@@ -94,6 +100,29 @@ const kickoffInputs: Omit<StackKickoffInput, 'order'>[] = [
   { id: 'original_project', title: 'Access to the original project file', optional: true },
 ];
 
+/**
+ * What WE do at kickoff, in the order it actually happens.
+ *
+ * The SOP's "Step 1: Project Planning & Kickoff" is most of this. Two things
+ * are added that the SOP leaves implicit but the team does anyway: booking and
+ * holding the first call once the deal closes, and sharing the tracker. Three
+ * steps answer themselves from project state, so nobody ticks a box about
+ * something the screen already shows.
+ */
+const kickoffSteps: Omit<StackKickoffStep, 'order'>[] = [
+  { id: 'kickoff_call_booked', title: 'Book the kickoff call', note: 'As soon as the deal closes, before anything else slips.' },
+  { id: 'kickoff_call_held', title: 'Hold the kickoff call with the client', note: 'Scope, deadline, who does what, how we will talk.' },
+  { id: 'slack_channel', title: 'Create the Slack channel with the client', note: 'This is where the project actually gets talked about.' },
+  { id: 'welcome_email', title: 'Send the welcome email', note: 'Introduces the team and the tracker.', action: 'welcome-email' },
+  { id: 'cadence_agreed', title: 'Agree the sync cadence', note: 'Weekly or every two weeks.', auto: 'cadence_set', action: 'cadence' },
+  { id: 'team_named', title: 'Name the lead developer, backup developer and project lead' },
+  { id: 'clickup_list', title: 'Create the ClickUp task list', note: 'One Click Setup.' },
+  { id: 'markup_folder', title: 'Create the MarkUp folder' },
+  { id: 'page_list', title: 'Pull the page list from the live site', note: 'Including CMS collections. Scan the sitemap and import it.', auto: 'pages_listed', action: 'pages' },
+  { id: 'tracker_shared', title: 'Share the tracker with the client', auto: 'tracker_shared', action: 'sheet' },
+  { id: 'internal_kickoff', title: 'Hold the internal kickoff', note: 'Deadline, functionality, animations, strategy.' },
+];
+
 function withOrder<T>(items: T[]): (T & { order: number })[] {
   return items.map((item, order) => ({ ...item, order }));
 }
@@ -108,4 +137,5 @@ export const WEBFLOW_STACK: StackDefinition = {
     ...withOrder(siteChecks).map((c, i) => ({ ...c, scope: 'site' as const, order: pageChecks.length + i })),
   ],
   kickoffInputs: withOrder(kickoffInputs),
+  kickoffSteps: withOrder(kickoffSteps),
 };

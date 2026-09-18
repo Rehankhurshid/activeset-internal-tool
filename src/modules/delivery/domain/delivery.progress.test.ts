@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildKickoffProgress,
+  buildKickoffState,
+  resolveKickoffStep,
   buildLaunchReadiness,
   buildPageProgress,
   resolveAutoCheck,
@@ -199,6 +201,67 @@ describe('buildKickoffProgress', () => {
   });
 });
 
+describe('kickoff steps', () => {
+  const noContext = { hasTrackerSheet: false, pageCount: 0 };
+  const step = (id: string) => stack.kickoffSteps.find((s) => s.id === id)!;
+
+  it('covers the things the team actually does first', () => {
+    const ids = stack.kickoffSteps.map((s) => s.id);
+    for (const expected of ['kickoff_call_booked', 'kickoff_call_held', 'slack_channel', 'welcome_email']) {
+      assert.ok(ids.includes(expected), `missing kickoff step: ${expected}`);
+    }
+  });
+
+  it('answers itself where the project already shows the answer', () => {
+    assert.equal(resolveKickoffStep(step('tracker_shared'), undefined, {}, noContext).done, false);
+    assert.deepEqual(
+      resolveKickoffStep(step('tracker_shared'), undefined, {}, { hasTrackerSheet: true, pageCount: 0 }),
+      { done: true, source: 'project' },
+    );
+    assert.deepEqual(
+      resolveKickoffStep(step('page_list'), undefined, {}, { hasTrackerSheet: false, pageCount: 12 }),
+      { done: true, source: 'project' },
+    );
+    assert.deepEqual(
+      resolveKickoffStep(step('cadence_agreed'), undefined, { callCadence: 'weekly' }, noContext),
+      { done: true, source: 'project' },
+    );
+    // "none" is a decision not to have a standing call, not a cadence.
+    assert.equal(resolveKickoffStep(step('cadence_agreed'), undefined, { callCadence: 'none' }, noContext).done, false);
+  });
+
+  it('lets a tick stand for things the app cannot see', () => {
+    assert.deepEqual(resolveKickoffStep(step('slack_channel'), true, {}, noContext), { done: true, source: 'person' });
+    assert.equal(resolveKickoffStep(step('slack_channel'), undefined, {}, noContext).done, false);
+  });
+
+  it('reports our side separately from the client side', () => {
+    const state = buildKickoffState(stack, {}, noContext);
+    assert.equal(state.steps.total, stack.kickoffSteps.length);
+    assert.equal(state.steps.done, 0);
+    assert.equal(state.complete, false);
+    assert.equal(state.readyToBuild, false);
+    assert.equal(state.total, state.inputs.total + state.steps.total);
+  });
+
+  it('can be ready to build while our own setup is still outstanding', () => {
+    // The build is blocked on the client's inputs, not on our internal kickoff.
+    const inputs = Object.fromEntries(stack.kickoffInputs.filter((i) => !i.optional).map((i) => [i.id, true]));
+    const state = buildKickoffState(stack, { kickoffInputs: inputs }, noContext);
+    assert.equal(state.readyToBuild, true);
+    assert.equal(state.complete, false, 'our own steps are still outstanding');
+    assert.ok(state.steps.outstanding.length > 0);
+  });
+
+  it('is complete only when both sides are', () => {
+    const inputs = Object.fromEntries(stack.kickoffInputs.filter((i) => !i.optional).map((i) => [i.id, true]));
+    const steps = Object.fromEntries(stack.kickoffSteps.map((s) => [s.id, true]));
+    const state = buildKickoffState(stack, { kickoffInputs: inputs, kickoffSteps: steps }, noContext);
+    assert.equal(state.complete, true);
+    assert.deepEqual(state.steps.outstanding, []);
+  });
+});
+
 describe('stack registry', () => {
   it('falls back to Webflow for an unset or unsupported stack', () => {
     assert.equal(getStack(undefined).id, 'webflow');
@@ -212,5 +275,7 @@ describe('stack registry', () => {
     assert.equal(new Set(disciplineIds).size, disciplineIds.length, 'duplicate discipline id');
     const inputIds = stack.kickoffInputs.map((i) => i.id);
     assert.equal(new Set(inputIds).size, inputIds.length, 'duplicate kickoff input id');
+    const stepIds = stack.kickoffSteps.map((s) => s.id);
+    assert.equal(new Set(stepIds).size, stepIds.length, 'duplicate kickoff step id');
   });
 });
