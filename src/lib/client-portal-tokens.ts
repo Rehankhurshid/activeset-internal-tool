@@ -239,6 +239,17 @@ export interface VerifiedPortalToken {
 const REJECT = () => new PortalAuthError(404, 'This link is no longer active');
 /** Hash of an impossible token, so malformed input still costs the same reads. */
 const NULL_HASH = hashPortalToken('');
+/**
+ * Stand-in project id for the read we make when there is no token record, so
+ * every rejection path costs the same two reads.
+ *
+ * It must be a VALID document id. Firestore reserves ids matching `__.*__`, and
+ * the obvious `__none__` is rejected by the backend with "Key path element must
+ * not be incomplete" — which surfaced as a 500 on every portal request instead
+ * of the uniform 404. Firestore also generates 20-character ids, so a longer
+ * hyphenated name cannot collide with a real project.
+ */
+const NO_SUCH_PROJECT_ID = 'client-portal-no-such-project-sentinel';
 
 /**
  * Resolves a raw token to its record and project, or throws PortalAuthError.
@@ -255,7 +266,7 @@ export async function verifyPortalToken(token: unknown): Promise<VerifiedPortalT
 
   const tokenSnap = await collection().doc(tokenHash).get();
   const record = tokenSnap.exists ? (tokenSnap.data() as ClientPortalTokenRecord) : null;
-  const projectId = record?.projectId || '__none__';
+  const projectId = record?.projectId || NO_SUCH_PROJECT_ID;
   const projectSnap = await projectRef(projectId).get();
   const project = projectSnap.exists ? ((projectSnap.data() || {}) as Record<string, unknown>) : null;
   const portal = project?.clientPortal as { enabled?: unknown; activeTokenHash?: unknown } | undefined;
