@@ -59,12 +59,11 @@ Every change to `firestore.rules` must keep this suite green **before**
 `npm run security:deploy-firestore-rules`. When you add a collection or change
 who may touch one, add or update the matching `describe` block in the same PR.
 
-### Known caveat: peer dependency mismatch
+### Why the version is pinned to 4.x
 
-`@firebase/rules-unit-testing@5.x` declares a peer dependency on `firebase@^12`,
-while this repo is on `firebase@11`. It was installed with `--legacy-peer-deps`
-and works because the package only imports the compat entrypoints
-(`firebase/compat/app`, `firebase/compat/firestore`), which are unchanged in 11.
-If a fresh `npm install` / `npm ci` fails with `ERESOLVE`, either pass
-`--legacy-peer-deps`, pin `@firebase/rules-unit-testing@^4` (the release that
-targets `firebase@^11`), or upgrade `firebase` to 12.
+`@firebase/rules-unit-testing@4.0.1` declares `firebase@^11`, which is what this
+repo runs. The 5.x line requires `firebase@^12`, so installing it here needs
+`--legacy-peer-deps` — which works on a machine that already has a resolved
+`node_modules`, and then fails the next clean `npm install`. It did exactly that
+on Vercel. Keep this on 4.x until `firebase` itself moves to 12; the API used by
+this suite is identical across the two.
