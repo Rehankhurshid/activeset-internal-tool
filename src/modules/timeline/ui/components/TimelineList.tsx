@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
     Table,
@@ -12,6 +12,11 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type {
     ProjectTimeline,
     TimelineItemStatus,
@@ -32,6 +37,8 @@ interface TimelineListProps {
     onStatusChange: (milestoneId: string, status: TimelineItemStatus) => void;
     /** Disable row click and status picker. Used by the public share view. */
     readOnly?: boolean;
+    /** Omit the assignee column (e.g. client-facing views). */
+    hideAssignee?: boolean;
 }
 
 export function TimelineList({
@@ -39,6 +46,7 @@ export function TimelineList({
     onOpenMilestone,
     onStatusChange,
     readOnly = false,
+    hideAssignee = false,
 }: TimelineListProps) {
     const rows = useMemo(() => {
         const phaseMap = new Map(timeline.phases.map((p) => [p.id, p]));
@@ -66,7 +74,7 @@ export function TimelineList({
                         <TableHead>Start</TableHead>
                         <TableHead>End</TableHead>
                         <TableHead>Duration</TableHead>
-                        <TableHead>Assignee</TableHead>
+                        {!hideAssignee && <TableHead>Assignee</TableHead>}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -88,6 +96,7 @@ export function TimelineList({
                                         aria-hidden="true"
                                     />
                                     <span className="truncate">{milestone.title}</span>
+                                    {milestone.clientVisible === true && <ClientVisibleGlyph />}
                                 </div>
                             </TableCell>
                             <TableCell>
@@ -132,14 +141,37 @@ export function TimelineList({
                             <TableCell className="tabular-nums text-xs">
                                 {durationLabel(milestone.startDate, milestone.endDate)}
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground truncate max-w-[180px]">
-                                {milestone.assignee || '—'}
-                            </TableCell>
+                            {!hideAssignee && (
+                                <TableCell className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                    {milestone.assignee || '—'}
+                                </TableCell>
+                            )}
                         </TableRow>
                     ))}
                 </TableBody>
             </Table>
         </div>
+    );
+}
+
+/** Small eye glyph marking a milestone that is shown on the client portal. */
+export function ClientVisibleGlyph({ className }: { className?: string }) {
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span
+                    role="img"
+                    aria-label="Visible to client"
+                    className={cn(
+                        'inline-flex shrink-0 items-center text-muted-foreground',
+                        className
+                    )}
+                >
+                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">Visible to client</TooltipContent>
+        </Tooltip>
     );
 }
 

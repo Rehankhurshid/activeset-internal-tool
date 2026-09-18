@@ -145,7 +145,7 @@ Reports are stored in Firestore `health_reports` collection with per-project bre
 | `/api/cron/scan-notifications` | Every few minutes | Fallback: drains pending notifications |
 | `/api/cron/cleanup` | Daily/Weekly | Removes old audit logs and change history |
 
-All cron endpoints support `CRON_SECRET` for authentication via `x-cron-secret` header or `Authorization: Bearer` header.
+All cron endpoints require `CRON_SECRET` in production, via the `Authorization: Bearer` header (what Vercel Cron sends) or `x-cron-secret`. When the variable is unset, production requests are rejected; local runs pass.
 
 ---
 
@@ -178,5 +178,5 @@ All cron endpoints support `CRON_SECRET` for authentication via `x-cron-secret` 
 | `GMAIL_USER` | Optional | Gmail sender for email notifications |
 | `GMAIL_APP_PASSWORD` | Optional | Gmail app password |
 | `NOTIFY_EMAIL` | Optional | Email recipient for alerts/reports |
-| `CRON_SECRET` | Optional | Auth secret for cron endpoints |
+| `CRON_SECRET` | Required in production | Auth secret for cron endpoints (fail-closed when unset) |
 | `NEXT_PUBLIC_BASE_URL` | Optional | Base URL for links in notifications (defaults to `https://app.activeset.co`) |

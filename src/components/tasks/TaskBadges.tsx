@@ -61,6 +61,21 @@ export function TaskPriorityBadge({
   );
 }
 
+const NEEDS_CLIENT_CLASSES =
+  'bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300';
+
+/** Amber flag for tasks waiting on the client; mirrors `Task.needsClientInput`. */
+export function TaskNeedsClientBadge({ className }: { className?: string }) {
+  return (
+    <Badge
+      variant="secondary"
+      className={cn('font-medium border-0', NEEDS_CLIENT_CLASSES, className)}
+    >
+      Needs client
+    </Badge>
+  );
+}
+
 export function TaskCategoryBadge({
   category,
   className,

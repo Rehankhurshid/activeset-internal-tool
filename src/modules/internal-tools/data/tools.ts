@@ -88,7 +88,7 @@ export const TOOLS: Tool[] = [
     ],
     notes: [
       'There are no credentials to enter. Refrens is reached through this app, which holds the signing key server-side — pairing gives your browser a token scoped to you alone.',
-      'Access is re-checked on every request, so losing Invoices access cuts the extension off immediately. Nothing needs rotating.',
+      'Access is re-checked on every request, so losing Invoices access cuts the extension off immediately. There is no key to rotate; the paired token simply expires after 180 days, and pairing again issues a fresh one.',
       'Chrome will warn that it can debug your browser. That permission exists only to turn Refrens’ rendered invoice into a real PDF; you will see a debugging banner on a hidden tab for a few seconds each time.',
       'It stops at "file attached" on purpose — mapping a payment moves money, so the final confirm stays in Skydo.',
     ],
@@ -101,14 +101,19 @@ export const TOOLS: Tool[] = [
     summary:
       'Audits a Webflow project’s settings against our best-practice checklist — favicon, branding, SEO, publishing.',
     kind: 'extension',
-    download: '/downloads/webflow-settings-auditor-2.0.0.zip',
-    version: '2.0.0',
+    download: '/downloads/webflow-settings-auditor-2.1.0.zip',
+    version: '2.1.0',
     source: 'chrome-extension/',
+    extensionId: 'fcggeinimgcpbpplnopegodlbapkmcnp',
+    pairingSlug: 'webflow-settings-auditor',
     steps: [
       ...LOAD_UNPACKED,
+      'Come back to this page and click "Pair with this browser" on this card.',
       'Open a Webflow project, then open the extension from the side panel to run the audit.',
     ],
-    notes: ['Reads Webflow project settings in the page you have open; it does not need an API token.'],
+    notes: [
+      'It reads the Webflow settings page you have open and talks to this app through a paired token scoped to you, so there are no credentials to enter. If the side panel says "Not paired", come back here and pair.',
+    ],
   },
   {
     id: 'webflow-team-tracker',

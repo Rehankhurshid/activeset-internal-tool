@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
+import {
+  ExtensionAuthError,
+  extensionAuthErrorResponse,
+  requireCallerOrExtensionToken,
+} from '@/lib/extension-tokens';
+
+const EXTENSION_SLUG = 'webflow-settings-auditor';
 
 /**
  * GET /api/projects
- * Get all projects (for Chrome extension dropdown)
- * Note: This is a simplified endpoint - in production you'd want auth
+ *
+ * The project list for the Webflow Settings Auditor's "save to project"
+ * dropdown. Accepts a signed-in @activeset.co session or the auditor's paired
+ * extension token — see requireCallerOrExtensionToken.
  */
 export async function GET(req: NextRequest) {
     try {
-        // For the Chrome extension, we return all projects
-        // In a production app, you'd filter by authenticated user
+        await requireCallerOrExtensionToken(req, EXTENSION_SLUG);
+
         const projectsSnapshot = await db.collection('projects')
             .orderBy('createdAt', 'desc')
             .limit(100)
@@ -30,6 +39,7 @@ export async function GET(req: NextRequest) {
         });
 
     } catch (error) {
+        if (error instanceof ExtensionAuthError) return extensionAuthErrorResponse(error);
         console.error('[API] /api/projects GET error:', error);
         return NextResponse.json(
             { success: false, error: 'Internal server error', projects: [] },

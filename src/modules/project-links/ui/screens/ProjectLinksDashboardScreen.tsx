@@ -19,6 +19,9 @@ import { type Project, type ProjectTag } from '@/modules/project-links';
 import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
 import { ProjectCard } from '@/components/projects/ProjectCard';
 import { DailyReviewBanner } from '@/components/projects/DailyReviewBanner';
+import { ClientUpdatesBanner } from '@/components/projects/ClientUpdatesBanner';
+import { isPortalStale, normalizeClientStatus } from '@/modules/client-portal';
+import { todayIso } from '@/lib/review-status';
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
@@ -34,7 +37,7 @@ import { useListNavigation, useShortcut } from '@/shared/keyboard';
 const MAINTENANCE_TAGS: ProjectTag[] = ['retainer', 'maintenance', 'subscription'];
 const ACTIVE_TAGS: ProjectTag[] = ['one_time', 'consulting'];
 
-/** `1`–`6` switch the status filter. One component per option keeps hook order stable. */
+/** `1`–`7` switch the status filter. One component per option keeps hook order stable. */
 function StatusShortcut({
   option,
   index,
@@ -47,7 +50,7 @@ function StatusShortcut({
   useShortcut({
     id: `projects-status-${option.value}`,
     keys: String(index + 1),
-    label: index === 0 ? 'Status filter 1–6' : `Filter: ${option.label}`,
+    label: index === 0 ? 'Status filter 1–7' : `Filter: ${option.label}`,
     group: 'Projects',
     hidden: index > 0,
     handler: () => onSelect(option.value),
@@ -128,7 +131,11 @@ export function ProjectLinksDashboardScreen() {
         return false;
       }
       // Status filter
-      if (statusFilter !== 'all') {
+      if (statusFilter === 'needs_client') {
+        // Client-facing bucket: portal on and the client owes us something.
+        if (project.clientPortal?.enabled !== true) return false;
+        if (normalizeClientStatus(project.clientFacing?.status) !== 'needs_client') return false;
+      } else if (statusFilter !== 'all') {
         const projectStatus = project.status || 'current';
         if (statusFilter === 'paused' || statusFilter === 'closed' || statusFilter === 'paid') {
           if (projectStatus !== statusFilter) return false;
@@ -148,7 +155,8 @@ export function ProjectLinksDashboardScreen() {
     });
   }, [projects, searchQuery, statusFilter, activeTags]);
 
-  // Group by client (stable alphabetical, unassigned last)
+  // Group by client (stable alphabetical, unassigned last), with a per-group
+  // client-portal rollup for the section header.
   const groupedProjects = useMemo(() => {
     const groups = new Map<string, Project[]>();
     const unassigned: Project[] = [];
@@ -165,12 +173,22 @@ export function ProjectLinksDashboardScreen() {
         groups.set(client, [project]);
       }
     }
-    const sortedGroups: Array<{ client: string | null; projects: Project[] }> =
+    const today = todayIso();
+    const withRollup = (client: string | null, projects: Project[]) => {
+      let waitingCount = 0;
+      let staleCount = 0;
+      for (const p of projects) {
+        if (p.clientPortal?.enabled === true && normalizeClientStatus(p.clientFacing?.status) === 'needs_client') waitingCount++;
+        if (isPortalStale(p, today)) staleCount++;
+      }
+      return { client, projects, waitingCount, staleCount };
+    };
+    const sortedGroups: Array<{ client: string | null; projects: Project[]; waitingCount: number; staleCount: number }> =
       Array.from(groups.entries())
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([client, projects]) => ({ client, projects }));
+        .map(([client, projects]) => withRollup(client, projects));
     if (unassigned.length > 0) {
-      sortedGroups.push({ client: null, projects: unassigned });
+      sortedGroups.push(withRollup(null, unassigned));
     }
     return sortedGroups;
   }, [filteredProjects]);
@@ -225,11 +243,14 @@ export function ProjectLinksDashboardScreen() {
   const {
     maintenanceCount, activeCount, pausedCount, closedCount, paidCount,
     currentCount, runningScanCount, connectedSystemCount, unassignedCurrentCount,
+    sharedCount, needsClientCount, staleCount,
   } = useMemo(() => {
     const c = {
       maintenanceCount: 0, activeCount: 0, pausedCount: 0, closedCount: 0, paidCount: 0,
       currentCount: 0, runningScanCount: 0, connectedSystemCount: 0, unassignedCurrentCount: 0,
+      sharedCount: 0, needsClientCount: 0, staleCount: 0,
     };
+    const today = todayIso();
     for (const p of projects) {
       const status = p.status || 'current';
       const tags = p.tags || [];
@@ -247,6 +268,11 @@ export function ProjectLinksDashboardScreen() {
       }
       if (p.imageScanJob?.status === 'running') c.runningScanCount++;
       if (p.clickupListId || p.webflowConfig || p.sitemapUrl) c.connectedSystemCount++;
+      if (p.clientPortal?.enabled === true) {
+        c.sharedCount++;
+        if (normalizeClientStatus(p.clientFacing?.status) === 'needs_client') c.needsClientCount++;
+        if (isPortalStale(p, today)) c.staleCount++;
+      }
     }
     return c;
   }, [projects]);
@@ -258,6 +284,8 @@ export function ProjectLinksDashboardScreen() {
     { value: 'paused', label: 'Paused', count: pausedCount },
     { value: 'closed', label: 'Closed', count: closedCount },
     { value: 'paid', label: 'Paid', count: paidCount },
+    // Last on purpose: keeps `1`–`6` stable and gives this one `7`.
+    { value: 'needs_client', label: 'Waiting on client', count: needsClientCount },
   ];
 
   // Render the nav + header/grid skeleton immediately while projects load,
@@ -308,6 +336,9 @@ export function ProjectLinksDashboardScreen() {
                   <p className="text-sm text-muted-foreground mt-1">
                     {currentCount} current · {unassignedCurrentCount} unassigned · {connectedSystemCount} connected
                     {runningScanCount > 0 ? ` · ${runningScanCount} scanning` : ''}
+                    {` · ${sharedCount} shared`}
+                    {needsClientCount > 0 ? ` · ${needsClientCount} waiting on client` : ''}
+                    {staleCount > 0 ? ` · ${staleCount} stale` : ''}
                   </p>
                 </div>
                 <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-2 shrink-0">
@@ -403,11 +434,14 @@ export function ProjectLinksDashboardScreen() {
             {/* Daily review banner — only renders when there are current projects */}
             <DailyReviewBanner projects={projects} className="mb-4 sm:mb-6" />
 
+            {/* Client portal nudge — only renders when a shared portal has gone stale */}
+            <ClientUpdatesBanner projects={projects} className="mb-4 sm:mb-6" />
+
             {/* Projects Grid/List */}
             {filteredProjects.length > 0 ? (
               groupByClient ? (
                 <div className="space-y-8">
-                  {groupedProjects.map(({ client, projects: clientProjects }) => (
+                  {groupedProjects.map(({ client, projects: clientProjects, waitingCount, staleCount: groupStaleCount }) => (
                     <section key={client ?? '__unassigned__'}>
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-2 border-b border-border/60">
                         <div className="flex items-center gap-2 min-w-0">
@@ -424,6 +458,14 @@ export function ProjectLinksDashboardScreen() {
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 shrink-0">
                             {clientProjects.length}
                           </Badge>
+                          {(waitingCount > 0 || groupStaleCount > 0) && (
+                            <span className="text-[11px] text-muted-foreground truncate">
+                              {[
+                                waitingCount > 0 ? `${waitingCount} waiting` : null,
+                                groupStaleCount > 0 ? `${groupStaleCount} stale` : null,
+                              ].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
                         </div>
                         {client && (
                           <Button

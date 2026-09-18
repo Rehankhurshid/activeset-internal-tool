@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
+import {
+  ExtensionAuthError,
+  extensionAuthErrorResponse,
+  requireCallerOrExtensionToken,
+} from '@/lib/extension-tokens';
+
+// Both handlers accept a signed-in @activeset.co session or the Webflow
+// Settings Auditor's paired extension token — see requireCallerOrExtensionToken.
+const EXTENSION_SLUG = 'webflow-settings-auditor';
 
 /**
  * POST /api/webflow-settings
@@ -7,6 +16,8 @@ import { db } from '@/lib/firebase-admin';
  */
 export async function POST(req: NextRequest) {
     try {
+        await requireCallerOrExtensionToken(req, EXTENSION_SLUG);
+
         const body = await req.json();
 
         const {
@@ -62,6 +73,7 @@ export async function POST(req: NextRequest) {
         });
 
     } catch (error) {
+        if (error instanceof ExtensionAuthError) return extensionAuthErrorResponse(error);
         console.error('[API] /api/webflow-settings POST error:', error);
         return NextResponse.json(
             { success: false, error: 'Internal server error' },
@@ -76,6 +88,8 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
     try {
+        await requireCallerOrExtensionToken(req, EXTENSION_SLUG);
+
         const { searchParams } = new URL(req.url);
         const projectId = searchParams.get('projectId');
 
@@ -105,6 +119,7 @@ export async function GET(req: NextRequest) {
         });
 
     } catch (error) {
+        if (error instanceof ExtensionAuthError) return extensionAuthErrorResponse(error);
         console.error('[API] /api/webflow-settings GET error:', error);
         return NextResponse.json(
             { success: false, error: 'Internal server error' },

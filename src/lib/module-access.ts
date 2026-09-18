@@ -18,6 +18,11 @@ export async function hasModuleAccess(
   email: string,
   module: RestrictedModule
 ): Promise<boolean> {
+  // Project Links is open to everyone who can sign in — mirrors
+  // AccessControlService.hasModuleAccess. (requireCaller already limits sign-in
+  // to @activeset.co.)
+  if (module === 'project-links') return true;
+
   if (!hasFirebaseAdminCredentials) return false;
 
   const snap = await adminDb.collection('access_control').doc('module_access').get();

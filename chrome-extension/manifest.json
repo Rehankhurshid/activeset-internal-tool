@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Webflow Settings Auditor",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "Audit Webflow Project Settings against best practices. Checks favicon, branding, SEO, publishing options, and more.",
     "permissions": [
         "activeTab",
@@ -34,5 +34,12 @@
         "16": "icons/icon16.png",
         "48": "icons/icon48.png",
         "128": "icons/icon128.png"
+    },
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtccttYQJhp/BEhyFwqyHP5kzQNBsE2jSSEgPVcSXPfbWBS1CERB73NsBQD33XjpQpPoxBYo0/bqtfj9kwAoW6QRxpphPmZQi15BWPNLrYLh7fk8MB6UBk6JHeklxtgWsjt305CDV8qukDH+s9pvXvC2fC0K7Ya9P3VRpxQSmLerNomtOm4lkla0+zST+gZT5xxqJVdEj1JF5zZf/5rh0Ix6r1unAtI5gWTDwM0R0xYOqOqp4HlRJDARwGynbMX4WBHTstzPpvko1L+KgNWGWdtV0EaBixBS27ulmHLmv5xN4B/LxZWZ3c7Cwcsbzz/ZB5anURXTwVFCTRSLc+OrIWQIDAQAB",
+    "externally_connectable": {
+        "matches": [
+            "https://app.activeset.co/*",
+            "http://localhost:3000/*"
+        ]
     }
 }

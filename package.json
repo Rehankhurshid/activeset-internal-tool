@@ -23,6 +23,8 @@
     "schema-gen:pkg:build": "npm --prefix packages/schema-gen run build",
     "schema-gen:pkg:pack": "npm --prefix packages/schema-gen pack",
     "test:local-capture": "tsx --test src/local-capture/*.test.ts",
+    "test:client-portal": "tsx --test src/modules/client-portal/domain/*.test.ts",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-activeset \"tsx --test tests/firestore.rules.test.ts\"",
     "verify:ui": "npx tsx scripts/verify-ui.ts",
     "verify:ui:staged": "npx tsx scripts/verify-ui.ts",
     "security:migrate-webflow-tokens": "tsx scripts/migrate-webflow-tokens.ts",
@@ -128,6 +130,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/glob": "^8.1.0",
     "@types/jsonwebtoken": "^9.0.10",

@@ -5,6 +5,7 @@ import {
     updateDoc,
     deleteDoc,
     onSnapshot,
+    runTransaction,
     Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -126,6 +127,37 @@ export const timelineService = {
         } catch (error) {
             logError(error, 'getOrCreateTimeline');
             throw new DatabaseError('Failed to load timeline');
+        }
+    },
+
+    /**
+     * Sets one milestone's client visibility inside a transaction.
+     *
+     * The generic updateMilestone reads the timeline, maps the array and writes
+     * it whole, so flipping three switches in quick succession can restore
+     * milestones the team just hid. Visibility decides what leaves the company,
+     * so it gets a read-and-write that cannot lose the previous flip.
+     */
+    async setMilestoneClientVisible(
+        projectId: string,
+        milestoneId: string,
+        clientVisible: boolean
+    ): Promise<void> {
+        try {
+            const ref = doc(db, TIMELINES_COLLECTION, projectId);
+            await runTransaction(db, async (tx) => {
+                const snap = await tx.get(ref);
+                if (!snap.exists()) throw new DatabaseError('Timeline not found');
+                const nowISO = new Date().toISOString();
+                const milestones = ((snap.data()?.milestones ?? []) as TimelineMilestone[]).map((m) =>
+                    m.id === milestoneId ? { ...m, clientVisible, updatedAt: nowISO } : m
+                );
+                tx.update(ref, { milestones, updatedAt: Timestamp.now() });
+            });
+        } catch (error) {
+            logError(error, 'setMilestoneClientVisible');
+            if (error instanceof DatabaseError) throw error;
+            throw new DatabaseError('Failed to update milestone visibility');
         }
     },
 

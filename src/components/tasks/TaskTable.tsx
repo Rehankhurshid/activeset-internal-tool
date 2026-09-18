@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -24,6 +24,7 @@ import {
   AlertCircle,
   AlertTriangle,
   RefreshCw,
+  MessageSquareWarning,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -73,6 +74,7 @@ import {
 } from '@/types';
 import {
   TaskCategoryBadge,
+  TaskNeedsClientBadge,
   TaskPriorityBadge,
   TaskStatusBadge,
 } from './TaskBadges';
@@ -132,16 +134,20 @@ export function TaskTable({
   const billingEnabled = Boolean(billing?.enabled) && !readOnly;
   const billingRate = billing?.hourlyRate ?? null;
   const billingCurrency = billing?.currency ?? 'USD';
-  const isNewSinceLastVisit = (t: Task): boolean => {
-    if (previousViewedAt <= 0) return false;
-    if (userEmail && t.createdBy === userEmail) return false;
-    const ms = t.createdAt instanceof Date ? t.createdAt.getTime() : 0;
-    return ms > previousViewedAt;
-  };
+  const isNewSinceLastVisit = useCallback(
+    (t: Task): boolean => {
+      if (previousViewedAt <= 0) return false;
+      if (userEmail && t.createdBy === userEmail) return false;
+      const ms = t.createdAt instanceof Date ? t.createdAt.getTime() : 0;
+      return ms > previousViewedAt;
+    },
+    [previousViewedAt, userEmail],
+  );
   const [sorting, setSorting] = useState<SortingState>([]);
   const [titleQuery, setTitleQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
+  const [needsClientOnly, setNeedsClientOnly] = useState(false);
   const [linkDialogTask, setLinkDialogTask] = useState<Task | null>(null);
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
 
@@ -158,6 +164,7 @@ export function TaskTable({
       if (priorityFilter !== 'all' && t.priority !== priorityFilter) {
         return false;
       }
+      if (needsClientOnly && !t.needsClientInput) return false;
       if (titleQuery) {
         const q = titleQuery.toLowerCase();
         if (
@@ -169,7 +176,7 @@ export function TaskTable({
       }
       return true;
     });
-  }, [tasks, titleQuery, statusFilter, priorityFilter]);
+  }, [tasks, titleQuery, statusFilter, priorityFilter, needsClientOnly]);
 
   // Re-order so subtasks appear directly under their parent. Tanstack preserves
   // input order when no column sort is active; once the user clicks a column
@@ -301,6 +308,9 @@ export function TaskTable({
                       >
                         New
                       </Badge>
+                    )}
+                    {task.needsClientInput && (
+                      <TaskNeedsClientBadge className="h-5 px-1.5 text-[10px]" />
                     )}
                   </div>
                   {task.description && (
@@ -772,21 +782,48 @@ export function TaskTable({
               id: 'actions',
               header: '',
               enableSorting: false,
-              cell: ({ row }) => (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-rose-600"
-                  onClick={() => handleDelete(row.original.id)}
-                  title="Delete task"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              ),
+              cell: ({ row }) => {
+                const task = row.original;
+                const needsClient = Boolean(task.needsClientInput);
+                const toggleLabel = needsClient
+                  ? 'Clear needs client input'
+                  : 'Needs client input';
+                return (
+                  <div className="flex items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        'h-7 w-7',
+                        needsClient
+                          ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400'
+                          : 'text-muted-foreground hover:text-amber-600',
+                      )}
+                      onClick={() =>
+                        handleUpdate(task.id, { needsClientInput: !needsClient })
+                      }
+                      title={toggleLabel}
+                      aria-label={toggleLabel}
+                      aria-pressed={needsClient}
+                    >
+                      <MessageSquareWarning className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-rose-600"
+                      onClick={() => handleDelete(task.id)}
+                      title="Delete task"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                );
+              },
             } as ColumnDef<Task>,
           ]),
     ],
-    [assignees, visibleParentIds, previousViewedAt, userEmail, readOnly, clickupListId, retryingTaskId, billingEnabled, billingRate, billingCurrency],
+    [assignees, visibleParentIds, isNewSinceLastVisit, readOnly, clickupListId, retryingTaskId, billingEnabled, billingRate, billingCurrency],
   );
 
   const table = useReactTable({
@@ -842,6 +879,22 @@ export function TaskTable({
             ))}
           </SelectContent>
         </Select>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            'h-9 gap-1.5',
+            needsClientOnly &&
+              'border-amber-500/60 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-400',
+          )}
+          onClick={() => setNeedsClientOnly((v) => !v)}
+          aria-pressed={needsClientOnly}
+          title="Only show tasks waiting on the client"
+        >
+          <MessageSquareWarning className="h-3.5 w-3.5" />
+          Needs client
+        </Button>
         <span className="text-xs text-muted-foreground ml-auto">
           {filtered.length} of {tasks.length} task{tasks.length === 1 ? '' : 's'}
         </span>

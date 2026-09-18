@@ -12,7 +12,7 @@ import { PROJECT_TAG_TONES } from '@/lib/ui-tones';
 import { cn } from '@/lib/utils';
 import { Kbd } from '@/shared/keyboard';
 
-export type StatusFilter = 'all' | 'maintenance' | 'active' | 'paused' | 'closed' | 'paid';
+export type StatusFilter = 'all' | 'maintenance' | 'active' | 'paused' | 'closed' | 'paid' | 'needs_client';
 
 export const ALL_TAGS: ProjectTag[] = ['retainer', 'one_time', 'subscription', 'maintenance', 'consulting'];
 

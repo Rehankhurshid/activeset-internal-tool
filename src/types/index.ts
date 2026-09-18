@@ -10,6 +10,8 @@ export interface ProjectLink {
   source?: 'manual' | 'auto';
   locale?: string; // e.g., "en", "de", "fr" - detected from sitemap hreflang
   pageType?: 'static' | 'collection' | 'unknown'; // Detected from Webflow or URL patterns
+  /** Shown on the client portal as a deliverable. Manual links only; default false. */
+  clientVisible?: boolean;
 }
 
 // --- FOLDER PAGE TYPES ---
@@ -379,6 +381,13 @@ export interface Project {
   updatedAt: Date;
   userId: string;
   client?: string; // Optional client/company name used to group projects together
+  /** Client portal settings (the private client-facing page). The portal token
+   *  itself is never stored here — it lives in the admin-only
+   *  `client_portal_tokens` collection, hashed. */
+  clientPortal?: ClientPortalSettings;
+  /** Client-facing status the team maintains, plus counters the portal beacon
+   *  writes through firebase-admin. Counter writes never touch `updatedAt`. */
+  clientFacing?: ClientFacingState;
   // --- Billing ---
   /** How the project is billed. Missing = 'fixed'. `adhoc` unlocks the
    *  per-task billable hours + "generate invoice from tasks" flow. */
@@ -643,6 +652,8 @@ export interface TimelineMilestone {
   color?: TimelineColor;         // falls back to phase color
   assignee?: string;             // email
   notes?: string;
+  /** Rendered on the client portal (title, dates, status only). Default false. */
+  clientVisible?: boolean;
   order: number;
   createdAt?: string;            // ISO
   updatedAt?: string;            // ISO
@@ -909,3 +920,124 @@ export interface ParsedTaskSuggestion {
   priority: TaskPriority;
 }
 
+// --- CLIENT PORTAL / CLIENT-FACING TYPES ---
+
+/**
+ * Status the team sets for the client's eyes. Deliberately separate from the
+ * internal/commercial `ProjectStatus` (current/paused/closed/paid).
+ */
+export type ClientStatus = 'on_track' | 'needs_client' | 'blocked' | 'paused' | 'delivered';
+
+export const CLIENT_STATUSES: ClientStatus[] = ['on_track', 'needs_client', 'blocked', 'paused', 'delivered'];
+
+/** Internal wording (dashboard chips, editors). */
+export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
+  on_track: 'On track',
+  needs_client: 'Waiting on client',
+  blocked: 'Blocked',
+  paused: 'Paused',
+  delivered: 'Delivered',
+};
+
+/** Softer wording shown to the client on the portal. */
+export const CLIENT_STATUS_PORTAL_LABELS: Record<ClientStatus, string> = {
+  on_track: 'On track',
+  needs_client: 'Waiting on you',
+  blocked: 'On hold',
+  paused: 'Paused',
+  delivered: 'Delivered',
+};
+
+export function normalizeClientStatus(raw: unknown): ClientStatus {
+  return (CLIENT_STATUSES as string[]).includes(raw as string) ? (raw as ClientStatus) : 'on_track';
+}
+
+/** Per-project portal settings. Written by the team through the client SDK. */
+export interface ClientPortalSettings {
+  /** Master switch. The token is only honoured while this is strictly `true`. */
+  enabled: boolean;
+  /** ISO timestamp of the last issue/rotate, for the Client tab. */
+  tokenIssuedAt?: string;
+  /** sha256 of the live token. Server-managed; a link only resolves when the
+   *  token record it names is active. Firestore rules keep the client SDK
+   *  from changing it. */
+  activeTokenHash?: string;
+  /** Overrides `Project.client` as the name in the portal header. */
+  brandName?: string;
+  /** Overrides `Project.logoUrl` in the portal header. */
+  brandLogoUrl?: string;
+  /** One short welcome line under the project name. */
+  welcome?: string;
+  /** Client contacts (informational until per-contact tokens exist). */
+  contactEmails?: string[];
+  /** Lets the client write back from the portal. Defaults to on. */
+  repliesOpen?: boolean;
+}
+
+/**
+ * Client-facing state. `status`, `statusNote`, `currentPhaseId`, `lastUpdateAt`
+ * and `lastUpdateBy` are written by the team (client SDK, bumps `updatedAt`).
+ * The view counters are written only by firebase-admin from the portal beacon
+ * with a merge that never touches `updatedAt`, so client opens do not reshuffle
+ * the updatedAt-sorted project lists.
+ */
+export interface ClientFacingState {
+  status?: ClientStatus;
+  /** One line the client sees under the status chip. */
+  statusNote?: string;
+  /** Phase id from project_timelines/{projectId}.phases[]; drives the stepper. */
+  currentPhaseId?: string;
+  /** ISO timestamp of the last "Mark updated" / status edit. */
+  lastUpdateAt?: string;
+  lastUpdateBy?: string;
+  /** Open asks awaiting the client, mirrored from tasks flagged needsClientInput. */
+  openRequestCount?: number;
+  /** Client messages the team has not marked read. Written by the portal route. */
+  unreadMessageCount?: number;
+  /** ISO timestamp of the newest client message. */
+  lastMessageAt?: string;
+  viewCount?: number;
+  lastViewedAt?: string;
+  lastViewCountry?: string;
+  lastViewCity?: string;
+}
+
+/**
+ * A short note the team posts to the client's portal. Lives in the
+ * `client_updates` subcollection under the project, so team members read and
+ * write it with the client SDK (rules restrict it to @activeset.co) while the
+ * portal reads it server-side through the allow-listed projection.
+ */
+export interface ClientUpdate {
+  id: string;
+  /** Optional heading. The body carries the message. */
+  title?: string;
+  /** Plain text, shown to the client verbatim. */
+  body: string;
+  postedAt: string;
+  postedBy: string;
+  /** Pinned updates sort above the rest on the portal. */
+  pinned?: boolean;
+}
+
+/**
+ * A message written by the CLIENT from their portal page. Never lands in the
+ * world-readable `requests` collection: it is written only by
+ * /api/portal/[token]/messages through firebase-admin, into the
+ * `client_messages` subcollection under the project.
+ */
+export interface ClientMessage {
+  id: string;
+  /** Plain text, capped by the route. */
+  body: string;
+  /** Set when the client is answering a specific ask; the id of that task. */
+  askTaskId?: string;
+  /** What the client typed as their name, if anything. Never trusted as identity. */
+  authorName?: string;
+  createdAt: string;
+  /** Set when a team member marks it read in the Client tab. */
+  readAt?: string;
+  readBy?: string;
+  /** Set once the message has been turned into an internal request. */
+  convertedRequestId?: string;
+}
