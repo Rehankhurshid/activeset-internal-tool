@@ -16,8 +16,6 @@ export type {
   StackDefinition,
   StackDiscipline,
   StackId,
-  StackKickoffInput,
-  StackKickoffStep,
 } from './domain/delivery.types';
 export {
   PAGE_WORK_STATUSES,
@@ -29,19 +27,20 @@ export {
 export { AVAILABLE_STACKS, DEFAULT_STACK_ID, getStack, isStackSupported } from './domain/stacks';
 
 export {
-  buildKickoffProgress,
-  buildKickoffState,
-  buildKickoffStepProgress,
-  resolveKickoffStep,
   buildLaunchReadiness,
   buildPageProgress,
+  pageChecksFor,
   resolveAutoCheck,
   resolveCheck,
 } from './domain/delivery.progress';
+
+// The project's own checklist, read as a delivery stage. Kickoff and the
+// site-wide launch list live there, not in this module, so they can differ per
+// project and are edited in one place.
+export { itemsForStage, sectionsForStage, stageProgress } from './domain/delivery.checklist';
+export type { StageProgress, StageSection } from './domain/delivery.checklist';
 export type {
   BuildLaunchReadinessInput,
-  KickoffContext,
-  KickoffStepProgress,
   CheckProgress,
   DisciplineProgress,
   LaunchReadiness,

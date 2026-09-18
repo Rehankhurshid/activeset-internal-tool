@@ -15,15 +15,70 @@ maintained twice. Making the page the model removes the duplicate.
 The PeakXV SEO/AEO tracker and the metrics tracker are deliberately **not** in
 scope. Those are retainer reporting, a different job.
 
+## Checklists belong to the project, not to this module
+
+Kickoff and the site-wide launch list are **sections of the project's own
+checklist**, seeded from an editable SOP template and deep-copied per project.
+They are not held in code here.
+
+This was got wrong first time round: those lists were TypeScript constants in
+`webflow.stack.ts`, so every project got an identical list and nobody could add,
+remove or reword an item without a deploy. No two projects run exactly the same
+way, and the app already had a checklist system that solved this properly.
+
+A checklist section carries an optional `stage` (`kickoff` or `launch`). The
+Delivery tab renders the sections tagged for the stage you are on; the Checklist
+tab shows every section as it always did; both tick the same item through
+`checklistService`. Untagged sections — which is every existing template until
+someone tags one — appear only on the Checklist tab, so nothing changed for
+them.
+
+### Tagging a section
+
+Two places, both per-section:
+
+- **This project only** — Checklist tab, press *Edit Structure*, then pick
+  Kickoff, Launch or *Not in Delivery* on the section header. Tagged sections
+  carry a small badge when you leave edit mode.
+- **Every future project** — Checklist Creator, the stage dropdown beside the
+  section title. Checklists are deep-copied at creation, so this changes new
+  checklists and leaves existing ones alone.
+
+The tag survives the Creator's Markdown tab as a `> Stage: kickoff` line under
+the section heading, and an item's scan signal as a `  - 🔍 Check: page_title`
+sub-bullet. Both are covered by `src/lib/template-export.test.ts`, because the
+editor round-trips through that format on every tab switch: a field the writer
+omits is not just missing from an export, it is deleted on the next save.
+
+An empty stage says so and links to the Checklist tab rather than showing 0 of 0,
+which would read as finished.
+
+### The one exception: per-page QC
+
+Per-page QC stays in this module because the checklist model has no page axis and
+cannot ask one question of 26 pages. It is still per-project and editable: the
+Launch screen's *Edit checks* button rewrites the whole list onto the project,
+seeded from the stack until then. Renaming keeps existing answers, since they key
+off the check id; removing a check that pages have answered warns with the count
+and says the answers stop counting; adding one back later gives it a new id, so
+old answers do not return.
+
+A check can name a scan signal, which answers it from the last page audit until a
+person says otherwise. Only the signals `resolveAutoCheck` implements are
+offered, and `pageChecksFor` drops any other value it finds on the document —
+a signal nothing computes would leave a check looking automatic and never
+answered.
+
 ## Stacks
 
-Everything technology-specific lives in a stack definition under
-`src/modules/delivery/domain/stacks/`: the disciplines, the launch checks, the
-kickoff inputs. Nothing outside that folder names a technology.
+A stack definition holds only what is structural: the disciplines that become
+the page grid's columns and the tracker sheet's columns, plus a starting set of
+per-page QC questions. Nothing outside
+`src/modules/delivery/domain/stacks/` names a technology.
 
 | Stack | State |
 | --- | --- |
-| `webflow` | Defined. Seeded from the migration SOP and the Muffins/Keatech sheets. |
+| `webflow` | Defined: four disciplines, twelve seeded page checks. |
 | `astro-sanity` | Registered, undefined. |
 | `next-storyblok` | Registered, undefined. |
 
@@ -32,37 +87,26 @@ Projects with no stack fall back to Webflow.
 
 ## The four stages
 
-**Kickoff** — two checklists, because kickoff has two sides.
+**Kickoff** — the sections of the project's checklist tagged `kickoff`. In the
+shipped Webflow template that is "Input" (what the client owes us) and "Step 1:
+Project Planning & Kickoff" (what we do: book and hold the first call once the
+deal closes, open the Slack channel, send the welcome email, name the leads,
+create the ClickUp list and MarkUp folder, share the tracker, hold the internal
+kickoff). Beside it sit the two things that are not checklist items: the sync
+cadence and the welcome email draft.
 
-*What the client owes us*: the crawl, assets, Webflow account, domain access,
-analytics codes, fonts. The build is blocked on these, so "ready to start
-building" means every non-optional one is in.
-
-*What we do*: book the kickoff call once the deal closes, hold it, open the
-Slack channel with the client, send the welcome email, name the leads, create
-the ClickUp list and MarkUp folder, pull the page list, share the tracker, hold
-the internal kickoff. These are tracked here rather than only in the SOP
-checklist — that covers the whole build, and its kickoff section is easy to lose
-inside sixty-odd items.
-
-Three of our steps answer themselves from project state (the cadence is set, the
-tracker exists, pages are on the tracker) and show as "done in the app" with no
-checkbox, so nobody ticks a box about something the screen already shows. Steps
-that can be performed here link to the control that performs them: the welcome
-email opens the draft, the cadence scrolls to its card, the page list jumps to
-the Pages stage.
-
-Kickoff is *complete* when both sides are. It is *ready to build* when only the
-client's side is — we do not hold a build hostage to our own internal kickoff.
+A project whose checklist has no section tagged `kickoff` is shown as not set up
+rather than as finished — zero of zero would read as done.
 
 **Build** — the page grid. One row per page, a status per discipline
 (`not_started`, `in_progress`, `blocked`, `in_review`, `completed`,
 `not_required`), assignee, expected date, design/staging/docs links and a review
 comment. Pages are imported from discovered links rather than typed.
 
-**Launch** — the site-wide checklist plus a short QC list per page. Readiness is
-derived: every applicable page built, every pre-launch check answered and
-passing. Post-launch checks are tracked but never gate a launch.
+**Launch** — the sections tagged `launch`, plus the per-page QC. Readiness is
+derived: every applicable page built, and every launch checklist item settled.
+An item marked `skipped` counts as not applicable rather than done, which is the
+checklist's own way of saying a step does not apply to this project.
 
 **Handover** — walkthrough videos and the launch record.
 
@@ -71,6 +115,9 @@ passing. Post-launch checks are tracked but never gate a launch.
 Eight checks answer themselves from the page's existing audit, so the team ticks
 judgement calls rather than things a crawler already knows: page title, meta
 description, H1, image alt text, Open Graph, link resolution, schema, spelling.
+
+An item on a checklist can also name one of these in `autoCheck`, so a launch
+checklist item answers itself.
 
 Three rules matter:
 
@@ -85,7 +132,8 @@ Three rules matter:
 | Where | What |
 | --- | --- |
 | `projects/{id}/pages/{pageId}` | One document per page. Team-only in rules. |
-| `projects/{id}.delivery` | Stack, site-check answers, kickoff answers, call cadence, tracker sheet id. |
+| `projects/{id}.delivery` | Stack, this project's page-check list, call cadence, tracker sheet id. |
+| `project_checklists` | Kickoff and launch live here, as tagged sections. Not a delivery collection — the Checklist tab owns it. |
 
 Pages are a subcollection, not an array on the project: a large site is hundreds
 of rows each carrying its own statuses and QC answers, and rewriting an array to
@@ -151,10 +199,16 @@ a very large package to carry into a serverless bundle for two endpoints.
 
 ## Verification
 
-1. `npm run test:delivery` — the derivations, the sheet round trip, the kickoff
-   email.
+1. `npm test` — the derivations, the sheet round trip, the kickoff email, the
+   stage readings, and the template Markdown round trip. `npm run test:delivery`
+   alone covers this module.
 2. `npm run arch:check`.
 3. In the app: open a project, add pages from the sitemap, move a status, then
    generate the sheet and confirm the columns match what the client is used to.
 4. Import: point it at a copy of the Muffins tracker and confirm the page list
    and statuses come through, and that a second import changes nothing.
+5. Stages: on a project with an untagged checklist, confirm Kickoff says it is not
+   set up. Tag a section Kickoff from the Checklist tab, confirm it appears under
+   Kickoff, tick an item there and confirm the Checklist tab shows it ticked too.
+6. Page checks: rename a check and confirm existing answers survive; remove an
+   answered one and confirm the warning names the number of pages affected.

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { SOPTemplate, SOPTemplateSection, SOPTemplateItem } from '@/types';
+import { SOPTemplate, SOPTemplateSection, SOPTemplateItem, ChecklistStage } from '@/types';
 import { checklistService } from '@/services/ChecklistService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     Loader2,
     Plus,
@@ -42,6 +49,9 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+/** A Select cannot hold an empty value, so "untagged" needs a sentinel. */
+const NO_STAGE = 'none';
+
 // ── Internal editable types (add stable _uid for sortable) ──
 type EditableItem = SOPTemplateItem & { _uid: string };
 type EditableSection = Omit<SOPTemplateSection, 'items'> & { _uid: string; items: EditableItem[] };
@@ -66,10 +76,14 @@ const stripUid = (sections: EditableSection[]): SOPTemplateSection[] =>
         title: s.title,
         emoji: s.emoji,
         order: sIdx,
+        // Carried deliberately: a saved template that dropped these would quietly
+        // un-tag the Delivery stages and un-answer the scan-backed items.
+        stage: s.stage,
         items: s.items.map((it, iIdx) => ({
             title: it.title,
             emoji: it.emoji,
             status: it.status,
+            autoCheck: it.autoCheck,
             notes: it.notes,
             referenceLink: it.referenceLink,
             hoverImage: it.hoverImage,
@@ -594,6 +608,29 @@ function SortableSectionCard({
                             placeholder="Section Title"
                             className="font-medium text-lg"
                         />
+                        {/*
+                          Tagging a stage here is what makes every checklist built
+                          from this template show up on Kickoff or Launch. It stays
+                          a per-section choice, and a project can change it on its
+                          own copy afterwards.
+                        */}
+                        <Select
+                            value={section.stage ?? NO_STAGE}
+                            onValueChange={(value) =>
+                                onUpdateSection(sIndex, {
+                                    stage: value === NO_STAGE ? undefined : (value as ChecklistStage),
+                                })
+                            }
+                        >
+                            <SelectTrigger className="w-[11rem] flex-shrink-0" aria-label="Delivery stage">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={NO_STAGE}>Not in Delivery</SelectItem>
+                                <SelectItem value="kickoff">Kickoff stage</SelectItem>
+                                <SelectItem value="launch">Launch stage</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div className="pl-4 border-l-2 border-muted ml-6 space-y-3">

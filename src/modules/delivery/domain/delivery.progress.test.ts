@@ -1,10 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildKickoffProgress,
-  buildKickoffState,
-  resolveKickoffStep,
   buildLaunchReadiness,
+  pageChecksFor,
   buildPageProgress,
   resolveAutoCheck,
   resolveCheck,
@@ -117,8 +115,8 @@ describe('resolveAutoCheck', () => {
 });
 
 describe('resolveCheck', () => {
-  const autoCheck = stack.checks.find((c) => c.id === 'page_title') as StackCheck;
-  const manualCheck = stack.checks.find((c) => c.id === 'headings') as StackCheck;
+  const autoCheck = stack.defaultPageChecks.find((c) => c.id === 'page_title') as StackCheck;
+  const manualCheck = stack.defaultPageChecks.find((c) => c.id === 'headings') as StackCheck;
   const failing = { categories: { seo: { title: '' } } } as unknown as AuditResult;
 
   it("lets a person's answer override the scan", () => {
@@ -137,128 +135,63 @@ describe('resolveCheck', () => {
 });
 
 describe('buildLaunchReadiness', () => {
-  const answerAll = (value: 'passed' | 'not_required') =>
-    Object.fromEntries(stack.checks.filter((c) => c.scope === 'site' && !c.postLaunch).map((c) => [c.id, value]));
-  const answerPage = () =>
-    Object.fromEntries(stack.checks.filter((c) => c.scope === 'page').map((c) => [c.id, 'passed' as const]));
+  const checks = stack.defaultPageChecks;
+  const answerPage = () => Object.fromEntries(checks.map((c) => [c.id, 'passed' as const]));
+  const launchItem = (status: 'not_started' | 'completed' | 'skipped', title = 'Connect the domain') =>
+    ({ id: `i_${title}_${status}`, title, status, order: 0 }) as never;
+  const run = (over: Record<string, unknown> = {}) =>
+    buildLaunchReadiness(
+      { pages: [], pageChecks: checks, ...over } as never,
+      stack.disciplines,
+    );
 
   it('is not ready with no pages, and says so', () => {
-    const r = buildLaunchReadiness({ stack, pages: [], delivery: { siteChecks: answerAll('passed') } });
+    const r = run();
     assert.equal(r.ready, false);
     assert.ok(r.blockers.includes('No pages added yet'));
   });
 
-  it('is ready when pages are built and every pre-launch check passes', () => {
-    const pages = [page('home', ALL_DONE, { qc: answerPage() })];
-    const r = buildLaunchReadiness({ stack, pages, delivery: { siteChecks: answerAll('passed') } });
+  it('is ready when pages are built and the launch checklist is done', () => {
+    const r = run({
+      pages: [page('home', ALL_DONE, { qc: answerPage() })],
+      launchChecklistItems: [launchItem('completed')],
+    });
     assert.deepEqual(r.blockers, []);
     assert.equal(r.ready, true);
   });
 
-  it('does not let outstanding post-launch checks block the launch', () => {
-    const pages = [page('home', ALL_DONE, { qc: answerPage() })];
-    const r = buildLaunchReadiness({ stack, pages, delivery: { siteChecks: answerAll('passed') } });
+  it('counts a skipped checklist item as not applicable, not as done', () => {
+    const r = run({
+      pages: [page('home', ALL_DONE, { qc: answerPage() })],
+      launchChecklistItems: [launchItem('skipped')],
+    });
+    assert.equal(r.siteChecks.applicable, 0, 'skipped drops out of the denominator');
     assert.equal(r.ready, true);
-    assert.ok(r.postLaunchChecks.pending > 0, 'post-launch work is still tracked');
   });
 
-  it('names what is holding the launch up', () => {
-    const pages = [page('home', { ...ALL_DONE, dev_mobile: 'in_progress' }), page('about', ALL_DONE, { qc: answerPage() })];
-    const r = buildLaunchReadiness({ stack, pages, delivery: {} });
+  it('names an outstanding checklist item as a blocker', () => {
+    const r = run({
+      pages: [page('home', ALL_DONE, { qc: answerPage() })],
+      launchChecklistItems: [launchItem('not_started')],
+    });
     assert.equal(r.ready, false);
-    assert.ok(r.blockers.some((b) => b.includes('1 page is still in progress')));
-    assert.ok(r.blockers.some((b) => b.includes('site checks unanswered')));
+    assert.ok(r.blockers.some((b) => b.includes('launch checklist items outstanding')));
+  });
+
+  it('is ready with no launch checklist at all — an untagged project is not blocked here', () => {
+    // Whether the stage is set up is the UI's story to tell; readiness only
+    // reports what it was given.
+    const r = run({ pages: [page('home', ALL_DONE, { qc: answerPage() })] });
+    assert.equal(r.ready, true);
   });
 
   it('counts a scan failure as a failing page check without anyone answering', () => {
-    const pages = [page('home', ALL_DONE)];
-    const audits = { home: { categories: { seo: { title: '', imagesWithoutAlt: 4 } } } as unknown as AuditResult };
-    const r = buildLaunchReadiness({ stack, pages, delivery: { siteChecks: answerAll('passed') }, auditsByPageId: audits });
+    const r = run({
+      pages: [page('home', ALL_DONE)],
+      auditsByPageId: { home: { categories: { seo: { title: '', imagesWithoutAlt: 4 } } } },
+    });
     assert.ok(r.pageChecks.failed >= 2, 'missing title and alt text both counted');
     assert.equal(r.ready, false);
-  });
-
-  it('drops not_required checks out of the denominator', () => {
-    const r = buildLaunchReadiness({ stack, pages: [], delivery: { siteChecks: answerAll('not_required') } });
-    assert.equal(r.siteChecks.applicable, 0);
-    assert.equal(r.siteChecks.pending, 0);
-  });
-});
-
-describe('buildKickoffProgress', () => {
-  it('ignores optional inputs and lists what is outstanding', () => {
-    const required = stack.kickoffInputs.filter((i) => !i.optional);
-    const progress = buildKickoffProgress(stack, { kickoffInputs: {} });
-    assert.equal(progress.total, required.length);
-    assert.equal(progress.done, 0);
-    assert.equal(progress.complete, false);
-    assert.equal(progress.outstanding.length, required.length);
-
-    const all = Object.fromEntries(required.map((i) => [i.id, true]));
-    const done = buildKickoffProgress(stack, { kickoffInputs: all });
-    assert.equal(done.complete, true);
-    assert.deepEqual(done.outstanding, []);
-  });
-});
-
-describe('kickoff steps', () => {
-  const noContext = { hasTrackerSheet: false, pageCount: 0 };
-  const step = (id: string) => stack.kickoffSteps.find((s) => s.id === id)!;
-
-  it('covers the things the team actually does first', () => {
-    const ids = stack.kickoffSteps.map((s) => s.id);
-    for (const expected of ['kickoff_call_booked', 'kickoff_call_held', 'slack_channel', 'welcome_email']) {
-      assert.ok(ids.includes(expected), `missing kickoff step: ${expected}`);
-    }
-  });
-
-  it('answers itself where the project already shows the answer', () => {
-    assert.equal(resolveKickoffStep(step('tracker_shared'), undefined, {}, noContext).done, false);
-    assert.deepEqual(
-      resolveKickoffStep(step('tracker_shared'), undefined, {}, { hasTrackerSheet: true, pageCount: 0 }),
-      { done: true, source: 'project' },
-    );
-    assert.deepEqual(
-      resolveKickoffStep(step('page_list'), undefined, {}, { hasTrackerSheet: false, pageCount: 12 }),
-      { done: true, source: 'project' },
-    );
-    assert.deepEqual(
-      resolveKickoffStep(step('cadence_agreed'), undefined, { callCadence: 'weekly' }, noContext),
-      { done: true, source: 'project' },
-    );
-    // "none" is a decision not to have a standing call, not a cadence.
-    assert.equal(resolveKickoffStep(step('cadence_agreed'), undefined, { callCadence: 'none' }, noContext).done, false);
-  });
-
-  it('lets a tick stand for things the app cannot see', () => {
-    assert.deepEqual(resolveKickoffStep(step('slack_channel'), true, {}, noContext), { done: true, source: 'person' });
-    assert.equal(resolveKickoffStep(step('slack_channel'), undefined, {}, noContext).done, false);
-  });
-
-  it('reports our side separately from the client side', () => {
-    const state = buildKickoffState(stack, {}, noContext);
-    assert.equal(state.steps.total, stack.kickoffSteps.length);
-    assert.equal(state.steps.done, 0);
-    assert.equal(state.complete, false);
-    assert.equal(state.readyToBuild, false);
-    assert.equal(state.total, state.inputs.total + state.steps.total);
-  });
-
-  it('can be ready to build while our own setup is still outstanding', () => {
-    // The build is blocked on the client's inputs, not on our internal kickoff.
-    const inputs = Object.fromEntries(stack.kickoffInputs.filter((i) => !i.optional).map((i) => [i.id, true]));
-    const state = buildKickoffState(stack, { kickoffInputs: inputs }, noContext);
-    assert.equal(state.readyToBuild, true);
-    assert.equal(state.complete, false, 'our own steps are still outstanding');
-    assert.ok(state.steps.outstanding.length > 0);
-  });
-
-  it('is complete only when both sides are', () => {
-    const inputs = Object.fromEntries(stack.kickoffInputs.filter((i) => !i.optional).map((i) => [i.id, true]));
-    const steps = Object.fromEntries(stack.kickoffSteps.map((s) => [s.id, true]));
-    const state = buildKickoffState(stack, { kickoffInputs: inputs, kickoffSteps: steps }, noContext);
-    assert.equal(state.complete, true);
-    assert.deepEqual(state.steps.outstanding, []);
   });
 });
 
@@ -269,13 +202,27 @@ describe('stack registry', () => {
   });
 
   it('gives every check and discipline a unique id', () => {
-    const checkIds = stack.checks.map((c) => c.id);
-    assert.equal(new Set(checkIds).size, checkIds.length, 'duplicate check id');
     const disciplineIds = stack.disciplines.map((d) => d.id);
     assert.equal(new Set(disciplineIds).size, disciplineIds.length, 'duplicate discipline id');
-    const inputIds = stack.kickoffInputs.map((i) => i.id);
-    assert.equal(new Set(inputIds).size, inputIds.length, 'duplicate kickoff input id');
-    const stepIds = stack.kickoffSteps.map((s) => s.id);
-    assert.equal(new Set(stepIds).size, stepIds.length, 'duplicate kickoff step id');
+    const checkIds2 = stack.defaultPageChecks.map((c) => c.id);
+    assert.equal(new Set(checkIds2).size, checkIds2.length, 'duplicate page check id');
+  });
+});
+
+describe('pageChecksFor', () => {
+  it('falls back to the stack until the project saves its own', () => {
+    assert.deepEqual(
+      pageChecksFor(stack, undefined).map((c) => c.id),
+      stack.defaultPageChecks.map((c) => c.id),
+    );
+    assert.deepEqual(pageChecksFor(stack, { pageChecks: [] }).map((c) => c.id), stack.defaultPageChecks.map((c) => c.id));
+  });
+
+  it('uses the project list once there is one, in its own order', () => {
+    const custom = [
+      { id: 'b', title: 'Second', group: 'QA', order: 1 },
+      { id: 'a', title: 'First', group: 'QA', order: 0 },
+    ];
+    assert.deepEqual(pageChecksFor(stack, { pageChecks: custom }).map((c) => c.id), ['a', 'b']);
   });
 });

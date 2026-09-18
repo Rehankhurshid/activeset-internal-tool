@@ -1,11 +1,13 @@
-import { SOPTemplate, SOPTemplateItem } from '@/types';
+import { AutoCheckId, SOPTemplate, SOPTemplateItem } from '@/types';
 
 /**
  * SOP Templates — each defines a reusable checklist structure.
  * Items have no `id` here; IDs are generated at instantiation time.
  */
 
-const makeItems = (items: { title: string; emoji?: string }[]): SOPTemplateItem[] =>
+const makeItems = (
+    items: { title: string; emoji?: string; autoCheck?: AutoCheckId }[],
+): SOPTemplateItem[] =>
     items.map((item, i) => ({
         ...item,
         status: 'not_started' as const,
@@ -23,6 +25,8 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 title: 'Input',
                 emoji: '📥',
                 order: 0,
+                // Surfaces on Delivery → Kickoff. The build is blocked on these.
+                stage: 'kickoff',
                 items: makeItems([
                     { title: 'Run ScreamingFrog tool and scan the site entirely & use the Sitemap.xml to download all the pages in the sitemap', emoji: '🐸' },
                     { title: 'Access to the Original Project (Optional)', emoji: '✍️' },
@@ -42,12 +46,17 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 title: 'Step 1: Project Planning & Kickoff',
                 emoji: '📁',
                 order: 1,
+                stage: 'kickoff',
                 items: makeItems([
+                    { title: 'Book the kickoff call as soon as the deal closes', emoji: '📅' },
+                    { title: 'Hold the kickoff call: scope, deadline, who does what, how we will talk', emoji: '📞' },
+                    { title: 'Agree the sync cadence — weekly or every two weeks', emoji: '🔁' },
                     { title: 'List all the pages from the live website that include the CMS collection', emoji: '📑' },
                     { title: 'Define the Lead Developer, Backup Developer, Project Lead', emoji: '👥' },
                     { title: 'Create Slack Channel with Client. Workflow: Setup Channel – Webflow Migration', emoji: '💬' },
                     { title: 'Create the ClickUp Task List: ⚙️ One Click Setup', emoji: '☑️' },
-                    { title: 'Project Lead sends a Email intro for the project introducing team member', emoji: '💌' },
+                    { title: 'Project Lead sends the welcome email introducing the team', emoji: '💌' },
+                    { title: 'Share the project tracker with the client', emoji: '📊' },
                     { title: 'Create the MarkUp Folder [MarkUp]', emoji: '📝' },
                     { title: 'Internal kickoff: deadline, functionality, animations, strategy', emoji: '👥' },
                 ]),
@@ -118,15 +127,16 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Step 7: QA & Pre-Launch Checklist',
                 emoji: '🧪',
+                stage: 'launch',
                 order: 7,
                 items: makeItems([
                     { title: 'Test all pages on all breakpoints', emoji: '🏁' },
                     { title: 'Verify all animations are smooth and device-optimized', emoji: '🏁' },
-                    { title: 'Check all links, buttons, and navigation', emoji: '🏁' },
+                    { title: 'Check all links, buttons, and navigation', emoji: '🏁', autoCheck: 'links_resolve' },
                     { title: 'Test all CMS data fetching properly on templates', emoji: '🏁' },
                     { title: 'Test all forms (submit, error state, integration)', emoji: '🏁' },
                     { title: 'Check website loading speed and optimize assets', emoji: '🏁' },
-                    { title: 'Validate SEO settings for all pages', emoji: '🏁' },
+                    { title: 'Validate SEO settings for all pages', emoji: '🏁', autoCheck: 'page_title' },
                 ]),
             },
             {
@@ -142,6 +152,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Step 9: Launch',
                 emoji: '🚀',
+                stage: 'launch',
                 order: 9,
                 items: makeItems([
                     { title: 'Connect domain and hosting settings' },

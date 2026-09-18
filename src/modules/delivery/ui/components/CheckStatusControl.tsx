@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { AUTO_CHECK_IDS, isAutoCheckId } from '../../domain/delivery.types';
 import type { AutoCheckId, CheckStatus } from '../../domain/delivery.types';
 
 /**
@@ -27,6 +28,21 @@ export const AUTO_CHECK_DESCRIPTIONS: Record<AutoCheckId, string> = {
   schema: 'structured data is present',
   spelling: 'no spelling issues were found',
 };
+
+/**
+ * The scan signal on a check, if it is one the resolver knows.
+ *
+ * Checks can arrive from a project document, where the signal is only a string,
+ * so it is validated before being shown as automatic — the editor offers
+ * {@link AUTO_CHECK_IDS} and nothing else for the same reason.
+ */
+export function autoCheckIdOf(
+  check: { auto?: AutoCheckId } | undefined,
+): AutoCheckId | undefined {
+  return isAutoCheckId(check?.auto) ? check.auto : undefined;
+}
+
+export { AUTO_CHECK_IDS, isAutoCheckId };
 
 const OPTIONS: { status: CheckStatus; label: string; hint: string }[] = [
   { status: 'pending', label: 'Pending', hint: 'Not answered yet' },

@@ -20,7 +20,8 @@ import { db } from '@/lib/firebase';
 import { fetchAuthed } from '@/lib/api-client';
 import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
-import type { ProjectLink } from '@/types';
+import { checklistService } from '@/services/ChecklistService';
+import type { ChecklistItemStatus, ProjectChecklist, ProjectLink } from '@/types';
 import type {
   CheckStatus,
   CreateProjectPageInput,
@@ -325,40 +326,41 @@ export const deliveryRepository = {
     }
   },
 
-  async setSiteCheck(projectId: string, checkId: string, status: CheckStatus): Promise<void> {
-    try {
-      await updateDoc(doc(db, PROJECTS, projectId), {
-        [`delivery.siteChecks.${checkId}`]: status,
-        updatedAt: Timestamp.now(),
-      });
-    } catch (error) {
-      logError(error, 'setSiteCheck');
-      throw new DatabaseError('Failed to update the check');
-    }
+
+
+
+  // --- The project's own checklist ------------------------------------------
+  // Kickoff and the site-wide launch list are sections of it, tagged with a
+  // stage. Delivery renders them; the Checklist tab renders all of them; both
+  // tick the same item.
+
+  subscribeToChecklists(projectId: string, cb: (checklists: ProjectChecklist[]) => void): () => void {
+    return checklistService.subscribeToProjectChecklists(projectId, cb);
   },
 
-  async setKickoffInput(projectId: string, inputId: string, received: boolean): Promise<void> {
-    try {
-      await updateDoc(doc(db, PROJECTS, projectId), {
-        [`delivery.kickoffInputs.${inputId}`]: received,
-        updatedAt: Timestamp.now(),
-      });
-    } catch (error) {
-      logError(error, 'setKickoffInput');
-      throw new DatabaseError('Failed to update the kickoff list');
-    }
+  setChecklistItemStatus(
+    checklistId: string,
+    sectionId: string,
+    itemId: string,
+    status: ChecklistItemStatus,
+    userEmail?: string,
+  ): Promise<void> {
+    return checklistService.updateItemStatus(checklistId, sectionId, itemId, status, userEmail);
   },
 
-  /** Our own kickoff: the calls, the channel, the welcome email, the setup. */
-  async setKickoffStep(projectId: string, stepId: string, done: boolean): Promise<void> {
+  /** This project's per-page QC questions, replacing whatever was there. */
+  async setPageChecks(
+    projectId: string,
+    checks: NonNullable<ProjectDeliveryState['pageChecks']>,
+  ): Promise<void> {
     try {
       await updateDoc(doc(db, PROJECTS, projectId), {
-        [`delivery.kickoffSteps.${stepId}`]: done,
+        'delivery.pageChecks': checks,
         updatedAt: Timestamp.now(),
       });
     } catch (error) {
-      logError(error, 'setKickoffStep');
-      throw new DatabaseError('Failed to update the kickoff list');
+      logError(error, 'setPageChecks');
+      throw new DatabaseError('Failed to save the page checks');
     }
   },
 

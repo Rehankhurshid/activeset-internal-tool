@@ -5,8 +5,9 @@ import { Handshake, LayoutList, Rocket } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import type { Project } from '@/types';
-import { buildKickoffState, buildLaunchReadiness, type KickoffContext } from '../../domain/delivery.progress';
+import type { Project, ProjectChecklist } from '@/types';
+import { stageProgress } from '../../domain/delivery.checklist';
+import { buildPageProgress } from '../../domain/delivery.progress';
 import { getStack } from '../../domain/stacks';
 import type { ProjectPage } from '../../domain/delivery.types';
 import { deliveryRepository } from '../../infrastructure/delivery.repository';
@@ -31,17 +32,17 @@ const STAGES: { id: Stage; label: string; icon: typeof Handshake }[] = [
 /**
  * The website build, as one tab with three stages.
  *
- * Kickoff, pages and launch are sequential and each is the whole screen while
- * it is the live one, so they share a tab rather than taking three. Three more
- * top-level tabs would also crowd the project bar past the nine that the number
- * keys reach.
+ * Kickoff and Launch are views onto the project's own checklist — the sections
+ * tagged for that stage — so what a project does can differ from the next one
+ * without touching this code. Pages is the grid.
  *
- * The stage is chosen for you the first time: whatever the project is actually
- * at. After that it stays where you put it.
+ * The stage is chosen for you the first time, from where the work actually is.
+ * After that it stays where you put it.
  */
 export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
   const stack = useMemo(() => getStack(project.delivery?.stackId), [project.delivery?.stackId]);
   const [pages, setPages] = useState<ProjectPage[]>([]);
+  const [checklists, setChecklists] = useState<ProjectChecklist[]>([]);
   const [stage, setStage] = useState<Stage | null>(null);
 
   useEffect(() => {
@@ -49,36 +50,32 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
     return deliveryRepository.subscribeToPages(project.id, setPages);
   }, [project.id]);
 
-  // What the app already knows about kickoff, so steps it can answer are not
-  // also asked of a person.
-  const kickoffContext: KickoffContext = useMemo(
-    () => ({ hasTrackerSheet: Boolean(project.delivery?.trackerSheetId), pageCount: pages.length }),
-    [project.delivery?.trackerSheetId, pages.length],
-  );
-  const kickoff = useMemo(
-    () => buildKickoffState(stack, project.delivery, kickoffContext),
-    [stack, project.delivery, kickoffContext],
-  );
-  const readiness = useMemo(
-    () => buildLaunchReadiness({ stack, pages, delivery: project.delivery }),
-    [stack, pages, project.delivery],
-  );
+  useEffect(() => {
+    if (!project.id) return;
+    return deliveryRepository.subscribeToChecklists(project.id, setChecklists);
+  }, [project.id]);
 
-  // Pick the stage once, from where the work actually is. Re-deciding on every
-  // render would drag someone back out of the stage they just opened.
+  const kickoff = useMemo(() => stageProgress(checklists, 'kickoff'), [checklists]);
+  const launch = useMemo(() => stageProgress(checklists, 'launch'), [checklists]);
+  const pageProgress = useMemo(() => buildPageProgress(stack, pages), [stack, pages]);
+
+  // Pick the stage once. Re-deciding on every render would drag someone back
+  // out of the stage they just opened.
   useEffect(() => {
     if (stage !== null) return;
-    if (!kickoff.readyToBuild && pages.length === 0) setStage('kickoff');
-    else if (readiness.pages.total > 0 && readiness.pages.done === readiness.pages.total) setStage('launch');
+    if (pages.length === 0 && !kickoff.untagged && !kickoff.complete) setStage('kickoff');
+    else if (pageProgress.total > 0 && pageProgress.done === pageProgress.total) setStage('launch');
     else setStage('pages');
-  }, [stage, kickoff.readyToBuild, pages.length, readiness.pages.total, readiness.pages.done]);
+  }, [stage, pages.length, kickoff.untagged, kickoff.complete, pageProgress.total, pageProgress.done]);
 
   const current = stage ?? 'pages';
 
+  // A stage with no checklist section tagged for it shows nothing rather than
+  // "0/0", which would read as finished.
   const counts: Record<Stage, string | null> = {
-    kickoff: kickoff.complete ? null : `${kickoff.done}/${kickoff.total}`,
-    pages: pages.length > 0 ? `${readiness.pages.done}/${readiness.pages.total}` : null,
-    launch: readiness.ready ? 'Ready' : null,
+    kickoff: kickoff.untagged || kickoff.complete ? null : `${kickoff.done}/${kickoff.total}`,
+    pages: pages.length > 0 ? `${pageProgress.done}/${pageProgress.total}` : null,
+    launch: launch.untagged ? null : launch.complete ? 'Ready' : `${launch.done}/${launch.total}`,
   };
 
   return (
@@ -96,15 +93,13 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
                 onClick={() => setStage(id)}
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                  active
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
+                  active ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
                 {label}
                 {counts[id] && (
-                  <Badge variant="secondary" className="h-4 px-1 text-[10px] font-mono tabular-nums">
+                  <Badge variant="secondary" className="h-4 px-1 font-mono text-[10px] tabular-nums">
                     {counts[id]}
                   </Badge>
                 )}
@@ -113,21 +108,10 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
           })}
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          {stack.name} build
-          {!stack.checks.length && ' · no checklist defined for this stack yet'}
-        </p>
+        <p className="text-xs text-muted-foreground">{stack.name} build</p>
       </div>
 
-      {current === 'kickoff' && (
-        <KickoffScreen
-          project={project}
-          stack={stack}
-          userEmail={userEmail}
-          context={kickoffContext}
-          onGoToPages={() => setStage('pages')}
-        />
-      )}
+      {current === 'kickoff' && <KickoffScreen project={project} stack={stack} userEmail={userEmail} />}
 
       {current === 'pages' && (
         <div className="space-y-4">

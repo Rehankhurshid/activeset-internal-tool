@@ -17,8 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { Project } from '@/types';
-import { buildKickoffProgress } from '../../domain/delivery.progress';
-import type { StackDefinition } from '../../domain/delivery.types';
 import { buildKickoffEmail, type SyncCadence } from '../../domain/kickoff.email';
 
 /**
@@ -63,27 +61,31 @@ function findLink(project: Pick<Project, 'links'>, pattern: RegExp): string | un
 
 interface KickoffEmailDialogProps {
   project: Project;
-  stack: StackDefinition;
   /** Whoever is drafting, used as the lead when the project has no owner set. */
   userEmail: string;
+  /**
+   * What kickoff is still waiting on, in the client's own words — the titles of
+   * the project's outstanding kickoff checklist items. The caller reads them off
+   * the project's checklist, because what kickoff needs differs per project.
+   */
+  outstanding: string[];
   /** The client portal link, when the caller has one — it is not derivable here. */
   portalUrl?: string;
 }
 
-/** Lets the kickoff step list open this draft, rather than describing a button. */
+/** Lets the Kickoff screen open this draft from elsewhere on the page. */
 export interface KickoffEmailDialogHandle {
   open: () => void;
 }
 
 export const KickoffEmailDialog = forwardRef<KickoffEmailDialogHandle, KickoffEmailDialogProps>(
-  function KickoffEmailDialog({ project, stack, userEmail, portalUrl }, ref) {
+  function KickoffEmailDialog({ project, userEmail, outstanding, portalUrl }, ref) {
   const [open, setOpen] = useState(false);
   useImperativeHandle(ref, () => ({ open: () => setOpen(true) }), []);
   const [copied, setCopied] = useState(false);
 
   const draft = useMemo(() => {
     const delivery = project.delivery;
-    const outstanding = buildKickoffProgress(stack, delivery).outstanding;
     return buildKickoffEmail({
       projectName: project.name,
       clientName: project.client,
@@ -95,7 +97,7 @@ export const KickoffEmailDialog = forwardRef<KickoffEmailDialogHandle, KickoffEm
       cadence: (delivery?.callCadence ?? 'none') as SyncCadence,
       outstandingInputs: outstanding,
     });
-  }, [project, stack, userEmail, portalUrl]);
+  }, [project, userEmail, outstanding, portalUrl]);
 
   const [subject, setSubject] = useState(draft.subject);
   const [body, setBody] = useState(draft.body);
@@ -104,7 +106,7 @@ export const KickoffEmailDialog = forwardRef<KickoffEmailDialogHandle, KickoffEm
 
   const handleOpenChange = (next: boolean) => {
     // Re-seed from the current project state each time it is opened, so a draft
-    // left over from before three inputs arrived does not come back.
+    // left over from before three of the asks arrived does not come back.
     if (next) {
       setSubject(draft.subject);
       setBody(draft.body);

@@ -12,8 +12,8 @@
  * document, so they are declared in @/types with the rest of `Project` and
  * re-exported here — the same arrangement the client-portal module uses.
  */
-export type { CheckStatus, ProjectDeliveryState, StackId } from '@/types';
-import type { CheckStatus, StackId } from '@/types';
+export type { AutoCheckId, CheckStatus, ProjectDeliveryState, StackId } from '@/types';
+import type { AutoCheckId, CheckStatus, StackId } from '@/types';
 
 /**
  * How far a single discipline has got on a single page.
@@ -72,83 +72,67 @@ export interface StackDiscipline {
   order: number;
 }
 
-/**
- * Checks the existing page audit can answer on its own, so the team ticks
- * judgement calls rather than things a crawler already knows.
- */
-export type AutoCheckId =
-  | 'page_title'
-  | 'meta_description'
-  | 'single_h1'
-  | 'image_alt'
-  | 'open_graph'
-  | 'links_resolve'
-  | 'schema'
-  | 'spelling';
 
 /** `unknown` means the page has not been scanned, which is not the same as failing. */
 export type AutoCheckVerdict = 'pass' | 'fail' | 'unknown';
 
 /**
- * One item on a launch checklist. `site` items are asked once for the whole
- * project; `page` items are asked of every page.
+ * Every scan signal `resolveAutoCheck` can actually answer.
+ *
+ * Written as a record so the compiler fails the day `AutoCheckId` gains a member
+ * and this list does not. It matters because a check's signal can arrive from a
+ * project document, where it is just a string: one the resolver does not know
+ * would make the check look automatic and leave it silently unanswered forever,
+ * so such a value is dropped rather than carried around.
  */
+const AUTO_CHECK_ID_MAP: Record<AutoCheckId, true> = {
+  page_title: true,
+  meta_description: true,
+  single_h1: true,
+  image_alt: true,
+  open_graph: true,
+  links_resolve: true,
+  schema: true,
+  spelling: true,
+};
+
+export const AUTO_CHECK_IDS = Object.keys(AUTO_CHECK_ID_MAP) as AutoCheckId[];
+
+export function isAutoCheckId(value: unknown): value is AutoCheckId {
+  return typeof value === 'string' && value in AUTO_CHECK_ID_MAP;
+}
+
+/** One per-page QC question, asked of every page on the tracker. */
 export interface StackCheck {
   id: string;
   title: string;
   /** Heading it sits under, e.g. 'SEO & analytics'. */
   group: string;
-  scope: 'site' | 'page';
   order: number;
   /** Answered from scan data when present; still overridable by a person. */
   auto?: AutoCheckId;
   /** Shown beside the item when it needs explaining. */
   note?: string;
-  /** Checked after the site is live rather than before. */
-  postLaunch?: boolean;
 }
 
-/** Something needed from the client before the build can start. */
-export interface StackKickoffInput {
-  id: string;
-  title: string;
-  order: number;
-  optional?: boolean;
-  note?: string;
-}
 
-/**
- * Things the app can already answer about our own kickoff, so a step the
- * project plainly shows as done does not also need a tick.
- */
-export type KickoffStepAutoId = 'tracker_shared' | 'cadence_set' | 'pages_listed';
 
-/**
- * Something WE do at kickoff, as opposed to something the client owes us.
- *
- * Tracked here rather than only in the SOP checklist because this is the screen
- * the team is on during kickoff; the SOP holds sixty-odd items across the whole
- * build, and the kickoff section is easy to lose inside it.
- */
-export interface StackKickoffStep {
-  id: string;
-  title: string;
-  order: number;
-  note?: string;
-  /** Answered from project state when the app already knows. */
-  auto?: KickoffStepAutoId;
-  /** The control on the kickoff screen that performs it, so the row can point at it. */
-  action?: 'welcome-email' | 'cadence' | 'sheet' | 'pages';
-}
 
 export interface StackDefinition {
   id: StackId;
   name: string;
   description: string;
   disciplines: StackDiscipline[];
-  checks: StackCheck[];
-  kickoffInputs: StackKickoffInput[];
-  kickoffSteps: StackKickoffStep[];
+  /**
+   * Starting point for a project's per-page QC, copied onto the project the
+   * first time the Launch stage is opened and editable there afterwards.
+   *
+   * Site-wide and kickoff checklists deliberately do NOT live here: they are
+   * sections of the project's own checklist, so they can differ per project and
+   * are edited in one place. Per-page QC is the exception only because the
+   * checklist model has no page axis — it cannot ask one question of 26 pages.
+   */
+  defaultPageChecks: StackCheck[];
 }
 
 /**

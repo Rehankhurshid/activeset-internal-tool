@@ -54,12 +54,15 @@ function instantiateTemplate(template: SOPTemplate): ChecklistSection[] {
         title: section.title,
         emoji: section.emoji,
         order: section.order,
+        // Without this the Delivery stages would never see a tagged template.
+        stage: section.stage,
         id: `sec_${generateId()}`,
         items: section.items.map((item) => stripUndefined({
             title: item.title,
             emoji: item.emoji,
             status: item.status,
             order: item.order,
+            autoCheck: item.autoCheck,
             id: `item_${generateId()}`,
         })),
     }));
@@ -545,9 +548,12 @@ export const checklistService = {
     async updateSOPTemplate(templateId: string, updates: Partial<SOPTemplate>): Promise<void> {
         try {
             const ref = doc(db, COLLECTIONS.SOP_TEMPLATES, templateId);
-            const clean = stripUndefined(updates);
-            // Remove id and isBuiltIn from the update payload
-            const { id: _id, isBuiltIn: _ib, ...payload } = clean as Record<string, unknown>;
+            const clean = stripUndefined(updates) as Record<string, unknown>;
+            // A template's identity and its built-in flag are not editable, so
+            // they are dropped rather than written back.
+            const payload = Object.fromEntries(
+                Object.entries(clean).filter(([key]) => key !== 'id' && key !== 'isBuiltIn'),
+            );
             await updateDoc(ref, {
                 ...payload,
                 updatedAt: Timestamp.now(),

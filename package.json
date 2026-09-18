@@ -26,6 +26,8 @@
     "test:local-capture": "tsx --test src/local-capture/*.test.ts",
     "test:client-portal": "tsx --test src/modules/client-portal/domain/*.test.ts",
     "test:delivery": "tsx --test src/modules/delivery/domain/*.test.ts",
+    "test:lib": "tsx --test src/lib/*.test.ts",
+    "test": "npm run test:lib && npm run test:domain && npm run test:local-capture",
     "test:rules": "firebase emulators:exec --only firestore --project demo-activeset \"tsx --test tests/firestore.rules.test.ts\"",
     "verify:ui": "npx tsx scripts/verify-ui.ts",
     "verify:ui:staged": "npx tsx scripts/verify-ui.ts",

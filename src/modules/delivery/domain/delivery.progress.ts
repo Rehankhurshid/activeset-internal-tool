@@ -1,6 +1,7 @@
-import type { AuditResult } from '@/types';
+import type { AuditResult, ChecklistItem } from '@/types';
 import {
   SETTLED_PAGE_STATUSES,
+  isAutoCheckId,
   normalizePageWorkStatus,
   type AutoCheckId,
   type AutoCheckVerdict,
@@ -9,7 +10,7 @@ import {
   type ProjectPage,
   type StackCheck,
   type StackDefinition,
-  type StackKickoffStep,
+  type StackDiscipline,
 } from './delivery.types';
 
 /**
@@ -185,9 +186,15 @@ export interface LaunchReadiness {
 }
 
 export interface BuildLaunchReadinessInput {
-  stack: StackDefinition;
   pages: ProjectPage[];
-  delivery: ProjectDeliveryState | undefined;
+  /** The per-page QC questions for THIS project, already resolved. */
+  pageChecks: StackCheck[];
+  /**
+   * Items from the project's own checklist sections tagged `launch`, already
+   * flattened. The site-wide launch list is a checklist, so it differs per
+   * project and is edited in one place.
+   */
+  launchChecklistItems?: ChecklistItem[];
   /** Page id → the latest audit for that page, when one exists. */
   auditsByPageId?: Record<string, AuditResult | undefined>;
 }
@@ -200,21 +207,26 @@ export interface BuildLaunchReadinessInput {
  * are tracked but never gate the launch, because most of them cannot be true
  * until the site is live.
  */
-export function buildLaunchReadiness(input: BuildLaunchReadinessInput): LaunchReadiness {
-  const { stack, pages, delivery, auditsByPageId = {} } = input;
+export function buildLaunchReadiness(
+  input: BuildLaunchReadinessInput,
+  disciplines: StackDiscipline[],
+): LaunchReadiness {
+  const { pages, pageChecks: pageCheckDefs, launchChecklistItems = [], auditsByPageId = {} } = input;
 
-  const pageProgress = buildPageProgress(stack, pages);
+  const pageProgress = buildPageProgress({ disciplines } as StackDefinition, pages);
 
-  const siteCheckDefs = stack.checks.filter((c) => c.scope === 'site' && !c.postLaunch);
-  const postLaunchDefs = stack.checks.filter((c) => c.scope === 'site' && c.postLaunch);
-  const pageCheckDefs = stack.checks.filter((c) => c.scope === 'page');
-
-  const siteAnswers = delivery?.siteChecks ?? {};
-  const resolveSite = (defs: StackCheck[]) =>
-    defs.map((check) => resolveCheck(check, siteAnswers[check.id], undefined));
-
-  const siteChecks = tally(resolveSite(siteCheckDefs));
-  const postLaunchChecks = tally(resolveSite(postLaunchDefs));
+  // A checklist item is done when someone ticked it, or skipped it on purpose.
+  // "skipped" is the checklist's way of saying not applicable, so it drops out
+  // of the denominator the same way `not_required` does elsewhere.
+  const siteResults: { status: CheckStatus }[] = launchChecklistItems.map((item) => {
+    if (item.status === 'completed') return { status: 'passed' as CheckStatus };
+    if (item.status === 'skipped') return { status: 'not_required' as CheckStatus };
+    return { status: 'pending' as CheckStatus };
+  });
+  const siteChecks = tally(siteResults);
+  // Post-launch is a checklist concern now; the section is simply not tagged
+  // `launch` if the team does not want it gating anything.
+  const postLaunchChecks: CheckProgress = { passed: 0, failed: 0, pending: 0, applicable: 0 };
 
   const pageCheckResults: { status: CheckStatus }[] = [];
   for (const page of pages) {
@@ -235,8 +247,7 @@ export function buildLaunchReadiness(input: BuildLaunchReadinessInput): LaunchRe
   if (pageProgress.blocked > 0) {
     blockers.push(`${pageProgress.blocked} ${pageProgress.blocked === 1 ? 'page is' : 'pages are'} blocked`);
   }
-  if (siteChecks.failed > 0) blockers.push(`${siteChecks.failed} site checks failing`);
-  if (siteChecks.pending > 0) blockers.push(`${siteChecks.pending} site checks unanswered`);
+  if (siteChecks.pending > 0) blockers.push(`${siteChecks.pending} launch checklist items outstanding`);
   if (pageChecks.failed > 0) blockers.push(`${pageChecks.failed} page checks failing`);
   if (pageChecks.pending > 0) blockers.push(`${pageChecks.pending} page checks unanswered`);
 
@@ -250,109 +261,21 @@ export function buildLaunchReadiness(input: BuildLaunchReadinessInput): LaunchRe
   };
 }
 
-/** Whether the client has given us everything the build needs to start. */
-export function buildKickoffProgress(
-  stack: StackDefinition,
-  delivery: ProjectDeliveryState | undefined,
-): { done: number; total: number; outstanding: string[]; complete: boolean } {
-  const answers = delivery?.kickoffInputs ?? {};
-  const required = stack.kickoffInputs.filter((i) => !i.optional);
-  const outstanding = required.filter((i) => answers[i.id] !== true).map((i) => i.title);
-  return {
-    done: required.length - outstanding.length,
-    total: required.length,
-    outstanding,
-    complete: outstanding.length === 0,
-  };
-}
-
-/** What the app already knows about our own kickoff, without anyone ticking. */
-export interface KickoffContext {
-  /** A tracker sheet has been generated for this project. */
-  hasTrackerSheet: boolean;
-  /** Pages are on the tracker, so the page list has plainly been pulled. */
-  pageCount: number;
-}
-
 /**
- * Whether a kickoff step is done: what someone ticked, or what the project
- * already shows. A tick always wins, so a step can be marked done even when the
- * app cannot see it (a call held, a channel created).
+ * The per-page QC questions for a project: whatever the team has set, or the
+ * stack's starting set until they change them.
  */
-export function resolveKickoffStep(
-  step: StackKickoffStep,
-  ticked: boolean | undefined,
-  delivery: ProjectDeliveryState | undefined,
-  context: KickoffContext,
-): { done: boolean; source: 'person' | 'project' } {
-  if (ticked === true) return { done: true, source: 'person' };
-  switch (step.auto) {
-    case 'tracker_shared':
-      if (context.hasTrackerSheet) return { done: true, source: 'project' };
-      break;
-    case 'cadence_set':
-      if (delivery?.callCadence && delivery.callCadence !== 'none') return { done: true, source: 'project' };
-      break;
-    case 'pages_listed':
-      if (context.pageCount > 0) return { done: true, source: 'project' };
-      break;
-    default:
-      break;
-  }
-  return { done: false, source: 'person' };
-}
-
-export interface KickoffStepProgress {
-  done: number;
-  total: number;
-  outstanding: string[];
-  complete: boolean;
-}
-
-/** Our side of kickoff: the calls, the channel, the welcome email, the setup. */
-export function buildKickoffStepProgress(
+export function pageChecksFor(
   stack: StackDefinition,
   delivery: ProjectDeliveryState | undefined,
-  context: KickoffContext,
-): KickoffStepProgress {
-  const ticks = delivery?.kickoffSteps ?? {};
-  const outstanding = stack.kickoffSteps
-    .filter((step) => !resolveKickoffStep(step, ticks[step.id], delivery, context).done)
-    .map((step) => step.title);
-  return {
-    done: stack.kickoffSteps.length - outstanding.length,
-    total: stack.kickoffSteps.length,
-    outstanding,
-    complete: outstanding.length === 0,
-  };
-}
-
-/**
- * Kickoff as a whole: what the client owes us and what we owe the project.
- *
- * `readyToBuild` is the narrower question — the build is blocked on the client's
- * inputs, not on whether we have held our internal kickoff yet.
- */
-export function buildKickoffState(
-  stack: StackDefinition,
-  delivery: ProjectDeliveryState | undefined,
-  context: KickoffContext,
-): {
-  inputs: ReturnType<typeof buildKickoffProgress>;
-  steps: KickoffStepProgress;
-  done: number;
-  total: number;
-  complete: boolean;
-  readyToBuild: boolean;
-} {
-  const inputs = buildKickoffProgress(stack, delivery);
-  const steps = buildKickoffStepProgress(stack, delivery, context);
-  return {
-    inputs,
-    steps,
-    done: inputs.done + steps.done,
-    total: inputs.total + steps.total,
-    complete: inputs.complete && steps.complete,
-    readyToBuild: inputs.complete,
-  };
+): StackCheck[] {
+  const saved = delivery?.pageChecks;
+  const checks = saved && saved.length > 0 ? saved : stack.defaultPageChecks;
+  // A saved signal is whatever was written to the document, so it is validated
+  // here rather than trusted: an unknown one is dropped, which turns the check
+  // into an ordinary question a person answers instead of one that looks
+  // automatic and never resolves.
+  return [...checks]
+    .sort((a, b) => a.order - b.order)
+    .map((check) => (check.auto && !isAutoCheckId(check.auto) ? { ...check, auto: undefined } : check));
 }

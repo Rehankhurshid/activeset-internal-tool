@@ -2,10 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import type { AuditResult, Project } from '@/types';
+import type { AuditResult, Project, ProjectChecklist } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { buildLaunchReadiness, resolveAutoCheck } from '../../domain/delivery.progress';
+import { itemsForStage, stageProgress } from '../../domain/delivery.checklist';
+import {
+  buildLaunchReadiness,
+  pageChecksFor,
+  resolveAutoCheck,
+} from '../../domain/delivery.progress';
 import type {
+  AutoCheckVerdict,
   CheckStatus,
   ProjectPage,
   StackDefinition,
@@ -13,16 +19,18 @@ import type {
 import { deliveryRepository, normalizePagePath } from '../../infrastructure/delivery.repository';
 import { LaunchReadinessCard } from '../components/LaunchReadinessCard';
 import { PageQcMatrix } from '../components/PageQcMatrix';
-import { SiteChecklist } from '../components/SiteChecklist';
+import { StageChecklist } from '../components/StageChecklist';
 import { STATUS_LABELS } from '../components/CheckStatusControl';
 
 /**
  * Launch: is this site ready to go live, and if not, what is in the way.
  *
- * The verdict is derived from the work — pages built, site checks, per-page QC —
- * so there is deliberately no button here that declares a site ready. Scan data
- * the app already has answers the checks it can answer; everything else is a
- * judgement call, and a person's judgement always beats the crawler's.
+ * The verdict is derived from the work — pages built, the project's own launch
+ * checklist, per-page QC — so there is deliberately no button here that declares
+ * a site ready. What counts as ready differs per project, which is why the
+ * site-wide half of it is checklist sections tagged `launch` rather than a list
+ * in this code. Scan data answers what it can; everything else is a judgement
+ * call, and a person's judgement always beats the crawler's.
  */
 
 export interface LaunchScreenProps {
@@ -56,78 +64,67 @@ function buildAuditsByPageId(
 }
 
 /**
- * What the page scans suggest about a site-wide check.
+ * What the page scans make of each launch checklist item that names one.
  *
- * Site checks are never *answered* from scan data — `buildLaunchReadiness`
- * resolves them with no audit, and a number that disagreed with the checklist
- * below it would be worse than no number. This is a hint, shown under the check,
- * so the person answering knows where to look.
+ * A launch item is asked of the whole site, so the pages are read together: one
+ * page that would fail is enough to say the site would, and a site where nothing
+ * has been scanned gets no verdict at all rather than a reassuring pass. This is
+ * a hint beside the item — nothing here answers it, because the person ticking
+ * it is the one signing the launch off.
  */
-function buildSiteScanHints(
-  stack: StackDefinition,
+function buildAutoVerdicts(
+  items: { id: string; autoCheck?: Parameters<typeof resolveAutoCheck>[0] }[],
   pages: ProjectPage[],
   auditsByPageId: Record<string, AuditResult | undefined>,
-): Record<string, string> {
-  const hints: Record<string, string> = {};
+): Record<string, AutoCheckVerdict> {
+  const verdicts: Record<string, AutoCheckVerdict> = {};
   const scanned = pages.filter((page) => auditsByPageId[page.id]);
-  if (scanned.length === 0) return hints;
+  if (scanned.length === 0) return verdicts;
 
-  for (const check of stack.checks) {
-    if (check.scope !== 'site' || !check.auto) continue;
-    let failing = 0;
+  for (const item of items) {
+    if (!item.autoCheck) continue;
     let answered = 0;
+    let failing = 0;
     for (const page of scanned) {
-      const verdict = resolveAutoCheck(check.auto, auditsByPageId[page.id]);
+      const verdict = resolveAutoCheck(item.autoCheck, auditsByPageId[page.id]);
       if (verdict === 'unknown') continue;
       answered += 1;
       if (verdict === 'fail') failing += 1;
     }
     if (answered === 0) continue;
-    hints[check.id] =
-      failing === 0
-        ? `Last scan: clear on all ${answered} scanned ${answered === 1 ? 'page' : 'pages'}.`
-        : `Last scan: ${failing} of ${answered} scanned ${answered === 1 ? 'page' : 'pages'} would fail this.`;
+    verdicts[item.id] = failing > 0 ? 'fail' : 'pass';
   }
-  return hints;
+  return verdicts;
 }
 
 export function LaunchScreen({ project, stack, userEmail }: LaunchScreenProps) {
   const [pages, setPages] = useState<ProjectPage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [checklists, setChecklists] = useState<ProjectChecklist[]>([]);
+  const [loadingPages, setLoadingPages] = useState(true);
+  const [loadingChecklists, setLoadingChecklists] = useState(true);
 
   // Answers written but not yet reflected by the subscription, so a click lands
   // immediately instead of waiting on a round trip.
-  const [siteOverrides, setSiteOverrides] = useState<Record<string, CheckStatus>>({});
   const [pageOverrides, setPageOverrides] = useState<Record<string, Record<string, CheckStatus>>>({});
 
   useEffect(() => {
-    setLoading(true);
-    const unsubscribe = deliveryRepository.subscribeToPages(project.id, (next) => {
+    setLoadingPages(true);
+    return deliveryRepository.subscribeToPages(project.id, (next) => {
       setPages(next);
-      setLoading(false);
+      setLoadingPages(false);
     });
-    return unsubscribe;
   }, [project.id]);
 
-  const serverSiteChecks = useMemo(
-    () => project.delivery?.siteChecks ?? {},
-    [project.delivery?.siteChecks],
-  );
+  useEffect(() => {
+    setLoadingChecklists(true);
+    return deliveryRepository.subscribeToChecklists(project.id, (next) => {
+      setChecklists(next);
+      setLoadingChecklists(false);
+    });
+  }, [project.id]);
 
   // Drop an optimistic answer once the real data agrees, so a later change by
   // someone else is not masked by a stale local value.
-  useEffect(() => {
-    setSiteOverrides((prev) => {
-      const next: Record<string, CheckStatus> = {};
-      let changed = false;
-      for (const [checkId, status] of Object.entries(prev)) {
-        if (serverSiteChecks[checkId] === status) changed = true;
-        else next[checkId] = status;
-      }
-      return changed ? next : prev;
-    });
-  }, [serverSiteChecks]);
-
   useEffect(() => {
     setPageOverrides((prev) => {
       const next: Record<string, Record<string, CheckStatus>> = {};
@@ -145,11 +142,6 @@ export function LaunchScreen({ project, stack, userEmail }: LaunchScreenProps) {
     });
   }, [pages]);
 
-  const siteAnswers = useMemo(
-    () => ({ ...serverSiteChecks, ...siteOverrides }),
-    [serverSiteChecks, siteOverrides],
-  );
-
   const mergedPages = useMemo(
     () =>
       pages.map((page) => {
@@ -164,39 +156,29 @@ export function LaunchScreen({ project, stack, userEmail }: LaunchScreenProps) {
     [project, mergedPages],
   );
 
+  // This project's own per-page QC questions, not the stack's, once it has any.
+  const pageChecks = useMemo(() => pageChecksFor(stack, project.delivery), [stack, project.delivery]);
+
+  const launchItems = useMemo(() => itemsForStage(checklists, 'launch'), [checklists]);
+  const launchProgress = useMemo(() => stageProgress(checklists, 'launch'), [checklists]);
+
   const readiness = useMemo(
     () =>
-      buildLaunchReadiness({
-        stack,
-        pages: mergedPages,
-        delivery: { ...project.delivery, siteChecks: siteAnswers },
-        auditsByPageId,
-      }),
-    [stack, mergedPages, project.delivery, siteAnswers, auditsByPageId],
+      buildLaunchReadiness(
+        {
+          pages: mergedPages,
+          pageChecks,
+          launchChecklistItems: launchItems,
+          auditsByPageId,
+        },
+        stack.disciplines,
+      ),
+    [mergedPages, pageChecks, launchItems, auditsByPageId, stack.disciplines],
   );
 
-  const siteHints = useMemo(
-    () => buildSiteScanHints(stack, mergedPages, auditsByPageId),
-    [stack, mergedPages, auditsByPageId],
-  );
-
-  const handleSiteCheck = useCallback(
-    async (checkId: string, status: CheckStatus) => {
-      const previous = serverSiteChecks[checkId];
-      setSiteOverrides((prev) => ({ ...prev, [checkId]: status }));
-      try {
-        await deliveryRepository.setSiteCheck(project.id, checkId, status);
-      } catch {
-        setSiteOverrides((prev) => {
-          const next = { ...prev };
-          if (previous === undefined) delete next[checkId];
-          else next[checkId] = previous;
-          return next;
-        });
-        toast.error('Could not save that check');
-      }
-    },
-    [project.id, serverSiteChecks],
+  const autoVerdicts = useMemo(
+    () => buildAutoVerdicts(launchItems, mergedPages, auditsByPageId),
+    [launchItems, mergedPages, auditsByPageId],
   );
 
   const handlePageCheck = useCallback(
@@ -206,7 +188,7 @@ export function LaunchScreen({ project, stack, userEmail }: LaunchScreenProps) {
 
       // Answering against the scan is allowed and is the point — it is just
       // worth saying out loud, because the disagreement is now on the record.
-      const check = stack.checks.find((candidate) => candidate.id === checkId);
+      const check = pageChecks.find((candidate) => candidate.id === checkId);
       if (check?.auto && status !== 'pending') {
         const verdict = resolveAutoCheck(check.auto, auditsByPageId[pageId]);
         const scanStatus: CheckStatus | undefined =
@@ -238,10 +220,10 @@ export function LaunchScreen({ project, stack, userEmail }: LaunchScreenProps) {
         toast.error('Could not save that check');
       }
     },
-    [project.id, pages, stack, auditsByPageId],
+    [project.id, pages, pageChecks, auditsByPageId],
   );
 
-  if (loading) {
+  if (loadingPages || loadingChecklists) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-40 w-full" />
@@ -253,15 +235,28 @@ export function LaunchScreen({ project, stack, userEmail }: LaunchScreenProps) {
 
   return (
     <div className="space-y-3">
-      <LaunchReadinessCard readiness={readiness} stackName={stack.name} userEmail={userEmail} />
-      <SiteChecklist
-        stack={stack}
-        answers={siteAnswers}
-        hints={siteHints}
-        onChange={handleSiteCheck}
+      <LaunchReadinessCard
+        readiness={readiness}
+        stackName={stack.name}
+        userEmail={userEmail}
+        launchChecklistUntagged={launchProgress.untagged}
       />
+
+      <StageChecklist
+        projectId={project.id}
+        checklists={checklists}
+        stage="launch"
+        userEmail={userEmail}
+        emptyHint="The launch stage is the site-wide list: the things checked once before going live, not once per page."
+        autoVerdicts={autoVerdicts}
+      />
+
       <PageQcMatrix
-        stack={stack}
+        projectId={project.id}
+        checks={pageChecks}
+        defaultChecks={stack.defaultPageChecks}
+        stackName={stack.name}
+        checksAreSaved={Boolean(project.delivery?.pageChecks?.length)}
         pages={mergedPages}
         auditsByPageId={auditsByPageId}
         onChange={handlePageCheck}

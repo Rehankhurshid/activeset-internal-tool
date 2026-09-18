@@ -551,6 +551,31 @@ export interface DatabaseOperationContext {
 // Checklist item status
 export type ChecklistItemStatus = 'not_started' | 'in_progress' | 'completed' | 'skipped';
 
+/**
+ * Signals the page audit already computes, which a checklist item can name so
+ * it answers itself instead of asking a person for something a crawler knows.
+ */
+export type AutoCheckId =
+  | 'page_title'
+  | 'meta_description'
+  | 'single_h1'
+  | 'image_alt'
+  | 'open_graph'
+  | 'links_resolve'
+  | 'schema'
+  | 'spelling';
+
+/**
+ * Which stage of a website build a checklist section belongs to.
+ *
+ * Purely a view hint: the Delivery tab's Kickoff and Launch stages render the
+ * sections tagged for them, so the team sees the relevant slice where they are
+ * working. The Checklist tab still shows every section, and both tick the same
+ * underlying item. Untagged sections appear only on the Checklist tab, which is
+ * what every existing template does.
+ */
+export type ChecklistStage = 'kickoff' | 'launch';
+
 // Individual checklist item
 export interface ChecklistItem {
   id: string;
@@ -564,6 +589,9 @@ export interface ChecklistItem {
   completedAt?: string;      // ISO date
   completedBy?: string;      // User email who completed it
   order: number;
+  /** When set, the latest page scans can answer this item. Optional: hand-written
+   *  items are untouched, and a person's status always wins. */
+  autoCheck?: AutoCheckId;
 }
 
 // Section of the checklist (e.g., "Step 1: Project Planning & Kickoff")
@@ -573,6 +601,8 @@ export interface ChecklistSection {
   emoji?: string;            // Section emoji (e.g., "📁", "🧱")
   items: ChecklistItem[];
   order: number;
+  /** Surfaces this section on a Delivery stage as well as the Checklist tab. */
+  stage?: ChecklistStage;
 }
 
 // Full project checklist
@@ -595,6 +625,8 @@ export interface SOPTemplateSection {
   emoji?: string;
   items: SOPTemplateItem[];
   order: number;
+  /** Carried onto every checklist made from this template. */
+  stage?: ChecklistStage;
 }
 
 // SOP template definition (for the template selector)
@@ -937,12 +969,18 @@ export type CheckStatus = 'pending' | 'passed' | 'failed' | 'not_required';
 /** Site-wide delivery state. Pages live in the `pages` subcollection. */
 export interface ProjectDeliveryState {
   stackId?: StackId;
-  /** Check id → answer, for site-scoped checks only. */
-  siteChecks?: Record<string, CheckStatus>;
-  /** Kickoff input id → whether the client has given it to us. */
-  kickoffInputs?: Record<string, boolean>;
-  /** Kickoff step id → whether we have done it. Our side of kickoff. */
-  kickoffSteps?: Record<string, boolean>;
+  /**
+   * This project's per-page QC questions, seeded from the stack the first time
+   * the Launch stage opens and editable afterwards. Stored per project because
+   * no two builds ask exactly the same things.
+   *
+   * Kickoff and the site-wide launch list are NOT here — those are sections of
+   * the project's checklist, tagged with a stage.
+   */
+  // Deliberately the same shape as the delivery module's `StackCheck`, field
+  // for field: `pageChecksFor` hands these straight to `resolveCheck`, so a
+  // second name for the scan signal would silently lose it.
+  pageChecks?: { id: string; title: string; group: string; order: number; auto?: AutoCheckId; note?: string }[];
   /** How often the team and client sync; drives the "no call recently" nudge. */
   callCadence?: 'weekly' | 'biweekly' | 'none';
   lastSyncCallAt?: string;

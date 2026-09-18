@@ -1,4 +1,4 @@
-import { SOPTemplate, SOPTemplateSection, SOPTemplateItem } from '@/types';
+import { SOPTemplate, SOPTemplateSection, SOPTemplateItem, ChecklistStage } from '@/types';
 import jsPDF from 'jspdf';
 
 /**
@@ -21,6 +21,14 @@ export function templateToMarkdown(template: Partial<SOPTemplate>): string {
     for (const section of template.sections || []) {
         lines.push(`## ${section.emoji || '📁'} ${section.title}`);
         lines.push('');
+        // The editor round-trips through this format every time someone switches
+        // to the Markdown tab, so anything omitted here is silently erased. The
+        // stage tag drives the Kickoff and Launch screens, which makes losing it
+        // expensive rather than cosmetic.
+        if (section.stage) {
+            lines.push(`> Stage: ${section.stage}`);
+            lines.push('');
+        }
         for (const item of section.items || []) {
             const emoji = item.emoji ? `${item.emoji} ` : '';
             lines.push(`- [ ] ${emoji}${item.title}`);
@@ -29,6 +37,9 @@ export function templateToMarkdown(template: Partial<SOPTemplate>): string {
             }
             if (item.hoverImage) {
                 lines.push(`  - 🖼️ Image: ${item.hoverImage}`);
+            }
+            if (item.autoCheck) {
+                lines.push(`  - 🔍 Check: ${item.autoCheck}`);
             }
         }
         lines.push('');
@@ -61,6 +72,10 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
     // Sub-bullet "  - 🔗 Reference: …" / "  - 🖼️ Image: …"
     const subRefRegex = /^\s+-\s*(?:🔗|Reference|🌐)[^a-zA-Z0-9]*(?:Reference\s*:?\s*)?(.+)$/i;
     const subImgRegex = /^\s+-\s*(?:🖼️?|Image)[^a-zA-Z0-9]*(?:Image\s*:?\s*)?(.+)$/i;
+    // Sub-bullet "  - 🔍 Check: page_title" — the scan signal that answers an item.
+    const subCheckRegex = /^\s+-\s*(?:🔍|Check)[^a-zA-Z0-9]*(?:Check\s*:?\s*)?(.+)$/i;
+    // Section-level "> Stage: kickoff", written under the section heading.
+    const stageRegex = /^>\s*Stage\s*:\s*(.+)$/i;
     const blockquoteRegex = /^>\s*(.+)$/;
     const dividerRegex = /^---+\s*$/;
 
@@ -146,6 +161,20 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
             continue;
         }
 
+        // Section-level stage tag. Checked before the item sub-bullets because it
+        // belongs to the section, and anything that is not a known stage is
+        // ignored rather than written through as a tag nothing will match.
+        if (currentSection && !currentItem) {
+            const stageMatch = line.match(stageRegex);
+            if (stageMatch) {
+                const value = stageMatch[1].trim().toLowerCase();
+                if (value === 'kickoff' || value === 'launch') {
+                    currentSection.stage = value as ChecklistStage;
+                }
+                continue;
+            }
+        }
+
         // Sub-bullet for current item (reference link)
         if (currentItem) {
             const refMatch = line.match(subRefRegex);
@@ -156,6 +185,13 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
             const imgMatch = line.match(subImgRegex);
             if (imgMatch) {
                 currentItem.hoverImage = imgMatch[1].trim();
+                continue;
+            }
+            const checkMatch = line.match(subCheckRegex);
+            if (checkMatch) {
+                // Kept as written; the delivery domain validates it before ever
+                // treating a check as automatic.
+                currentItem.autoCheck = checkMatch[1].trim() as SOPTemplateItem['autoCheck'];
                 continue;
             }
         }

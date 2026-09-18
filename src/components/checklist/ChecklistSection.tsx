@@ -1,11 +1,10 @@
 'use client';
 
 import React from 'react';
-import { ChecklistSection as ChecklistSectionType, ChecklistItemStatus } from '@/types';
+import { ChecklistSection as ChecklistSectionType, ChecklistItemStatus, ChecklistStage } from '@/types';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Progress } from '@/components/ui/progress';
 import { ChecklistItemRow } from './ChecklistItem';
-import { ChevronRight, Plus, Trash2, GripVertical, MoreVertical } from 'lucide-react';
+import { ChevronRight, Plus, Trash2, GripVertical, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,12 +26,32 @@ interface ChecklistSectionProps {
     onDeleteSection?: () => void;
     onAddItem?: () => void;
     onDeleteItem?: (itemId: string) => void;
-    onUpdateSection?: (updates: Partial<ChecklistSectionType>) => void; // For future title/emoji edits
+    onUpdateSection?: (updates: Partial<ChecklistSectionType>) => void;
 
     dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 
     readOnly?: boolean;
 }
+
+/**
+ * Which Delivery stage this section drives, if any.
+ *
+ * This is the link between the Checklist tab and the Kickoff and Launch stages:
+ * a section tagged here is the list those stages show and tick. It is a choice
+ * per section per project because no two builds run the same way — one needs a
+ * content audit before kickoff, the next needs a Webflow seat and nothing else.
+ * Untagged is the default and means "part of the checklist, not a stage".
+ */
+const STAGE_OPTIONS: { value: ChecklistStage | 'none'; label: string; hint: string }[] = [
+    { value: 'none', label: 'Not in Delivery', hint: 'Shows in the checklist only' },
+    { value: 'kickoff', label: 'Kickoff', hint: 'Everything before the build can start' },
+    { value: 'launch', label: 'Launch', hint: 'The site-wide checks before going live' },
+];
+
+const STAGE_LABELS: Record<ChecklistStage, string> = {
+    kickoff: 'Kickoff',
+    launch: 'Launch',
+};
 
 function computeProgress(items: { status: ChecklistItemStatus }[]) {
     if (items.length === 0) return { completed: 0, total: 0, percent: 0 };
@@ -131,6 +150,11 @@ export function ChecklistSectionBlock({
                                 <>
                                     <span className="text-xl mr-2">{section.emoji || '📋'}</span>
                                     <h4 className="font-semibold text-sm truncate">{section.title}</h4>
+                                    {section.stage && (
+                                        <span className="flex-shrink-0 rounded border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                            {STAGE_LABELS[section.stage]}
+                                        </span>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -157,6 +181,42 @@ export function ChecklistSectionBlock({
                         {/* Edit Controls */}
                         {isEditing ? (
                             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs font-normal"
+                                            title="Which Delivery stage this section drives"
+                                        >
+                                            {section.stage ? STAGE_LABELS[section.stage] : 'Not in Delivery'}
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-60">
+                                        {STAGE_OPTIONS.map((option) => {
+                                            const selected = (section.stage ?? 'none') === option.value;
+                                            return (
+                                                <DropdownMenuItem
+                                                    key={option.value}
+                                                    onClick={() =>
+                                                        onUpdateSection?.({
+                                                            // `updateSections` strips undefined before writing, so
+                                                            // this is how the tag is removed rather than blanked.
+                                                            stage: option.value === 'none' ? undefined : option.value,
+                                                        })
+                                                    }
+                                                    className="gap-2"
+                                                >
+                                                    <Check className={cn('h-3.5 w-3.5 flex-shrink-0', !selected && 'invisible')} />
+                                                    <span className="flex flex-col">
+                                                        <span className="text-xs font-medium">{option.label}</span>
+                                                        <span className="text-[10px] text-muted-foreground">{option.hint}</span>
+                                                    </span>
+                                                </DropdownMenuItem>
+                                            );
+                                        })}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                                 <Button
                                     variant="ghost"
                                     size="icon"

@@ -10,9 +10,9 @@ import type { CheckProgress, LaunchReadiness } from '../../domain/delivery.progr
  *
  * "Ready" is derived — nobody can assert it — so this card never offers a button
  * to declare it. It states what is in the way, in the words the team would use
- * in a call, and keeps post-launch work well away from the verdict: those checks
- * cannot pass before the site is live, and counting them as outstanding would
- * make every project look permanently unfinished.
+ * in a call. The site-wide half of that is the project's own launch checklist, so
+ * a project with nothing tagged for launch is reported as not set up rather than
+ * as a spotless zero out of zero.
  */
 
 interface CounterProps {
@@ -47,6 +47,11 @@ export interface LaunchReadinessCardProps {
   stackName?: string;
   /** Answers are not attributed in storage yet; this at least says who is answering. */
   userEmail?: string;
+  /**
+   * No checklist section is tagged `launch` on this project. The counter says so
+   * instead of showing 0/0, which reads as finished.
+   */
+  launchChecklistUntagged?: boolean;
   className?: string;
 }
 
@@ -54,9 +59,10 @@ export function LaunchReadinessCard({
   readiness,
   stackName,
   userEmail,
+  launchChecklistUntagged = false,
   className,
 }: LaunchReadinessCardProps) {
-  const { ready, blockers, pages, siteChecks, pageChecks, postLaunchChecks } = readiness;
+  const { ready, blockers, pages, siteChecks, pageChecks } = readiness;
 
   return (
     <Card className={cn('gap-0 py-4', className)}>
@@ -75,7 +81,7 @@ export function LaunchReadinessCard({
               {ready
                 ? 'Every page is built and every pre-launch check passes.'
                 : `${blockers.length} ${blockers.length === 1 ? 'thing is' : 'things are'} in the way.`}
-              {stackName ? ` Checklist: ${stackName}.` : ''}
+              {stackName ? ` ${stackName} build.` : ''}
             </p>
           </div>
         </div>
@@ -100,32 +106,20 @@ export function LaunchReadinessCard({
             detail={pages.blocked > 0 ? `${pages.blocked} blocked` : undefined}
           />
           <Counter
-            label="Site checks"
-            value={`${siteChecks.passed}/${siteChecks.applicable}`}
-            detail={checkDetail(siteChecks)}
+            label="Launch checklist"
+            value={launchChecklistUntagged ? '—' : `${siteChecks.passed}/${siteChecks.applicable}`}
+            detail={
+              launchChecklistUntagged
+                ? 'No section tagged for launch yet'
+                : checkDetail(siteChecks)
+            }
+            tone={launchChecklistUntagged ? 'muted' : 'default'}
           />
           <Counter
             label="Page checks"
             value={`${pageChecks.passed}/${pageChecks.applicable}`}
             detail={checkDetail(pageChecks)}
           />
-        </div>
-
-        <div className="mt-3 border-t border-dashed pt-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
-              Post-launch checks are done once the site is live. They never block the launch and are
-              not counted in the verdict above.
-            </p>
-            <div className="shrink-0 rounded-md border border-dashed px-3 py-1.5">
-              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                After launch{' '}
-              </span>
-              <span className="text-sm font-semibold tabular-nums text-muted-foreground">
-                {postLaunchChecks.passed}/{postLaunchChecks.applicable}
-              </span>
-            </div>
-          </div>
         </div>
 
         {userEmail && (
