@@ -2,7 +2,7 @@
 
 import { projectsService } from '@/services/database';
 import { fetchAuthed } from '@/lib/api-client';
-import type { ClientMessage, ClientStatus, ClientUpdate } from '@/types';
+import type { ClientStatus, ClientUpdate } from '@/types';
 
 /** Mirror of the JSON returned by /api/client-portal/[projectId]/link. */
 export interface PortalLinkState {
@@ -81,7 +81,6 @@ export const clientPortalRepository = {
       brandLogoUrl?: string | null;
       welcome?: string | null;
       contactEmails?: string[];
-      repliesOpen?: boolean;
     },
   ) => projectsService.updateClientPortalSettings(projectId, patch),
 
@@ -106,13 +105,4 @@ export const clientPortalRepository = {
 
   deleteUpdate: (projectId: string, updateId: string) =>
     projectsService.deleteClientUpdate(projectId, updateId),
-
-  subscribeToMessages: (projectId: string, cb: (messages: ClientMessage[]) => void) =>
-    projectsService.subscribeToClientMessages(projectId, cb),
-
-  markMessageRead: (projectId: string, messageId: string, byEmail: string) =>
-    projectsService.markClientMessageRead(projectId, messageId, byEmail),
-
-  linkMessageToRequest: (projectId: string, messageId: string, requestId: string) =>
-    projectsService.linkClientMessageToRequest(projectId, messageId, requestId),
 };

@@ -17,6 +17,7 @@ import {
   type UpdateData,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { fetchAuthed } from '@/lib/api-client';
 import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
 import type { ProjectLink } from '@/types';
@@ -105,6 +106,26 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
     if (value[key] === undefined) delete value[key];
   }
   return value;
+}
+
+/**
+ * Calls the sheet route and turns its failures into something a person can act
+ * on. A `configuration` error means the fix is in the Google Cloud console, not
+ * in this app, so it is surfaced verbatim rather than flattened to "failed".
+ */
+async function sheetAction<T>(
+  projectId: string,
+  body: Record<string, unknown>,
+  fallback: string,
+): Promise<T> {
+  const res = await fetchAuthed(`/api/delivery/${encodeURIComponent(projectId)}/sheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const parsed = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new DatabaseError(parsed?.error || `${fallback} (${res.status})`);
+  return parsed;
 }
 
 export const deliveryRepository = {
@@ -341,6 +362,39 @@ export const deliveryRepository = {
       logError(error, 'updateDeliveryState');
       throw new DatabaseError('Failed to update the project');
     }
+  },
+
+  // --- The client's tracker sheet ------------------------------------------
+  // Everything here goes through /api/delivery/[projectId]/sheet: the Google
+  // credentials are the server's service account and must never reach a
+  // browser. The app owns the page data; the sheet is a view of it.
+
+  async syncSheet(projectId: string): Promise<{
+    spreadsheetUrl: string;
+    rows: number;
+    created: boolean;
+    syncedAt: string;
+  }> {
+    return sheetAction(projectId, { action: 'sync' }, 'Failed to update the tracker sheet');
+  },
+
+  async shareSheet(projectId: string, email: string): Promise<void> {
+    await sheetAction(projectId, { action: 'share', email }, 'Failed to share the tracker sheet');
+  },
+
+  /** Reads a sheet and reports what would be imported, writing nothing. */
+  async previewSheetImport(
+    projectId: string,
+    sheetUrl: string,
+  ): Promise<{ rows: { title: string; group?: string }[]; duplicates: number }> {
+    return sheetAction(projectId, { action: 'preview-import', sheetUrl }, 'Failed to read that sheet');
+  },
+
+  async importSheet(
+    projectId: string,
+    sheetUrl: string,
+  ): Promise<{ added: number; updated: number; skipped: number }> {
+    return sheetAction(projectId, { action: 'import', sheetUrl }, 'Failed to import that sheet');
   },
 
   /**

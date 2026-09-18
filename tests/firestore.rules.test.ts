@@ -476,10 +476,7 @@ describe('firestore.rules', { timeout: 30_000 }, () => {
   });
 
   // ────────────────────────────────────────────────────────────────────────
-  // The client conversation lives under the project. The team reads and writes
-  // it from the browser; a client's own message arrives through the portal
-  // route with firebase-admin, so `create` on client_messages is closed to
-  // every client-SDK identity including the admin's.
+  // Updates the team posts to the client's portal: team-only from the browser.
   // ────────────────────────────────────────────────────────────────────────
   describe('projects/{id}/pages (delivery tracker)', () => {
     const pageRef = (db: Db) => db.collection('projects').doc('p1').collection('pages').doc('pg1');
@@ -545,56 +542,6 @@ describe('firestore.rules', { timeout: 30_000 }, () => {
 
     it('denies a signed-in @gmail.com write', async () => {
       await assertFails(updateRef(outsider()).update({ body: 'Spoofed' }));
-    });
-  });
-
-  describe('projects/{id}/client_messages', () => {
-    const messageRef = (db: Db) =>
-      db.collection('projects').doc('p1').collection('client_messages').doc('m1');
-
-    beforeEach(async () => {
-      await seed('projects', 'p1', { name: 'Redesign', userId: 'team-uid' });
-      await testEnv.withSecurityRulesDisabled(async (ctx) => {
-        await ctx
-          .firestore()
-          .collection('projects')
-          .doc('p1')
-          .collection('client_messages')
-          .doc('m1')
-          .set({ body: 'Copy attached', createdAt: '2026-09-18T11:00:00.000Z' });
-      });
-    });
-
-    it('allows an @activeset.co read', async () => {
-      await assertSucceeds(messageRef(team()).get());
-    });
-
-    it('allows an @activeset.co update (marking it read)', async () => {
-      await assertSucceeds(messageRef(team()).update({ readAt: '2026-09-18T12:00:00.000Z' }));
-    });
-
-    it('denies a signed-out read', async () => {
-      await assertFails(messageRef(signedOut()).get());
-    });
-
-    it('denies a signed-out create — the portal route writes these with admin', async () => {
-      await assertFails(
-        signedOut()
-          .collection('projects')
-          .doc('p1')
-          .collection('client_messages')
-          .add({ body: 'Injected', createdAt: 'now' }),
-      );
-    });
-
-    it('denies even the admin creating one from the client SDK', async () => {
-      await assertFails(
-        admin()
-          .collection('projects')
-          .doc('p1')
-          .collection('client_messages')
-          .add({ body: 'From the console', createdAt: 'now' }),
-      );
     });
   });
 

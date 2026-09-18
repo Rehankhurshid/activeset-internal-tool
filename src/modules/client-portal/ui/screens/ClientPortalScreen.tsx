@@ -4,7 +4,6 @@ import { PortalDeliverables } from '../components/PortalDeliverables';
 import { PortalFooter } from '../components/PortalFooter';
 import { PortalHeader } from '../components/PortalHeader';
 import { PortalPlan } from '../components/PortalPlan';
-import { PortalReplyForm } from '../components/PortalReplyForm';
 import { PortalStatusCard } from '../components/PortalStatusCard';
 import { PortalUpdatesFeed } from '../components/PortalUpdatesFeed';
 import { TrackPortalView } from '../components/TrackPortalView';
@@ -49,8 +48,7 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         <PortalUpdatesFeed updates={view.updates} now={now} />
         <PortalPlan phases={view.phases} now={now} />
         <PortalDeliverables deliverables={view.deliverables} websiteUrl={view.websiteUrl} />
-        {view.asks.length > 0 && <PortalAsks asks={view.asks} now={now} repliesOpen={view.repliesOpen} />}
-        <PortalReplyForm token={token} asks={view.asks} repliesOpen={view.repliesOpen} />
+        {view.asks.length > 0 && <PortalAsks asks={view.asks} now={now} />}
         <PortalFooter brandName={view.brandName} agencyContactEmail={view.agencyContactEmail} />
       </main>
 

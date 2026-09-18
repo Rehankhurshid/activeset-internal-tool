@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClientPortalView } from './client-portal.projection';
 import { CLIENT_PORTAL_VIEW_KEYS } from './client-portal.types';
-import type { ClientMessage, ClientUpdate, Project, ProjectTimeline, Task } from '@/types';
+import type { ClientUpdate, Project, ProjectTimeline, Task } from '@/types';
 
 const SECRET = 'SECRET-SENTINEL';
 
@@ -209,40 +209,8 @@ describe('buildClientPortalView', () => {
     assert.equal(buildClientPortalView({ project: project(), timeline: null, updates: many }).updates.length, 20);
   });
 
-  it('marks an ask answered from the earliest matching client message, and leaves others alone', () => {
-    const messages: ClientMessage[] = [
-      { id: 'x1', body: `${SECRET}-reply-late`, askTaskId: 't1', createdAt: '2026-09-21T10:00:00.000Z' },
-      { id: 'x2', body: `${SECRET}-reply-early`, askTaskId: 't1', createdAt: '2026-09-20T10:00:00.000Z' },
-      { id: 'x3', body: `${SECRET}-other-project`, askTaskId: 'unknown-task', createdAt: '2026-09-20T10:00:00.000Z' },
-      { id: 'x4', body: `${SECRET}-general`, createdAt: '2026-09-20T11:00:00.000Z' },
-    ];
-    const view = buildClientPortalView({ project: project(), timeline: timeline(), tasks: tasks(), messages });
-    assert.equal(view.asks.length, 1);
-    assert.equal(view.asks[0].id, 't1');
-    assert.equal(view.asks[0].answeredAt, '2026-09-20T10:00:00.000Z', 'earliest reply wins');
-  });
 
-  it('never echoes a client message body back onto the page', () => {
-    const messages: ClientMessage[] = [
-      { id: 'x1', body: `${SECRET}-<script>alert(1)</script>`, askTaskId: 't1', createdAt: '2026-09-20T10:00:00.000Z' },
-      { id: 'x2', body: `${SECRET}-general`, authorName: `${SECRET}-name`, createdAt: '2026-09-20T11:00:00.000Z' },
-    ];
-    const view = buildClientPortalView({ project: project(), timeline: timeline(), tasks: tasks(), messages });
-    const json = JSON.stringify(view);
-    assert.equal(json.includes(SECRET), false, 'client-submitted text must not be reflected');
-    assert.equal(json.includes('<script>'), false);
-  });
 
-  it('treats replies as open unless the team switched them off', () => {
-    assert.equal(buildClientPortalView({ project: project(), timeline: null }).repliesOpen, true);
-    assert.equal(
-      buildClientPortalView({
-        project: project({ clientPortal: { enabled: true, repliesOpen: false } }),
-        timeline: null,
-      }).repliesOpen,
-      false,
-    );
-  });
 
   it('prefers portal branding overrides over project fields', () => {
     const view = buildClientPortalView({

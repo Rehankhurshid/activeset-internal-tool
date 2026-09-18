@@ -1000,8 +1000,6 @@ export interface ClientPortalSettings {
   welcome?: string;
   /** Client contacts (informational until per-contact tokens exist). */
   contactEmails?: string[];
-  /** Lets the client write back from the portal. Defaults to on. */
-  repliesOpen?: boolean;
 }
 
 /**
@@ -1022,10 +1020,6 @@ export interface ClientFacingState {
   lastUpdateBy?: string;
   /** Open asks awaiting the client, mirrored from tasks flagged needsClientInput. */
   openRequestCount?: number;
-  /** Client messages the team has not marked read. Written by the portal route. */
-  unreadMessageCount?: number;
-  /** ISO timestamp of the newest client message. */
-  lastMessageAt?: string;
   viewCount?: number;
   lastViewedAt?: string;
   lastViewCountry?: string;
@@ -1050,24 +1044,3 @@ export interface ClientUpdate {
   pinned?: boolean;
 }
 
-/**
- * A message written by the CLIENT from their portal page. Never lands in the
- * world-readable `requests` collection: it is written only by
- * /api/portal/[token]/messages through firebase-admin, into the
- * `client_messages` subcollection under the project.
- */
-export interface ClientMessage {
-  id: string;
-  /** Plain text, capped by the route. */
-  body: string;
-  /** Set when the client is answering a specific ask; the id of that task. */
-  askTaskId?: string;
-  /** What the client typed as their name, if anything. Never trusted as identity. */
-  authorName?: string;
-  createdAt: string;
-  /** Set when a team member marks it read in the Client tab. */
-  readAt?: string;
-  readBy?: string;
-  /** Set once the message has been turned into an internal request. */
-  convertedRequestId?: string;
-}

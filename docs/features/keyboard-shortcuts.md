@@ -53,3 +53,6 @@ goes back to the page's `backHref`.
 Home: `1`–`5` open a module, `j`/`k` + `Enter` walk the list.
 Projects: `n` new, `/` search, `v` grid/list, `c` group by client, `1`–`7` status filter, `j`/`k` + `Enter` open a card.
 Project: `[` / `]` previous/next tab, `1`–`9` jump to a tab, `s` share the client portal link, `c` copy the client portal link, `e` embed.
+Delivery tab: `n` add a page, `i` import from the sitemap, `/` search; in the grid, arrows move and `1`–`6` set a status.
+
+There are now ten project tabs, so for admins Invoices sits past the `1`–`9` range and is reached with `]`.

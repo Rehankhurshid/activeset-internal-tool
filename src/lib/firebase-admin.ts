@@ -97,6 +97,39 @@ const getExplicitPrivateKey = (): string | undefined =>
 const getStorageBucket = (): string | undefined =>
     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET;
 
+/**
+ * The service account this deployment runs as, for Google APIs beyond Firebase.
+ *
+ * The same key that reaches Firestore can sign for Sheets and Drive once those
+ * APIs are enabled on the GCP project, which is what the delivery tracker uses
+ * — no second credential to manage or rotate. Returns null when the app is
+ * running on Application Default Credentials or without credentials at all,
+ * because there is no private key to sign with in those cases.
+ */
+export const getServiceAccountCredentials = (): {
+    projectId: string;
+    clientEmail: string;
+    privateKey: string;
+} | null => {
+    const fromJson = parseServiceAccountFromEnv();
+    if (fromJson?.clientEmail && fromJson.privateKey && fromJson.projectId) {
+        return {
+            projectId: fromJson.projectId,
+            clientEmail: fromJson.clientEmail,
+            privateKey: fromJson.privateKey.replace(/\\n/g, '\n'),
+        };
+    }
+
+    const clientEmail = getExplicitClientEmail();
+    const privateKey = getExplicitPrivateKey();
+    const projectId = getProjectId();
+    if (clientEmail && privateKey && projectId) {
+        return { projectId, clientEmail, privateKey: privateKey.replace(/\\n/g, '\n') };
+    }
+
+    return null;
+};
+
 if (!admin.apps.length) {
     try {
         const projectId = getProjectId();

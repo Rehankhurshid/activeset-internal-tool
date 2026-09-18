@@ -33,11 +33,10 @@ export const COLLECTIONS = {
   // A subcollection rather than an array on the project so a large site does
   // not approach the 1MB document ceiling and two people can edit two rows.
   PROJECT_PAGES: 'pages',
-  // Subcollections of projects/{id} carrying the client conversation. Both are
-  // matched in firestore.rules as team-only; the client's own writes arrive
-  // through the token-scoped portal route with firebase-admin.
+  // Short notes the team posts to the client's portal. Team-only in rules.
+  // There is no inbound equivalent: the client portal is a status page, and the
+  // conversation happens in the Slack channel kickoff opens.
   CLIENT_UPDATES: 'client_updates',
-  CLIENT_MESSAGES: 'client_messages',
 } as const;
 
 // UI constants

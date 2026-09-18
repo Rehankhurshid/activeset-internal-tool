@@ -9,6 +9,7 @@ This folder contains deep-dive documentation for major internal tool features.
 - [webflow-pages.md](./webflow-pages.md) — Webflow page management and SEO-related tooling.
 - [project-links.md](./project-links.md) — project links dashboard and data model.
 - [client-portal.md](./client-portal.md) — client-facing project page, the Client tab, portal tokens and client-facing status.
+- [website-delivery.md](./website-delivery.md) — kickoff to handover: the page tracker, stack definitions, launch checklists and the client's Google Sheet.
 - [capture-package-publish.md](./capture-package-publish.md) — publishing workflow for the `activeset-capture` package.
 - [webflow-tracker-extension.md](./webflow-tracker-extension.md) — Chrome extension for Webflow account/session tracking.
 - [site-monitoring.md](./site-monitoring.md) — automated scanning, anomaly detection, alerts, and daily health reports.

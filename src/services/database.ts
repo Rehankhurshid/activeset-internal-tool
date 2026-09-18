@@ -9,13 +9,11 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
-  setDoc,
   writeBatch,
   onSnapshot,
   query,
   where,
   orderBy,
-  increment,
   runTransaction,
   Timestamp,
   type DocumentData,
@@ -33,7 +31,6 @@ import {
   UpdateProjectLinkInput,
   AuditResult,
   ImageScanJob,
-  ClientMessage,
   ClientUpdate,
   Task,
   CreateTaskInput,
@@ -223,7 +220,7 @@ const generateClickUpSyncRequestId = (): string => {
 function sanitizeProjectData<T extends Record<string, unknown>>(data: T): T {
   const cfg = (data as { webflowConfig?: Record<string, unknown> }).webflowConfig;
   if (cfg && typeof cfg === 'object' && 'apiToken' in cfg) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // `apiToken` is destructured to strip it from `rest`, and is read below.
     const { apiToken, ...rest } = cfg as { apiToken?: unknown };
     (data as { webflowConfig?: Record<string, unknown> }).webflowConfig = {
       ...rest,
@@ -1269,7 +1266,6 @@ export const projectsService = {
       brandLogoUrl?: string | null;
       welcome?: string | null;
       contactEmails?: string[];
-      repliesOpen?: boolean;
     },
   ): Promise<void> {
     try {
@@ -1285,7 +1281,6 @@ export const projectsService = {
         const emails = Array.from(new Set(patch.contactEmails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
         update['clientPortal.contactEmails'] = emails;
       }
-      if (patch.repliesOpen !== undefined) update['clientPortal.repliesOpen'] = patch.repliesOpen;
       await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), update);
     } catch (error) {
       logError(error, 'updateClientPortalSettings');
@@ -1293,11 +1288,10 @@ export const projectsService = {
     }
   },
 
-  // --- Client portal: the conversation -------------------------------------
-  // `client_updates` and `client_messages` are subcollections of the project.
-  // Firestore rules make both team-only from the browser and close `create` on
-  // messages entirely, so the client's own writes can arrive only through
-  // /api/portal/[token]/messages with firebase-admin.
+  // --- Client portal: updates the team posts -------------------------------
+  // `client_updates` is a subcollection of the project, team-only in the rules.
+  // There is no inbound equivalent: the portal is a status page, and the
+  // conversation happens in the Slack channel kickoff opens.
 
   subscribeToClientUpdates(projectId: string, callback: (updates: ClientUpdate[]) => void): () => void {
     const q = query(
@@ -1374,51 +1368,8 @@ export const projectsService = {
     }
   },
 
-  subscribeToClientMessages(projectId: string, callback: (messages: ClientMessage[]) => void): () => void {
-    const q = query(
-      collection(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_MESSAGES),
-      orderBy('createdAt', 'desc'),
-    );
-    return onSnapshot(
-      q,
-      (snap) => callback(snap.docs.map((d) => ({ ...(d.data() as ClientMessage), id: d.id }))),
-      (error) => {
-        console.error('subscribeToClientMessages failed', error);
-        callback([]);
-      },
-    );
-  },
 
-  /** Marks one message read and decrements the project's unread counter. */
-  async markClientMessageRead(projectId: string, messageId: string, byEmail: string): Promise<void> {
-    try {
-      const batch = writeBatch(db);
-      batch.update(doc(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_MESSAGES, messageId), {
-        readAt: new Date().toISOString(),
-        readBy: byEmail.trim().toLowerCase(),
-      });
-      // Counters only: never `updatedAt`, which every project list sorts by.
-      batch.update(doc(db, PROJECTS_COLLECTION, projectId), {
-        'clientFacing.unreadMessageCount': increment(-1),
-      });
-      await batch.commit();
-    } catch (error) {
-      logError(error, 'markClientMessageRead');
-      throw new DatabaseError('Failed to mark the message read');
-    }
-  },
 
-  /** Records which internal request a client message became. */
-  async linkClientMessageToRequest(projectId: string, messageId: string, requestId: string): Promise<void> {
-    try {
-      await updateDoc(doc(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_MESSAGES, messageId), {
-        convertedRequestId: requestId,
-      });
-    } catch (error) {
-      logError(error, 'linkClientMessageToRequest');
-      throw new DatabaseError('Failed to link the message');
-    }
-  },
 
   /**
    * Flags a manual link as a client-visible deliverable (or not).

@@ -79,11 +79,9 @@ service cloud.firestore {
       }
 
       // ────────────────────────────────────────────────────────────────────
-      // Client conversation. Team-only from the browser; the client's own
-      // messages are written by /api/portal/[token]/messages with
-      // firebase-admin, which bypasses these rules. Rules do NOT cascade into
-      // subcollections, so anything not matched here (portal_views) stays
-      // deny-by-default even though the parent project is team-readable.
+      // Updates the team posts to the client's portal. Team-only. Rules do NOT
+      // cascade into subcollections, so anything not matched here (portal_views)
+      // stays deny-by-default even though the parent project is team-readable.
       // ────────────────────────────────────────────────────────────────────
       // Delivery: one document per page being built. Team-only, like the rest of
       // the project's working data. Clients never read this directly — page
@@ -97,12 +95,6 @@ service cloud.firestore {
         allow read, write: if isActiveSetUser();
       }
 
-      match /client_messages/{messageId} {
-        // Reading and triaging is a team action. Clients never read this back;
-        // their own message is echoed to them by the portal projection.
-        allow read, update, delete: if isActiveSetUser();
-        allow create: if false;
-      }
     }
 
     // ──────────────────────────────────────────────────────────────────────

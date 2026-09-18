@@ -8,6 +8,12 @@ import { EmbedDialog } from '@/modules/project-links';
 import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
 import type { Project } from '@/modules/project-links';
 import { ProjectTextCheckCard, WebsiteAuditDashboardScreen } from '@/modules/site-monitoring';
+import {
+    buildPageProgress,
+    deliveryRepository,
+    getStack,
+    type ProjectPage as DeliveryPage,
+} from '@/modules/delivery';
 import { webflowConfigRepository } from '@/modules/webflow';
 import type { WebflowConfigInput } from '@/types/webflow';
 import type { ProjectChecklist } from '@/types';
@@ -18,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { Building2, ChevronDown, Code, Handshake, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, MoreHorizontal, RefreshCw, Loader2, Plus, Search as SearchIcon, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
+import { Building2, ChevronDown, Code, Handshake, ImageIcon, LayoutList, LayoutDashboard, Globe, Link2, ListChecks, MoreHorizontal, RefreshCw, Loader2, Plus, Search as SearchIcon, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { CLIENT_STATUS_LABELS, clientPortalRepository, normalizeClientStatus } from '@/modules/client-portal';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -44,12 +50,13 @@ const ChecklistOverview = dynamic(() => import('@/components/checklist/Checklist
 const ProjectTimelineOverview = dynamic(() => import('@/modules/timeline').then(m => m.ProjectTimelineOverview), { ssr: false, loading: TabLoader });
 const InvoicesTab = dynamic(() => import('@/modules/invoices/ui/components/InvoicesTab').then(m => m.InvoicesTab), { ssr: false, loading: TabLoader });
 const ClientPanel = dynamic(() => import('@/modules/client-portal').then(m => m.ClientPanel), { ssr: false, loading: TabLoader });
+const DeliveryTab = dynamic(() => import('@/modules/delivery').then(m => m.DeliveryTab), { ssr: false, loading: TabLoader });
 
 interface PageProps {
     params: Promise<{ id: string }>;
 }
 
-const PRIMARY_DESKTOP_TAB_VALUES = new Set(['audit', 'client', 'links', 'tasks', 'webflow']);
+const PRIMARY_DESKTOP_TAB_VALUES = new Set(['audit', 'delivery', 'client', 'links', 'tasks']);
 
 export default function ProjectDetailPage({ params }: PageProps) {
     const { id } = use(params);
@@ -66,7 +73,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const searchParams = useSearchParams();
     const initialTab = (() => {
         const fromUrl = searchParams?.get('tab');
-        const valid = ['audit', 'client', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
+        const valid = ['audit', 'delivery', 'client', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
         return fromUrl && valid.includes(fromUrl) ? fromUrl : 'audit';
     })();
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -95,6 +102,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
     // first paint. The hooks no-op when passed undefined.
     const { tasks } = useProjectTasks(badgesActive ? project?.id : undefined);
     const { timeline } = useProjectTimeline(badgesActive ? project?.id : undefined);
+    // Page counts for the Delivery tab badge. Deferred with the other badge
+    // subscriptions so the default Audit view still costs one listener.
+    const [deliveryPages, setDeliveryPages] = useState<DeliveryPage[]>([]);
+    useEffect(() => {
+        if (!project?.id || !badgesActive) return;
+        return deliveryRepository.subscribeToPages(project.id, setDeliveryPages);
+    }, [project?.id, badgesActive]);
     const [checklists, setChecklists] = useState<ProjectChecklist[]>([]);
 
     useEffect(() => {
@@ -358,6 +372,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
         return <div className="p-8">Project not found</div>;
     }
 
+    const deliveryStack = getStack(project.delivery?.stackId);
+    const deliveryDone = buildPageProgress(deliveryStack, deliveryPages).done;
+
     const isAdhoc = normalizeBillingType(project.billingType) === 'adhoc';
     const autoLinks = project.links.filter(l => l.source === 'auto');
     const autoLinksCount = autoLinks.length;
@@ -381,12 +398,19 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const timelineStat: TabStat = timelinePhases + timelineMilestones > 0
         ? { label: String(timelineMilestones || timelinePhases), tone: 'set' }
         : { label: 'Not Set', tone: 'unset' };
+    // Pages built is the honest measure of a website build, and the one the
+    // client's tracker sheet shows too.
+    const deliveryStat: TabStat = deliveryPages.length > 0
+        ? { label: `${deliveryDone}/${deliveryPages.length}`, tone: 'set' }
+        : { label: 'Not Set', tone: 'unset' };
+
     const clientStat: TabStat = project.clientPortal?.enabled === true
         ? { label: CLIENT_STATUS_LABELS[normalizeClientStatus(project.clientFacing?.status)], tone: 'set' }
         : { label: 'Off', tone: 'unset' };
 
     const tabOptions: TabOption[] = [
         { value: 'audit', label: 'Audit Dashboard', compactLabel: 'Audit', icon: <LayoutDashboard className="h-4 w-4" />, stat: auditStat },
+        { value: 'delivery', label: 'Delivery', icon: <LayoutList className="h-4 w-4" />, stat: deliveryStat },
         { value: 'client', label: 'Client', icon: <Handshake className="h-4 w-4" />, stat: clientStat },
         { value: 'links', label: 'Links', icon: <Link2 className="h-4 w-4" />, stat: linksStat },
         { value: 'tasks', label: 'Tasks', icon: <ListTodo className="h-4 w-4" />, stat: tasksStat },
@@ -579,6 +603,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             pathToLocaleMap={project.pathToLocaleMap}
                             imageScanJob={project.imageScanJob}
                         />
+                    </TabsContent>
+
+                    <TabsContent value="delivery" className="mt-4 sm:mt-6">
+                        <DeliveryTab project={project} userEmail={user.email ?? ''} />
                     </TabsContent>
 
                     <TabsContent value="client" className="mt-4 sm:mt-6">

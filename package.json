@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit --pretty false",
     "lint:architecture": "eslint src/app/page.tsx \"src/app/**/page.tsx\" \"src/modules/**/*.{ts,tsx}\" --max-warnings=0",
     "arch:check": "npm run typecheck && npm run lint:architecture",
+    "test:domain": "tsx --test src/modules/delivery/domain/*.test.ts src/modules/client-portal/domain/*.test.ts",
     "capture:local": "tsx scripts/capture-local.ts",
     "capture:wizard": "tsx scripts/capture-wizard.ts",
     "cms-alt": "tsx scripts/cms-alt.ts",

@@ -1,5 +1,4 @@
 import type {
-  ClientMessage,
   ClientUpdate,
   Project,
   ProjectLink,
@@ -26,9 +25,6 @@ export interface BuildClientPortalViewInput {
   tasks?: Task[];
   /** Team posts, newest first after projection. */
   updates?: ClientUpdate[];
-  /** The client's own messages, used only to mark asks answered. Never rendered
-   *  back verbatim, so nothing a client sends can be reflected onto the page. */
-  messages?: ClientMessage[];
   now?: Date;
 }
 
@@ -73,10 +69,9 @@ function toDeliverable(l: ProjectLink): PortalDeliverableView {
   return { id: l.id, title: l.title, url: l.url };
 }
 
-function toAsk(t: Task, answeredAt?: string): PortalAskView {
+function toAsk(t: Task): PortalAskView {
   const ask: PortalAskView = { id: t.id, title: t.title };
   if (t.dueDate) ask.dueDate = t.dueDate;
-  if (answeredAt) ask.answeredAt = answeredAt;
   return ask;
 }
 
@@ -111,7 +106,7 @@ function compact<T extends object>(obj: T): T {
  * checklists, audits, images and invoices are all deliberately absent.
  */
 export function buildClientPortalView(input: BuildClientPortalViewInput): ClientPortalView {
-  const { project, timeline, tasks = [], updates = [], messages = [], now = new Date() } = input;
+  const { project, timeline, tasks = [], updates = [], now = new Date() } = input;
   const settings = project.clientPortal;
   const facing = project.clientFacing ?? {};
 
@@ -168,20 +163,10 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     .sort((a, b) => a.order - b.order)
     .map(toDeliverable);
 
-  // Earliest reply per ask: an ask the client has already answered still shows,
-  // because the team has not acted on it yet, but it reads as answered.
-  const answeredAt = new Map<string, string>();
-  for (const message of messages) {
-    const id = message.askTaskId;
-    if (!id || !message.createdAt) continue;
-    const existing = answeredAt.get(id);
-    if (!existing || message.createdAt < existing) answeredAt.set(id, message.createdAt);
-  }
-
   const asks = tasks
     .filter((t) => t.needsClientInput === true && t.status !== 'done')
     .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || a.order - b.order)
-    .map((t) => toAsk(t, answeredAt.get(t.id)));
+    .map(toAsk);
 
   const updateViews = [...updates]
     .filter((u) => typeof u.body === 'string' && u.body.trim().length > 0)
@@ -213,9 +198,6 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     deliverables,
     asks,
     updates: updateViews,
-    // Replies need somewhere to land and someone to tell; both are true
-    // whenever the portal is on, so this is a simple switch for later.
-    repliesOpen: settings?.repliesOpen !== false,
     generatedAt: now.toISOString(),
   };
 

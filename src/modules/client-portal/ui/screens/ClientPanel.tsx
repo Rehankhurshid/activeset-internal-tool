@@ -2,18 +2,15 @@
 
 import { useMemo, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Project, ProjectTimeline, Task } from '@/types';
 import { cn } from '@/lib/utils';
 import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
-import { ClientMessagesInbox } from '../components/ClientMessagesInbox';
 import { ClientStatusChip } from '../components/ClientStatusChip';
 import { ClientStatusEditor } from '../components/ClientStatusEditor';
 import { ClientUpdateComposer } from '../components/ClientUpdateComposer';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalLinkCard } from '../components/PortalLinkCard';
-import { PortalRepliesToggle } from '../components/PortalRepliesToggle';
 import { PortalVisibilityLists } from '../components/PortalVisibilityLists';
 
 interface ClientPanelProps {
@@ -105,7 +102,6 @@ export function ClientPanel(props: ClientPanelProps) {
   const { project, timeline, userEmail, tasks } = props;
   const [link, setLink] = useState<PortalLinkState | null>(null);
   const enabled = link ? link.enabled : project.clientPortal?.enabled === true;
-  const unread = project.clientFacing?.unreadMessageCount ?? 0;
 
   return (
     <div className="space-y-4">
@@ -159,25 +155,6 @@ export function ClientPanel(props: ClientPanelProps) {
         <div className="space-y-4">
           <Card className="gap-3">
             <CardHeader>
-              <div className="flex items-center gap-2">
-                <SectionTitle>Replies from the client</SectionTitle>
-                {unread > 0 && (
-                  <Badge variant="destructive" className="h-4 px-1.5 text-[10px] tabular-nums">
-                    {unread} unread
-                  </Badge>
-                )}
-              </div>
-              <CardDescription className="text-xs">
-                Anything they write from their page. Nothing here becomes internal work until you convert it.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ClientMessagesInbox projectId={project.id} userEmail={userEmail} tasks={tasks} />
-            </CardContent>
-          </Card>
-
-          <Card className="gap-3">
-            <CardHeader>
               <SectionTitle>What the client can see</SectionTitle>
               <CardDescription className="text-xs">
                 Only switched-on milestones (title, dates, status) and links reach the portal.
@@ -210,9 +187,6 @@ export function ClientPanel(props: ClientPanelProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               <PortalBrandingFields project={project} />
-              <div className="border-t pt-3">
-                <PortalRepliesToggle project={project} />
-              </div>
             </CardContent>
           </Card>
         </div>
