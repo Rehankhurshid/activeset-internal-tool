@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClientPortalView } from './client-portal.projection';
 import { CLIENT_PORTAL_VIEW_KEYS } from './client-portal.types';
-import type { ClientUpdate, Project, ProjectTimeline, Task } from '@/types';
+import type { Project, ProjectTimeline, Task } from '@/types';
 
 const SECRET = 'SECRET-SENTINEL';
 
@@ -190,24 +190,6 @@ describe('buildClientPortalView', () => {
     assert.equal(view.currentPhase?.total, 3);
   });
 
-  it('orders updates pinned-first then newest-first, drops empty ones, and caps the feed', () => {
-    const updates: ClientUpdate[] = [
-      { id: 'u1', body: 'Oldest', postedAt: '2026-09-01T09:00:00.000Z', postedBy: 'rehan@activeset.co' },
-      { id: 'u2', body: 'Newest', postedAt: '2026-09-17T09:00:00.000Z', postedBy: 'rehan@activeset.co' },
-      { id: 'u3', body: 'Pinned', postedAt: '2026-09-05T09:00:00.000Z', postedBy: 'rehan@activeset.co', pinned: true },
-      { id: 'u4', body: '   ', postedAt: '2026-09-18T09:00:00.000Z', postedBy: 'rehan@activeset.co' },
-    ];
-    const view = buildClientPortalView({ project: project(), timeline: null, updates });
-    assert.deepEqual(view.updates.map((u) => u.id), ['u3', 'u2', 'u1']);
-
-    const many: ClientUpdate[] = Array.from({ length: 30 }, (_, i) => ({
-      id: `m${i}`,
-      body: `Update ${i}`,
-      postedAt: `2026-09-${String((i % 28) + 1).padStart(2, '0')}T09:00:00.000Z`,
-      postedBy: 'rehan@activeset.co',
-    }));
-    assert.equal(buildClientPortalView({ project: project(), timeline: null, updates: many }).updates.length, 20);
-  });
 
 
 

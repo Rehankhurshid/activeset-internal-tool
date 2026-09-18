@@ -13,7 +13,6 @@ import {
   onSnapshot,
   query,
   where,
-  orderBy,
   runTransaction,
   Timestamp,
   type DocumentData,
@@ -31,7 +30,6 @@ import {
   UpdateProjectLinkInput,
   AuditResult,
   ImageScanJob,
-  ClientUpdate,
   Task,
   CreateTaskInput,
   UpdateTaskInput,
@@ -1288,85 +1286,10 @@ export const projectsService = {
     }
   },
 
-  // --- Client portal: updates the team posts -------------------------------
-  // `client_updates` is a subcollection of the project, team-only in the rules.
-  // There is no inbound equivalent: the portal is a status page, and the
-  // conversation happens in the Slack channel kickoff opens.
 
-  subscribeToClientUpdates(projectId: string, callback: (updates: ClientUpdate[]) => void): () => void {
-    const q = query(
-      collection(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_UPDATES),
-      orderBy('postedAt', 'desc'),
-    );
-    return onSnapshot(
-      q,
-      (snap) => callback(snap.docs.map((d) => ({ ...(d.data() as ClientUpdate), id: d.id }))),
-      (error) => {
-        console.error('subscribeToClientUpdates failed', error);
-        callback([]);
-      },
-    );
-  },
 
-  async postClientUpdate(
-    projectId: string,
-    input: { title?: string; body: string; pinned?: boolean },
-    byEmail: string,
-  ): Promise<string> {
-    const body = input.body.trim();
-    if (!body) throw new DatabaseError('An update needs a message');
-    try {
-      const payload = stripUndefined({
-        title: input.title?.trim() || undefined,
-        body,
-        pinned: input.pinned ? true : undefined,
-        postedAt: new Date().toISOString(),
-        postedBy: byEmail.trim().toLowerCase(),
-      });
-      const ref = await addDoc(
-        collection(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_UPDATES),
-        payload as Record<string, unknown>,
-      );
-      return ref.id;
-    } catch (error) {
-      logError(error, 'postClientUpdate');
-      throw new DatabaseError('Failed to post the update');
-    }
-  },
 
-  async updateClientUpdate(
-    projectId: string,
-    updateId: string,
-    patch: { title?: string | null; body?: string; pinned?: boolean },
-  ): Promise<void> {
-    try {
-      const update: UpdateData<DocumentData> = {};
-      if (patch.title !== undefined) {
-        const title = patch.title?.trim();
-        update.title = title ? title : deleteField();
-      }
-      if (patch.body !== undefined) {
-        const body = patch.body.trim();
-        if (!body) throw new DatabaseError('An update needs a message');
-        update.body = body;
-      }
-      if (patch.pinned !== undefined) update.pinned = patch.pinned;
-      await updateDoc(doc(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_UPDATES, updateId), update);
-    } catch (error) {
-      logError(error, 'updateClientUpdate');
-      if (error instanceof DatabaseError) throw error;
-      throw new DatabaseError('Failed to edit the update');
-    }
-  },
 
-  async deleteClientUpdate(projectId: string, updateId: string): Promise<void> {
-    try {
-      await deleteDoc(doc(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_UPDATES, updateId));
-    } catch (error) {
-      logError(error, 'deleteClientUpdate');
-      throw new DatabaseError('Failed to delete the update');
-    }
-  },
 
 
 

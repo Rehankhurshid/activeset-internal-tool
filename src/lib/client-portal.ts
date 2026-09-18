@@ -4,7 +4,7 @@ import { COLLECTIONS } from '@/lib/constants';
 import { PortalAuthError, verifyPortalToken } from '@/lib/client-portal-tokens';
 import { buildClientPortalView } from '@/modules/client-portal/domain/client-portal.projection';
 import type { ClientPortalView } from '@/modules/client-portal/domain/client-portal.types';
-import type { ClientUpdate, Project, ProjectTimeline, Task } from '@/types';
+import type { Project, ProjectTimeline, Task } from '@/types';
 
 /**
  * Server-side loader for the portal page: token → project + timeline + asks →
@@ -79,8 +79,7 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
   }
 
   const { projectId, tokenHash, project: raw } = verified;
-  const projectDoc = adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId);
-  const [timelineSnap, asksSnap, updatesSnap] = await Promise.all([
+  const [timelineSnap, asksSnap] = await Promise.all([
     adminDb.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
     adminDb
       .collection(COLLECTIONS.TASKS)
@@ -91,17 +90,14 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
       // filter happens in the projection.
       .limit(500)
       .get(),
-    // Single-field orderBy on a subcollection: no composite index needed.
-    projectDoc.collection(COLLECTIONS.CLIENT_UPDATES).orderBy('postedAt', 'desc').limit(20).get(),
   ]);
 
   const project = toProject(projectId, raw);
   const timeline = toTimeline(projectId, timelineSnap.exists ? (timelineSnap.data() as Record<string, unknown>) : undefined);
   const tasks = asksSnap.docs.map((d) => toTask(d.id, d.data() as Record<string, unknown>));
-  const updates = updatesSnap.docs.map((d) => ({ ...(d.data() as ClientUpdate), id: d.id }));
 
   return {
-    view: buildClientPortalView({ project, timeline, tasks, updates }),
+    view: buildClientPortalView({ project, timeline, tasks }),
     projectId,
     tokenHash,
   };

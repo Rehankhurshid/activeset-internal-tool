@@ -57,14 +57,6 @@ export interface PortalAskView {
   dueDate?: string;
 }
 
-/** One post from the team, newest first. Plain text only. */
-export interface PortalUpdateView {
-  id: string;
-  title?: string;
-  body: string;
-  postedAt: string;
-  pinned?: boolean;
-}
 
 /**
  * The ONLY payload the client portal page receives. Built by
@@ -94,7 +86,6 @@ export interface ClientPortalView {
   phases: PortalPhaseView[];
   deliverables: PortalDeliverableView[];
   asks: PortalAskView[];
-  updates: PortalUpdateView[];
   /** ISO timestamp the projection was built (server time). */
   generatedAt: string;
 }
@@ -118,6 +109,5 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'phases',
   'deliverables',
   'asks',
-  'updates',
   'generatedAt',
 ] as const;

@@ -1,5 +1,4 @@
 import type {
-  ClientUpdate,
   Project,
   ProjectLink,
   ProjectTimeline,
@@ -15,7 +14,6 @@ import type {
   PortalMilestoneStatus,
   PortalMilestoneView,
   PortalPhaseView,
-  PortalUpdateView,
 } from './client-portal.types';
 
 export interface BuildClientPortalViewInput {
@@ -23,8 +21,6 @@ export interface BuildClientPortalViewInput {
   timeline: ProjectTimeline | null | undefined;
   /** Optional. Only tasks with `needsClientInput` and not done become asks. */
   tasks?: Task[];
-  /** Team posts, newest first after projection. */
-  updates?: ClientUpdate[];
   now?: Date;
 }
 
@@ -75,20 +71,6 @@ function toAsk(t: Task): PortalAskView {
   return ask;
 }
 
-const MAX_UPDATES = 20;
-const MAX_UPDATE_BODY = 2000;
-
-function toUpdate(u: ClientUpdate): PortalUpdateView {
-  const view: PortalUpdateView = {
-    id: u.id,
-    body: String(u.body ?? '').slice(0, MAX_UPDATE_BODY),
-    postedAt: u.postedAt,
-  };
-  const title = u.title?.trim();
-  if (title) view.title = title;
-  if (u.pinned) view.pinned = true;
-  return view;
-}
 
 function compact<T extends object>(obj: T): T {
   for (const key of Object.keys(obj) as Array<keyof T>) {
@@ -106,7 +88,7 @@ function compact<T extends object>(obj: T): T {
  * checklists, audits, images and invoices are all deliberately absent.
  */
 export function buildClientPortalView(input: BuildClientPortalViewInput): ClientPortalView {
-  const { project, timeline, tasks = [], updates = [], now = new Date() } = input;
+  const { project, timeline, tasks = [], now = new Date() } = input;
   const settings = project.clientPortal;
   const facing = project.clientFacing ?? {};
 
@@ -168,11 +150,6 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || a.order - b.order)
     .map(toAsk);
 
-  const updateViews = [...updates]
-    .filter((u) => typeof u.body === 'string' && u.body.trim().length > 0)
-    .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.postedAt.localeCompare(a.postedAt))
-    .slice(0, MAX_UPDATES)
-    .map(toUpdate);
 
   const status = normalizeClientStatus(facing.status);
 
@@ -197,7 +174,6 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     phases,
     deliverables,
     asks,
-    updates: updateViews,
     generatedAt: now.toISOString(),
   };
 

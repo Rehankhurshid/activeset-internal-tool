@@ -91,7 +91,6 @@ API documentation is in `/docs/misc/`:
 | `client_portal_tokens` | Server-only. Client portal capability tokens keyed by sha256(token), raw value never stored in the clear; firebase-admin only (see docs/features/client-portal.md) |
 | `projects/{id}/portal_views` | Server-only subcollection. One row per counted client portal open |
 | `projects/{id}/pages` | Website delivery. One document per page being built (see docs/features/website-delivery.md) |
-| `projects/{id}/client_updates` | Short notes the team posts to the client's portal |
 
 ## Common Patterns
 

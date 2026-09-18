@@ -25,7 +25,6 @@ export type {
   PortalMilestoneStatus,
   PortalMilestoneView,
   PortalPhaseView,
-  PortalUpdateView,
 } from './domain/client-portal.types';
 export {
   CLIENT_STATUS_ORDER,

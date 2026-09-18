@@ -2,7 +2,7 @@
 
 import { projectsService } from '@/services/database';
 import { fetchAuthed } from '@/lib/api-client';
-import type { ClientStatus, ClientUpdate } from '@/types';
+import type { ClientStatus } from '@/types';
 
 /** Mirror of the JSON returned by /api/client-portal/[projectId]/link. */
 export interface PortalLinkState {
@@ -87,22 +87,4 @@ export const clientPortalRepository = {
   updateLinkClientVisibility: (projectId: string, linkId: string, clientVisible: boolean) =>
     projectsService.updateLinkClientVisibility(projectId, linkId, clientVisible),
 
-  // --- The conversation ----------------------------------------------------
-  // Live subscriptions rather than fetches: the Client tab should show a
-  // client's reply the moment it lands, the same way the rest of the app works.
-
-  subscribeToUpdates: (projectId: string, cb: (updates: ClientUpdate[]) => void) =>
-    projectsService.subscribeToClientUpdates(projectId, cb),
-
-  postUpdate: (projectId: string, input: { title?: string; body: string; pinned?: boolean }, byEmail: string) =>
-    projectsService.postClientUpdate(projectId, input, byEmail),
-
-  editUpdate: (
-    projectId: string,
-    updateId: string,
-    patch: { title?: string | null; body?: string; pinned?: boolean },
-  ) => projectsService.updateClientUpdate(projectId, updateId, patch),
-
-  deleteUpdate: (projectId: string, updateId: string) =>
-    projectsService.deleteClientUpdate(projectId, updateId),
 };

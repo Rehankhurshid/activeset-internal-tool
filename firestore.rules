@@ -91,10 +91,6 @@ service cloud.firestore {
         allow read, write: if isActiveSetUser();
       }
 
-      match /client_updates/{updateId} {
-        allow read, write: if isActiveSetUser();
-      }
-
     }
 
     // ──────────────────────────────────────────────────────────────────────

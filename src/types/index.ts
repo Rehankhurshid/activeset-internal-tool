@@ -1026,21 +1026,4 @@ export interface ClientFacingState {
   lastViewCity?: string;
 }
 
-/**
- * A short note the team posts to the client's portal. Lives in the
- * `client_updates` subcollection under the project, so team members read and
- * write it with the client SDK (rules restrict it to @activeset.co) while the
- * portal reads it server-side through the allow-listed projection.
- */
-export interface ClientUpdate {
-  id: string;
-  /** Optional heading. The body carries the message. */
-  title?: string;
-  /** Plain text, shown to the client verbatim. */
-  body: string;
-  postedAt: string;
-  postedBy: string;
-  /** Pinned updates sort above the rest on the portal. */
-  pinned?: boolean;
-}
 

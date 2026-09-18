@@ -5,7 +5,6 @@ import { PortalFooter } from '../components/PortalFooter';
 import { PortalHeader } from '../components/PortalHeader';
 import { PortalPlan } from '../components/PortalPlan';
 import { PortalStatusCard } from '../components/PortalStatusCard';
-import { PortalUpdatesFeed } from '../components/PortalUpdatesFeed';
 import { TrackPortalView } from '../components/TrackPortalView';
 
 interface ClientPortalScreenProps {
@@ -45,7 +44,6 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
           welcome={view.welcome}
         />
         <PortalStatusCard view={view} now={now} />
-        <PortalUpdatesFeed updates={view.updates} now={now} />
         <PortalPlan phases={view.phases} now={now} />
         <PortalDeliverables deliverables={view.deliverables} websiteUrl={view.websiteUrl} />
         {view.asks.length > 0 && <PortalAsks asks={view.asks} now={now} />}

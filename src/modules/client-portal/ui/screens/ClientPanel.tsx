@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils';
 import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
 import { ClientStatusChip } from '../components/ClientStatusChip';
 import { ClientStatusEditor } from '../components/ClientStatusEditor';
-import { ClientUpdateComposer } from '../components/ClientUpdateComposer';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalLinkCard } from '../components/PortalLinkCard';
 import { PortalVisibilityLists } from '../components/PortalVisibilityLists';
@@ -139,17 +138,6 @@ export function ClientPanel(props: ClientPanelProps) {
             </CardContent>
           </Card>
 
-          <Card className="gap-3">
-            <CardHeader>
-              <SectionTitle>Updates for the client</SectionTitle>
-              <CardDescription className="text-xs">
-                Short notes shown on the portal, newest first. The client reads them exactly as typed.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ClientUpdateComposer projectId={project.id} userEmail={userEmail} />
-            </CardContent>
-          </Card>
         </div>
 
         <div className="space-y-4">

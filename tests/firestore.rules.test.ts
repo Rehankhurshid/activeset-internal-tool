@@ -511,40 +511,6 @@ describe('firestore.rules', { timeout: 30_000 }, () => {
     });
   });
 
-  describe('projects/{id}/client_updates', () => {
-    const updateRef = (db: Db) =>
-      db.collection('projects').doc('p1').collection('client_updates').doc('u1');
-
-    beforeEach(async () => {
-      await seed('projects', 'p1', { name: 'Redesign', userId: 'team-uid' });
-      await testEnv.withSecurityRulesDisabled(async (ctx) => {
-        await ctx
-          .firestore()
-          .collection('projects')
-          .doc('p1')
-          .collection('client_updates')
-          .doc('u1')
-          .set({ body: 'Staging is up', postedBy: TEAM_EMAIL, postedAt: '2026-09-18T10:00:00.000Z' });
-      });
-    });
-
-    it('allows an @activeset.co read', async () => {
-      await assertSucceeds(updateRef(team()).get());
-    });
-
-    it('allows an @activeset.co write', async () => {
-      await assertSucceeds(updateRef(team()).update({ body: 'Staging is up, with copy' }));
-    });
-
-    it('denies a signed-out read', async () => {
-      await assertFails(updateRef(signedOut()).get());
-    });
-
-    it('denies a signed-in @gmail.com write', async () => {
-      await assertFails(updateRef(outsider()).update({ body: 'Spoofed' }));
-    });
-  });
-
   // ────────────────────────────────────────────────────────────────────────
   // webflow_sessions — deliberately open: the Webflow extension talks to it
   // without Firebase Auth. This test documents that exception; if it starts

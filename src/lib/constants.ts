@@ -33,10 +33,6 @@ export const COLLECTIONS = {
   // A subcollection rather than an array on the project so a large site does
   // not approach the 1MB document ceiling and two people can edit two rows.
   PROJECT_PAGES: 'pages',
-  // Short notes the team posts to the client's portal. Team-only in rules.
-  // There is no inbound equivalent: the client portal is a status page, and the
-  // conversation happens in the Slack channel kickoff opens.
-  CLIENT_UPDATES: 'client_updates',
 } as const;
 
 // UI constants
