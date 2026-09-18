@@ -2,7 +2,7 @@
 
 import { projectsService } from '@/services/database';
 import { fetchAuthed } from '@/lib/api-client';
-import type { ClientStatus } from '@/types';
+import type { ClientMessage, ClientStatus, ClientUpdate } from '@/types';
 
 /** Mirror of the JSON returned by /api/client-portal/[projectId]/link. */
 export interface PortalLinkState {
@@ -60,19 +60,59 @@ export const clientPortalRepository = {
     return body.views ?? [];
   },
 
+  /**
+   * `touch: true` also stamps "last updated", which is what the stale-portal
+   * nudge reads. Pass it when the team has actually told the client something
+   * (the Client tab's Save), not when a status is being tidied from a list.
+   */
   updateClientFacing: (
     projectId: string,
     patch: { status?: ClientStatus; statusNote?: string | null; currentPhaseId?: string | null },
     byEmail: string,
-  ) => projectsService.updateClientFacing(projectId, patch, byEmail),
+    options: { touch?: boolean } = {},
+  ) => projectsService.updateClientFacing(projectId, patch, byEmail, options),
 
   markClientUpdated: (projectId: string, byEmail: string) => projectsService.markClientUpdated(projectId, byEmail),
 
   updateClientPortalSettings: (
     projectId: string,
-    patch: { brandName?: string | null; brandLogoUrl?: string | null; welcome?: string | null; contactEmails?: string[] },
+    patch: {
+      brandName?: string | null;
+      brandLogoUrl?: string | null;
+      welcome?: string | null;
+      contactEmails?: string[];
+      repliesOpen?: boolean;
+    },
   ) => projectsService.updateClientPortalSettings(projectId, patch),
 
   updateLinkClientVisibility: (projectId: string, linkId: string, clientVisible: boolean) =>
     projectsService.updateLinkClientVisibility(projectId, linkId, clientVisible),
+
+  // --- The conversation ----------------------------------------------------
+  // Live subscriptions rather than fetches: the Client tab should show a
+  // client's reply the moment it lands, the same way the rest of the app works.
+
+  subscribeToUpdates: (projectId: string, cb: (updates: ClientUpdate[]) => void) =>
+    projectsService.subscribeToClientUpdates(projectId, cb),
+
+  postUpdate: (projectId: string, input: { title?: string; body: string; pinned?: boolean }, byEmail: string) =>
+    projectsService.postClientUpdate(projectId, input, byEmail),
+
+  editUpdate: (
+    projectId: string,
+    updateId: string,
+    patch: { title?: string | null; body?: string; pinned?: boolean },
+  ) => projectsService.updateClientUpdate(projectId, updateId, patch),
+
+  deleteUpdate: (projectId: string, updateId: string) =>
+    projectsService.deleteClientUpdate(projectId, updateId),
+
+  subscribeToMessages: (projectId: string, cb: (messages: ClientMessage[]) => void) =>
+    projectsService.subscribeToClientMessages(projectId, cb),
+
+  markMessageRead: (projectId: string, messageId: string, byEmail: string) =>
+    projectsService.markClientMessageRead(projectId, messageId, byEmail),
+
+  linkMessageToRequest: (projectId: string, messageId: string, requestId: string) =>
+    projectsService.linkClientMessageToRequest(projectId, messageId, requestId),
 };

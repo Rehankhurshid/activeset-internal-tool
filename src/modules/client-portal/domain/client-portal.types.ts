@@ -55,6 +55,19 @@ export interface PortalAskView {
   id: string;
   title: string;
   dueDate?: string;
+  /** ISO timestamp of the client's own reply to this ask, when they sent one.
+   *  The ask stays on the list until the team clears the flag, but it reads as
+   *  answered so the client is not asked twice for the same thing. */
+  answeredAt?: string;
+}
+
+/** One post from the team, newest first. Plain text only. */
+export interface PortalUpdateView {
+  id: string;
+  title?: string;
+  body: string;
+  postedAt: string;
+  pinned?: boolean;
 }
 
 /**
@@ -85,6 +98,9 @@ export interface ClientPortalView {
   phases: PortalPhaseView[];
   deliverables: PortalDeliverableView[];
   asks: PortalAskView[];
+  updates: PortalUpdateView[];
+  /** Whether the client may write back. False turns the reply form off. */
+  repliesOpen: boolean;
   /** ISO timestamp the projection was built (server time). */
   generatedAt: string;
 }
@@ -108,5 +124,7 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'phases',
   'deliverables',
   'asks',
+  'updates',
+  'repliesOpen',
   'generatedAt',
 ] as const;

@@ -1,14 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import type { Project, ProjectTimeline } from '@/types';
+import type { Project, ProjectTimeline, Task } from '@/types';
 import { cn } from '@/lib/utils';
 import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
+import { ClientMessagesInbox } from '../components/ClientMessagesInbox';
 import { ClientStatusChip } from '../components/ClientStatusChip';
 import { ClientStatusEditor } from '../components/ClientStatusEditor';
+import { ClientUpdateComposer } from '../components/ClientUpdateComposer';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalLinkCard } from '../components/PortalLinkCard';
+import { PortalRepliesToggle } from '../components/PortalRepliesToggle';
 import { PortalVisibilityLists } from '../components/PortalVisibilityLists';
 
 interface ClientPanelProps {
@@ -17,6 +22,12 @@ interface ClientPanelProps {
   userEmail: string;
   /** Reserved for admin-only controls (client contacts / per-contact links) in the next phase. */
   isAdmin: boolean;
+  /**
+   * Optional. Used read-only: to name the ask a client reply answers, and to
+   * show which asks are currently published. The panel never subscribes to
+   * tasks itself — when the caller has them, it passes them down.
+   */
+  tasks?: Task[];
 }
 
 function SectionTitle({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -27,15 +38,74 @@ function SectionTitle({ children, className }: { children: React.ReactNode; clas
   );
 }
 
+function formatDue(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/**
+ * The asks the portal is publishing right now, read-only. There is no
+ * visibility switch on these: `needsClientInput` on a not-done task sends the
+ * task's title to the client verbatim, so the team needs to see the exact
+ * wording somewhere. Editing happens on the task itself, hence the links out.
+ */
+function PublishedAsks({ tasks }: { tasks: Task[] }) {
+  const asks = useMemo(
+    () =>
+      tasks
+        .filter((t) => t.needsClientInput === true && t.status !== 'done')
+        .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || a.order - b.order),
+    [tasks],
+  );
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Asks</h3>
+        <span className="text-[11px] tabular-nums text-muted-foreground">
+          {asks.length === 0 ? 'none' : `${asks.length} published`}
+        </span>
+      </div>
+      {asks.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Nothing is being asked of the client right now. Tick “Needs client input” on a task to add one.
+        </p>
+      ) : (
+        <div className="divide-y divide-border/60">
+          {asks.map((t) => (
+            <a
+              key={t.id}
+              href="?tab=tasks"
+              className="group flex items-center gap-2 py-1.5 hover:bg-muted/40"
+              title="Open the Tasks tab to edit the wording or clear the flag"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm group-hover:underline">{t.title}</span>
+                {t.dueDate && (
+                  <span className="block text-[11px] text-muted-foreground">Due {formatDue(t.dueDate)}</span>
+                )}
+              </span>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Internal "Client" tab: the portal link, what the client is told, what they
- * can see, and how the page is branded. Everything reads from the live
- * project doc the detail screen already subscribes to.
+ * can see, what they have written back, and how the page is branded.
+ * Everything reads from the live project doc the detail screen already
+ * subscribes to.
  */
 export function ClientPanel(props: ClientPanelProps) {
-  const { project, timeline, userEmail } = props;
+  const { project, timeline, userEmail, tasks } = props;
   const [link, setLink] = useState<PortalLinkState | null>(null);
   const enabled = link ? link.enabled : project.clientPortal?.enabled === true;
+  const unread = project.clientFacing?.unreadMessageCount ?? 0;
 
   return (
     <div className="space-y-4">
@@ -72,9 +142,40 @@ export function ClientPanel(props: ClientPanelProps) {
               <ClientStatusEditor project={project} phases={timeline?.phases ?? []} userEmail={userEmail} />
             </CardContent>
           </Card>
+
+          <Card className="gap-3">
+            <CardHeader>
+              <SectionTitle>Updates for the client</SectionTitle>
+              <CardDescription className="text-xs">
+                Short notes shown on the portal, newest first. The client reads them exactly as typed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ClientUpdateComposer projectId={project.id} userEmail={userEmail} />
+            </CardContent>
+          </Card>
         </div>
 
         <div className="space-y-4">
+          <Card className="gap-3">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <SectionTitle>Replies from the client</SectionTitle>
+                {unread > 0 && (
+                  <Badge variant="destructive" className="h-4 px-1.5 text-[10px] tabular-nums">
+                    {unread} unread
+                  </Badge>
+                )}
+              </div>
+              <CardDescription className="text-xs">
+                Anything they write from their page. Nothing here becomes internal work until you convert it.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ClientMessagesInbox projectId={project.id} userEmail={userEmail} tasks={tasks} />
+            </CardContent>
+          </Card>
+
           <Card className="gap-3">
             <CardHeader>
               <SectionTitle>What the client can see</SectionTitle>
@@ -87,13 +188,31 @@ export function ClientPanel(props: ClientPanelProps) {
             </CardContent>
           </Card>
 
+          {tasks && (
+            <Card className="gap-3">
+              <CardHeader>
+                <SectionTitle>What the client is being asked</SectionTitle>
+                <CardDescription className="text-xs">
+                  Every not-done task flagged “Needs client input” is published — there is no switch. The task title
+                  is what the client reads, word for word.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PublishedAsks tasks={tasks} />
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="gap-3">
             <CardHeader>
               <SectionTitle>Branding</SectionTitle>
               <CardDescription className="text-xs">Header copy on the portal page.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <PortalBrandingFields project={project} />
+              <div className="border-t pt-3">
+                <PortalRepliesToggle project={project} />
+              </div>
             </CardContent>
           </Card>
         </div>

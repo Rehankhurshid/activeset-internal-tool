@@ -24,7 +24,7 @@ service cloud.firestore {
     // Server-only collections. Deny everything to client SDKs; reads and
     // writes go through firebase-admin in route handlers. Collections that
     // are NOT listed anywhere in this file are also denied by default —
-    // client_portal_tokens, client_portal_views, extension_tokens,
+    // client_portal_tokens, projects/{id}/portal_views, extension_tokens,
     // project_invoices and app_secrets rely on that.
     // ──────────────────────────────────────────────────────────────────────
     match /project_secrets/{projectId} {
@@ -76,6 +76,24 @@ service cloud.firestore {
 
       match /link_audits/{linkId} {
         allow read, write: if canAccessProjectById();
+      }
+
+      // ────────────────────────────────────────────────────────────────────
+      // Client conversation. Team-only from the browser; the client's own
+      // messages are written by /api/portal/[token]/messages with
+      // firebase-admin, which bypasses these rules. Rules do NOT cascade into
+      // subcollections, so anything not matched here (portal_views) stays
+      // deny-by-default even though the parent project is team-readable.
+      // ────────────────────────────────────────────────────────────────────
+      match /client_updates/{updateId} {
+        allow read, write: if isActiveSetUser();
+      }
+
+      match /client_messages/{messageId} {
+        // Reading and triaging is a team action. Clients never read this back;
+        // their own message is echoed to them by the portal projection.
+        allow read, update, delete: if isActiveSetUser();
+        allow create: if false;
       }
     }
 

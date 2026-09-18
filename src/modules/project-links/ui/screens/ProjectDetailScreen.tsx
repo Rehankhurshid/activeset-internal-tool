@@ -311,9 +311,17 @@ export default function ProjectDetailPage({ params }: PageProps) {
         setIsSharingClientLink(true);
         try {
             const state = await clientPortalRepository.getLinkState(project.id);
-            if (!state.enabled || !state.url) {
+            if (!state.enabled) {
                 setActiveTab('client');
                 toast.info('Enable the client portal to get a link');
+                return;
+            }
+            if (!state.url) {
+                // Enabled, but this deployment stores tokens write-only, so the
+                // link cannot be read back. Saying "enable it" here would be
+                // plainly wrong; point at the one action that does work.
+                setActiveTab('client');
+                toast.info('The portal is on, but this link can only be shown once. Rotate it to get a new one.');
                 return;
             }
             const copied = await copyToClipboard(state.url);
@@ -579,6 +587,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             timeline={timeline ?? null}
                             userEmail={user.email ?? ''}
                             isAdmin={isAdmin}
+                            // Already subscribed here for the tab counts. The panel
+                            // uses them read-only, to show which asks are currently
+                            // published to the client and to name the ask a reply
+                            // answers, without opening a second listener.
+                            tasks={tasks}
                         />
                     </TabsContent>
 

@@ -30,12 +30,12 @@ export function PortalStatusCard({ view, now }: PortalStatusCardProps) {
 
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <PortalStatusChip status={view.status} label={view.statusLabel} />
-        <p className="text-sm text-muted-foreground">{relative ? `Last update ${relative}` : 'No updates yet'}</p>
+        {relative && <p className="text-sm text-muted-foreground">Last update {relative}</p>}
       </div>
 
       {view.statusNote && <p className="mt-4 max-w-prose text-base leading-relaxed text-foreground">{view.statusNote}</p>}
 
-      {(phases.length > 0 || currentPhase || nextMilestone) && (
+      {(realPhaseCount > 0 || currentPhase || nextMilestone) && (
         <div className="mt-6 space-y-4 border-t border-border pt-6">
           <PortalPhaseStepper phases={phases} currentIndex={currentIndex} />
           {(currentPhase || nextMilestone) && (

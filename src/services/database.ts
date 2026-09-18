@@ -14,6 +14,9 @@ import {
   onSnapshot,
   query,
   where,
+  orderBy,
+  increment,
+  runTransaction,
   Timestamp,
   type DocumentData,
   type UpdateData,
@@ -30,6 +33,8 @@ import {
   UpdateProjectLinkInput,
   AuditResult,
   ImageScanJob,
+  ClientMessage,
+  ClientUpdate,
   Task,
   CreateTaskInput,
   UpdateTaskInput,
@@ -1206,17 +1211,26 @@ export const projectsService = {
   // `clientFacing` are written only by the portal beacon with firebase-admin
   // and must never be touched here — dotted paths keep them intact.
 
+  /**
+   * `touch` controls whether this counts as telling the client something.
+   * `lastUpdateAt` is the only input to the stale-portal nudge, so quietly
+   * re-labelling a project from the dashboard must NOT clear it: otherwise
+   * triaging statuses marks every portal fresh while the client has heard
+   * nothing. The Client tab's explicit Save and "Mark updated" pass true.
+   */
   async updateClientFacing(
     projectId: string,
     patch: { status?: ClientStatus; statusNote?: string | null; currentPhaseId?: string | null },
     byEmail: string,
+    options: { touch?: boolean } = {},
   ): Promise<void> {
     try {
-      const update: UpdateData<DocumentData> = {
-        'clientFacing.lastUpdateAt': new Date().toISOString(),
-        'clientFacing.lastUpdateBy': byEmail.trim().toLowerCase(),
-        updatedAt: Timestamp.now(),
-      };
+      const update: UpdateData<DocumentData> = { updatedAt: Timestamp.now() };
+      if (options.touch) {
+        update['clientFacing.lastUpdateAt'] = new Date().toISOString();
+        const by = byEmail.trim().toLowerCase();
+        if (by) update['clientFacing.lastUpdateBy'] = by;
+      }
       if (patch.status !== undefined) update['clientFacing.status'] = patch.status;
       if (patch.statusNote !== undefined) {
         const note = patch.statusNote?.trim();
@@ -1250,7 +1264,13 @@ export const projectsService = {
    *  /api/client-portal/[projectId]/link and deliberately not settable here. */
   async updateClientPortalSettings(
     projectId: string,
-    patch: { brandName?: string | null; brandLogoUrl?: string | null; welcome?: string | null; contactEmails?: string[] },
+    patch: {
+      brandName?: string | null;
+      brandLogoUrl?: string | null;
+      welcome?: string | null;
+      contactEmails?: string[];
+      repliesOpen?: boolean;
+    },
   ): Promise<void> {
     try {
       const update: UpdateData<DocumentData> = { updatedAt: Timestamp.now() };
@@ -1265,6 +1285,7 @@ export const projectsService = {
         const emails = Array.from(new Set(patch.contactEmails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
         update['clientPortal.contactEmails'] = emails;
       }
+      if (patch.repliesOpen !== undefined) update['clientPortal.repliesOpen'] = patch.repliesOpen;
       await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), update);
     } catch (error) {
       logError(error, 'updateClientPortalSettings');
@@ -1272,15 +1293,152 @@ export const projectsService = {
     }
   },
 
-  /** Flags a manual link as a client-visible deliverable (or not). */
+  // --- Client portal: the conversation -------------------------------------
+  // `client_updates` and `client_messages` are subcollections of the project.
+  // Firestore rules make both team-only from the browser and close `create` on
+  // messages entirely, so the client's own writes can arrive only through
+  // /api/portal/[token]/messages with firebase-admin.
+
+  subscribeToClientUpdates(projectId: string, callback: (updates: ClientUpdate[]) => void): () => void {
+    const q = query(
+      collection(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_UPDATES),
+      orderBy('postedAt', 'desc'),
+    );
+    return onSnapshot(
+      q,
+      (snap) => callback(snap.docs.map((d) => ({ ...(d.data() as ClientUpdate), id: d.id }))),
+      (error) => {
+        console.error('subscribeToClientUpdates failed', error);
+        callback([]);
+      },
+    );
+  },
+
+  async postClientUpdate(
+    projectId: string,
+    input: { title?: string; body: string; pinned?: boolean },
+    byEmail: string,
+  ): Promise<string> {
+    const body = input.body.trim();
+    if (!body) throw new DatabaseError('An update needs a message');
+    try {
+      const payload = stripUndefined({
+        title: input.title?.trim() || undefined,
+        body,
+        pinned: input.pinned ? true : undefined,
+        postedAt: new Date().toISOString(),
+        postedBy: byEmail.trim().toLowerCase(),
+      });
+      const ref = await addDoc(
+        collection(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_UPDATES),
+        payload as Record<string, unknown>,
+      );
+      return ref.id;
+    } catch (error) {
+      logError(error, 'postClientUpdate');
+      throw new DatabaseError('Failed to post the update');
+    }
+  },
+
+  async updateClientUpdate(
+    projectId: string,
+    updateId: string,
+    patch: { title?: string | null; body?: string; pinned?: boolean },
+  ): Promise<void> {
+    try {
+      const update: UpdateData<DocumentData> = {};
+      if (patch.title !== undefined) {
+        const title = patch.title?.trim();
+        update.title = title ? title : deleteField();
+      }
+      if (patch.body !== undefined) {
+        const body = patch.body.trim();
+        if (!body) throw new DatabaseError('An update needs a message');
+        update.body = body;
+      }
+      if (patch.pinned !== undefined) update.pinned = patch.pinned;
+      await updateDoc(doc(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_UPDATES, updateId), update);
+    } catch (error) {
+      logError(error, 'updateClientUpdate');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to edit the update');
+    }
+  },
+
+  async deleteClientUpdate(projectId: string, updateId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_UPDATES, updateId));
+    } catch (error) {
+      logError(error, 'deleteClientUpdate');
+      throw new DatabaseError('Failed to delete the update');
+    }
+  },
+
+  subscribeToClientMessages(projectId: string, callback: (messages: ClientMessage[]) => void): () => void {
+    const q = query(
+      collection(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_MESSAGES),
+      orderBy('createdAt', 'desc'),
+    );
+    return onSnapshot(
+      q,
+      (snap) => callback(snap.docs.map((d) => ({ ...(d.data() as ClientMessage), id: d.id }))),
+      (error) => {
+        console.error('subscribeToClientMessages failed', error);
+        callback([]);
+      },
+    );
+  },
+
+  /** Marks one message read and decrements the project's unread counter. */
+  async markClientMessageRead(projectId: string, messageId: string, byEmail: string): Promise<void> {
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_MESSAGES, messageId), {
+        readAt: new Date().toISOString(),
+        readBy: byEmail.trim().toLowerCase(),
+      });
+      // Counters only: never `updatedAt`, which every project list sorts by.
+      batch.update(doc(db, PROJECTS_COLLECTION, projectId), {
+        'clientFacing.unreadMessageCount': increment(-1),
+      });
+      await batch.commit();
+    } catch (error) {
+      logError(error, 'markClientMessageRead');
+      throw new DatabaseError('Failed to mark the message read');
+    }
+  },
+
+  /** Records which internal request a client message became. */
+  async linkClientMessageToRequest(projectId: string, messageId: string, requestId: string): Promise<void> {
+    try {
+      await updateDoc(doc(db, PROJECTS_COLLECTION, projectId, COLLECTIONS.CLIENT_MESSAGES, messageId), {
+        convertedRequestId: requestId,
+      });
+    } catch (error) {
+      logError(error, 'linkClientMessageToRequest');
+      throw new DatabaseError('Failed to link the message');
+    }
+  },
+
+  /**
+   * Flags a manual link as a client-visible deliverable (or not).
+   *
+   * Runs in a transaction and writes only the `links` array it just read.
+   * The obvious implementation — read the project, map, write the array back —
+   * loses updates when two switches are flipped quickly, and the loser here is
+   * a link the team believes they hid from the client.
+   */
   async updateLinkClientVisibility(projectId: string, linkId: string, clientVisible: boolean): Promise<void> {
     try {
-      const project = await this.getProject(projectId);
-      if (!project) throw new DatabaseError('Project not found');
-      const updatedLinks = project.links.map((link) =>
-        link.id === linkId ? { ...link, clientVisible } : link,
-      );
-      await this.updateProjectLinks(projectId, updatedLinks);
+      const ref = doc(db, PROJECTS_COLLECTION, projectId);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new DatabaseError('Project not found');
+        const links = ((snap.data()?.links ?? []) as ProjectLink[]).map((link) =>
+          link.id === linkId ? { ...link, clientVisible } : link,
+        );
+        tx.update(ref, { links, updatedAt: Timestamp.now() });
+      });
     } catch (error) {
       logError(error, 'updateLinkClientVisibility');
       if (error instanceof DatabaseError) throw error;

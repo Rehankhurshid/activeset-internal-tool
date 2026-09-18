@@ -62,8 +62,17 @@ export function PortalLinkCard({ projectId, project, onStateChange }: PortalLink
     try {
       const next = await clientPortalRepository.getLinkState(projectId);
       if (id !== requestRef.current) return;
-      setState(next);
-      onStateChangeRef.current?.(next);
+      setState((prev) => {
+        // Enabling flips `clientPortal.enabled`, which re-triggers this load.
+        // Where the deployment cannot re-show a token, that reply carries
+        // `url: null` — and would wipe the one-time link off the screen
+        // seconds after it was minted, before anyone could copy it. Keep the
+        // URL we already hold for the same live link.
+        const merged =
+          !next.url && prev?.url && prev.issuedAt === next.issuedAt ? { ...next, url: prev.url } : next;
+        onStateChangeRef.current?.(merged);
+        return merged;
+      });
     } catch (err) {
       if (id !== requestRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load portal link');

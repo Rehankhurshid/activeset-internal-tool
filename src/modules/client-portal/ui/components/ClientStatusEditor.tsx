@@ -37,7 +37,13 @@ interface Draft {
 }
 
 function sameDraft(a: Draft, b: Draft): boolean {
-  return a.status === b.status && a.statusNote === b.statusNote && a.currentPhaseId === b.currentPhaseId;
+  // The note is trimmed on the way to Firestore, so compare it trimmed too:
+  // otherwise typing a trailing space leaves Save lit with nothing to save.
+  return (
+    a.status === b.status &&
+    a.statusNote.trim() === b.statusNote.trim() &&
+    a.currentPhaseId === b.currentPhaseId
+  );
 }
 
 interface ClientStatusEditorProps {
@@ -97,6 +103,9 @@ export function ClientStatusEditor({ project, phases, userEmail }: ClientStatusE
           currentPhaseId: draft.currentPhaseId || null,
         },
         userEmail,
+        // An explicit Save in the Client tab is the team telling the client
+        // something, so it refreshes the "last updated" stamp.
+        { touch: true },
       );
       toast.success('Client status saved');
     } catch (err) {

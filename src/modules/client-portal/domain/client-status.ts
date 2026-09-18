@@ -14,9 +14,12 @@ export function daysSinceClientUpdate(
 ): number | null {
   const at = facing?.lastUpdateAt;
   if (!at) return null;
-  const day = at.slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
-  return daysBetweenIso(day, today);
+  const parsed = new Date(at);
+  if (Number.isNaN(parsed.getTime())) return null;
+  // Convert the stored instant to the VIEWER's calendar day before differencing.
+  // Slicing the ISO string would compare a UTC day against a local `today`, which
+  // reads as a day old within hours of an update anywhere east of UTC.
+  return daysBetweenIso(todayIso(parsed), today);
 }
 
 /** True when the portal is enabled and the last update is older than the threshold (or never). */

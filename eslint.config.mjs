@@ -80,6 +80,19 @@ const eslintConfig = [
     },
   },
   {
+    // The client portal is served to people outside the company, so its route
+    // must not import the client-portal barrel: that barrel also re-exports the
+    // internal Client tab and its repository, both 'use client', and Next
+    // registers them as client references for whatever route pulls the barrel
+    // in. The result was ~326KB of internal admin UI — including its copy,
+    // readable in devtools — shipped to a client viewing a static page. This
+    // route reaches the one screen it renders directly instead.
+    files: ["src/app/portal/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": "off",
+    },
+  },
+  {
     files: [
       "src/modules/site-monitoring/ui/screens/PageAuditDetailsScreen.tsx",
       "src/modules/site-monitoring/ui/screens/WebsiteAuditDashboardScreen.tsx",

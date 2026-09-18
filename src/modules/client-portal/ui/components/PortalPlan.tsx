@@ -48,13 +48,20 @@ export function PortalPlan({ phases, now }: PortalPlanProps) {
                   PORTAL_MILESTONE_LABELS[milestone.status],
                 ].filter(Boolean);
                 return (
-                  <li
-                    key={milestone.id}
-                    className={cn('flex items-start gap-3 px-4 py-3.5 sm:px-5', done && 'opacity-60')}
-                  >
+                  <li key={milestone.id} className="flex items-start gap-3 px-4 py-3.5 sm:px-5">
                     <span aria-hidden="true" className={cn('mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full', DOT[milestone.status])} />
                     <div className="min-w-0 flex-1 sm:flex sm:items-baseline sm:justify-between sm:gap-4">
-                      <p className="text-sm font-medium text-foreground">{milestone.title}</p>
+                      <p
+                        className={cn(
+                          'text-sm font-medium',
+                          // Opacity would composite the whole row, dropping the
+                          // meta line to ~2.6:1 on white — unreadable on a phone
+                          // outdoors, and most rows are "done" late in a project.
+                          done ? 'text-muted-foreground' : 'text-foreground',
+                        )}
+                      >
+                        {milestone.title}
+                      </p>
                       <p className="mt-0.5 text-xs text-muted-foreground sm:mt-0 sm:shrink-0 sm:text-right">
                         {meta.join(' · ')}
                       </p>

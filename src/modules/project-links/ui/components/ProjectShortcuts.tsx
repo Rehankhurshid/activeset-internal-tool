@@ -56,7 +56,10 @@ export function ProjectShortcuts({ project, tabs, activeTab, onTabChange, onShar
     group: 'Project',
     handler: () => onTabChange(tabs[(idx - 1 + tabs.length) % tabs.length].value),
   });
-  useShortcut({ id: 'project-share', keys: 's', label: 'Share client link', group: 'Project', hint: true, handler: onShare });
+  // `s` and `c` both copy the client portal link; `s` is kept for the muscle
+  // memory built up while it shared the audit dashboard, but it stays out of
+  // the help sheet so the same action is not advertised twice.
+  useShortcut({ id: 'project-share', keys: 's', label: 'Copy client link', group: 'Project', hidden: true, handler: onShare });
   useShortcut({ id: 'project-embed', keys: 'e', label: 'Embed widget', group: 'Project', hint: true, handler: onEmbed });
   useShortcut({ id: 'project-copy-client-link', keys: 'c', label: 'Copy client link', group: 'Project', hint: true, handler: onCopyClientLink });
 

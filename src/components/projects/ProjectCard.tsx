@@ -138,7 +138,14 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
     const handleSetClientStatus = async (newStatus: ClientStatus) => {
         if (newStatus === clientStatus) return;
         try {
-            await clientPortalRepository.updateClientFacing(project.id, { status: newStatus }, user?.email ?? '');
+            // No `touch`: re-labelling from the card is bookkeeping, not an
+            // update to the client. Stamping it here would clear the
+            // stale-portal nudge for a project nobody has actually written to.
+            await clientPortalRepository.updateClientFacing(
+                project.id,
+                { status: newStatus },
+                user?.email ?? '',
+            );
         } catch (err) {
             console.error(err);
             toast.error('Could not update client status');

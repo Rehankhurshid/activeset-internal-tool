@@ -14,7 +14,9 @@ Client (company)          Project.client (free text today; a clients entity is p
    ├─ Phase               project_timelines/{projectId}.phases[]
    │   └─ Milestone       .milestones[] — shown only when clientVisible === true
    ├─ Deliverables        Project.links[] (manual links) — shown only when clientVisible === true
-   └─ Waiting on you      tasks where needsClientInput === true and status !== 'done'
+   ├─ Waiting on you      tasks where needsClientInput === true and status !== 'done'
+   ├─ Recent updates      projects/{id}/client_updates — short notes the team posts
+   └─ Replies             projects/{id}/client_messages — what the client writes back
 ```
 
 Vocabulary: the internal project `status` (current / paused / closed / paid) and
@@ -39,9 +41,15 @@ milestone statuses appear as Upcoming / In progress / Done / On hold.
   "This link is no longer active"; a deployment without firebase-admin
   credentials shows "temporarily unavailable". `?preview=1` shows a preview
   banner and is never counted as a view.
+- **Updates and replies**: the team's recent updates appear under the status
+  card. When replies are on, the client can write back — either as a general
+  message or attached to one of the asks, which then reads "You answered on
+  12 Sep". Their own text is never echoed back onto the page; the projection
+  uses their messages only to decide which asks look answered.
 - **Never shown**: task descriptions, checklists, audits and health data, images,
   invoices, internal status/tags, billing, tokens, milestone notes/assignees,
-  team emails other than the agency contact, other projects.
+  team emails other than the agency contact, other projects, and any phase that
+  has no client-visible milestone in it.
 
 ## The team's workflow
 
@@ -59,7 +67,14 @@ milestone statuses appear as Upcoming / In progress / Done / On hold.
 5. **Branding**: brand name (defaults to the project's client) and a welcome
    line. The logo comes from the project logo.
 6. **Tasks**: mark a task "Needs client input" to put it on the portal's
-   "What we need from you" list (title and due date only).
+   "What we need from you" list (title and due date only). The task title is
+   what the client reads, word for word — the Client tab lists the currently
+   published asks so this is visible in the place the team checks.
+7. **Updates**: post a short note from the Client tab; it appears on the client's
+   page newest-first, and can be pinned.
+8. **Replies**: the client's messages arrive in the Client tab with an unread
+   count, and can be marked read or turned into an internal request. Replies can
+   be switched off per project.
 
 The project list shows a client-status chip on each card, counts of shared /
 waiting-on-client / stale portals, and a `needs_client` filter (Phase 1b).
@@ -82,6 +97,8 @@ Server-only collections (absent from `firestore.rules` on purpose, so client SDK
 are denied by default):
 
 - `client_portal_tokens/{sha256(token)}` — `{ projectId, active, createdBy, createdAt, expiresAt?, revokedAt?, revokedBy?, lastUsedAt?, useCount, tokenCiphertext? }`. The raw token is **never** stored in the clear, so a Firestore export yields no working links.
+- `projects/{id}/client_updates` — `{ title?, body, postedAt, postedBy, pinned? }`. Team-readable and team-writable from the browser.
+- `projects/{id}/client_messages` — `{ body, askTaskId?, authorName?, createdAt, readAt?, readBy?, convertedRequestId? }`. The rules allow the team to read, update and delete, and deny `create` to every client-SDK identity including an admin's, so the portal route is the only writer.
 - `projects/{id}/portal_views` — one row per counted open: `{ projectId, tokenHash, viewedAt, ipHash?, userAgent?, referrer?, country?, city? }`. A subcollection rather than a top-level one so the Client tab can `orderBy('viewedAt')` without a composite index. Firestore rules do not cascade into subcollections and nothing matches this path, so it is deny-by-default even though the parent project doc is team-readable.
 
 ## Security model
@@ -127,6 +144,17 @@ are denied by default):
 | `POST /api/client-portal/[projectId]/link` `{ action: enable \| rotate \| disable }` | team | Manage the link; also writes `clientPortal.enabled`. |
 | `GET /api/client-portal/[projectId]/views?limit=N` | team | Recent opens (same shape as proposal views). |
 | `POST /api/portal/[token]/view` `{ preview?: boolean }` | token | View beacon. |
+| `POST /api/portal/[token]/messages` `{ body, askTaskId?, name?, company? }` | token | The client's reply. The only write a client can make. |
+
+Everything else the team does (posting updates, marking messages read, toggling
+replies) is a plain Firestore write through the client SDK, gated by the rules,
+so the Client tab updates live.
+
+The message route has no rate limiter to lean on — the codebase has none — so it
+defends itself: a valid unexpired token, `repliesOpen` not switched off, a
+honeypot field, a 4000-character cap, and a 20-per-hour cap counted from the
+subcollection. None of that stops someone holding the link; it stops scripted
+noise and runaway write costs.
 
 ## Files
 
@@ -154,6 +182,10 @@ are denied by default):
   copyable link again. Rotating the key makes existing links unreadable in the
   UI but does **not** invalidate them; rotate the links themselves for that.
 - `PROPOSAL_VIEW_IP_SALT` is reused for the portal beacon's IP hash.
+- `CLIENT_PORTAL_NOTIFY_EMAIL` (optional, falls back to `NOTIFY_EMAIL`) receives
+  an email when a client replies; Slack goes to the usual `SLACK_BOT_TOKEN` /
+  `SLACK_CHANNEL_ID`. Both are best-effort: a client pressing Send never sees an
+  error because Gmail or Slack is unhappy.
 - Firebase admin credentials are required: without them the portal page renders
   "temporarily unavailable" and the link routes return 503.
 
@@ -171,8 +203,26 @@ are denied by default):
 
 ## Roadmap
 
-- Phase 2: updates feed, asks with reply/approve, client messages inbox, email and
-  Slack notifications when a client acts.
-- Phase 3: `clients` entity replacing the free-text `client` string, a Clients
-  section in the rail, a company-level portal link listing every project, weekly
-  client digest, retirement of the legacy `/share/project-links` page.
+Phase 2 (updates, replies, notifications) is built. Still open:
+
+- Phase 3: a `clients` entity replacing the free-text `client` string, a Clients
+  section in the rail, a company-level portal link listing every project, a
+  weekly client digest, and retirement of the legacy `/share/project-links` page.
+- Per-contact links, so the dashboard can say who opened the page rather than
+  just how many times. The token record already carries a `label` for this.
+
+## Notes for whoever works on this next
+
+- The portal route imports its screen directly rather than through the module
+  index, and has an eslint override saying so. The index also exports the
+  internal Client tab, and Next ships anything a route's barrel pulls in to the
+  browser — that put ~326KB of admin UI, including its wording, on the client's
+  page. Keep the route's client references to the two components that genuinely
+  need to be interactive.
+- Visibility writes (`setMilestoneClientVisible`, `updateLinkClientVisibility`)
+  are transactions on purpose. The read-modify-write versions lose updates when
+  switches are flipped quickly, and the thing lost is a milestone or link the
+  team believes they hid.
+- `updateClientFacing` only stamps "last updated" when passed `{ touch: true }`.
+  That stamp is the sole input to the stale-portal nudge, so tidying statuses
+  from the project list must not clear it.

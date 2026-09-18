@@ -29,6 +29,11 @@ export const COLLECTIONS = {
   // Server-only subcollection projects/{id}/portal_views: one row per counted
   // client portal open (beacon). Not in firestore.rules, so default deny.
   CLIENT_PORTAL_VIEWS: 'portal_views',
+  // Subcollections of projects/{id} carrying the client conversation. Both are
+  // matched in firestore.rules as team-only; the client's own writes arrive
+  // through the token-scoped portal route with firebase-admin.
+  CLIENT_UPDATES: 'client_updates',
+  CLIENT_MESSAGES: 'client_messages',
 } as const;
 
 // UI constants

@@ -126,7 +126,7 @@ export function PortalVisibilityLists({ projectId, timeline, links }: PortalVisi
   const setMilestoneVisible = (m: TimelineMilestone, clientVisible: boolean) =>
     track(
       `m:${m.id}`,
-      () => timelineRepository.updateMilestone(projectId, m.id, { clientVisible }),
+      () => timelineRepository.setMilestoneClientVisible(projectId, m.id, clientVisible),
       'Failed to update milestone visibility',
     );
 

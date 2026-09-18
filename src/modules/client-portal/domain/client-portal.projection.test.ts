@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClientPortalView } from './client-portal.projection';
 import { CLIENT_PORTAL_VIEW_KEYS } from './client-portal.types';
-import type { Project, ProjectTimeline, Task } from '@/types';
+import type { ClientMessage, ClientUpdate, Project, ProjectTimeline, Task } from '@/types';
 
 const SECRET = 'SECRET-SENTINEL';
 
@@ -24,7 +24,7 @@ function project(overrides: Partial<Project> = {}): Project {
     clickupListId: `${SECRET}-list`,
     links: [
       { id: 'l1', title: 'Staging', url: 'https://staging.peakxv.com', order: 0, source: 'manual', clientVisible: true },
-      { id: 'l2', title: 'Internal Notion', url: `https://notion.so/${SECRET}`, order: 1, source: 'manual' },
+      { id: 'l2', title: 'Live internal dashboard', url: `https://notion.so/${SECRET}`, order: 1, source: 'manual' },
       { id: 'l3', title: '/pricing', url: 'https://peakxv.com/pricing', order: 2, source: 'auto', clientVisible: true },
     ],
     clientPortal: { enabled: true, welcome: 'Welcome to your project hub.' },
@@ -142,6 +142,106 @@ describe('buildClientPortalView', () => {
     assert.equal(view.currentPhase?.total, 3, 'the Other group is not a phase');
     assert.equal(view.phases.filter((p) => p.isCurrent).length, 1);
     assert.equal(view.phases.find((p) => p.isCurrent)?.title, 'Design');
+  });
+
+  it('never derives "Open site" from a link whose visibility switch is off', () => {
+    // No Webflow domain, so the fallback branch runs. The only title matching
+    // the live/production/website heuristic is switched off, so nothing should
+    // be published: a title is not consent.
+    const view = buildClientPortalView({
+      project: project({ webflowConfig: undefined }),
+      timeline: null,
+    });
+    assert.equal(view.websiteUrl, undefined);
+    assert.equal(JSON.stringify(view).includes(SECRET), false);
+
+    const opted = buildClientPortalView({
+      project: project({
+        webflowConfig: undefined,
+        links: [
+          { id: 'l9', title: 'Live site', url: 'https://peakxv.com', order: 0, source: 'manual', clientVisible: true },
+        ],
+      }),
+      timeline: null,
+    });
+    assert.equal(opted.websiteUrl, 'https://peakxv.com');
+  });
+
+  it('keeps phases with nothing visible off the stepper and out of the phase count', () => {
+    const t = timeline();
+    t.phases.push({ id: 'ph_internal', title: 'Internal QA & buffer', order: 3 });
+    t.milestones.push({
+      id: 'm9',
+      title: 'Internal buffer',
+      phaseId: 'ph_internal',
+      status: 'not_started',
+      startDate: '2026-10-01',
+      endDate: '2026-10-05',
+      order: 9,
+    });
+    const view = buildClientPortalView({ project: project({ clientFacing: undefined }), timeline: t });
+    assert.equal(
+      view.phases.some((p) => p.title === 'Internal QA & buffer'),
+      false,
+      'a phase with no client-visible milestone must not be named to the client',
+    );
+    // Discovery, Design and Build each keep a visible milestone; the empty one goes.
+    assert.deepEqual(view.phases.map((p) => p.title), ['Discovery', 'Design', 'Build']);
+    assert.equal(view.currentPhase?.total, 3);
+  });
+
+  it('orders updates pinned-first then newest-first, drops empty ones, and caps the feed', () => {
+    const updates: ClientUpdate[] = [
+      { id: 'u1', body: 'Oldest', postedAt: '2026-09-01T09:00:00.000Z', postedBy: 'rehan@activeset.co' },
+      { id: 'u2', body: 'Newest', postedAt: '2026-09-17T09:00:00.000Z', postedBy: 'rehan@activeset.co' },
+      { id: 'u3', body: 'Pinned', postedAt: '2026-09-05T09:00:00.000Z', postedBy: 'rehan@activeset.co', pinned: true },
+      { id: 'u4', body: '   ', postedAt: '2026-09-18T09:00:00.000Z', postedBy: 'rehan@activeset.co' },
+    ];
+    const view = buildClientPortalView({ project: project(), timeline: null, updates });
+    assert.deepEqual(view.updates.map((u) => u.id), ['u3', 'u2', 'u1']);
+
+    const many: ClientUpdate[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `m${i}`,
+      body: `Update ${i}`,
+      postedAt: `2026-09-${String((i % 28) + 1).padStart(2, '0')}T09:00:00.000Z`,
+      postedBy: 'rehan@activeset.co',
+    }));
+    assert.equal(buildClientPortalView({ project: project(), timeline: null, updates: many }).updates.length, 20);
+  });
+
+  it('marks an ask answered from the earliest matching client message, and leaves others alone', () => {
+    const messages: ClientMessage[] = [
+      { id: 'x1', body: `${SECRET}-reply-late`, askTaskId: 't1', createdAt: '2026-09-21T10:00:00.000Z' },
+      { id: 'x2', body: `${SECRET}-reply-early`, askTaskId: 't1', createdAt: '2026-09-20T10:00:00.000Z' },
+      { id: 'x3', body: `${SECRET}-other-project`, askTaskId: 'unknown-task', createdAt: '2026-09-20T10:00:00.000Z' },
+      { id: 'x4', body: `${SECRET}-general`, createdAt: '2026-09-20T11:00:00.000Z' },
+    ];
+    const view = buildClientPortalView({ project: project(), timeline: timeline(), tasks: tasks(), messages });
+    assert.equal(view.asks.length, 1);
+    assert.equal(view.asks[0].id, 't1');
+    assert.equal(view.asks[0].answeredAt, '2026-09-20T10:00:00.000Z', 'earliest reply wins');
+  });
+
+  it('never echoes a client message body back onto the page', () => {
+    const messages: ClientMessage[] = [
+      { id: 'x1', body: `${SECRET}-<script>alert(1)</script>`, askTaskId: 't1', createdAt: '2026-09-20T10:00:00.000Z' },
+      { id: 'x2', body: `${SECRET}-general`, authorName: `${SECRET}-name`, createdAt: '2026-09-20T11:00:00.000Z' },
+    ];
+    const view = buildClientPortalView({ project: project(), timeline: timeline(), tasks: tasks(), messages });
+    const json = JSON.stringify(view);
+    assert.equal(json.includes(SECRET), false, 'client-submitted text must not be reflected');
+    assert.equal(json.includes('<script>'), false);
+  });
+
+  it('treats replies as open unless the team switched them off', () => {
+    assert.equal(buildClientPortalView({ project: project(), timeline: null }).repliesOpen, true);
+    assert.equal(
+      buildClientPortalView({
+        project: project({ clientPortal: { enabled: true, repliesOpen: false } }),
+        timeline: null,
+      }).repliesOpen,
+      false,
+    );
   });
 
   it('prefers portal branding overrides over project fields', () => {

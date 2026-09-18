@@ -3,7 +3,10 @@ import { cache } from 'react';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { loadClientPortalByToken } from '@/lib/client-portal';
 import { hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
-import { ClientPortalScreen } from '@/modules/client-portal';
+// Deliberately NOT '@/modules/client-portal': that barrel also exports the
+// internal Client tab, which Next would then ship to the client's browser.
+// See the eslint override for src/app/portal/**.
+import { ClientPortalScreen } from '@/modules/client-portal/ui/screens/ClientPortalScreen';
 
 interface PageProps {
   params: Promise<{ token: string }>;
