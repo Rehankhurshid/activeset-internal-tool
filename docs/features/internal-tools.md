@@ -52,7 +52,8 @@ sent to a browser. Instead:
    different id per machine) over `externally_connectable`.
 2. **Pair with this browser** calls `POST /api/extension/pair`, which checks the caller's
    module access and mints an opaque per-person token. Only its SHA-256 is stored, in
-   `extension_tokens`.
+   `extension_tokens`, with an `expiresAt` **180 days** out (`EXTENSION_TOKEN_TTL_DAYS` in
+   `extension-tokens.ts`). Pairing again replaces the token and restarts the clock.
 3. The page pushes that token into the extension. The extension can never pull one out —
    `STATUS` is not reachable from a web page, only `PING`, `PAIR` and `UNPAIR`, and only
    from allowlisted origins.
@@ -63,8 +64,45 @@ sent to a browser. Instead:
 So revoking someone in Team Access cuts their extension off immediately, with no key to
 rotate. Adding a person is granting them a module, not handing out a secret.
 
+### Expiry and revocation
+
+A token past its `expiresAt` is rejected with `401 Extension token expired — pair again
+from Internal Tools`; the extension clears it locally and shows the "Not paired" notice,
+so recovery is just pairing again. Tokens issued before expiry existed have no `expiresAt`
+and stay valid until they are re-paired or revoked.
+
+Two ways to revoke ahead of expiry, both on `DELETE /api/extension/pair`:
+
+- **Self-unpair** — `DELETE /api/extension/pair?slug=<slug>` with the person's own Firebase
+  bearer token. This is what the card's unpair action calls.
+- **Admin revoke** — `DELETE /api/extension/pair?slug=<slug>&email=<person>` with an
+  **admin** bearer token revokes that person's tokens for the extension. Use it for a lost
+  laptop or a departed teammate. Removing their module in Team Access already blocks every
+  request; this additionally deletes the stored record.
+
+Both return `{ revoked }` — the number of token records deleted.
+
 `ALLOWED_QUERY_KEYS` in `RefrensService.ts` is the contract for what the extension may
 ask for — a future extension version cannot widen its own reach by adding a parameter.
+
+### The Webflow Settings Auditor uses the same pairing
+
+The auditor is listed for everyone (no `requiresModule`), but the two routes it calls —
+`GET /api/projects` for the "save to project" dropdown and `GET|POST /api/webflow-settings`
+for the audit results — are **not** open. Both go through `requireCallerOrExtensionToken`
+in [`src/lib/extension-tokens.ts`](../../src/lib/extension-tokens.ts): a signed-in
+@activeset.co Firebase session passes, and so does a paired extension token issued for the
+`webflow-settings-auditor` slug. Anything else gets 401/403.
+
+The extension is registered in [`extension-registry.ts`](../../src/lib/extension-registry.ts)
+with pinned id `fcggeinimgcpbpplnopegodlbapkmcnp` against the `project-links` module. That
+module is open to every team member — `module-access.ts` mirrors the client-side shortcut —
+so pairing only proves the person can sign in, which is all these routes need. The side
+panel shows a "Not paired" notice (with a link back to this page) when it has no token or
+the server rejected one; a 401 also clears the stale token locally so re-pairing is clean.
+
+`POST /api/extension/pair` only looks up the Refrens `urlKey` for extensions on the
+`invoices` module, so pairing the auditor never depends on Refrens being configured.
 
 ## Currently listed
 
@@ -72,7 +110,7 @@ ask for — a future extension version cannot widen its own reach by adding a pa
 |---|---|---|
 | Screenshot Runner | in-app | `src/modules/screenshot-runner/` |
 | Refrens → Skydo Invoice Bridge | extension (requires `invoices`) | `extensions/refrens-skydo-bridge/` |
-| Webflow Settings Auditor | extension | `chrome-extension/` |
+| Webflow Settings Auditor | extension (pairs; routes need a session or extension token) | `chrome-extension/` |
 | Webflow Team Tracker | extension | `webflow-team-tracker-1.0.6/` |
 
 The two Webflow extensions still sit in ad-hoc folders at the repo root. Moving them

@@ -1,4 +1,4 @@
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 /**
@@ -45,7 +45,13 @@ class AccessControlService {
                     'project-links': [...ADMIN_EMAILS]
                 }
             };
-            await this.saveModuleAccess(defaultAccess);
+            // Firestore rules restrict access_control writes to admins, so only
+            // seed the doc when an admin is signed in; anyone else just works off
+            // the in-memory defaults until an admin opens Settings → Team Access.
+            const currentEmail = auth.currentUser?.email ?? '';
+            if (currentEmail && this.isAdmin(currentEmail)) {
+                await this.saveModuleAccess(defaultAccess);
+            }
             return defaultAccess;
         } catch (error) {
             console.error('Error fetching module access:', error);

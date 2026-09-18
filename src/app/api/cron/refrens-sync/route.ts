@@ -43,7 +43,7 @@ function getBaseUrl(req: NextRequest): string {
  * upsert the mirror, and fire a status-change email if the invoice opted in.
  *
  * Auth: requires CRON_SECRET via `Authorization: Bearer <secret>` or
- * `x-cron-secret`. When CRON_SECRET is unset (local dev), all callers pass.
+ * `x-cron-secret`. When CRON_SECRET is unset, callers pass only outside production.
  */
 export async function GET(req: NextRequest) {
   if (!isCronAuthorized(req)) {

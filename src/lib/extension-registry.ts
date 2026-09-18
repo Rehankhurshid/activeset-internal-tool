@@ -22,6 +22,15 @@ export const REGISTERED_EXTENSIONS: RegisteredExtension[] = [
     name: 'Refrens → Skydo Invoice Bridge',
     module: 'invoices',
   },
+  {
+    // project-links is open to every team member (see module-access.ts), so
+    // pairing here only proves the person is signed in with an @activeset.co
+    // account — which is all /api/projects and /api/webflow-settings need.
+    id: 'fcggeinimgcpbpplnopegodlbapkmcnp',
+    slug: 'webflow-settings-auditor',
+    name: 'Webflow Settings Auditor',
+    module: 'project-links',
+  },
 ];
 
 export const getExtensionBySlug = (slug: string) =>

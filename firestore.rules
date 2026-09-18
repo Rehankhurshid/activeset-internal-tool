@@ -3,9 +3,29 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ──────────────────────────────────────────────────────────────────────
-    // project_secrets — server-only. Stores third-party API tokens
-    // (Webflow, etc.). Writes and reads must go through firebase-admin
-    // on the server; deny everything to client SDKs.
+    // Shared helpers. Every @activeset.co identity is "the team"; admins are
+    // the two hardcoded emails or anyone carrying the `admin` custom claim
+    // (the local-dev token endpoint stamps it). Mirrors src/lib/api-auth.ts.
+    // ──────────────────────────────────────────────────────────────────────
+    function isAdmin() {
+      return request.auth != null
+        && (request.auth.token.email == 'rehan@activeset.co'
+            || request.auth.token.email == 'salman@activeset.co'
+            || request.auth.token.admin == true);
+    }
+
+    function isActiveSetUser() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email.matches('.*@activeset\\.co$');
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Server-only collections. Deny everything to client SDKs; reads and
+    // writes go through firebase-admin in route handlers. Collections that
+    // are NOT listed anywhere in this file are also denied by default —
+    // client_portal_tokens, client_portal_views, extension_tokens,
+    // project_invoices and app_secrets rely on that.
     // ──────────────────────────────────────────────────────────────────────
     match /project_secrets/{projectId} {
       allow read, write: if false;
@@ -18,19 +38,6 @@ service cloud.firestore {
     // secret can never be re-introduced on the client-readable doc.
     // ──────────────────────────────────────────────────────────────────────
     match /projects/{projectId} {
-      function isAdmin() {
-        return request.auth != null
-          && (request.auth.token.email == 'rehan@activeset.co'
-              || request.auth.token.email == 'salman@activeset.co'
-              || request.auth.token.admin == true);
-      }
-
-      function isActiveSetUser() {
-        return request.auth != null
-          && request.auth.token.email is string
-          && request.auth.token.email.matches('.*@activeset\\.co$');
-      }
-
       function isOwner() {
         return request.auth != null
           && resource.data.userId == request.auth.uid;
@@ -72,12 +79,41 @@ service cloud.firestore {
       }
     }
 
-    // Everything else stays on prior permissive behavior. We list each
+    // ──────────────────────────────────────────────────────────────────────
+    // Per-project work data. Reads stay open because the public audit share
+    // (/share/project-links/[token]) still renders these from the browser;
+    // writes are team-only. No server route writes these with the client SDK
+    // (ClickUp webhooks, nag-bot and Raycast all use firebase-admin).
+    // ──────────────────────────────────────────────────────────────────────
+    match /project_timelines/{id} {
+      allow read: if true;
+      allow write: if isActiveSetUser();
+    }
+    match /project_checklists/{id} {
+      allow read: if true;
+      allow write: if isActiveSetUser();
+    }
+    match /tasks/{id} {
+      allow read: if true;
+      allow write: if isActiveSetUser();
+    }
+    match /requests/{id} {
+      allow read: if true;
+      allow write: if isActiveSetUser();
+    }
+
+    // Module access grants: everyone signed in reads them (the nav resolves
+    // grants client-side); only admins may change them. Settings → Team Access
+    // is admin-only UI and AccessControlService seeds the doc only as an admin.
+    match /access_control/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Everything below stays on prior permissive behavior. We list each
     // collection explicitly rather than using `match /{document=**}` so
-    // the server-only project_secrets block actually takes effect.
-    match /project_checklists/{id}        { allow read, write: if true; }
-    match /project_timelines/{id}         { allow read, write: if true; }
-    match /timeline_templates/{id}        { allow read, write: if true; }
+    // the server-only and default-deny collections actually take effect.
+    match /timeline_templates/{id}         { allow read, write: if true; }
     match /sop_templates/{id}             { allow read, write: if true; }
     match /scan_jobs/{id}                 { allow read, write: if true; }
     match /site_alerts/{id}               { allow read, write: if true; }
@@ -90,27 +126,25 @@ service cloud.firestore {
     match /cmsRuns/{runId}/events/{eid}   { allow read, write: if true; }
     match /schemaRuns/{runId}             { allow read, write: if true; }
     match /schemaRuns/{runId}/events/{eid}{ allow read, write: if true; }
-    match /access_control/{id}            { allow read, write: if true; }
     match /configurations/{id}            { allow read, write: if true; }
     match /webflow_account_history/{id}   { allow read, write: if true; }
-    match /tasks/{id}                     { allow read, write: if true; }
-    match /requests/{id}                  { allow read, write: if true; }
 
-    // Proposals - authenticated agency users only (contains pricing/internal notes)
+    // Proposals - team only (contains pricing/internal notes)
     match /proposals/{proposalId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isActiveSetUser();
     }
 
-    // Shared Proposals - public read for client-facing share URLs, writes via
-    // ProposalService (which runs authenticated on the agency side)
+    // Shared Proposals - public read for client-facing share URLs. Client
+    // signatures are written by /api/proposals/[id]/sign with firebase-admin;
+    // the agency's own writes come from signed-in team members.
     match /shared_proposals/{proposalId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isActiveSetUser();
     }
 
-    // Proposal Templates - authenticated agency users
+    // Proposal Templates - team only
     match /templates/{templateId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isActiveSetUser();
     }
 
     // Proposal Views - server-only. /api/proposals/[id]/view writes through
@@ -120,18 +154,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Proposal Comments - allow authenticated agency users and public access for shared proposals
+    // Proposal Comments - public read on shared proposals; clients may leave a
+    // comment from the public view (authorType 'client'), the team does the rest.
     match /proposal_comments/{commentId} {
-      allow read, write: if request.auth != null;
-      allow create: if request.resource.data.authorType == 'client';
       allow read: if true;
+      allow create: if isActiveSetUser() || request.resource.data.authorType == 'client';
+      allow update, delete: if isActiveSetUser();
     }
 
-    // Proposal History - read-only for authenticated users, write via service
+    // Proposal History - team only, except the public e-signature flow may
+    // append a 'signed' event.
     match /proposal_history/{historyId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-      allow create: if request.resource.data.changeType == 'signed';
+      allow read: if isActiveSetUser();
+      allow create: if isActiveSetUser() || request.resource.data.changeType == 'signed';
+      allow update, delete: if isActiveSetUser();
     }
 
     // Webflow Sessions - allow public access for extension communication

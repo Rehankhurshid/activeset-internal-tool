@@ -1,6 +1,8 @@
 // Webflow Settings Auditor - Side Panel JavaScript
 // Handles UI interactions, audit triggering, and result display
 
+// Fallback for the "Open Internal Tools" link — once paired, the app's own
+// origin (pushed in at pairing time) is used instead.
 const API_BASE = 'https://app.activeset.co';
 // const API_BASE = 'http://localhost:3000'; // For development
 
@@ -29,6 +31,10 @@ const elements = {
     projectSelect: document.getElementById('projectSelect'),
     saveBtn: document.getElementById('saveBtn'),
     saveStatus: document.getElementById('saveStatus'),
+    pairingNotice: document.getElementById('pairingNotice'),
+    pairingText: document.getElementById('pairingText'),
+    pairingLink: document.getElementById('pairingLink'),
+    pairingRetry: document.getElementById('pairingRetry'),
     // Category badges
     generalBadge: document.getElementById('generalBadge'),
     publishingBadge: document.getElementById('publishingBadge'),
@@ -55,6 +61,7 @@ async function init() {
     elements.runAudit.addEventListener('click', startAudit);
     elements.projectSelect.addEventListener('change', handleProjectSelect);
     elements.saveBtn.addEventListener('click', saveResults);
+    elements.pairingRetry.addEventListener('click', loadProjects);
 }
 
 // Check if current page is Webflow settings
@@ -292,11 +299,36 @@ function updateCategoryBadge(category, badge, results) {
     }
 }
 
+// Saving needs the browser to be paired with the app. The background worker
+// answers needsPairing when there is no token or the server rejected it; this
+// turns that into an instruction instead of a bare error.
+async function showPairingNotice(message) {
+    elements.pairingText.textContent =
+        message || 'Open Internal Tools in the app and click "Pair with this browser".';
+    try {
+        const { apiBase } = await chrome.runtime.sendMessage({ action: 'getPairing' });
+        elements.pairingLink.href = `${apiBase || API_BASE}/modules/internal-tools`;
+    } catch (e) {
+        // Keep the default href.
+    }
+    elements.pairingNotice.classList.remove('hidden');
+}
+
+function hidePairingNotice() {
+    elements.pairingNotice.classList.add('hidden');
+}
+
 // Load projects for save dropdown
 async function loadProjects() {
     try {
         const response = await chrome.runtime.sendMessage({ action: 'fetchProjects' });
-        
+
+        if (response.needsPairing) {
+            await showPairingNotice(response.error);
+            return;
+        }
+        hidePairingNotice();
+
         if (response.success && response.projects) {
             elements.projectSelect.innerHTML = '<option value="">Select a project...</option>';
             response.projects.forEach(project => {
@@ -350,6 +382,9 @@ async function saveResults() {
         if (response.success) {
             elements.saveStatus.textContent = '✓ Saved successfully!';
             elements.saveStatus.classList.add('success');
+        } else if (response.needsPairing) {
+            elements.saveStatus.textContent = '';
+            await showPairingNotice(response.error);
         } else {
             throw new Error(response.error || 'Failed to save');
         }

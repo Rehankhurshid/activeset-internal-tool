@@ -1,5 +1,7 @@
 import 'server-only';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import type { NextRequest } from 'next/server';
+import { ApiAuthError, requireCaller, type AuthedCaller } from '@/lib/api-auth';
 import { db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { hasModuleAccess } from '@/lib/module-access';
 import type { RestrictedModule } from '@/services/AccessControlService';
@@ -16,10 +18,19 @@ import type { RestrictedModule } from '@/services/AccessControlService';
  * yield working credentials. Module access is re-checked on every request rather
  * than baked in at pairing time, so revoking someone in Settings → Team Access
  * takes effect immediately instead of when their token happens to expire.
+ *
+ * Tokens also carry a hard expiry ({@link EXTENSION_TOKEN_TTL_DAYS}) so a token
+ * that was copied off a machine and forgotten stops working on its own. Pairing
+ * again issues a fresh one. Records written before expiry existed have no
+ * `expiresAt` and stay valid until revoked or re-paired.
  */
 
 const COLLECTION = 'extension_tokens';
 const TOKEN_BYTES = 32;
+
+/** How long a freshly issued extension token stays valid. */
+export const EXTENSION_TOKEN_TTL_DAYS = 180;
+const EXTENSION_TOKEN_TTL_MS = EXTENSION_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 export interface ExtensionTokenRecord {
   uid: string;
@@ -27,6 +38,8 @@ export interface ExtensionTokenRecord {
   extension: string;
   module: RestrictedModule;
   createdAt: string;
+  /** ISO timestamp. Absent on tokens issued before expiry existed; those never expire. */
+  expiresAt?: string;
   lastUsedAt?: string;
 }
 
@@ -49,12 +62,14 @@ export async function issueExtensionToken(params: {
   await revokeExtensionTokens(params.email, params.extension);
 
   const token = randomBytes(TOKEN_BYTES).toString('base64url');
+  const issuedAt = Date.now();
   const record: ExtensionTokenRecord = {
     uid: params.uid,
     email: params.email.toLowerCase(),
     extension: params.extension,
     module: params.module,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(issuedAt).toISOString(),
+    expiresAt: new Date(issuedAt + EXTENSION_TOKEN_TTL_MS).toISOString(),
   };
   await collection().doc(hash(token)).set(record);
   return token;
@@ -101,6 +116,12 @@ export async function requireExtensionToken(
     throw new ExtensionAuthError(401, 'Invalid extension token');
   }
 
+  // Older records have no expiresAt and stay valid. A present-but-unparseable
+  // value fails closed rather than granting an open-ended token.
+  if (record.expiresAt !== undefined && !(Date.parse(record.expiresAt) > Date.now())) {
+    throw new ExtensionAuthError(401, 'Extension token expired — pair again from Internal Tools');
+  }
+
   if (record.extension !== extension) {
     throw new ExtensionAuthError(403, 'Token was issued for a different extension');
   }
@@ -118,4 +139,29 @@ export function extensionAuthErrorResponse(err: unknown) {
   const status = err instanceof ExtensionAuthError ? err.status : 500;
   const message = err instanceof Error ? err.message : 'Unexpected error';
   return Response.json({ error: message }, { status });
+}
+
+export type CallerOrExtension =
+  | { kind: 'caller'; caller: AuthedCaller }
+  | { kind: 'extension'; record: ExtensionTokenRecord };
+
+/**
+ * For routes reachable both from the app (Firebase ID token) and from a paired
+ * extension (extension token) on the same `Authorization: Bearer` header.
+ *
+ * The Firebase check runs first because it is the common case for the app; an
+ * extension token is not a JWT, so it fails that check cheaply and falls through
+ * to the token lookup. When both fail the extension error is what surfaces,
+ * since a caller who reached the fallback had no usable session either way.
+ */
+export async function requireCallerOrExtensionToken(
+  req: NextRequest,
+  slug: string
+): Promise<CallerOrExtension> {
+  try {
+    return { kind: 'caller', caller: await requireCaller(req) };
+  } catch (err) {
+    if (!(err instanceof ApiAuthError)) throw err;
+  }
+  return { kind: 'extension', record: await requireExtensionToken(req, slug) };
 }

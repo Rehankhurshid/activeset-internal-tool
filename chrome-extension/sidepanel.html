@@ -176,6 +176,17 @@
             <!-- Save Section -->
             <div id="saveSection" class="save-section hidden">
                 <div class="save-header">Save to Project Dashboard</div>
+                <div id="pairingNotice" class="warning-card pairing-notice hidden">
+                    <div class="warning-icon">🔗</div>
+                    <div class="warning-text">
+                        <strong>Not paired</strong>
+                        <p id="pairingText">Open Internal Tools in the app and click "Pair with this browser".</p>
+                        <p class="pairing-actions">
+                            <a id="pairingLink" href="https://app.activeset.co/modules/internal-tools" target="_blank" rel="noopener">Open Internal Tools</a>
+                            <button id="pairingRetry" type="button" class="btn-link">Re-check</button>
+                        </p>
+                    </div>
+                </div>
                 <select id="projectSelect" class="project-select">
                     <option value="">Select a project...</option>
                 </select>
@@ -191,7 +202,7 @@
         <footer class="footer">
             <span>ActiveSet</span>
             <span class="footer-divider">•</span>
-            <span>v2.0.0</span>
+            <span>v2.1.0</span>
         </footer>
     </div>
 
