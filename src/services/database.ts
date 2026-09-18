@@ -15,6 +15,8 @@ import {
   query,
   where,
   Timestamp,
+  type DocumentData,
+  type UpdateData,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { toSafeDate } from '@/lib/firestore-dates';
@@ -34,6 +36,7 @@ import {
   ProjectRequest,
   RequestSource,
   normalizeProjectStatus,
+  ClientStatus,
 } from '@/types';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
@@ -1194,6 +1197,94 @@ export const projectsService = {
     } catch (error) {
       logError(error, 'disableAuditShareLink');
       throw new DatabaseError('Failed to disable public audit share link');
+    }
+  },
+
+  // --- Client portal: client-facing state the team maintains ---------------
+  // All of these are team writes through the client SDK and bump `updatedAt`
+  // (the convention for every team edit). The view counters under
+  // `clientFacing` are written only by the portal beacon with firebase-admin
+  // and must never be touched here — dotted paths keep them intact.
+
+  async updateClientFacing(
+    projectId: string,
+    patch: { status?: ClientStatus; statusNote?: string | null; currentPhaseId?: string | null },
+    byEmail: string,
+  ): Promise<void> {
+    try {
+      const update: UpdateData<DocumentData> = {
+        'clientFacing.lastUpdateAt': new Date().toISOString(),
+        'clientFacing.lastUpdateBy': byEmail.trim().toLowerCase(),
+        updatedAt: Timestamp.now(),
+      };
+      if (patch.status !== undefined) update['clientFacing.status'] = patch.status;
+      if (patch.statusNote !== undefined) {
+        const note = patch.statusNote?.trim();
+        update['clientFacing.statusNote'] = note ? note : deleteField();
+      }
+      if (patch.currentPhaseId !== undefined) {
+        update['clientFacing.currentPhaseId'] = patch.currentPhaseId ? patch.currentPhaseId : deleteField();
+      }
+      await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), update);
+    } catch (error) {
+      logError(error, 'updateClientFacing');
+      throw new DatabaseError('Failed to update client-facing status');
+    }
+  },
+
+  /** "Mark updated": refreshes the freshness stamp the portal shows. */
+  async markClientUpdated(projectId: string, byEmail: string): Promise<void> {
+    try {
+      await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), {
+        'clientFacing.lastUpdateAt': new Date().toISOString(),
+        'clientFacing.lastUpdateBy': byEmail.trim().toLowerCase(),
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'markClientUpdated');
+      throw new DatabaseError('Failed to mark client update');
+    }
+  },
+
+  /** Branding and copy for the portal header. `enabled` is server-managed via
+   *  /api/client-portal/[projectId]/link and deliberately not settable here. */
+  async updateClientPortalSettings(
+    projectId: string,
+    patch: { brandName?: string | null; brandLogoUrl?: string | null; welcome?: string | null; contactEmails?: string[] },
+  ): Promise<void> {
+    try {
+      const update: UpdateData<DocumentData> = { updatedAt: Timestamp.now() };
+      const text = (value: string | null | undefined) => {
+        const trimmed = value?.trim();
+        return trimmed ? trimmed : deleteField();
+      };
+      if (patch.brandName !== undefined) update['clientPortal.brandName'] = text(patch.brandName);
+      if (patch.brandLogoUrl !== undefined) update['clientPortal.brandLogoUrl'] = text(patch.brandLogoUrl);
+      if (patch.welcome !== undefined) update['clientPortal.welcome'] = text(patch.welcome);
+      if (patch.contactEmails !== undefined) {
+        const emails = Array.from(new Set(patch.contactEmails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
+        update['clientPortal.contactEmails'] = emails;
+      }
+      await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), update);
+    } catch (error) {
+      logError(error, 'updateClientPortalSettings');
+      throw new DatabaseError('Failed to update portal settings');
+    }
+  },
+
+  /** Flags a manual link as a client-visible deliverable (or not). */
+  async updateLinkClientVisibility(projectId: string, linkId: string, clientVisible: boolean): Promise<void> {
+    try {
+      const project = await this.getProject(projectId);
+      if (!project) throw new DatabaseError('Project not found');
+      const updatedLinks = project.links.map((link) =>
+        link.id === linkId ? { ...link, clientVisible } : link,
+      );
+      await this.updateProjectLinks(projectId, updatedLinks);
+    } catch (error) {
+      logError(error, 'updateLinkClientVisibility');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to update link visibility');
     }
   },
 };

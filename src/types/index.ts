@@ -10,6 +10,8 @@ export interface ProjectLink {
   source?: 'manual' | 'auto';
   locale?: string; // e.g., "en", "de", "fr" - detected from sitemap hreflang
   pageType?: 'static' | 'collection' | 'unknown'; // Detected from Webflow or URL patterns
+  /** Shown on the client portal as a deliverable. Manual links only; default false. */
+  clientVisible?: boolean;
 }
 
 // --- FOLDER PAGE TYPES ---
@@ -379,6 +381,13 @@ export interface Project {
   updatedAt: Date;
   userId: string;
   client?: string; // Optional client/company name used to group projects together
+  /** Client portal settings (the private client-facing page). The portal token
+   *  itself is never stored here — it lives in the admin-only
+   *  `client_portal_tokens` collection, hashed. */
+  clientPortal?: ClientPortalSettings;
+  /** Client-facing status the team maintains, plus counters the portal beacon
+   *  writes through firebase-admin. Counter writes never touch `updatedAt`. */
+  clientFacing?: ClientFacingState;
   // --- Billing ---
   /** How the project is billed. Missing = 'fixed'. `adhoc` unlocks the
    *  per-task billable hours + "generate invoice from tasks" flow. */
@@ -643,6 +652,8 @@ export interface TimelineMilestone {
   color?: TimelineColor;         // falls back to phase color
   assignee?: string;             // email
   notes?: string;
+  /** Rendered on the client portal (title, dates, status only). Default false. */
+  clientVisible?: boolean;
   order: number;
   createdAt?: string;            // ISO
   updatedAt?: string;            // ISO
@@ -907,5 +918,81 @@ export interface ParsedTaskSuggestion {
   description?: string;
   category: TaskCategory;
   priority: TaskPriority;
+}
+
+// --- CLIENT PORTAL / CLIENT-FACING TYPES ---
+
+/**
+ * Status the team sets for the client's eyes. Deliberately separate from the
+ * internal/commercial `ProjectStatus` (current/paused/closed/paid).
+ */
+export type ClientStatus = 'on_track' | 'needs_client' | 'blocked' | 'paused' | 'delivered';
+
+export const CLIENT_STATUSES: ClientStatus[] = ['on_track', 'needs_client', 'blocked', 'paused', 'delivered'];
+
+/** Internal wording (dashboard chips, editors). */
+export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
+  on_track: 'On track',
+  needs_client: 'Waiting on client',
+  blocked: 'Blocked',
+  paused: 'Paused',
+  delivered: 'Delivered',
+};
+
+/** Softer wording shown to the client on the portal. */
+export const CLIENT_STATUS_PORTAL_LABELS: Record<ClientStatus, string> = {
+  on_track: 'On track',
+  needs_client: 'Waiting on you',
+  blocked: 'On hold',
+  paused: 'Paused',
+  delivered: 'Delivered',
+};
+
+export function normalizeClientStatus(raw: unknown): ClientStatus {
+  return (CLIENT_STATUSES as string[]).includes(raw as string) ? (raw as ClientStatus) : 'on_track';
+}
+
+/** Per-project portal settings. Written by the team through the client SDK. */
+export interface ClientPortalSettings {
+  /** Master switch. The token is only honoured while this is strictly `true`. */
+  enabled: boolean;
+  /** ISO timestamp of the last issue/rotate, for the Client tab. */
+  tokenIssuedAt?: string;
+  /** sha256 of the live token. Server-managed; a link only resolves when the
+   *  token record it names is active. Firestore rules keep the client SDK
+   *  from changing it. */
+  activeTokenHash?: string;
+  /** Overrides `Project.client` as the name in the portal header. */
+  brandName?: string;
+  /** Overrides `Project.logoUrl` in the portal header. */
+  brandLogoUrl?: string;
+  /** One short welcome line under the project name. */
+  welcome?: string;
+  /** Client contacts (informational until per-contact tokens exist). */
+  contactEmails?: string[];
+}
+
+/**
+ * Client-facing state. `status`, `statusNote`, `currentPhaseId`, `lastUpdateAt`
+ * and `lastUpdateBy` are written by the team (client SDK, bumps `updatedAt`).
+ * The view counters are written only by firebase-admin from the portal beacon
+ * with a merge that never touches `updatedAt`, so client opens do not reshuffle
+ * the updatedAt-sorted project lists.
+ */
+export interface ClientFacingState {
+  status?: ClientStatus;
+  /** One line the client sees under the status chip. */
+  statusNote?: string;
+  /** Phase id from project_timelines/{projectId}.phases[]; drives the stepper. */
+  currentPhaseId?: string;
+  /** ISO timestamp of the last "Mark updated" / status edit. */
+  lastUpdateAt?: string;
+  lastUpdateBy?: string;
+  /** Open asks awaiting the client (Phase 2 client_requests). */
+  openRequestCount?: number;
+  viewCount?: number;
+  lastViewedAt?: string;
+  lastViewCountry?: string;
+  lastViewCity?: string;
 }
 

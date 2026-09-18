@@ -120,3 +120,5 @@ Daily aggregated issue tracking across all projects:
 | `health_reports` | Daily aggregated health reports |
 | `configurations` | Settings (agencies, services, terms) |
 | `access_control` | Module access permissions |
+| `client_portal_tokens` | Server-only. Client portal capability tokens keyed by sha256(token), raw value never stored in the clear; firebase-admin only (see docs/features/client-portal.md) |
+| `projects/{id}/portal_views` | Server-only subcollection. One row per counted client portal open |

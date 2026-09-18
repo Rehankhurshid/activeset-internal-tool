@@ -22,6 +22,7 @@ import {
     toISO,
 } from '../../domain/timeline.utils';
 import { TimelineBar } from './TimelineBar';
+import { ClientVisibleGlyph } from './TimelineList';
 import { TimelineRuler } from './TimelineRuler';
 import { TodayLine } from './TodayLine';
 
@@ -194,6 +195,9 @@ export function TimelineGantt({
                                     style={{ height: ROW_HEIGHT }}
                                 >
                                     <span className="truncate">{row.milestone.title}</span>
+                                    {row.milestone.clientVisible === true && (
+                                        <ClientVisibleGlyph className="ml-1.5" />
+                                    )}
                                 </div>
                             );
                         })}

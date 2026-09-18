@@ -19,6 +19,7 @@ const modules = [
   "seo-engine",
   "screenshot-runner",
   "settings",
+  "client-portal",
 ];
 
 const createModuleBoundaryRule = (moduleName) => {
@@ -82,6 +83,7 @@ const eslintConfig = [
     files: [
       "src/modules/site-monitoring/ui/screens/PageAuditDetailsScreen.tsx",
       "src/modules/site-monitoring/ui/screens/WebsiteAuditDashboardScreen.tsx",
+      "src/modules/project-links/ui/components/ImageLibrary.tsx",
     ],
     rules: {
       "@next/next/no-img-element": "off",

@@ -71,6 +71,10 @@ Single project page with tabbed interface for different features:
 
 #### Tabs:
 
+##### **Client Tab**
+
+Manages the client portal for the project — the private link, client-facing status, which milestones and links the client sees, and branding. See [client-portal.md](./client-portal.md).
+
 ##### **Links Tab**
 - Displays manual project links directly inside the project detail dashboard
 - Supports adding, editing, deleting, filtering, previewing, opening, and drag-and-drop reordering
@@ -423,6 +427,8 @@ useEffect(() => {
 ---
 
 ## Related Features
+
+- [Client Portal](./client-portal.md) — client-facing page and Client tab
 
 - **Audit Dashboard**: [audit-dashboard.md](./audit-dashboard.md) - Detailed content quality monitoring
 - **Webflow Pages**: [webflow-pages.md](./webflow-pages.md) - SEO management for Webflow sites

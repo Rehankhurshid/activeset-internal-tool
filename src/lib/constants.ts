@@ -23,6 +23,12 @@ export const COLLECTIONS = {
   TASKS: 'tasks',
   // Raw incoming request blobs (Slack/email/paste) that get parsed into tasks.
   REQUESTS: 'requests',
+  // Server-only: client portal capability tokens, keyed by sha256(token).
+  // Absent from firestore.rules on purpose (default deny) — firebase-admin only.
+  CLIENT_PORTAL_TOKENS: 'client_portal_tokens',
+  // Server-only subcollection projects/{id}/portal_views: one row per counted
+  // client portal open (beacon). Not in firestore.rules, so default deny.
+  CLIENT_PORTAL_VIEWS: 'portal_views',
 } as const;
 
 // UI constants

@@ -12,6 +12,9 @@ export interface ProjectLinksRepository {
   updateProjectProposalId: (projectId: string, proposalId: string | null) => Promise<void>;
   updateProjectAssignees: (projectId: string, assigneeEmails: string[]) => Promise<void>;
   createAuditShareLink: (projectId: string) => Promise<string>;
+  /** Issues a fresh audit share token; the previous public link stops working. */
+  regenerateAuditShareLink: (projectId: string) => Promise<string>;
+  disableAuditShareLink: (projectId: string) => Promise<void>;
 }
 
 export const projectLinksRepository: ProjectLinksRepository = {
@@ -25,4 +28,6 @@ export const projectLinksRepository: ProjectLinksRepository = {
   updateProjectAssignees: (projectId, assigneeEmails) =>
     projectsService.updateProjectAssignees(projectId, assigneeEmails),
   createAuditShareLink: (projectId) => projectsService.createAuditShareLink(projectId),
+  regenerateAuditShareLink: (projectId) => projectsService.createAuditShareLink(projectId, { regenerate: true }),
+  disableAuditShareLink: (projectId) => projectsService.disableAuditShareLink(projectId),
 };

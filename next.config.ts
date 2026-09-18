@@ -27,6 +27,15 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Client portal pages: the URL is the credential, so never leak it via
+        // Referer and never let it be indexed.
+        source: "/portal/:path*",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+      },
+      {
         source: "/api/:path*",
         headers: [
           { key: "Access-Control-Allow-Credentials", value: "true" },

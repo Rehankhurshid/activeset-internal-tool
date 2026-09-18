@@ -10,8 +10,11 @@ interface ProjectShortcutsProps {
   tabs: TabOption[];
   activeTab: string;
   onTabChange: (value: string) => void;
+  /** `s` — share the client portal link (copies it, or opens the Client tab when the portal is off). */
   onShare: () => void;
   onEmbed: () => void;
+  /** `c` — copy the client portal link. */
+  onCopyClientLink: () => void;
 }
 
 function TabShortcut({ tab, index, onTabChange }: { tab: TabOption; index: number; onTabChange: (v: string) => void }) {
@@ -30,7 +33,7 @@ function TabShortcut({ tab, index, onTabChange }: { tab: TabOption; index: numbe
  * Keyboard layer for the project detail screen. Rendered inside the page's
  * JSX (after its early returns) so it only exists once a project is loaded.
  */
-export function ProjectShortcuts({ project, tabs, activeTab, onTabChange, onShare, onEmbed }: ProjectShortcutsProps) {
+export function ProjectShortcuts({ project, tabs, activeTab, onTabChange, onShare, onEmbed, onCopyClientLink }: ProjectShortcutsProps) {
   const { id, name, client } = project;
   useEffect(() => {
     recordRecentProject({ id, name, client });
@@ -53,8 +56,9 @@ export function ProjectShortcuts({ project, tabs, activeTab, onTabChange, onShar
     group: 'Project',
     handler: () => onTabChange(tabs[(idx - 1 + tabs.length) % tabs.length].value),
   });
-  useShortcut({ id: 'project-share', keys: 's', label: 'Share audit dashboard', group: 'Project', hint: true, handler: onShare });
+  useShortcut({ id: 'project-share', keys: 's', label: 'Share client link', group: 'Project', hint: true, handler: onShare });
   useShortcut({ id: 'project-embed', keys: 'e', label: 'Embed widget', group: 'Project', hint: true, handler: onEmbed });
+  useShortcut({ id: 'project-copy-client-link', keys: 'c', label: 'Copy client link', group: 'Project', hint: true, handler: onCopyClientLink });
 
   return (
     <>

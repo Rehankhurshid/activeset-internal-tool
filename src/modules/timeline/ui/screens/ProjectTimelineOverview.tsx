@@ -138,6 +138,7 @@ export function ProjectTimelineOverview({
                         color: draft.color,
                         assignee: draft.assignee,
                         notes: draft.notes,
+                        clientVisible: draft.clientVisible ?? false,
                     });
                     toast.success('Milestone updated');
                 } else {
@@ -150,6 +151,7 @@ export function ProjectTimelineOverview({
                         color: draft.color,
                         assignee: draft.assignee,
                         notes: draft.notes,
+                        clientVisible: draft.clientVisible ?? false,
                     });
                     toast.success('Milestone created');
                 }

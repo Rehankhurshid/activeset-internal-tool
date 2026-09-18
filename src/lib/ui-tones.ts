@@ -1,4 +1,4 @@
-import type { ProjectStatus, ProjectTag } from '@/types';
+import type { ClientStatus, ProjectStatus, ProjectTag } from '@/types';
 
 /** Shared 5(+1)-tone palette for small stat tiles, metric chips, and status dots. */
 export type Tone = 'emerald' | 'cyan' | 'amber' | 'violet' | 'rose' | 'muted';
@@ -29,3 +29,15 @@ export const PROJECT_STATUS_TONES: Record<ProjectStatus, { text: string; border:
   closed: { text: 'text-amber-400', border: 'border-amber-500/30', bg: 'bg-amber-500/5', dot: 'text-amber-500' },
   paid: { text: 'text-sky-400', border: 'border-sky-500/30', bg: 'bg-sky-500/5', dot: 'text-sky-500' },
 };
+
+/** Client-facing status → shared tone, for the internal dashboard chips and
+ *  editors (dark shell). The portal page has its own light-only chip and must
+ *  not use these classes (they carry `dark:` variants). */
+export const CLIENT_STATUS_TONES: Record<ClientStatus, Tone> = {
+  on_track: 'emerald',
+  needs_client: 'amber',
+  blocked: 'rose',
+  paused: 'muted',
+  delivered: 'cyan',
+};
+

@@ -21,11 +21,29 @@ import {
     SlidersHorizontal,
     DollarSign,
     Activity,
+    Globe,
+    TrendingUp,
+    Hourglass,
+    OctagonAlert,
+    PackageCheck,
 } from 'lucide-react';
-import { Project, ProjectStatus, ProjectTag, PROJECT_TAG_LABELS, PROJECT_STATUS_LABELS } from '@/types';
+import { toast } from 'sonner';
+import {
+    Project,
+    ProjectStatus,
+    ProjectTag,
+    ClientStatus,
+    PROJECT_TAG_LABELS,
+    PROJECT_STATUS_LABELS,
+    CLIENT_STATUSES,
+    CLIENT_STATUS_LABELS,
+    normalizeClientStatus,
+} from '@/types';
 import { projectsService } from '@/services/database';
+import { useAuth } from '@/modules/auth-access';
+import { ClientStatusChip, clientPortalRepository } from '@/modules/client-portal';
 import { cn } from '@/lib/utils';
-import { PROJECT_TAG_TONES, PROJECT_STATUS_TONES } from '@/lib/ui-tones';
+import { PROJECT_TAG_TONES, PROJECT_STATUS_TONES, CLIENT_STATUS_TONES, type Tone } from '@/lib/ui-tones';
 import { ProjectLogoDialog } from './ProjectLogoDialog';
 import {
     DropdownMenu,
@@ -52,6 +70,25 @@ const STATUS_OPTIONS: { value: ProjectStatus; icon: React.ComponentType<{ classN
     { value: 'paid', icon: DollarSign, description: 'Payment received' },
 ];
 
+/** Client-facing status sub-menu: internal wording + a one-line hint. Order follows CLIENT_STATUSES. */
+const CLIENT_STATUS_OPTIONS: Record<ClientStatus, { icon: React.ComponentType<{ className?: string }>; description: string }> = {
+    on_track: { icon: TrendingUp, description: 'Moving as planned' },
+    needs_client: { icon: Hourglass, description: 'Waiting on the client' },
+    blocked: { icon: OctagonAlert, description: 'Stuck on our side' },
+    paused: { icon: CirclePause, description: 'On hold' },
+    delivered: { icon: PackageCheck, description: 'Handed over' },
+};
+
+/** Icon colour per shared tone (TONE_CLASSES carries bg/border too, which would paint the icon box). */
+const TONE_ICON_TEXT: Record<Tone, string> = {
+    emerald: 'text-emerald-500',
+    cyan: 'text-cyan-500',
+    amber: 'text-amber-500',
+    violet: 'text-violet-500',
+    rose: 'text-rose-500',
+    muted: 'text-muted-foreground',
+};
+
 function detectWebsiteUrl(project: Project): string | undefined {
     const custom = project.webflowConfig?.customDomain;
     if (custom) return custom.startsWith('http') ? custom : `https://${custom}`;
@@ -68,6 +105,7 @@ interface ProjectCardProps {
 }
 
 function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
+    const { user } = useAuth();
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
     const [editingLinkId, setEditingLinkId] = React.useState<string | null>(null);
     const [isExpanded, setIsExpanded] = React.useState(false);
@@ -80,6 +118,8 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
     const disableDropdown = project.disableDropdown === true;
     const spellcheckEnabled = project.enableSpellcheck !== false;
     const assigneeEmails = project.assigneeEmails ?? [];
+    const portalEnabled = project.clientPortal?.enabled === true;
+    const clientStatus: ClientStatus = normalizeClientStatus(project.clientFacing?.status);
 
     const handleDelete = async () => {
         try {
@@ -93,6 +133,16 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
     const handleSetStatus = async (newStatus: ProjectStatus) => {
         if (newStatus === status) return;
         await projectsService.updateProjectStatus(project.id, newStatus);
+    };
+
+    const handleSetClientStatus = async (newStatus: ClientStatus) => {
+        if (newStatus === clientStatus) return;
+        try {
+            await clientPortalRepository.updateClientFacing(project.id, { status: newStatus }, user?.email ?? '');
+        } catch (err) {
+            console.error(err);
+            toast.error('Could not update client status');
+        }
     };
 
     const handleToggleTag = async (tag: ProjectTag) => {
@@ -201,6 +251,9 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
                                     )}
                                 >
                                     {project.logoUrl ? (
+                                        // Logos come from arbitrary hosts (auto-fetched favicons, storage), so
+                                        // next/image would need a remotePattern per host.
+                                        // eslint-disable-next-line @next/next/no-img-element
                                         <img
                                             src={project.logoUrl}
                                             alt=""
@@ -285,6 +338,41 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
                                     })}
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
+
+                            {/* Client status sub-menu — only when the portal is on */}
+                            {portalEnabled && (
+                                <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger>
+                                        <Globe className={cn("mr-2 h-4 w-4 shrink-0", TONE_ICON_TEXT[CLIENT_STATUS_TONES[clientStatus]])} />
+                                        <span className="min-w-0 truncate">Client status: {CLIENT_STATUS_LABELS[clientStatus]}</span>
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                        {CLIENT_STATUSES.map((value) => {
+                                            const { icon: Icon, description } = CLIENT_STATUS_OPTIONS[value];
+                                            return (
+                                                <DropdownMenuItem
+                                                    key={value}
+                                                    onClick={() => handleSetClientStatus(value)}
+                                                    className="flex items-start gap-2"
+                                                >
+                                                    <Icon className={cn("h-4 w-4 mt-0.5 shrink-0", TONE_ICON_TEXT[CLIENT_STATUS_TONES[value]])} />
+                                                    <div className="flex flex-col">
+                                                        <span className="flex items-center gap-1.5">
+                                                            {CLIENT_STATUS_LABELS[value]}
+                                                            {value === clientStatus && (
+                                                                <Check className="h-3 w-3 text-muted-foreground" />
+                                                            )}
+                                                        </span>
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            {description}
+                                                        </span>
+                                                    </div>
+                                                </DropdownMenuItem>
+                                            );
+                                        })}
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                            )}
 
                             {/* Tag sub-menu */}
                             <DropdownMenuSub>
@@ -418,7 +506,7 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
                     )}
                 </div>
 
-                {/* Row 3 — footer: tags + people */}
+                {/* Row 3 — footer: tags + client status + people */}
                 <div className="flex items-center justify-between gap-2 p-3 pt-2 mt-auto">
                     <div className="flex min-w-0 flex-wrap items-center gap-1">
                         {visibleTags.map(tag => {
@@ -441,6 +529,8 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
                                 +{hiddenTagCount}
                             </span>
                         )}
+                        {/* Renders nothing unless the client portal is enabled */}
+                        <ClientStatusChip project={project} size="sm" />
                     </div>
                     <ProjectPeoplePicker
                         projectId={project.id}

@@ -18,7 +18,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { Building2, ChevronDown, Code, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, RefreshCw, Loader2, Plus, Search as SearchIcon, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
+import { Building2, ChevronDown, Code, Handshake, ImageIcon, LayoutDashboard, Globe, Link2, ListChecks, MoreHorizontal, RefreshCw, Loader2, Plus, Search as SearchIcon, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { CLIENT_STATUS_LABELS, clientPortalRepository, normalizeClientStatus } from '@/modules/client-portal';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { InlineEdit } from '@/components/ui/inline-edit';
@@ -39,14 +41,15 @@ const TasksTab = dynamic(() => import('@/components/tasks/TasksTab').then(m => m
 const WebflowPagesDashboard = dynamic(() => import('@/components/webflow/WebflowPagesDashboard').then(m => m.WebflowPagesDashboard), { ssr: false, loading: TabLoader });
 const ImageLibrary = dynamic(() => import('../components/ImageLibrary').then(m => m.ImageLibrary), { ssr: false, loading: TabLoader });
 const ChecklistOverview = dynamic(() => import('@/components/checklist/ChecklistOverview').then(m => m.ChecklistOverview), { ssr: false, loading: TabLoader });
-const ProjectTimelineOverview = dynamic(() => import('@/modules/timeline/ui/screens/ProjectTimelineOverview').then(m => m.ProjectTimelineOverview), { ssr: false, loading: TabLoader });
+const ProjectTimelineOverview = dynamic(() => import('@/modules/timeline').then(m => m.ProjectTimelineOverview), { ssr: false, loading: TabLoader });
 const InvoicesTab = dynamic(() => import('@/modules/invoices/ui/components/InvoicesTab').then(m => m.InvoicesTab), { ssr: false, loading: TabLoader });
+const ClientPanel = dynamic(() => import('@/modules/client-portal').then(m => m.ClientPanel), { ssr: false, loading: TabLoader });
 
 interface PageProps {
     params: Promise<{ id: string }>;
 }
 
-const PRIMARY_DESKTOP_TAB_VALUES = new Set(['audit', 'links', 'tasks', 'webflow']);
+const PRIMARY_DESKTOP_TAB_VALUES = new Set(['audit', 'client', 'links', 'tasks', 'webflow']);
 
 export default function ProjectDetailPage({ params }: PageProps) {
     const { id } = use(params);
@@ -56,13 +59,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
     const [isSyncingSitemap, setIsSyncingSitemap] = useState(false);
     const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
+    const [isSharingClientLink, setIsSharingClientLink] = useState(false);
 
     // Default to 'audit' tab, or whatever ?tab=… in the URL points at. The list of
     // valid tab values is enforced below in tabOptions; falling back to 'audit' is safe.
     const searchParams = useSearchParams();
     const initialTab = (() => {
         const fromUrl = searchParams?.get('tab');
-        const valid = ['audit', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
+        const valid = ['audit', 'client', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
         return fromUrl && valid.includes(fromUrl) ? fromUrl : 'audit';
     })();
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -262,6 +266,70 @@ export default function ProjectDetailPage({ params }: PageProps) {
         }
     };
 
+    const handleRegenerateAuditShareLink = async () => {
+        if (!project || isCreatingShareLink) return;
+        setIsCreatingShareLink(true);
+        try {
+            const shareUrl = await projectLinksRepository.regenerateAuditShareLink(project.id);
+            const copied = await copyToClipboard(shareUrl);
+            if (copied) {
+                toast.success('New audit share link copied — the old one no longer works');
+            } else {
+                toast.info(`Share link: ${shareUrl}`, { duration: 12000 });
+            }
+        } catch (error) {
+            console.error('Error regenerating public audit share link:', error);
+            toast.error('Failed to regenerate share link');
+        } finally {
+            setIsCreatingShareLink(false);
+        }
+    };
+
+    const handleDisableAuditShareLink = async () => {
+        if (!project || isCreatingShareLink) return;
+        setIsCreatingShareLink(true);
+        try {
+            await projectLinksRepository.disableAuditShareLink(project.id);
+            toast.success('Audit share link disabled');
+        } catch (error) {
+            console.error('Error disabling public audit share link:', error);
+            toast.error('Failed to disable share link');
+        } finally {
+            setIsCreatingShareLink(false);
+        }
+    };
+
+    // Header "Share" and the `s` / `c` shortcuts: copy the client portal link.
+    // With the portal off, land on the Client tab where it can be enabled.
+    const handleShareClientLink = async () => {
+        if (!project || isSharingClientLink) return;
+        if (project.clientPortal?.enabled !== true) {
+            setActiveTab('client');
+            toast.info('Enable the client portal to get a link');
+            return;
+        }
+        setIsSharingClientLink(true);
+        try {
+            const state = await clientPortalRepository.getLinkState(project.id);
+            if (!state.enabled || !state.url) {
+                setActiveTab('client');
+                toast.info('Enable the client portal to get a link');
+                return;
+            }
+            const copied = await copyToClipboard(state.url);
+            if (copied) {
+                toast.success('Client portal link copied');
+            } else {
+                toast.info(`Portal link: ${state.url}`, { duration: 12000 });
+            }
+        } catch (error) {
+            console.error('Error reading client portal link:', error);
+            toast.error('Failed to get the client portal link');
+        } finally {
+            setIsSharingClientLink(false);
+        }
+    };
+
     if (authLoading || isLoading) {
         return <div className="p-8"><Skeleton className="h-[200px] w-full" /></div>;
     }
@@ -305,9 +373,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
     const timelineStat: TabStat = timelinePhases + timelineMilestones > 0
         ? { label: String(timelineMilestones || timelinePhases), tone: 'set' }
         : { label: 'Not Set', tone: 'unset' };
+    const clientStat: TabStat = project.clientPortal?.enabled === true
+        ? { label: CLIENT_STATUS_LABELS[normalizeClientStatus(project.clientFacing?.status)], tone: 'set' }
+        : { label: 'Off', tone: 'unset' };
 
     const tabOptions: TabOption[] = [
         { value: 'audit', label: 'Audit Dashboard', compactLabel: 'Audit', icon: <LayoutDashboard className="h-4 w-4" />, stat: auditStat },
+        { value: 'client', label: 'Client', icon: <Handshake className="h-4 w-4" />, stat: clientStat },
         { value: 'links', label: 'Links', icon: <Link2 className="h-4 w-4" />, stat: linksStat },
         { value: 'tasks', label: 'Tasks', icon: <ListTodo className="h-4 w-4" />, stat: tasksStat },
         { value: 'webflow', label: 'Webflow Pages', compactLabel: 'Webflow', icon: <Globe className="h-4 w-4" />, stat: webflowStat },
@@ -327,8 +399,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 showBackButton
                 backHref="/modules/project-links"
             >
-                <Button variant="outline" size="sm" onClick={handleShareAuditDashboard} disabled={isCreatingShareLink}>
-                    {isCreatingShareLink ? (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleShareClientLink}
+                    disabled={isSharingClientLink}
+                    title={project.clientPortal?.enabled === true ? 'Copy the client portal link' : 'Enable the client portal to get a link'}
+                >
+                    {isSharingClientLink ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                         <Share2 className="mr-2 h-4 w-4" />
@@ -339,14 +417,38 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     <Code className="mr-2 h-4 w-4" />
                     <span className="hidden sm:inline">Embed</span>
                 </Button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" aria-label="More sharing options" disabled={isCreatingShareLink}>
+                            {isCreatingShareLink ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                        <DropdownMenuItem onSelect={() => void handleShareAuditDashboard()}>
+                            Copy audit share link (legacy)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => void handleRegenerateAuditShareLink()}>
+                            Regenerate audit share link
+                        </DropdownMenuItem>
+                        {project.publicAuditShareEnabled && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem variant="destructive" onSelect={() => void handleDisableAuditShareLink()}>
+                                    Disable audit share link
+                                </DropdownMenuItem>
+                            </>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </AppNavigation>
             <ProjectShortcuts
                 project={{ id: project.id, name: project.name, client: project.client }}
                 tabs={tabOptions}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                onShare={handleShareAuditDashboard}
+                onShare={handleShareClientLink}
                 onEmbed={() => setIsEmbedDialogOpen(true)}
+                onCopyClientLink={handleShareClientLink}
             />
 
             <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6 lg:space-y-8">
@@ -468,6 +570,15 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             detectedLocales={project.detectedLocales}
                             pathToLocaleMap={project.pathToLocaleMap}
                             imageScanJob={project.imageScanJob}
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="client" className="mt-4 sm:mt-6">
+                        <ClientPanel
+                            project={project}
+                            timeline={timeline ?? null}
+                            userEmail={user.email ?? ''}
+                            isAdmin={isAdmin}
                         />
                     </TabsContent>
 

@@ -88,6 +88,8 @@ API documentation is in `/docs/misc/`:
 | `audit_logs` | Website audit history |
 | `configurations` | Settings (agencies, services, terms, etc.) |
 | `access_control` | Module access permissions |
+| `client_portal_tokens` | Server-only. Client portal capability tokens keyed by sha256(token), raw value never stored in the clear; firebase-admin only (see docs/features/client-portal.md) |
+| `projects/{id}/portal_views` | Server-only subcollection. One row per counted client portal open |
 
 ## Common Patterns
 

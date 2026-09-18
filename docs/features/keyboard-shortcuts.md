@@ -51,5 +51,5 @@ goes back to the page's `backHref`.
 | `Esc` | Back |
 
 Home: `1`–`5` open a module, `j`/`k` + `Enter` walk the list.
-Projects: `n` new, `/` search, `v` grid/list, `c` group by client, `1`–`6` status filter, `j`/`k` + `Enter` open a card.
-Project: `[` / `]` previous/next tab, `1`–`9` jump to a tab, `s` share, `e` embed.
+Projects: `n` new, `/` search, `v` grid/list, `c` group by client, `1`–`7` status filter, `j`/`k` + `Enter` open a card.
+Project: `[` / `]` previous/next tab, `1`–`9` jump to a tab, `s` share the client portal link, `c` copy the client portal link, `e` embed.

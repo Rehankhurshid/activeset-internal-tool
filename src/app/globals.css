@@ -389,3 +389,35 @@
   }
 
 }
+
+/* ---------------------------------------------------------------------------
+   Client portal palette (/portal/[token]).
+   A calm, light, print-like page for clients: warm off-white paper, ink text,
+   white cards and soft borders. `--primary` is ink rather than the app's
+   violet so colour is reserved for status meaning (the emerald/amber/rose
+   chips). AppProviders forces next-themes to `light` on /portal so no `dark:`
+   utility fires; this block then re-points every shadcn token for the page.
+   --------------------------------------------------------------------------- */
+.portal-theme {
+  color-scheme: light;
+  --radius: 0.75rem;
+  --background: oklch(0.985 0.004 80);
+  --foreground: oklch(0.22 0.01 60);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.01 60);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.01 60);
+  --primary: oklch(0.28 0.012 60);
+  --primary-foreground: oklch(0.985 0.004 80);
+  --secondary: oklch(0.955 0.006 80);
+  --secondary-foreground: oklch(0.3 0.01 60);
+  --muted: oklch(0.955 0.006 80);
+  --muted-foreground: oklch(0.5 0.012 60);
+  --accent: oklch(0.945 0.008 80);
+  --accent-foreground: oklch(0.25 0.012 60);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.915 0.008 80);
+  --input: oklch(0.9 0.008 80);
+  --ring: oklch(0.28 0.012 60);
+}
