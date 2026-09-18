@@ -436,6 +436,9 @@ export interface Project {
   reviewOwnerEmail?: string;
   /** Team members attached to the project for visible ownership across dashboards. */
   assigneeEmails?: string[];
+  /** Website delivery: chosen stack, site-wide checklist answers, kickoff state.
+   *  Pages themselves live in the `pages` subcollection, not here. */
+  delivery?: ProjectDeliveryState;
   // --- Daily review tracking ---
   /** UTC date (YYYY-MM-DD) of the most recent review. Primary "is it reviewed today" check. */
   lastReviewDate?: string;
@@ -918,6 +921,33 @@ export interface ParsedTaskSuggestion {
   description?: string;
   category: TaskCategory;
   priority: TaskPriority;
+}
+
+// --- WEBSITE DELIVERY ---
+// The page-level model lives in src/modules/delivery; these two shapes sit on
+// the project document itself, so they live here with the rest of Project and
+// the module re-exports them.
+
+/** Technologies a site is built on. Adding one is a stack definition, not a code path. */
+export type StackId = 'webflow' | 'astro-sanity' | 'next-storyblok';
+
+/** A person's answer to a launch checklist item. */
+export type CheckStatus = 'pending' | 'passed' | 'failed' | 'not_required';
+
+/** Site-wide delivery state. Pages live in the `pages` subcollection. */
+export interface ProjectDeliveryState {
+  stackId?: StackId;
+  /** Check id → answer, for site-scoped checks only. */
+  siteChecks?: Record<string, CheckStatus>;
+  /** Kickoff input id → whether the client has given it to us. */
+  kickoffInputs?: Record<string, boolean>;
+  /** How often the team and client sync; drives the "no call recently" nudge. */
+  callCadence?: 'weekly' | 'biweekly' | 'none';
+  lastSyncCallAt?: string;
+  /** The generated Google Sheet, once sheet sync exists. */
+  trackerSheetId?: string;
+  trackerSheetUrl?: string;
+  trackerSyncedAt?: string;
 }
 
 // --- CLIENT PORTAL / CLIENT-FACING TYPES ---

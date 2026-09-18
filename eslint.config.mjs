@@ -20,6 +20,7 @@ const modules = [
   "screenshot-runner",
   "settings",
   "client-portal",
+  "delivery",
 ];
 
 const createModuleBoundaryRule = (moduleName) => {

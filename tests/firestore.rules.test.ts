@@ -481,6 +481,39 @@ describe('firestore.rules', { timeout: 30_000 }, () => {
   // route with firebase-admin, so `create` on client_messages is closed to
   // every client-SDK identity including the admin's.
   // ────────────────────────────────────────────────────────────────────────
+  describe('projects/{id}/pages (delivery tracker)', () => {
+    const pageRef = (db: Db) => db.collection('projects').doc('p1').collection('pages').doc('pg1');
+
+    beforeEach(async () => {
+      await seed('projects', 'p1', { name: 'Redesign', userId: 'team-uid' });
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await ctx
+          .firestore()
+          .collection('projects')
+          .doc('p1')
+          .collection('pages')
+          .doc('pg1')
+          .set({ path: '/pricing', title: 'Pricing', order: 0, work: { copy: 'completed' } });
+      });
+    });
+
+    it('allows an @activeset.co read', async () => {
+      await assertSucceeds(pageRef(team()).get());
+    });
+
+    it('allows an @activeset.co write', async () => {
+      await assertSucceeds(pageRef(team()).update({ 'work.design': 'in_progress' }));
+    });
+
+    it('denies a signed-out read', async () => {
+      await assertFails(pageRef(signedOut()).get());
+    });
+
+    it('denies a signed-in @gmail.com write', async () => {
+      await assertFails(pageRef(outsider()).update({ 'work.design': 'completed' }));
+    });
+  });
+
   describe('projects/{id}/client_updates', () => {
     const updateRef = (db: Db) =>
       db.collection('projects').doc('p1').collection('client_updates').doc('u1');
