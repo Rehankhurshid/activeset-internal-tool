@@ -4,6 +4,7 @@ import { PortalDeliverables } from '../components/PortalDeliverables';
 import { PortalFooter } from '../components/PortalFooter';
 import { PortalHeader } from '../components/PortalHeader';
 import { PortalPlan } from '../components/PortalPlan';
+import { PortalReview } from '../components/PortalReview';
 import { PortalStatusCard } from '../components/PortalStatusCard';
 import { TrackPortalView } from '../components/TrackPortalView';
 
@@ -47,6 +48,9 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         <PortalPlan phases={view.phases} now={now} />
         <PortalDeliverables deliverables={view.deliverables} websiteUrl={view.websiteUrl} />
         {view.asks.length > 0 && <PortalAsks asks={view.asks} now={now} />}
+        {/* Below the deliverables deliberately: there is no approving something
+            you have not been shown. */}
+        <PortalReview review={view.review} token={token} now={now} preview={preview} />
         <PortalFooter brandName={view.brandName} agencyContactEmail={view.agencyContactEmail} />
       </main>
 

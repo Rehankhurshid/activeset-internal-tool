@@ -23,6 +23,9 @@ import {
 import { COLLECTIONS } from '@/lib/constants';
 import { getTemplateById, getDefaultTemplate, SOP_TEMPLATES } from '@/lib/sop-templates';
 import { DatabaseError, logError } from '@/lib/errors';
+// The one place a service reaches into a module: the diff between a project's
+// checklist and its template is delivery's own idea of what counts as process.
+import { applyImprovements, type Improvement } from '@/modules/delivery/domain/delivery.feedback';
 
 const CHECKLISTS_COLLECTION = COLLECTIONS.PROJECT_CHECKLISTS;
 
@@ -370,6 +373,55 @@ export const checklistService = {
             logError(error, 'getSOPTemplates');
             throw new DatabaseError('Failed to fetch SOP templates');
         }
+    },
+
+    /**
+     * One SOP template by id, built-in or custom.
+     *
+     * Built-ins live in `src/lib/sop-templates.ts` and come back flagged
+     * `isBuiltIn`, which callers have to honour: there is no document behind
+     * them to write to.
+     */
+    async getSOPTemplate(templateId: string): Promise<SOPTemplate | null> {
+        const builtIn = SOP_TEMPLATES.find((t) => t.id === templateId);
+        if (builtIn) return { ...builtIn, isBuiltIn: true };
+        try {
+            const snap = await getDoc(doc(db, COLLECTIONS.SOP_TEMPLATES, templateId));
+            if (!snap.exists()) return null;
+            return { id: snap.id, ...snap.data(), isBuiltIn: false } as SOPTemplate;
+        } catch (error) {
+            logError(error, 'getSOPTemplate');
+            throw new DatabaseError('Failed to fetch the SOP template');
+        }
+    },
+
+    /**
+     * Fold what a project learned back into the template it came from.
+     *
+     * This is the only write that travels from a project towards the process, so
+     * it deliberately does the smallest thing: the caller has already chosen
+     * which improvements to send, and the whole sections array is rewritten from
+     * the result rather than patched field by field.
+     *
+     * A built-in template is code and cannot be written to. Saying so plainly
+     * beats a write that appears to succeed and is gone on the next deploy.
+     */
+    async saveTemplateImprovements(
+        templateId: string,
+        improvements: Improvement[],
+    ): Promise<void> {
+        if (improvements.length === 0) return;
+
+        const template = await this.getSOPTemplate(templateId);
+        if (!template) throw new DatabaseError('That SOP template no longer exists');
+        if (template.isBuiltIn) {
+            throw new DatabaseError(
+                'This project follows a built-in template, which ships with the app and cannot be edited. Duplicate it in the Checklist Creator first, and improvements will have somewhere to go.',
+            );
+        }
+
+        const next = applyImprovements(template, improvements);
+        await this.updateSOPTemplate(templateId, { sections: next.sections });
     },
 
     /**

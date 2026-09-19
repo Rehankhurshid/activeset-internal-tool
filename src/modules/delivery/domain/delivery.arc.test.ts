@@ -317,6 +317,58 @@ describe('the shipped Webflow SOP', () => {
   });
 });
 
+describe('the agency basics, which every project type gets', () => {
+  // Getting the client into Slack, the welcome email and the walkthrough are not
+  // Webflow facts. They used to live only in the Webflow SOP, so a brand project
+  // got none of them.
+  const COMMON = [
+    'kickoff call',
+    'slack channel',
+    'welcome email',
+    'sync cadence',
+    'clickup task list',
+    'project tracker',
+    'internal kickoff',
+    'walkthrough videos',
+    'written approval',
+  ];
+
+  for (const template of SOP_TEMPLATES) {
+    it(`are all in "${template.name}"`, () => {
+      const titles = template.sections.flatMap((s) => s.items.map((i) => i.title.toLowerCase()));
+      for (const needle of COMMON) {
+        assert.ok(titles.some((t) => t.includes(needle)), `${template.id} is missing "${needle}"`);
+      }
+    });
+
+    it(`opens "${template.name}" with client setup and ends it with sign-off`, () => {
+      const first = template.sections[0];
+      const last = template.sections[template.sections.length - 1];
+      assert.equal(first.role, 'kickoff');
+      assert.match(first.title, /client setup/i);
+      assert.equal(last.role, 'client_review');
+      assert.match(last.title, /sign-off/i);
+    });
+
+    it(`numbers "${template.name}" without gaps or repeats`, () => {
+      assert.deepEqual(
+        template.sections.map((s) => s.order),
+        template.sections.map((_, i) => i),
+      );
+    });
+
+    it(`says each of "${template.name}" only once`, () => {
+      // The whole point of sharing them is that they stop being duplicated.
+      const titles = template.sections.flatMap((s) => s.items.map((i) => i.title.toLowerCase().trim()));
+      const seen = new Set<string>();
+      for (const title of titles) {
+        assert.ok(!seen.has(title), `${template.id} lists "${title}" twice`);
+        seen.add(title);
+      }
+    });
+  }
+});
+
 describe('the shipped SOP templates', () => {
   it('give every section of every template a place in the arc', () => {
     for (const template of SOP_TEMPLATES) {

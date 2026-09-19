@@ -51,6 +51,20 @@ Structure* for one project, and the Checklist Creator for every future one. The
 tag that came before roles, `stage: 'kickoff' | 'launch'`, is still read and
 means the role of the same name, so no live project needs re-tagging.
 
+### What every project gets, whatever it is
+
+Getting the client into Slack, the welcome email, the sync cadence, the
+walkthrough videos at the end: none of that is specific to Webflow or to
+branding. It used to be written into the Webflow SOP only, so a brand project got
+no Slack channel, no welcome email and no kickoff call from its checklist at all.
+
+Those steps now live once, in `AGENCY_START` and `AGENCY_CLOSE` in
+`src/lib/sop-templates.ts`, and `withAgencyBasics` wraps them around every
+template. Each SOP opens with *Start: client setup* and ends with *Close:
+handover & sign-off*, and adding a step to how the agency works adds it to every
+project type at once. A template's own sections are written without an `order`
+and numbered by the wrapper, so inserting a stage is a one-line edit.
+
 ### Gates
 
 A stage's items can be marked **blocking**. A later stage whose earlier blocking
@@ -88,6 +102,26 @@ ask one question of 26 pages. It is per-project and editable too: *Edit checks*
 on the launch stage writes the list onto the project, seeded from the stack until
 then. Renaming keeps existing answers, since they key off the check id; removing
 an answered check warns with the number of pages affected.
+
+## The client's sign-off
+
+A stage with the `client_review` role is one the client is asked to approve. The
+portal shows it as a card with one button, and the team sees the result on that
+stage.
+
+The portal is given the stage's **title and nothing else** — no step titles. The
+steps behind a review are ours ("work through the MarkUp comments"), and what the
+client needs is the work itself, which is already on their page as deliverables,
+plus one thing to say yes to.
+
+A project usually has more than one review point: staging feedback partway
+through, then final sign-off. The portal shows the first one still waiting on
+them, and once they have all been answered it shows the last, so their most
+recent approval stays on the page rather than the card vanishing the moment they
+press the button.
+
+The write is documented in [client-portal.md](client-portal.md#api-routes).
+Approving ticks nothing internal.
 
 ## Stacks
 

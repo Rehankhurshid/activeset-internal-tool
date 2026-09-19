@@ -587,6 +587,17 @@ export type ChecklistStage = 'kickoff' | 'launch';
  */
 export type StageRole = 'kickoff' | 'pages' | 'client_review' | 'launch';
 
+/** One client sign-off on one stage. Append-only; the team clears it, not the client. */
+export interface StageApproval {
+  /** `${checklistId}:${sectionId}` — the stage's key in the delivery arc. */
+  stageKey: string;
+  /** Kept alongside the key so the record still reads if the section is renamed. */
+  stageTitle: string;
+  approvedAt: string;
+  /** Whatever the client typed when approving, if anything. */
+  note?: string;
+}
+
 /** One labelled link on a task: the tool, the reference, the example. */
 export interface ChecklistItemLink {
   label: string;
@@ -1020,6 +1031,15 @@ export interface ProjectDeliveryState {
   // for field: `pageChecksFor` hands these straight to `resolveCheck`, so a
   // second name for the scan signal would silently lose it.
   pageChecks?: { id: string; title: string; group: string; order: number; auto?: AutoCheckId; note?: string }[];
+  /**
+   * Stages the client has signed off, keyed by the stage's own key.
+   *
+   * Written only by the portal route, from a link the client was given. It is a
+   * record of what they said, never a status the team sets on their behalf, and
+   * it deliberately does not tick any internal item: an unauthenticated action
+   * must not complete our own work for us.
+   */
+  approvals?: StageApproval[];
   /** How often the team and client sync; drives the "no call recently" nudge. */
   callCadence?: 'weekly' | 'biweekly' | 'none';
   lastSyncCallAt?: string;

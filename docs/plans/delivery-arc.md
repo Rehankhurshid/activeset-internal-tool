@@ -106,14 +106,23 @@ about checklist items.
 
 ## Phases
 
-1. **The spine.** Stages from sections, roles, the migration, the Delivery rail.
-   Every section of every SOP visible in Delivery. *(the bulk of the value)*
-2. **Context on tasks.** `howTo` and `links`, the carry-through fixes, the
-   Creator's item editor, the SOP rewrite.
-3. **Gates and ownership.** Blocking items, derived stage completion, due dates,
-   overdue surfacing.
-4. **The template feedback loop.**
-5. **Client review stages.**
+1. ~~**The spine.**~~ Done. Stages from sections, roles, the migration, the rail.
+2. ~~**Context on tasks.**~~ Done. `howTo` and `links`, the carry-through fixes,
+   the Creator's item editor, the SOP rewrite.
+3. **Gates and ownership.** Blocking items and gates are done. Due dates exist
+   and an item shows as overdue on its row; what is left is surfacing an overdue
+   item somewhere you are not already looking — the stage rail, the dashboard,
+   and the nag bot, which today reads only the `tasks` collection.
+4. ~~**The template feedback loop.**~~ Done. `delivery.feedback.ts` diffs a
+   project's checklist against its source template and offers the guidance back;
+   built-in templates are code and are refused with an explanation.
+5. ~~**Client review stages.**~~ Done. A `client_review` stage appears on the
+   portal as one button; approving writes `delivery.approvals` through a narrow
+   token-authed route and ticks nothing internal.
+
+Added along the way, not in the original plan: **the agency basics**. Slack, the
+welcome email, the cadence and the walkthrough were only in the Webflow SOP, so a
+brand project got none of them. They now live once and wrap every template.
 
 ## Bugs found on the way, to fix in phase 2
 

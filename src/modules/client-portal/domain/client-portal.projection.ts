@@ -1,7 +1,10 @@
 import type {
+  ChecklistSection,
   Project,
+  ProjectChecklist,
   ProjectLink,
   ProjectTimeline,
+  StageRole,
   Task,
   TimelineItemStatus,
   TimelineMilestone,
@@ -14,6 +17,7 @@ import type {
   PortalMilestoneStatus,
   PortalMilestoneView,
   PortalPhaseView,
+  PortalReviewView,
 } from './client-portal.types';
 
 export interface BuildClientPortalViewInput {
@@ -21,6 +25,8 @@ export interface BuildClientPortalViewInput {
   timeline: ProjectTimeline | null | undefined;
   /** Optional. Only tasks with `needsClientInput` and not done become asks. */
   tasks?: Task[];
+  /** Optional. Only a section with the `client_review` role becomes a review. */
+  checklists?: ProjectChecklist[];
   now?: Date;
 }
 
@@ -87,8 +93,49 @@ function compact<T extends object>(obj: T): T {
  * than the agency contact), milestone notes/assignees, task descriptions,
  * checklists, audits, images and invoices are all deliberately absent.
  */
+/**
+ * The stage the client is being asked to sign off, if any.
+ *
+ * Duplicated from the delivery module's `roleOf` rather than imported, because
+ * the portal projection is the app's narrowest allow-list and reaching into
+ * another module's domain to build it would be the wrong direction of
+ * dependency. Two lines is a fair price for that.
+ */
+function reviewRoleOf(section: ChecklistSection): StageRole | undefined {
+  if (section.role) return section.role;
+  return section.stage === 'kickoff' || section.stage === 'launch' ? section.stage : undefined;
+}
+
+function toPortalReview(
+  checklists: ProjectChecklist[],
+  approvals: NonNullable<Project['delivery']>['approvals'],
+): PortalReviewView | undefined {
+  const reviews: PortalReviewView[] = [];
+
+  for (const checklist of checklists) {
+    const sections = [...(checklist.sections ?? [])].sort((a, b) => a.order - b.order);
+    for (const section of sections) {
+      if (reviewRoleOf(section) !== 'client_review') continue;
+      const stageKey = `${checklist.id}:${section.id}`;
+      const approval = (approvals ?? []).find((a) => a.stageKey === stageKey);
+      reviews.push({
+        stageKey,
+        title: section.title,
+        ...(approval ? { approvedAt: approval.approvedAt } : {}),
+        ...(approval?.note ? { approvedNote: approval.note } : {}),
+      });
+    }
+  }
+
+  // A project has more than one review point — staging feedback partway through,
+  // then final sign-off — so show the one actually waiting on them. Once they
+  // have all been answered, show the last, so their most recent approval stays
+  // on the page rather than the card vanishing the moment they press the button.
+  return reviews.find((r) => !r.approvedAt) ?? reviews[reviews.length - 1];
+}
+
 export function buildClientPortalView(input: BuildClientPortalViewInput): ClientPortalView {
-  const { project, timeline, tasks = [], now = new Date() } = input;
+  const { project, timeline, tasks = [], checklists = [], now = new Date() } = input;
   const settings = project.clientPortal;
   const facing = project.clientFacing ?? {};
 
@@ -174,6 +221,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     phases,
     deliverables,
     asks,
+    review: toPortalReview(checklists, project.delivery?.approvals),
     generatedAt: now.toISOString(),
   };
 

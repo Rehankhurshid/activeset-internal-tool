@@ -86,8 +86,26 @@ export interface ClientPortalView {
   phases: PortalPhaseView[];
   deliverables: PortalDeliverableView[];
   asks: PortalAskView[];
+  /**
+   * The stage waiting on the client's approval, when there is one.
+   *
+   * Deliberately carries no item titles. The stage's steps are ours — "fix the
+   * markup comments", "record the walkthrough videos" — and the client has the
+   * deliverables and the status note to judge by. What they need here is one
+   * thing to say yes to.
+   */
+  review?: PortalReviewView;
   /** ISO timestamp the projection was built (server time). */
   generatedAt: string;
+}
+
+export interface PortalReviewView {
+  /** Echoed back by the approve route, which checks it names a real review stage. */
+  stageKey: string;
+  title: string;
+  /** Set once approved, which is also what stops the card asking again. */
+  approvedAt?: string;
+  approvedNote?: string;
 }
 
 /** Keys of ClientPortalView, kept in step by the projection test. */
@@ -109,5 +127,6 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'phases',
   'deliverables',
   'asks',
+  'review',
   'generatedAt',
 ] as const;

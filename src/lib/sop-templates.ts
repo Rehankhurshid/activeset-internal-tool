@@ -1,4 +1,4 @@
-import { AutoCheckId, ChecklistItemLink, SOPTemplate, SOPTemplateItem } from '@/types';
+import { AutoCheckId, ChecklistItemLink, SOPTemplate, SOPTemplateItem, SOPTemplateSection } from '@/types';
 
 /**
  * SOP Templates — each defines a reusable checklist structure.
@@ -32,17 +32,100 @@ const makeItems = (items: ItemSpec[]): SOPTemplateItem[] =>
         order: i,
     }));
 
+/**
+ * How ActiveSet runs any engagement, whatever is being built.
+ *
+ * Getting the client into Slack, the welcome email, the sync cadence, the
+ * walkthrough at the end: none of that is specific to Webflow or to branding,
+ * and it was previously written into the Webflow SOP only — so a brand project
+ * got no Slack channel, no welcome email and no kickoff call from its checklist.
+ * Defined once here and wrapped around every template by
+ * {@link withAgencyBasics}, so adding a step to how the agency works adds it to
+ * every project type at once.
+ */
+const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
+    title: 'Start: client setup',
+    emoji: '\u{1F91D}',
+    role: 'kickoff',
+    items: makeItems([
+        { title: 'Book the kickoff call as soon as the deal closes', emoji: '\u{1F4C5}', blocking: true },
+        {
+            title: 'Hold the kickoff call',
+            emoji: '\u{1F4DE}',
+            blocking: true,
+            howTo: 'Cover four things and nothing else: what is in scope, the deadline, who does what on both sides, and where we will talk day to day.',
+        },
+        {
+            title: 'Create the shared Slack channel with the client',
+            emoji: '\u{1F4AC}',
+            howTo: 'Run the channel setup workflow so it is named and stocked the same way every time. Slack is where we talk; email is for things that need a record.',
+        },
+        { title: 'Agree the sync cadence \u2014 weekly or every two weeks', emoji: '\u{1F501}' },
+        { title: 'Name the leads on both sides, ours and theirs', emoji: '\u{1F465}' },
+        { title: 'Project Lead sends the welcome email introducing the team', emoji: '\u{1F48C}' },
+        {
+            title: 'Create the ClickUp task list',
+            emoji: '\u2611\uFE0F',
+            howTo: 'Use the \u2699\uFE0F One Click Setup so the list matches this SOP.',
+        },
+        { title: 'Share the project tracker with the client', emoji: '\u{1F4CA}' },
+        { title: 'Create the MarkUp folder', emoji: '\u{1F4DD}', links: [{ label: 'MarkUp', url: 'https://www.markup.io/' }] },
+        {
+            title: 'Hold the internal kickoff',
+            emoji: '\u{1F465}',
+            howTo: 'The team without the client: deadline, what is going to be awkward to build, and anything in the brief nobody understands yet.',
+        },
+    ]),
+};
+
+const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
+    title: 'Close: handover & sign-off',
+    emoji: '\u2705',
+    role: 'client_review',
+    items: makeItems([
+        {
+            title: 'Record the walkthrough videos',
+            emoji: '\u{1F3AC}',
+            howTo: 'How to edit it, how to publish it, and anything custom. This is what stops the support questions six months from now.',
+        },
+        { title: 'Hand over the documentation and the video links', emoji: '\u{1F4E6}' },
+        {
+            title: 'Get written approval',
+            emoji: '\u2705',
+            blocking: true,
+            howTo: 'In writing, from whoever can actually sign it off. Verbal approval on a call is not what you want to be relying on if this goes sideways.',
+        },
+        {
+            title: 'Agree what happens next',
+            emoji: '\u{1F501}',
+            howTo: 'Retainer, ad-hoc support, or nothing. Saying it out loud at handover is much easier than raising it three weeks later.',
+        },
+        { title: 'Archive the project files and close the ClickUp list', emoji: '\u{1F5C4}\uFE0F' },
+    ]),
+};
+
+/**
+ * Wraps a template's own stages with the agency basics and numbers the result.
+ *
+ * Sections are written without an `order` and numbered here, so inserting a
+ * stage is a one-line edit rather than a renumbering exercise.
+ */
+function withAgencyBasics(
+    sections: Omit<SOPTemplateSection, 'order'>[],
+): SOPTemplateSection[] {
+    return [AGENCY_START, ...sections, AGENCY_CLOSE].map((section, order) => ({ ...section, order }));
+}
+
 export const SOP_TEMPLATES: SOPTemplate[] = [
     {
         id: 'webflow_migration_v1',
         name: 'Website Migration to Webflow',
         description: 'Complete SOP for migrating a website to Webflow — from input gathering to launch.',
         icon: '📄',
-        sections: [
+        sections: withAgencyBasics([
             {
                 title: 'Input',
                 emoji: '📥',
-                order: 0,
                 // The build cannot start without these, which is what `blocking` says.
                 role: 'kickoff',
                 items: makeItems([
@@ -106,45 +189,19 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 ]),
             },
             {
-                title: 'Step 1: Project Planning & Kickoff',
-                emoji: '📁',
-                order: 1,
-                role: 'kickoff',
+                title: 'Step 1: Project Planning',
+                emoji: '\u{1F4C1}',
                 items: makeItems([
-                    { title: 'Book the kickoff call as soon as the deal closes', emoji: '📅', blocking: true },
                     {
-                        title: 'Hold the kickoff call',
-                        emoji: '📞',
-                        blocking: true,
-                        howTo: 'Cover four things and nothing else: what is in scope, the deadline, who does what on both sides, and where we will talk day to day.',
-                    },
-                    { title: 'Agree the sync cadence — weekly or every two weeks', emoji: '🔁' },
-                    { title: 'List every page on the live site, including CMS collections', emoji: '📑' },
-                    { title: 'Name the Lead Developer, Backup Developer and Project Lead', emoji: '👥' },
-                    {
-                        title: 'Create the shared Slack channel with the client',
-                        emoji: '💬',
-                        howTo: 'Run the "Setup Channel – Webflow Migration" workflow so the channel is named and stocked the same way every time.',
-                    },
-                    {
-                        title: 'Create the ClickUp task list',
-                        emoji: '☑️',
-                        howTo: 'Use the ⚙️ One Click Setup so the list matches this SOP.',
-                    },
-                    { title: 'Project Lead sends the welcome email introducing the team', emoji: '💌' },
-                    { title: 'Share the project tracker with the client', emoji: '📊' },
-                    { title: 'Create the MarkUp folder', emoji: '📝', links: [{ label: 'MarkUp', url: 'https://www.markup.io/' }] },
-                    {
-                        title: 'Hold the internal kickoff',
-                        emoji: '👥',
-                        howTo: 'Developers and designer, without the client: deadline, functionality, animations, and anything in the design that will be expensive to build.',
+                        title: 'List every page on the live site, including CMS collections',
+                        emoji: '\u{1F4D1}',
+                        howTo: 'The crawl gives you the pages. The CMS collections behind them are what the crawl will not tell you, and they decide how much of the build is templates.',
                     },
                 ]),
             },
             {
                 title: 'Step 2: Design Preparation (Developer)',
                 emoji: '🎨',
-                order: 2,
                 items: makeItems([
                     { title: 'Check the styleguide is consistent: spacing, typography, colours', emoji: '✒️' },
                     { title: 'Plan the components with the designer', emoji: '💟' },
@@ -158,7 +215,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Step 3: Webflow Project Setup',
                 emoji: '🧱',
-                order: 3,
                 items: makeItems([
                     {
                         title: 'Add the project links to the widget',
@@ -175,7 +231,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Step 4: CMS Configuration',
                 emoji: '🗃️',
-                order: 4,
                 items: makeItems([
                     {
                         title: 'Decide what in the design should be CMS',
@@ -195,7 +250,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Step 5: Page Development & Layout',
                 emoji: '🧩',
-                order: 5,
                 // The build itself: the page grid renders in this stage.
                 role: 'pages',
                 items: makeItems([
@@ -214,7 +268,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Step 6: Integrations & Custom Code',
                 emoji: '🔧',
-                order: 6,
                 items: makeItems([
                     { title: 'Add SEO titles, descriptions and Open Graph fields', emoji: '⚓', autoCheck: 'meta_description' },
                     { title: 'Set up form automation, if it is needed (Zapier or Make)', emoji: '⚓' },
@@ -227,7 +280,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Step 7: QA & Pre-Launch Checklist',
                 emoji: '🧪',
-                order: 7,
                 role: 'launch',
                 items: makeItems([
                     { title: 'Test every page at every breakpoint', emoji: '🏁' },
@@ -242,32 +294,17 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 ]),
             },
             {
-                title: 'Step 8: Client Review & Handover',
-                emoji: '🤝',
-                order: 8,
-                // Ends with the client's approval rather than ours.
+                title: 'Step 8: Client Review',
+                emoji: '\u{1F91D}',
                 role: 'client_review',
                 items: makeItems([
-                    { title: 'Share the staging and MarkUp links for feedback', emoji: '🔗' },
-                    { title: 'Work through the MarkUp comments', emoji: '💬' },
-                    {
-                        title: 'Record the walkthrough videos',
-                        emoji: '🎬',
-                        howTo: 'How to edit the CMS, how to publish, and anything custom. This is what stops the support questions six months from now.',
-                    },
-                    { title: 'Hand over the documentation and the video links', emoji: '📦' },
-                    {
-                        title: 'Get written approval to launch',
-                        emoji: '✅',
-                        blocking: true,
-                        howTo: 'In writing, from whoever can actually sign it off. Verbal approval on a call is not what you want to be relying on if the launch goes sideways.',
-                    },
+                    { title: 'Share the staging and MarkUp links for feedback', emoji: '\u{1F517}' },
+                    { title: 'Work through the MarkUp comments', emoji: '\u{1F4AC}' },
                 ]),
             },
             {
                 title: 'Step 9: Launch',
                 emoji: '🚀',
-                order: 9,
                 role: 'launch',
                 items: makeItems([
                     {
@@ -292,7 +329,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Outputs',
                 emoji: '📦',
-                order: 10,
                 items: makeItems([
                     { title: 'A responsive, optimised Webflow site the client owns', emoji: '🌐' },
                     { title: 'Every requirement met and approved', emoji: '✅' },
@@ -300,18 +336,17 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                     { title: 'Redirects in place and the sitemap submitted', emoji: '↪️' },
                 ]),
             },
-        ],
+        ]),
     },
     {
         id: 'branding_v1',
         name: 'Brand Evolution',
         description: 'Complete SOP for brand evolution — from kickoff questionnaire through research, moodboards, stylescapes, logo, collateral to brand book handover.',
         icon: '🎨',
-        sections: [
+        sections: withAgencyBasics([
             {
                 title: 'Input & Requirements',
                 emoji: '📥',
-                order: 0,
                 role: 'kickoff',
                 items: makeItems([
                     { title: 'Client brief / project scope document', emoji: '📄' },
@@ -328,7 +363,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Phase 1: Pre-Production — Discovery & Research',
                 emoji: '🔍',
-                order: 1,
                 items: makeItems([
                     { title: 'Kickoff call with client and key stakeholders', emoji: '📅' },
                     { title: 'Review completed brand questionnaire before call (what are we selling? market category? why does the world need us?)', emoji: '📋' },
@@ -342,7 +376,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Phase 2: Pre-Production — Competitive Analysis',
                 emoji: '📊',
-                order: 2,
                 items: makeItems([
                     { title: 'Get list of competitors from client', emoji: '📋' },
                     { title: 'Break down each competitor\'s visual identity: logo type, typeface, colors, imagery, core visual element', emoji: '🔍' },
@@ -356,7 +389,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Phase 3: Production — Moodboarding',
                 emoji: '🖼️',
-                order: 3,
                 items: makeItems([
                     { title: 'Collect visual references from the internet based on research findings', emoji: '🌐' },
                     { title: 'Create 2–3 moodboard directions — each reflecting a different brand positioning', emoji: '🎨' },
@@ -370,7 +402,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Phase 4: Production — Stylescape',
                 emoji: '🖌️',
-                order: 4,
                 items: makeItems([
                     { title: 'Create custom-made stylescape based on approved moodboard direction', emoji: '🎨' },
                     { title: 'Design custom illustrations, patterns, and graphic elements aligned to brand identity', emoji: '✏️' },
@@ -385,7 +416,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Phase 5: Production — Logo & Collateral Design',
                 emoji: '✏️',
-                order: 5,
                 items: makeItems([
                     { title: 'Design multiple logo concepts (wordmark, icon, combined, monogram)', emoji: '🔄' },
                     { title: 'Present logo options to client — get sign-off', emoji: '🤝' },
@@ -399,7 +429,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Phase 6: Post-Production — Brand Book & Handover',
                 emoji: '📦',
-                order: 6,
                 role: 'client_review',
                 items: makeItems([
                     { title: 'Document the entire branding journey into a single brand book', emoji: '📖' },
@@ -418,7 +447,6 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             {
                 title: 'Outputs',
                 emoji: '🎁',
-                order: 7,
                 items: makeItems([
                     { title: 'Complete brand book / style guide', emoji: '📖' },
                     { title: 'Logo package (all formats and variations)', emoji: '🏷️' },
@@ -431,7 +459,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                     { title: 'Tone of voice and messaging guidelines', emoji: '🗣️' },
                 ]),
             },
-        ],
+        ]),
     },
 ];
 

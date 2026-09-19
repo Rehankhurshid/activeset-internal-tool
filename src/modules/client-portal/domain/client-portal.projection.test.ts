@@ -204,3 +204,80 @@ describe('buildClientPortalView', () => {
     assert.equal(view.websiteUrl, 'https://peakxv.com');
   });
 });
+
+describe('the review the client is asked to sign off', () => {
+  function checklist(sections: { id: string; title: string; role?: string; order: number }[]) {
+    return {
+      id: 'c1',
+      projectId: 'p1',
+      templateId: 't1',
+      templateName: 'SOP',
+      sections: sections.map((s) => ({ ...s, items: [] })),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never;
+  }
+
+  const sections = [
+    { id: 'setup', title: 'Start: client setup', role: 'kickoff', order: 0 },
+    { id: 'staging', title: 'Step 8: Client Review', role: 'client_review', order: 1 },
+    { id: 'close', title: 'Close: handover & sign-off', role: 'client_review', order: 2 },
+  ];
+
+  it('is absent when no stage asks for one', () => {
+    const view = buildClientPortalView({
+      project: project(),
+      timeline: null,
+      checklists: [checklist([sections[0]])],
+    });
+    assert.equal(view.review, undefined);
+  });
+
+  it('is the first one still waiting on them', () => {
+    const view = buildClientPortalView({
+      project: project(),
+      timeline: null,
+      checklists: [checklist(sections)],
+    });
+    assert.equal(view.review?.title, 'Step 8: Client Review');
+    assert.equal(view.review?.stageKey, 'c1:staging');
+    assert.equal(view.review?.approvedAt, undefined);
+  });
+
+  it('moves on once they have answered the first', () => {
+    const withApproval = project();
+    withApproval.delivery = {
+      approvals: [{ stageKey: 'c1:staging', stageTitle: 'Step 8: Client Review', approvedAt: '2026-09-01T10:00:00.000Z' }],
+    };
+    const view = buildClientPortalView({ project: withApproval, timeline: null, checklists: [checklist(sections)] });
+    assert.equal(view.review?.stageKey, 'c1:close');
+  });
+
+  it('keeps the last approval on the page rather than vanishing', () => {
+    const withApproval = project();
+    withApproval.delivery = {
+      approvals: [
+        { stageKey: 'c1:staging', stageTitle: 'a', approvedAt: '2026-09-01T10:00:00.000Z' },
+        { stageKey: 'c1:close', stageTitle: 'b', approvedAt: '2026-09-09T10:00:00.000Z', note: 'Looks great' },
+      ],
+    };
+    const view = buildClientPortalView({ project: withApproval, timeline: null, checklists: [checklist(sections)] });
+    assert.equal(view.review?.stageKey, 'c1:close');
+    assert.equal(view.review?.approvedAt, '2026-09-09T10:00:00.000Z');
+    assert.equal(view.review?.approvedNote, 'Looks great');
+  });
+
+  it('never carries the stage\u2019s own step titles to the client', () => {
+    // The steps are ours. What the client needs is one thing to say yes to.
+    const withItems = {
+      id: 'c1', projectId: 'p1', templateId: 't1', templateName: 'SOP',
+      sections: [{
+        id: 'close', title: 'Close', role: 'client_review', order: 0,
+        items: [{ id: 'i1', title: 'Work through the MarkUp comments', status: 'not_started', order: 0 }],
+      }],
+      createdAt: new Date(), updatedAt: new Date(),
+    } as never;
+    const view = buildClientPortalView({ project: project(), timeline: null, checklists: [withItems] });
+    assert.ok(!JSON.stringify(view).includes('MarkUp'));
+  });
+});

@@ -134,10 +134,25 @@ are denied by default):
 | `POST /api/client-portal/[projectId]/link` `{ action: enable \| rotate \| disable }` | team | Manage the link; also writes `clientPortal.enabled`. |
 | `GET /api/client-portal/[projectId]/views?limit=N` | team | Recent opens (same shape as proposal views). |
 | `POST /api/portal/[token]/view` `{ preview?: boolean }` | token | View beacon. |
+| `POST /api/portal/[token]/approve` `{ stageKey, note? }` | token | The client signs off a review stage. |
 
-A client can make no writes at all. Everything the team does — posting updates,
-setting status, choosing what is visible — is a plain Firestore write through
-the client SDK, gated by the rules, so the Client tab updates live.
+Approval is the **only** write a client can make, and it is deliberately narrow.
+The project comes from the token, never the body; the named stage is looked up in
+that project's own checklists and rejected unless it really carries the
+`client_review` role; and the single field written is `delivery.approvals`. A
+caller cannot name another project, another field, or a stage the team never
+offered for approval. It runs in a transaction and is idempotent, so a double tap
+on a phone does not rewrite when they agreed, and it leaves `updatedAt` alone so
+a client approving cannot reorder the team's project lists.
+
+Approving ticks no checklist item. Somebody holding the link is the client saying
+yes; it is not the team saying the work is done, and letting an unauthenticated
+URL complete internal work would confuse the two. The team sees the approval on
+the stage and ticks their own step.
+
+Everything else the team does — setting status, choosing what is visible — is a
+plain Firestore write through the client SDK, gated by the rules, so the Client
+tab updates live.
 
 ## Files
 

@@ -7,6 +7,7 @@ import type { Project, ProjectChecklist } from '@/types';
 import type { ArcEntry } from '../../domain/delivery.arc';
 import { roleProgress } from '../../domain/delivery.arc';
 import type { ProjectPage, StackDefinition } from '../../domain/delivery.types';
+import { ClientApprovalCard } from '../components/ClientApprovalCard';
 import { KickoffExtras } from '../components/KickoffExtras';
 import { LaunchExtras } from '../components/LaunchExtras';
 import { buildAuditsByPageId, buildAutoVerdicts } from '../components/launch-scan';
@@ -152,6 +153,11 @@ export function StageScreen({
             </CardContent>
           </Card>
           <DeliveryScreen project={project} stack={stack} userEmail={userEmail} />
+        </div>
+      ) : stage.role === 'client_review' ? (
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+          {list}
+          <ClientApprovalCard project={project} stageKey={stage.key} />
         </div>
       ) : (
         list
