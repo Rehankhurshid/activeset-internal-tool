@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CircleAlert, Link as LinkIcon, ListPlus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -169,7 +169,19 @@ export function AddAgencyBasics({ checklists, className }: AddAgencyBasicsProps)
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
 
-  const gaps = useMemo<ChecklistGap[]>(
+  /**
+   * Which resemblances Jev judged, keyed by checklist id.
+   *
+   * The cheap word-overlap answer renders immediately; this replaces it when it
+   * lands. Overlap has to tell "Create Slack Channel with Client" from "Create
+   * the shared Slack channel with the client" without also matching "Schedule
+   * the kickoff call" to "Hold the kickoff call", and it cannot. But waiting on
+   * a judgment to show the dialog would be worse than showing a good guess, and
+   * an absent or slow judgment has to cost nothing.
+   */
+  const [judged, setJudged] = useState<Record<string, MissingBasic[]>>({});
+
+  const localGaps = useMemo<ChecklistGap[]>(
     () =>
       checklists
         .map((checklist) => ({
@@ -180,6 +192,40 @@ export function AddAgencyBasics({ checklists, className }: AddAgencyBasicsProps)
         .filter((gap) => gap.missing.length > 0),
     [checklists],
   );
+
+  const gaps = useMemo<ChecklistGap[]>(
+    () => localGaps.map((gap) => ({ ...gap, missing: judged[gap.checklistId] ?? gap.missing })),
+    [localGaps, judged],
+  );
+
+  // Asked once the dialog is open, not on every render of the trigger: the
+  // trigger renders on every project screen and this is a paid request.
+  const idsKey = localGaps.map((gap) => gap.checklistId).join('|');
+  useEffect(() => {
+    if (!open || !idsKey) return;
+    let cancelled = false;
+
+    void Promise.all(
+      idsKey.split('|').map(async (checklistId) => {
+        try {
+          const res = await deliveryRepository.judgeBasicsGap(checklistId);
+          return res?.judged ? ([checklistId, res.missing] as const) : null;
+        } catch {
+          // The guess already on screen is a fine answer. A failed judgment is
+          // not worth an error somebody has to dismiss.
+          return null;
+        }
+      }),
+    ).then((rows) => {
+      if (cancelled) return;
+      const next = Object.fromEntries(rows.filter((row): row is NonNullable<typeof row> => row !== null));
+      if (Object.keys(next).length > 0) setJudged((prev) => ({ ...prev, ...next }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, idsKey]);
 
   const total = gaps.reduce((sum, gap) => sum + gap.missing.length, 0);
   const picked = gaps.reduce(

@@ -16,7 +16,7 @@ import {
   type DocumentData,
   type UpdateData,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { fetchAuthed } from '@/lib/api-client';
 import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
@@ -395,6 +395,32 @@ export const deliveryRepository = {
    */
   addAgencyBasics(checklistId: string, chosen: MissingBasic[]): Promise<void> {
     return checklistService.addAgencyBasics(checklistId, chosen);
+  },
+
+  /**
+   * The same gap, with each resemblance judged rather than guessed at by
+   * counting shared words.
+   *
+   * Goes through a route because the judgment needs a server-only API key.
+   * Returns `judged: false` when no key is configured or the judgment failed,
+   * and the caller keeps the answer it already has rather than being told this
+   * one was judged when it was not.
+   */
+  async judgeBasicsGap(
+    checklistId: string,
+  ): Promise<{ judged: boolean; missing: MissingBasic[] } | null> {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return null;
+
+    const res = await fetch('/api/delivery/basics-gap', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checklistId }),
+    });
+    if (!res.ok) return null;
+
+    const body = (await res.json()) as { gap?: { missing?: MissingBasic[] }; judged?: boolean };
+    return { judged: Boolean(body.judged), missing: body.gap?.missing ?? [] };
   },
 
   /** This project's per-page QC questions, replacing whatever was there. */
