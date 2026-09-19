@@ -321,6 +321,50 @@ export const checklistService = {
     },
 
     /**
+     * Record what a step produced: the date the call happened, the link to the
+     * recording, the emails that went into the channel.
+     *
+     * Merges over the stored map rather than replacing it. Two people can be on
+     * the same step at once, and this reads the whole checklist before writing it
+     * back, so a full-map write would drop the field the other one filled in
+     * while this one was in flight. An emptied field is deleted rather than
+     * stored as '', so "nothing recorded" is one state and not two.
+     */
+    async updateChecklistItemValues(
+        checklistId: string,
+        sectionId: string,
+        itemId: string,
+        values: Record<string, string>
+    ): Promise<void> {
+        try {
+            const checklist = await this.getChecklist(checklistId);
+            if (!checklist) throw new DatabaseError('Checklist not found');
+
+            const sections = checklist.sections.map((section) => {
+                if (section.id !== sectionId) return section;
+                return {
+                    ...section,
+                    items: section.items.map((item) => {
+                        if (item.id !== itemId) return item;
+                        const merged = { ...(item.values ?? {}), ...values };
+                        for (const key of Object.keys(merged)) {
+                            if (!merged[key]) delete merged[key];
+                        }
+                        return { ...item, values: merged };
+                    }),
+                };
+            });
+
+            const ref = doc(db, CHECKLISTS_COLLECTION, checklistId);
+            await updateDoc(ref, { sections: stripUndefined(sections), updatedAt: Timestamp.now() });
+        } catch (error) {
+            logError(error, 'updateChecklistItemValues');
+            if (error instanceof DatabaseError) throw error;
+            throw new DatabaseError('Failed to save what was recorded');
+        }
+    },
+
+    /**
      * Delete a checklist.
      */
     async deleteChecklist(checklistId: string): Promise<void> {

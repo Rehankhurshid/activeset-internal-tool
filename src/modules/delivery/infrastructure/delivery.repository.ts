@@ -351,6 +351,23 @@ export const deliveryRepository = {
   },
 
   /**
+   * What a step recorded — the date of the call, the link to the recording, the
+   * emails that went into the channel — keyed by field id.
+   *
+   * A patch, not the whole map: the caller sends the one field that was just
+   * edited, so two people filling in two fields of the same step do not undo
+   * each other.
+   */
+  setChecklistItemValues(
+    checklistId: string,
+    sectionId: string,
+    itemId: string,
+    values: Record<string, string>,
+  ): Promise<void> {
+    return checklistService.updateChecklistItemValues(checklistId, sectionId, itemId, values);
+  },
+
+  /**
    * The SOP a checklist was copied from, or null when it is gone — a template
    * can be deleted while the projects made from it are still running.
    */

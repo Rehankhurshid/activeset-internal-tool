@@ -1,14 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Circle,
   CircleDot,
+  Copy,
   ExternalLink,
   Link as LinkIcon,
   ListChecks,
+  MessageSquareQuote,
   MoreHorizontal,
   SkipForward,
   TriangleAlert,
@@ -22,13 +26,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { daysBetweenIso, todayIso } from '@/lib/review-status';
 import { cn } from '@/lib/utils';
-import type { ChecklistItem, ChecklistItemLink, ChecklistItemStatus } from '@/types';
+import type {
+  ChecklistItem,
+  ChecklistItemField,
+  ChecklistItemLink,
+  ChecklistItemStatus,
+  ChecklistItemTemplate,
+} from '@/types';
 import type { SectionStage } from '../../domain/delivery.arc';
 import type { AutoCheckVerdict } from '../../domain/delivery.types';
 import { deliveryRepository } from '../../infrastructure/delivery.repository';
+import { copyText } from './copy-text';
 
 /**
  * The items of one stage of the arc.
@@ -112,21 +124,259 @@ function dueState(
   };
 }
 
+/**
+ * Tidies a value on the way out of the field, not on the way in.
+ *
+ * Someone typing "meet.google.com/abc" has given us a URL; storing it without a
+ * scheme makes it a dead link when it is clicked three weeks later. Emails are
+ * kept as one comma-separated string because that is what gets pasted into
+ * Slack's invite box, and re-spacing them is the only thing worth doing to them.
+ */
+function normalizeFieldValue(type: ChecklistItemField['type'], raw: string): string {
+  const value = raw.trim();
+  if (!value) return '';
+  if (type === 'url' && !/^[a-z][a-z0-9+.-]*:/i.test(value)) return `https://${value}`;
+  if (type === 'emails') {
+    return value
+      .split(/[,;\s]+/)
+      .filter(Boolean)
+      .join(', ');
+  }
+  return value;
+}
+
+/** Only an http(s) value is safe to hand to an anchor, and only that is worth opening. */
+function openableUrl(value: string): string | null {
+  return /^https?:\/\//i.test(value) ? value : null;
+}
+
+interface TemplateChoice {
+  label: string;
+  /** What lands on the clipboard. */
+  text: string;
+  /** The option this choice is, when it is one, so it can be read before it is sent. */
+  option?: string;
+}
+
+/** An option is a sentence and a button is not, so the button gets its opening words. */
+function shortOptionLabel(option: string): string {
+  const line = option.split('\n')[0].trim();
+  const words = line.split(/\s+/);
+  if (words.length <= 5 && line.length <= 32) return line;
+  return `${words.slice(0, 5).join(' ').slice(0, 32)}…`;
+}
+
+/**
+ * What the copy buttons put on the clipboard.
+ *
+ * With no options there is one message. With them, each option is composed onto
+ * the body, because an option on its own is a fragment — "every two weeks" is
+ * not something anyone can send — and the first is the one to send unless there
+ * is a reason not to.
+ */
+function templateChoices(template: ChecklistItemTemplate): TemplateChoice[] {
+  const body = (template.body ?? '').trim();
+  const options = (template.options ?? []).map((option) => option.trim()).filter(Boolean);
+  if (options.length === 0) {
+    return [{ label: template.label?.trim() || 'Copy message', text: body }];
+  }
+  return options.map((option) => ({
+    label: shortOptionLabel(option),
+    text: body ? `${body}\n\n${option}` : option,
+    option,
+  }));
+}
+
+interface ItemFieldProps {
+  field: ChecklistItemField;
+  value: string;
+  /** Ticked, expected, and still empty. Worth saying; never worth blocking. */
+  missing: boolean;
+  disabled?: boolean;
+  onCommit: (value: string) => void;
+}
+
+function ItemField({ field, value, missing, disabled, onCommit }: ItemFieldProps) {
+  const inputId = useId();
+  const [draft, setDraft] = useState(value);
+  // Every write re-renders this row through the subscription. Adopting the
+  // stored value while someone is mid-sentence would eat their keystrokes, so it
+  // is only adopted when nobody is in the field.
+  const editing = useRef(false);
+
+  useEffect(() => {
+    if (!editing.current) setDraft(value);
+  }, [value]);
+
+  const commit = () => {
+    editing.current = false;
+    const next = normalizeFieldValue(field.type, draft);
+    if (next !== draft) setDraft(next);
+    if (next !== value) onCommit(next);
+  };
+
+  const openable = field.type === 'url' ? openableUrl(value) : null;
+
+  return (
+    <div className="min-w-0">
+      <label
+        htmlFor={inputId}
+        className="flex flex-wrap items-center gap-x-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+      >
+        {field.label}
+        {missing && (
+          <span className="font-normal normal-case tracking-normal text-amber-700 dark:text-amber-300">
+            not recorded
+          </span>
+        )}
+      </label>
+      <div className="mt-1 flex items-center gap-1.5">
+        <Input
+          id={inputId}
+          // The base size is deliberate: anything under 16px makes iOS Safari
+          // zoom the whole page on focus, and this gets used from a phone.
+          className={cn('h-9', missing && 'border-amber-500/50')}
+          type={field.type === 'date' ? 'date' : field.type === 'url' ? 'url' : 'text'}
+          inputMode={field.type === 'emails' ? 'email' : field.type === 'url' ? 'url' : undefined}
+          autoComplete="off"
+          placeholder={field.placeholder ?? (field.type === 'emails' ? 'name@client.com, …' : undefined)}
+          disabled={disabled}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onFocus={() => {
+            editing.current = true;
+          }}
+          onBlur={commit}
+          // Enter is how a phone keyboard finishes; without this the value only
+          // saves when something else happens to take the focus away.
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur();
+          }}
+        />
+        {openable && (
+          <a
+            href={openable}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${field.label}`}
+            className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
+      </div>
+      {field.type === 'emails' && (
+        <p className="mt-1 text-[10px] text-muted-foreground">Commas between them.</p>
+      )}
+    </div>
+  );
+}
+
+interface ItemTemplateProps {
+  template: ChecklistItemTemplate;
+}
+
+/**
+ * The message this step needs sent, ready to paste.
+ *
+ * The body is one tap away rather than hidden: a button that silently fills the
+ * clipboard with words nobody has read is how a client gets sent a placeholder.
+ */
+function ItemTemplate({ template }: ItemTemplateProps) {
+  const [open, setOpen] = useState(false);
+  const choices = useMemo(() => templateChoices(template), [template]);
+
+  const copy = async (text: string) => {
+    if (await copyText(text)) {
+      toast.success('Copied — paste it to the client');
+      return;
+    }
+    // The clipboard is refused on an insecure origin and by some mobile
+    // browsers. Opening the message is the only useful answer left: it can be
+    // selected and copied by hand.
+    setOpen(true);
+    toast.error('Could not reach the clipboard — the message is below, copy it by hand');
+  };
+
+  return (
+    <div className="mt-2 rounded-md border border-dashed bg-muted/30 p-2">
+      <div className="flex items-center gap-1.5">
+        <MessageSquareQuote className="h-3 w-3 shrink-0 text-muted-foreground" />
+        <span className="text-[11px] font-medium text-muted-foreground">Message</span>
+        <button
+          type="button"
+          onClick={() => setOpen((was) => !was)}
+          aria-expanded={open}
+          className="ml-auto inline-flex items-center gap-0.5 rounded-sm text-[10px] text-muted-foreground hover:text-foreground"
+        >
+          {open ? 'Hide' : 'Read it'}
+          {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </button>
+      </div>
+
+      {open && template.body?.trim() && (
+        <p className="mt-1.5 whitespace-pre-line rounded-md bg-background/70 p-2 text-[11px] leading-relaxed text-muted-foreground">
+          {template.body.trim()}
+        </p>
+      )}
+
+      <div className="mt-1.5 flex flex-col gap-1.5">
+        {choices.map((choice, index) => (
+          <div key={`${index}-${choice.label}`} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={index === 0 ? 'secondary' : 'outline'}
+              className="h-7 max-w-full px-2 text-xs"
+              onClick={() => copy(choice.text)}
+            >
+              <Copy className="h-3 w-3" />
+              <span className="truncate">{choice.label}</span>
+            </Button>
+            {index === 0 && choices.length > 1 && (
+              <span className="text-[10px] text-muted-foreground">Suggest this one</span>
+            )}
+            {open && choice.option && (
+              <p className="w-full whitespace-pre-line rounded-md bg-background/70 p-2 text-[11px] leading-relaxed text-muted-foreground">
+                {choice.option}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface StageChecklistRowProps {
   item: ChecklistItem;
   status: ChecklistItemStatus;
   /** What the last page scans say about this item, when it names an auto check. */
   verdict?: AutoCheckVerdict;
+  /** What this step recorded, with anything still in flight already folded in. */
+  values: Record<string, string>;
   onChange: (status: ChecklistItemStatus) => void;
+  onValueCommit: (fieldId: string, value: string) => void;
   disabled?: boolean;
 }
 
-function StageChecklistRow({ item, status, verdict, onChange, disabled }: StageChecklistRowProps) {
+function StageChecklistRow({
+  item,
+  status,
+  verdict,
+  values,
+  onChange,
+  onValueCommit,
+  disabled,
+}: StageChecklistRowProps) {
   const config = STATUS_CONFIG[status];
   const StatusIcon = config.icon;
   const answered = status === 'completed' || status === 'skipped';
   const links = linksOf(item);
   const due = dueState(item.dueDate, answered);
+  const fields = (item.fields ?? []).filter((field) => field.id);
+  const template = item.template;
+  const hasTemplate = Boolean(template && (template.body?.trim() || template.options?.length));
 
   return (
     <div className="group flex items-start gap-2.5 px-3 py-2 hover:bg-muted/40">
@@ -273,6 +523,31 @@ function StageChecklistRow({ item, status, verdict, onChange, disabled }: StageC
             </span>
           )}
         </div>
+
+        {/* What the step produced, recorded where the step is. One column on a
+            phone, two once there is room for them. */}
+        {fields.length > 0 && (
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {fields.map((field) => (
+              <ItemField
+                key={field.id}
+                field={field}
+                value={values[field.id] ?? ''}
+                // Completed, not answered: skipped means the step did not apply
+                // here, and nothing is missing from a step nobody did.
+                missing={
+                  status === 'completed' &&
+                  Boolean(field.expected) &&
+                  !(values[field.id] ?? '').trim()
+                }
+                disabled={disabled}
+                onCommit={(value) => onValueCommit(field.id, value)}
+              />
+            ))}
+          </div>
+        )}
+
+        {hasTemplate && template && <ItemTemplate template={template} />}
       </div>
 
       {!disabled && (
@@ -332,6 +607,10 @@ export function StageChecklist({
   // Ticks already written but not yet echoed by the subscription, so a click
   // lands immediately rather than after a round trip.
   const [overrides, setOverrides] = useState<Record<string, ChecklistItemStatus>>({});
+  // The same for recorded values, item key → field id → value. A blur writes and
+  // the subscription echoes a whole new checklist a moment later; without this
+  // the field would show the stored value again on the way through.
+  const [valueOverrides, setValueOverrides] = useState<Record<string, Record<string, string>>>({});
 
   const { checklistId, items } = stage;
   const sectionId = stage.section.id;
@@ -339,6 +618,12 @@ export function StageChecklist({
   const serverStatuses = useMemo(() => {
     const map: Record<string, ChecklistItemStatus> = {};
     for (const item of items) map[itemKey(checklistId, sectionId, item.id)] = item.status;
+    return map;
+  }, [items, checklistId, sectionId]);
+
+  const serverValues = useMemo(() => {
+    const map: Record<string, Record<string, string>> = {};
+    for (const item of items) map[itemKey(checklistId, sectionId, item.id)] = item.values ?? {};
     return map;
   }, [items, checklistId, sectionId]);
 
@@ -356,6 +641,26 @@ export function StageChecklist({
       return changed ? next : prev;
     });
   }, [serverStatuses]);
+
+  // Same discipline as the ticks: a pending value is dropped the moment the
+  // stored one agrees with it, so someone else's edit is not masked by ours.
+  useEffect(() => {
+    setValueOverrides((prev) => {
+      const next: Record<string, Record<string, string>> = {};
+      let changed = false;
+      for (const [key, pending] of Object.entries(prev)) {
+        const stored = serverValues[key];
+        const remaining: Record<string, string> = {};
+        for (const [fieldId, value] of Object.entries(pending)) {
+          if (stored === undefined || (stored[fieldId] ?? '') === value) changed = true;
+          else remaining[fieldId] = value;
+        }
+        if (Object.keys(remaining).length > 0) next[key] = remaining;
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [serverValues]);
 
   const handleChange = useCallback(
     async (itemId: string, status: ChecklistItemStatus) => {
@@ -381,6 +686,32 @@ export function StageChecklist({
       }
     },
     [overrides, userEmail, checklistId, sectionId],
+  );
+
+  const handleValueCommit = useCallback(
+    async (itemId: string, fieldId: string, value: string) => {
+      const key = itemKey(checklistId, sectionId, itemId);
+      const previous = valueOverrides[key]?.[fieldId];
+      setValueOverrides((prev) => ({ ...prev, [key]: { ...prev[key], [fieldId]: value } }));
+      try {
+        // One field, not the whole map: two people can be on the same step.
+        await deliveryRepository.setChecklistItemValues(checklistId, sectionId, itemId, {
+          [fieldId]: value,
+        });
+      } catch {
+        setValueOverrides((prev) => {
+          const forItem = { ...prev[key] };
+          if (previous === undefined) delete forItem[fieldId];
+          else forItem[fieldId] = previous;
+          const next = { ...prev };
+          if (Object.keys(forItem).length > 0) next[key] = forItem;
+          else delete next[key];
+          return next;
+        });
+        toast.error('Could not save that — it has been put back');
+      }
+    },
+    [valueOverrides, checklistId, sectionId],
   );
 
   if (items.length === 0) {
@@ -416,8 +747,13 @@ export function StageChecklist({
             item={item}
             status={overrides[itemKey(checklistId, sectionId, item.id)] ?? item.status}
             verdict={autoVerdicts?.[item.id]}
+            values={{
+              ...(item.values ?? {}),
+              ...valueOverrides[itemKey(checklistId, sectionId, item.id)],
+            }}
             disabled={disabled}
             onChange={(status) => handleChange(item.id, status)}
+            onValueCommit={(fieldId, value) => handleValueCommit(item.id, fieldId, value)}
           />
         ))}
       </div>

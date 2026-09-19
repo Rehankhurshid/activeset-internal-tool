@@ -1,7 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { SOPTemplate, SOPTemplateSection, SOPTemplateItem, ChecklistItemLink, StageRole } from '@/types';
+import {
+    SOPTemplate,
+    SOPTemplateSection,
+    SOPTemplateItem,
+    ChecklistItemLink,
+    ChecklistItemField,
+    ChecklistItemTemplate,
+    StageRole,
+} from '@/types';
 import { checklistService } from '@/services/ChecklistService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +42,7 @@ import {
     X,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { templateToMarkdown, parseMarkdownToTemplate } from '@/lib/template-export';
+import { templateToMarkdown, parseMarkdownToTemplate, fieldIdFromLabel } from '@/lib/template-export';
 // The scan signals come from the delivery domain, not from the component that
 // renders them, so the Creator does not depend on another screen's UI.
 import { AUTO_CHECK_IDS } from '@/modules/delivery/domain/delivery.types';
@@ -60,6 +68,35 @@ import { CSS } from '@dnd-kit/utilities';
 /** A Select cannot hold an empty value, so "no role" and "no signal" need sentinels. */
 const NO_ROLE = 'none';
 const NO_CHECK = 'none';
+
+/** What each field type is called on screen, and what it is for. */
+const FIELD_TYPE_OPTIONS: { value: ChecklistItemField['type']; label: string }[] = [
+    { value: 'date', label: 'Date' },
+    { value: 'url', label: 'Link' },
+    { value: 'text', label: 'Text' },
+    { value: 'emails', label: 'Emails' },
+];
+
+/**
+ * The ids a field needs before it is saved.
+ *
+ * The id is normally minted when the label loses focus; this catches the field
+ * whose label was typed and then saved straight away. A field that already has an
+ * id keeps it — re-deriving it from a renamed label would orphan every value
+ * already recorded against it.
+ */
+const fillFieldIds = (
+    fields: ChecklistItemField[] | undefined,
+): ChecklistItemField[] | undefined => {
+    if (!fields?.length) return fields;
+    const taken = fields.map((field) => field.id).filter(Boolean);
+    return fields.map((field) => {
+        if (field.id) return field;
+        const id = fieldIdFromLabel(field.label, taken);
+        taken.push(id);
+        return { ...field, id };
+    });
+};
 
 /**
  * What a section's role is called on screen.
@@ -132,6 +169,11 @@ const stripUid = (sections: EditableSection[]): SOPTemplateSection[] =>
             referenceLink: it.referenceLink,
             hoverImage: it.hoverImage,
             assignee: it.assignee,
+            fields: fillFieldIds(it.fields),
+            template: it.template,
+            // `it.values` is left behind on purpose: what a project recorded when
+            // it ticked a step is that project's, and a template carrying it would
+            // hand the next client this one's dates and links.
             completedAt: it.completedAt,
             completedBy: it.completedBy,
             order: iIdx,
@@ -558,12 +600,28 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                                     <code>👤 Assignee: name@activeset.co</code>, <code>⛔ Blocking: yes</code>,{' '}
                                     <code>📅 Due: 2026-01-31</code>. Anything else is ignored.
                                 </p>
+                                <p>
+                                    What to record when the step is done is one bullet per field:{' '}
+                                    <code>🧾 Field: Call date (date, expected)</code> — the type is{' '}
+                                    <code>date | url | text | emails</code>, and{' '}
+                                    <code>expected</code> only flags a tick with nothing filled in. Add{' '}
+                                    <code>🧾 Field placeholder: …</code> under it for a hint, and{' '}
+                                    <code>🧾 Field id: …</code> only to keep an id that no longer matches
+                                    its label — renaming a field otherwise orphans what projects recorded.
+                                </p>
+                                <p>
+                                    The message to copy and send is{' '}
+                                    <code>💬 Message label:</code> for the button,{' '}
+                                    <code>💬 Message:</code> repeated once per line of the message, and{' '}
+                                    <code>💬 Option: Weekly</code> per choice, the first being the
+                                    recommendation. What a project <em>recorded</em> is never written here.
+                                </p>
                                 <p>Switch to <strong>Visual</strong> to preview, drag-reorder, or save.</p>
                             </div>
                             <Textarea
                                 value={markdown}
                                 onChange={(e) => setMarkdown(e.target.value)}
-                                placeholder={`# 📝 Template name\n> Description\n\n---\n\n## 📁 Section title\n\n> Role: kickoff\n\n- [ ] 📝 Item title\n  - 📋 How-to: What to actually do.\n  - 📋 How-to: A second line, if it needs one.\n  - 🔗 Link: [Screaming Frog](https://example.com)\n  - ⛔ Blocking: yes`}
+                                placeholder={`# 📝 Template name\n> Description\n\n---\n\n## 📁 Section title\n\n> Role: kickoff\n\n- [ ] 📝 Item title\n  - 📋 How-to: What to actually do.\n  - 📋 How-to: A second line, if it needs one.\n  - 🔗 Link: [Screaming Frog](https://example.com)\n  - ⛔ Blocking: yes\n  - 🧾 Field: Call date (date, expected)\n  - 💬 Message label: Copy the message for the client\n  - 💬 Message: Hi — how often would you like to sync?\n  - 💬 Option: Weekly`}
                                 className="font-mono text-xs min-h-[480px]"
                                 spellCheck={false}
                             />
@@ -780,12 +838,49 @@ function SortableItemRow({
     const writeLinks = (next: ChecklistItemLink[]) =>
         onUpdateItem(sIndex, iIndex, { links: next, referenceLink: undefined });
 
+    /** What to record when the step is done. An empty list is no list at all. */
+    const fields: ChecklistItemField[] = item.fields || [];
+    const writeFields = (next: ChecklistItemField[]) =>
+        onUpdateItem(sIndex, iIndex, { fields: next.length ? next : undefined });
+    const patchField = (fIdx: number, updates: Partial<ChecklistItemField>) =>
+        writeFields(fields.map((field, i) => (i === fIdx ? { ...field, ...updates } : field)));
+
+    /**
+     * Mint the id from the label, once, when the author moves on.
+     *
+     * Doing it per keystroke would freeze the id on the first letter; doing it on
+     * every edit would rewrite it when a field is renamed, orphaning the values
+     * projects have already recorded against the old id. So: only if it has none.
+     */
+    const nameField = (fIdx: number) => {
+        const field = fields[fIdx];
+        if (!field || field.id || !field.label.trim()) return;
+        const taken = fields.map((f) => f.id).filter(Boolean);
+        patchField(fIdx, { id: fieldIdFromLabel(field.label, taken) });
+    };
+
+    /** The message to copy and send, dropped entirely once nothing is left in it. */
+    const message = item.template;
+    const options = message?.options || [];
+    const writeMessage = (updates: Partial<ChecklistItemTemplate>) => {
+        const next: ChecklistItemTemplate = {
+            label: message?.label,
+            body: message?.body || '',
+            options: message?.options,
+            ...updates,
+        };
+        const empty = !next.body && !next.label && !(next.options || []).length;
+        onUpdateItem(sIndex, iIndex, { template: empty ? undefined : next });
+    };
+
     // What the collapsed row admits to carrying, so nobody has to open 70 rows
     // to find the one with the how-to on it.
     const carried = [
         item.howTo ? 'how-to' : null,
         links.length ? `${links.length} link${links.length > 1 ? 's' : ''}` : null,
         item.notes ? 'notes' : null,
+        fields.length ? `${fields.length} field${fields.length > 1 ? 's' : ''}` : null,
+        message ? `message${options.length ? ` · ${options.length} options` : ''}` : null,
         item.assignee ? item.assignee : null,
         item.dueDate ? `due ${item.dueDate}` : null,
         item.autoCheck ? 'scan' : null,
@@ -931,6 +1026,149 @@ function SortableItemRow({
                             placeholder="Anything worth knowing next time."
                             className="text-xs min-h-[48px]"
                         />
+                    </div>
+
+                    {/*
+                      A tick cannot hold the date the call happened or where the
+                      recording lives, and those are the things anyone needs three
+                      weeks later. These are the boxes Delivery puts beside it.
+                    */}
+                    <div className="space-y-1">
+                        <Label className="text-xs">Record when done</Label>
+                        {fields.map((field, fIdx) => (
+                            <div key={fIdx} className="space-y-1 rounded-md bg-background/60 p-2">
+                                <div className="flex gap-2 items-center">
+                                    <Input
+                                        value={field.label}
+                                        onChange={(e) => patchField(fIdx, { label: e.target.value })}
+                                        onBlur={() => nameField(fIdx)}
+                                        placeholder="What to record, e.g. Call date"
+                                        className="h-7 text-xs"
+                                    />
+                                    <Select
+                                        value={field.type}
+                                        onValueChange={(value) =>
+                                            patchField(fIdx, { type: value as ChecklistItemField['type'] })
+                                        }
+                                    >
+                                        <SelectTrigger
+                                            className="h-7 text-xs w-[7rem] flex-shrink-0"
+                                            aria-label="Field type"
+                                        >
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {FIELD_TYPE_OPTIONS.map((option) => (
+                                                <SelectItem key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-muted-foreground flex-shrink-0"
+                                        onClick={() => writeFields(fields.filter((_, i) => i !== fIdx))}
+                                        aria-label="Remove field"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                                <div className="flex gap-2 items-center">
+                                    <Input
+                                        value={field.placeholder || ''}
+                                        onChange={(e) =>
+                                            patchField(fIdx, { placeholder: e.target.value || undefined })
+                                        }
+                                        placeholder="Hint (optional)"
+                                        className="h-7 text-xs"
+                                    />
+                                    {/*
+                                      Flagged as missing when the step is ticked
+                                      without it — never a gate. A step that is
+                                      done is done.
+                                    */}
+                                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground flex-shrink-0 pr-7">
+                                        <Checkbox
+                                            checked={!!field.expected}
+                                            onCheckedChange={(checked) =>
+                                                patchField(fIdx, {
+                                                    expected: checked === true ? true : undefined,
+                                                })
+                                            }
+                                        />
+                                        Expected
+                                    </label>
+                                </div>
+                            </div>
+                        ))}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground"
+                            onClick={() => writeFields([...fields, { id: '', label: '', type: 'text' }])}
+                        >
+                            <Plus className="h-3 w-3 mr-1" /> Add field
+                        </Button>
+                    </div>
+
+                    {/*
+                      Most steps that wait on a client wait because nobody has
+                      asked yet, and asking means writing the same message again.
+                    */}
+                    <div className="space-y-1">
+                        <Label className="text-xs">Message to copy and send</Label>
+                        <Input
+                            value={message?.label || ''}
+                            onChange={(e) => writeMessage({ label: e.target.value || undefined })}
+                            placeholder="What the button says, e.g. Copy the message for the client"
+                            className="h-7 text-xs"
+                        />
+                        <Textarea
+                            value={message?.body || ''}
+                            onChange={(e) => writeMessage({ body: e.target.value })}
+                            placeholder="The message itself, ready to paste."
+                            className="text-xs min-h-[72px]"
+                        />
+                        {options.map((option, oIdx) => (
+                            <div key={oIdx} className="flex gap-2 items-center">
+                                <Input
+                                    value={option}
+                                    onChange={(e) =>
+                                        writeMessage({
+                                            options: options.map((o, i) =>
+                                                i === oIdx ? e.target.value : o,
+                                            ),
+                                        })
+                                    }
+                                    placeholder="A choice to put to them, e.g. Weekly"
+                                    className="h-7 text-xs"
+                                />
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground flex-shrink-0"
+                                    onClick={() =>
+                                        writeMessage({
+                                            options: options.filter((_, i) => i !== oIdx),
+                                        })
+                                    }
+                                    aria-label="Remove option"
+                                >
+                                    <X className="h-3 w-3" />
+                                </Button>
+                            </div>
+                        ))}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground"
+                            onClick={() => writeMessage({ options: [...options, ''] })}
+                        >
+                            {/* The first option is the recommendation, so order matters. */}
+                            <Plus className="h-3 w-3 mr-1" /> Add option
+                        </Button>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">

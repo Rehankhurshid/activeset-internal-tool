@@ -3,6 +3,8 @@ import {
     SOPTemplateSection,
     SOPTemplateItem,
     ChecklistItemLink,
+    ChecklistItemField,
+    ChecklistItemTemplate,
     StageRole,
 } from '@/types';
 import jsPDF from 'jspdf';
@@ -21,6 +23,17 @@ import jsPDF from 'jspdf';
  * lines of prose, where a sub-bullet is a single line — so each of its lines
  * becomes its own `How-to:` bullet and the parser joins them back. A file people
  * hand-edit is worth more than one long line with escaped newlines in it.
+ *
+ * The two list-of-records shapes follow from the same rule. A field is one
+ * `Field: Label (type, expected)` bullet, with the attributes that do not fit on
+ * it — an id that has drifted from its label, a placeholder — as `Field id:` and
+ * `Field placeholder:` bullets attaching to the field above them. A message is a
+ * `Message label:` bullet, `Message:` repeated per line of body, and one
+ * `Option:` bullet per choice.
+ *
+ * What is deliberately never written is `values`: what a project recorded when it
+ * ticked a step is that project's, and a template that carried it would hand one
+ * client's dates and links to the next.
  */
 
 /** Every role the parser will accept, so a hand-typed one that matches nothing is dropped instead. */
@@ -44,7 +57,48 @@ const SUB_BULLET_KEYS = new Set([
     'blocking',
     'due',
     'duedate',
+    'field',
+    'fieldid',
+    'fieldtype',
+    'fieldplaceholder',
+    'fieldexpected',
+    'message',
+    'messagelabel',
+    'messagebody',
+    'option',
+    'options',
 ]);
+
+/** The field types the parser will accept; anything else is read as free text. */
+const FIELD_TYPES: ChecklistItemField['type'][] = ['date', 'url', 'text', 'emails'];
+
+/**
+ * The id a field's label alone implies, given the fields written before it.
+ *
+ * Nobody should have to invent a key, so the id is the slug of the label. The
+ * writer and the parser derive it the same way, which is what lets the Markdown
+ * stay quiet: only an id that has *drifted* from its label — a field renamed
+ * after values were recorded against it — has to be written down.
+ */
+export function fieldIdFromLabel(label: string, taken: Iterable<string>): string {
+    const base =
+        label
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '') || 'field';
+    const used = new Set(taken);
+    if (!used.has(base)) return base;
+    let n = 2;
+    while (used.has(`${base}-${n}`)) n += 1;
+    return `${base}-${n}`;
+}
+
+/** The same derivation, against the labels of the fields already in the list. */
+function derivedFieldId(previous: { label: string }[], label: string): string {
+    const taken: string[] = [];
+    for (const field of previous) taken.push(fieldIdFromLabel(field.label, taken));
+    return fieldIdFromLabel(label, taken);
+}
 
 /**
  * The role a section plays, tolerating the tag that came before roles existed.
@@ -70,6 +124,49 @@ function multilineSubBullets(emoji: string, key: string, value: string): string[
     return value
         .split('\n')
         .map((line) => `  - ${emoji} ${key}: ${line}`.replace(/\s+$/, ''));
+}
+
+/**
+ * The fields to record when the step is done.
+ *
+ * The type and the "expected" flag ride in a parenthetical because that is how
+ * anyone would write it by hand; the id follows only when it no longer matches
+ * the label, and the placeholder gets its own line because it is a sentence.
+ */
+function fieldSubBullets(fields: ChecklistItemField[]): string[] {
+    const lines: string[] = [];
+
+    fields.forEach((field, index) => {
+        const tail = [field.type, field.expected ? 'expected' : null].filter(Boolean).join(', ');
+        lines.push(`  - 🧾 Field: ${field.label} (${tail})`);
+        // An id the editor has not filled in yet is the derived one in all but
+        // name, so it is written as the silence rather than as an empty bullet.
+        const derived = derivedFieldId(fields.slice(0, index), field.label);
+        const id = field.id || derived;
+        if (id !== derived) {
+            lines.push(`  - 🧾 Field id: ${id}`);
+        }
+        if (field.placeholder) {
+            lines.push(`  - 🧾 Field placeholder: ${field.placeholder}`);
+        }
+    });
+
+    return lines;
+}
+
+/** The message to copy and send: its button label, its body a line at a time, then the choices. */
+function messageSubBullets(message: ChecklistItemTemplate): string[] {
+    const lines: string[] = [];
+
+    if (message.label) {
+        lines.push(`  - 💬 Message label: ${message.label}`);
+    }
+    lines.push(...multilineSubBullets('💬', 'Message', message.body || ''));
+    for (const option of message.options || []) {
+        lines.push(`  - 💬 Option: ${option}`);
+    }
+
+    return lines;
 }
 
 /** Sub-bullets for one item: one line per fact it carries, in a fixed order so the file is stable. */
@@ -105,6 +202,14 @@ function itemSubBullets(item: SOPTemplateItem): string[] {
     if (item.dueDate) {
         lines.push(`  - 📅 Due: ${item.dueDate}`);
     }
+    if (item.fields?.length) {
+        lines.push(...fieldSubBullets(item.fields));
+    }
+    if (item.template) {
+        lines.push(...messageSubBullets(item.template));
+    }
+    // `item.values` is missing on purpose. See the note at the top of the file:
+    // a template that carried it would seed every project with another's answers.
 
     return lines;
 }
@@ -163,6 +268,14 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
 
     let currentSection: SOPTemplateSection | null = null;
     let currentItem: SOPTemplateItem | null = null;
+    /**
+     * The message under construction, assembled across several bullets.
+     *
+     * `body` is only a string once a `Message:` line has been read, so it is kept
+     * loose here and settled when the item is flushed — otherwise a message whose
+     * label came first would start its body with a blank line.
+     */
+    let message: { label?: string; body?: string; options?: string[] } | null = null;
     let descriptionCaptured = false;
 
     const titleRegex = /^#\s+(.+)$/;
@@ -180,6 +293,9 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
     const keyedRegex = /^([A-Za-z][A-Za-z -]*?)\s*:\s*(.*)$/;
     // "[Label](https://…)" — greedy, so a label containing "]" still parses.
     const mdLinkRegex = /^\[(.*)\]\((.*)\)$/;
+    // "Call date (date, expected)" — greedy, so only the last parenthetical is
+    // read as the tail and a label may contain brackets of its own.
+    const fieldTailRegex = /^(.*)\(([^()]*)\)$/;
     // Section-level "> Role: pages", written under the section heading, and the
     // "> Stage: kickoff" that came before it.
     const roleRegex = /^>\s*Role\s*:\s*(.+)$/i;
@@ -217,11 +333,53 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
         return value ? { label: '', url: value } : undefined;
     };
 
+    /** A type name written by hand, case and spacing ignored. */
+    const parseFieldType = (raw: string): ChecklistItemField['type'] | undefined => {
+        const value = raw.trim().toLowerCase();
+        return FIELD_TYPES.find((type) => type === value);
+    };
+
+    /**
+     * "Call date (date, expected)" — the label, then a tail saying what it is.
+     *
+     * The tail only counts when every token in it is one we know, so "Recording
+     * link (Fathom)" keeps its whole label and falls back to a free-text field
+     * rather than losing half its name to a guess.
+     */
+    const parseField = (raw: string, previous: ChecklistItemField[]): ChecklistItemField => {
+        const value = raw.trim();
+        let label = value;
+        let type: ChecklistItemField['type'] = 'text';
+        let expected = false;
+
+        const tail = value.match(fieldTailRegex);
+        if (tail) {
+            const tokens = tail[2]
+                .split(',')
+                .map((token) => token.trim().toLowerCase())
+                .filter(Boolean);
+            const known = tokens.every((token) => token === 'expected' || !!parseFieldType(token));
+            if (tokens.length > 0 && known) {
+                label = tail[1].trim();
+                type = tokens.map(parseFieldType).find(Boolean) ?? 'text';
+                expected = tokens.includes('expected');
+            }
+        }
+
+        const field: ChecklistItemField = { id: derivedFieldId(previous, label), label, type };
+        if (expected) field.expected = true;
+        return field;
+    };
+
     const flushItem = () => {
         if (currentSection && currentItem) {
+            // Settle the message before the item leaves: a label or a list of
+            // options with no body still describes a message worth keeping.
+            if (message) currentItem.template = { ...message, body: message.body ?? '' };
             currentSection.items.push(currentItem);
         }
         currentItem = null;
+        message = null;
     };
 
     const flushSection = () => {
@@ -367,6 +525,51 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
                     case 'due':
                     case 'duedate':
                         currentItem.dueDate = value;
+                        continue;
+                    case 'field': {
+                        const fields = currentItem.fields || [];
+                        currentItem.fields = [...fields, parseField(value, fields)];
+                        continue;
+                    }
+                    case 'fieldid':
+                    case 'fieldtype':
+                    case 'fieldplaceholder':
+                    case 'fieldexpected': {
+                        // An attribute of the field the last `Field:` line opened.
+                        // With no field above it there is nothing to attach to, so
+                        // it is dropped like any other stray bullet.
+                        const fields = currentItem.fields;
+                        if (!fields?.length) continue;
+                        const field = fields[fields.length - 1];
+                        if (key === 'fieldid') {
+                            // An empty id means "the one the label implies", which
+                            // is already what parseField put there.
+                            if (value) field.id = value;
+                        } else if (key === 'fieldtype') {
+                            field.type = parseFieldType(value) ?? field.type;
+                        } else if (key === 'fieldplaceholder') {
+                            if (value) field.placeholder = value;
+                        } else if (/^(yes|true|1)$/i.test(value)) {
+                            field.expected = true;
+                        }
+                        continue;
+                    }
+                    case 'messagelabel':
+                        message = { ...(message || {}), label: value };
+                        continue;
+                    case 'message':
+                    case 'messagebody':
+                        message = { ...(message || {}), body: appendLine(message?.body, value) };
+                        continue;
+                    case 'option':
+                    case 'options':
+                        // A choice with nothing in it is not a choice to offer.
+                        if (value) {
+                            message = {
+                                ...(message || {}),
+                                options: [...(message?.options || []), value],
+                            };
+                        }
                         continue;
                 }
 
