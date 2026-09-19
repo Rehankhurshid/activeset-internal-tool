@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/review-digest",
       "schedule": "0 22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/delivery-nudge",
+      "schedule": "35 3 * * *"
     }
   ]
 }

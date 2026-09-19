@@ -6,6 +6,8 @@ import {
 } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
 import { getBaseUrl } from '@/lib/base-url';
+// The bot ONLY pings internal team members, never clients.
+import { isTeamMember } from '@/lib/team';
 import {
   lookupUserIdByEmail,
   mention,
@@ -29,25 +31,7 @@ const UPCOMING_WINDOW_DAYS = 3;
 // task is actually most pressing (and falls to `early-bird` when nothing else is).
 const STALE_NO_DUE_SENTINEL = -100;
 
-// Team-only filter: the bot ONLY pings internal team members, never clients.
-// Same convention as src/lib/api-auth.ts (requireCaller) and the access-control rule.
-const TEAM_DOMAIN = '@activeset.co';
-// Optional escape hatch — comma-separated extra team emails (e.g. contractors on
-// another domain). Anything outside this set + the team domain is treated as a
-// client and skipped silently.
-const TEAM_ALLOWLIST: ReadonlySet<string> = new Set(
-  (process.env.NAG_TEAM_EMAILS ?? '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean),
-);
 
-function isTeamMember(email: string): boolean {
-  const e = email.toLowerCase().trim();
-  if (!e) return false;
-  if (e.endsWith(TEAM_DOMAIN)) return true;
-  return TEAM_ALLOWLIST.has(e);
-}
 
 interface NagTask {
   id: string;
@@ -144,15 +128,20 @@ function daysSince(d: Date): number {
   return Math.floor((Date.now() - d.getTime()) / 86_400_000);
 }
 
-async function loadProjectNames(projectIds: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+interface NagProject {
+  name?: string;
+  status?: string;
+}
+
+async function loadProjects(projectIds: string[]): Promise<Map<string, NagProject>> {
+  const out = new Map<string, NagProject>();
   await Promise.all(
     projectIds.map(async (id) => {
       try {
         const snap = await adminDb.collection(PROJECTS_COLLECTION).doc(id).get();
         if (snap.exists) {
-          const name = (snap.data() as { name?: string } | undefined)?.name;
-          if (name) out.set(id, name);
+          const data = snap.data() as NagProject | undefined;
+          out.set(id, { name: data?.name, status: data?.status });
         }
       } catch {
         /* ignore */
@@ -161,6 +150,19 @@ async function loadProjectNames(projectIds: string[]): Promise<Map<string, strin
   );
   return out;
 }
+
+/**
+ * Projects nobody should be chased about.
+ *
+ * The bot used to read every task that was not done, whatever had become of the
+ * project around it — so a closed engagement kept producing Monday morning
+ * reminders about work nobody was going to do. A nudge that is wrong often
+ * enough stops being read, including the one that mattered.
+ *
+ * A project with no status at all is treated as live: absence of a record is
+ * not evidence that the work stopped.
+ */
+const DORMANT_PROJECT_STATUSES: ReadonlySet<string> = new Set(['closed', 'paid', 'paused']);
 
 function describeTaskStatus(t: NagTask): string {
   if (!t.dueDate) return `sitting ${daysSince(t.createdAt)} days with no due date`;
@@ -362,6 +364,8 @@ export interface RunNagBotResult {
   channelDeliveries?: number;
   /** Count of successful direct-message deliveries. */
   dmDeliveries?: number;
+  /** Items skipped because their project is closed, paid or paused. */
+  skippedDormant?: number;
   /** Tasks skipped because the assignee was not on the team (e.g. a client). */
   skippedNonTeam?: number;
   note?: string;
@@ -529,9 +533,36 @@ export async function runNagBot(opts: RunNagBotOptions = {}): Promise<RunNagBotR
     };
   }
 
-  const projectNames = await loadProjectNames([
+  const projects = await loadProjects([
     ...new Set(candidates.map((c) => c.projectId).filter(Boolean)),
   ]);
+
+  // Dropped after gathering rather than before, because the project ids are not
+  // known until the tasks and steps have been read.
+  const live = candidates.filter((c) => {
+    const status = projects.get(c.projectId)?.status;
+    return !status || !DORMANT_PROJECT_STATUSES.has(status);
+  });
+  const skippedDormant = candidates.length - live.length;
+  candidates.length = 0;
+  candidates.push(...live);
+
+  // Everything left belonged to a project nobody is working on any more, which
+  // is a quiet success rather than a reason to post an empty message.
+  if (candidates.length === 0) {
+    return {
+      ok: true,
+      testMode,
+      posted: 0,
+      skippedNonTeam,
+      skippedDormant,
+      note: `nothing to chase \u2014 the ${skippedDormant} outstanding item${skippedDormant === 1 ? '' : 's'} left all belong to closed, paid or paused projects.`,
+    };
+  }
+
+  const projectNames = new Map<string, string>();
+  for (const [id, project] of projects) if (project.name) projectNames.set(id, project.name);
+
   for (const c of candidates) {
     c.projectName = projectNames.get(c.projectId);
   }
@@ -685,6 +716,7 @@ export async function runNagBot(opts: RunNagBotOptions = {}): Promise<RunNagBotR
     channelDeliveries,
     dmDeliveries,
     skippedNonTeam,
+    skippedDormant,
     results,
   };
 }

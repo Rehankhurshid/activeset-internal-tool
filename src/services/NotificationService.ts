@@ -1,5 +1,12 @@
 import nodemailer from 'nodemailer';
 import { readFirstEnv } from '@/lib/runtime-env';
+import { firstNameOf } from '@/lib/team';
+import {
+  SKIP_REASON_LABELS,
+  type NudgeDigest,
+  type NudgeItem,
+  type PersonNudge,
+} from '@/modules/delivery/domain/delivery.nudge';
 import { CreateSiteAlertInput, ALERT_TYPE_LABELS } from '@/types/alerts';
 import { DailyHealthReport, ProjectHealthSummary } from '@/types/health-report';
 
@@ -908,6 +915,294 @@ export async function sendInvoiceStatusEmail(
 
   console.log(
     `[notifications] Invoice status email sent for ${input.projectName} #${input.invoiceNumber ?? '—'} ${input.oldStatus}→${input.newStatus}`
+  );
+  return 'sent';
+}
+
+// ---------------------------------------------------------------------------
+// Daily delivery nudge
+// ---------------------------------------------------------------------------
+
+/**
+ * Titles and project names are typed by people and land inside an HTML string,
+ * so an apostrophe-happy step called "Client's <brief>" would otherwise break
+ * the markup it sits in. Cheap insurance; the rest of this file predates it.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function days(n: number): string {
+  return n === 1 ? '1 day' : `${n} days`;
+}
+
+/** How late, in the words a person would use rather than a signed integer. */
+function latenessLabel(daysOverdue: number | undefined): string {
+  if (daysOverdue === undefined) return 'no date';
+  if (daysOverdue > 0) return `${days(daysOverdue)} late`;
+  if (daysOverdue === 0) return 'due today';
+  return `due in ${days(-daysOverdue)}`;
+}
+
+function latenessColor(daysOverdue: number | undefined): string {
+  if (daysOverdue === undefined) return '#94a3b8';
+  if (daysOverdue > 0) return '#f87171';
+  if (daysOverdue === 0) return '#fbbf24';
+  return '#94a3b8';
+}
+
+/** The worst lateness in a set of items; 0 when nothing is actually late. */
+function worstLatenessOf(people: PersonNudge[]): number {
+  return people.reduce(
+    (worst, person) =>
+      person.projects.reduce(
+        (w, project) => project.items.reduce((x, item) => Math.max(x, item.daysOverdue ?? 0), w),
+        worst,
+      ),
+    0,
+  );
+}
+
+const SOURCE_LABELS: Record<NudgeItem['source'], string> = {
+  // Named apart because they are opened in different places — a step lives on the
+  // project's Delivery tab, a task usually in ClickUp.
+  step: 'Delivery step',
+  task: 'Task',
+};
+
+function itemRow(item: NudgeItem): string {
+  const meta = [SOURCE_LABELS[item.source], item.stage, item.dueDate ? `due ${item.dueDate}` : null]
+    .filter(Boolean)
+    .map((part) => escapeHtml(String(part)))
+    .join(' · ');
+  const title = escapeHtml(item.title);
+
+  return `
+        <tr>
+          <td style="padding:8px 0;border-bottom:1px solid #1e293b;">
+            ${
+              item.url
+                ? `<a href="${item.url}" style="color:#e2e8f0;font-size:14px;font-weight:600;text-decoration:none;">${title}</a>`
+                : `<span style="color:#e2e8f0;font-size:14px;font-weight:600;">${title}</span>`
+            }
+            <div style="font-size:12px;color:#94a3b8;margin-top:2px;">${meta}</div>
+          </td>
+          <td style="padding:8px 0;border-bottom:1px solid #1e293b;text-align:right;white-space:nowrap;vertical-align:top;color:${latenessColor(item.daysOverdue)};font-size:13px;font-weight:600;">
+            ${latenessLabel(item.daysOverdue)}
+          </td>
+        </tr>`;
+}
+
+/**
+ * Count and worst lateness first, because this arrives every morning and the
+ * notification preview is all most people will read of it.
+ */
+export function deliveryNudgeSubject(person: PersonNudge): string {
+  const projects = `${person.projects.length} ${person.projects.length === 1 ? 'project' : 'projects'}`;
+  if (person.allOnTime) return `${person.total} open · nothing late — across ${projects}`;
+
+  const worst = worstLatenessOf([person]);
+  return `${person.overdue} overdue · ${days(worst)} late — ${person.total} open on ${projects}`;
+}
+
+/**
+ * One person's own outstanding work, grouped by project, worst first.
+ *
+ * Goes to them rather than to NOTIFY_EMAIL, so the Gmail check here does not
+ * care whether NOTIFY_EMAIL is set — the digest is what needs that.
+ */
+export async function sendDeliveryNudgeEmail(
+  person: PersonNudge,
+  baseUrl: string,
+): Promise<'sent' | 'skipped'> {
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword) return 'skipped';
+  if (person.total === 0) return 'skipped';
+
+  const subject = deliveryNudgeSubject(person);
+  const worst = worstLatenessOf([person]);
+  const firstName = escapeHtml(firstNameOf(person.assignee));
+
+  // On-time work still gets a mail, but it must not read like a warning or the
+  // real warnings stop landing.
+  const headline = person.allOnTime
+    ? `${firstName} — ${person.total} ${person.total === 1 ? 'thing' : 'things'} on your plate, none late`
+    : `${firstName} — ${person.overdue} ${person.overdue === 1 ? 'thing is' : 'things are'} late`;
+  const subhead = person.allOnTime
+    ? 'Nothing has slipped yet. Here it is so it stays that way.'
+    : `Worst is ${days(worst)} past due. ${person.total} outstanding in total.`;
+
+  const projectBlocks = person.projects
+    .map(
+      (project) => `
+      <div style="margin-bottom:20px;">
+        <div style="font-size:13px;font-weight:700;color:#93c5fd;letter-spacing:0.02em;margin-bottom:4px;">
+          ${escapeHtml(project.projectName)}
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+          ${project.items.map(itemRow).join('')}
+        </table>
+      </div>`,
+    )
+    .join('');
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:8px;">
+      <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${headline}</div>
+      <div style="font-size:14px;color:#94a3b8;margin-bottom:20px;">${subhead}</div>
+      ${projectBlocks}
+      <div style="margin-top:20px;">
+        <a href="${baseUrl}/modules/project-links" style="display:inline-block;background:#1e293b;color:#e2e8f0;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">Open the dashboard</a>
+      </div>
+      <div style="margin-top:20px;font-size:12px;color:#64748b;">
+        You get this while something of yours is still open on a live project, and not after.
+      </div>
+    </div>
+  `;
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
+  });
+
+  await transporter.sendMail({
+    from: `"ActiveSet Delivery" <${email.gmailUser}>`,
+    to: person.assignee,
+    subject,
+    html,
+  });
+
+  console.log(
+    `[notifications] Delivery nudge sent to ${person.assignee} (${person.total} open, ${person.overdue} overdue)`,
+  );
+  return 'sent';
+}
+
+export function deliveryDigestSubject(digest: NudgeDigest): string {
+  const skipped = `${digest.skipped.length} skipped`;
+  if (digest.totalItems === 0) return `All clear · nothing to chase — delivery board (${skipped})`;
+
+  const people = `${digest.people.length} ${digest.people.length === 1 ? 'person' : 'people'}`;
+  if (digest.totalOverdue === 0) {
+    return `${digest.totalItems} open · nothing late — delivery board (${people}, ${skipped})`;
+  }
+
+  const worst = worstLatenessOf(digest.people);
+  return `${digest.totalOverdue} overdue · ${days(worst)} late — delivery board (${people}, ${skipped})`;
+}
+
+/**
+ * The whole board, for the one person who wants all of it.
+ *
+ * The skipped list is the point of this mail as much as the totals are: a quiet
+ * morning and six projects deliberately left alone look identical without it,
+ * and only one of those means the job is working.
+ */
+export async function sendDeliveryDigestEmail(
+  digest: NudgeDigest,
+  baseUrl: string,
+  to: string,
+): Promise<'sent' | 'skipped'> {
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword || !to) return 'skipped';
+
+  const subject = deliveryDigestSubject(digest);
+
+  const stat = (value: string | number, label: string, color: string) => `
+          <td style="text-align:center;padding:0 8px;">
+            <div style="font-size:22px;font-weight:700;color:${color};">${value}</div>
+            <div style="font-size:11px;color:#94a3b8;">${label}</div>
+          </td>`;
+
+  const peopleRows = digest.people.length
+    ? digest.people
+        .map(
+          (person) => `
+        <tr>
+          <td style="padding:8px 0;border-bottom:1px solid #1e293b;font-size:14px;color:#e2e8f0;">
+            ${escapeHtml(firstNameOf(person.assignee))}
+            <div style="font-size:12px;color:#64748b;">${escapeHtml(person.assignee)}</div>
+          </td>
+          <td style="padding:8px 0;border-bottom:1px solid #1e293b;text-align:right;white-space:nowrap;font-size:13px;color:${person.allOnTime ? '#94a3b8' : '#f87171'};font-weight:600;">
+            ${person.overdue} overdue / ${person.total} open
+            <div style="font-size:12px;color:#64748b;font-weight:400;">${person.projects.length} ${person.projects.length === 1 ? 'project' : 'projects'}</div>
+          </td>
+        </tr>`,
+        )
+        .join('')
+    : `<tr><td style="padding:8px 0;font-size:14px;color:#94a3b8;">Nobody is being chased today.</td></tr>`;
+
+  const activeRows = digest.active.length
+    ? digest.active
+        .map(
+          (project) => `
+        <tr>
+          <td style="padding:6px 0;border-bottom:1px solid #1e293b;font-size:14px;">
+            <a href="${baseUrl}/modules/project-links/${project.projectId}?tab=delivery" style="color:#e2e8f0;text-decoration:none;">${escapeHtml(project.projectName)}</a>
+          </td>
+          <td style="padding:6px 0;border-bottom:1px solid #1e293b;text-align:right;font-size:13px;color:#94a3b8;white-space:nowrap;">${project.outstanding} outstanding</td>
+        </tr>`,
+        )
+        .join('')
+    : `<tr><td style="padding:6px 0;font-size:14px;color:#94a3b8;">No project is being chased today.</td></tr>`;
+
+  const skippedRows = digest.skipped.length
+    ? digest.skipped
+        .map(
+          (project) => `
+        <tr>
+          <td style="padding:6px 0;border-bottom:1px solid #1e293b;font-size:14px;">
+            <a href="${baseUrl}/modules/project-links/${project.projectId}" style="color:#cbd5e1;text-decoration:none;">${escapeHtml(project.projectName)}</a>
+          </td>
+          <td style="padding:6px 0;border-bottom:1px solid #1e293b;text-align:right;font-size:13px;color:#64748b;">${escapeHtml(SKIP_REASON_LABELS[project.reason])}</td>
+        </tr>`,
+        )
+        .join('')
+    : `<tr><td style="padding:6px 0;font-size:14px;color:#94a3b8;">Nothing was skipped.</td></tr>`;
+
+  const section = (title: string, rows: string) => `
+      <div style="font-size:13px;font-weight:700;color:#93c5fd;margin:24px 0 4px;">${title}</div>
+      <table style="width:100%;border-collapse:collapse;">${rows}</table>`;
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:8px;">
+      <div style="font-size:18px;font-weight:600;margin-bottom:16px;">Delivery board — today's chasing</div>
+      <table style="width:100%;border-collapse:collapse;background:#111c31;border-radius:8px;padding:12px;">
+        <tr>
+          ${stat(digest.totalOverdue, 'overdue', digest.totalOverdue > 0 ? '#f87171' : '#22c55e')}
+          ${stat(digest.totalItems, 'open', '#e2e8f0')}
+          ${stat(digest.people.length, 'people mailed', '#e2e8f0')}
+          ${stat(digest.active.length, 'chased', '#e2e8f0')}
+          ${stat(digest.skipped.length, 'skipped', '#94a3b8')}
+        </tr>
+      </table>
+      ${section('Who was mailed', peopleRows)}
+      ${section('Projects being chased', activeRows)}
+      ${section('Skipped, and why', skippedRows)}
+      <div style="margin-top:24px;">
+        <a href="${baseUrl}/modules/project-links" style="display:inline-block;background:#1e293b;color:#e2e8f0;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">Open the dashboard</a>
+      </div>
+    </div>
+  `;
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
+  });
+
+  await transporter.sendMail({
+    from: `"ActiveSet Delivery" <${email.gmailUser}>`,
+    to,
+    subject,
+    html,
+  });
+
+  console.log(
+    `[notifications] Delivery digest sent to ${to} (${digest.totalItems} open, ${digest.totalOverdue} overdue, ${digest.skipped.length} skipped)`,
   );
   return 'sent';
 }
