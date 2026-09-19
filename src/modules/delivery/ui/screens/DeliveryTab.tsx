@@ -16,6 +16,7 @@ import { buildPageProgress } from '../../domain/delivery.progress';
 import { getStack } from '../../domain/stacks';
 import type { ProjectPage } from '../../domain/delivery.types';
 import { deliveryRepository } from '../../infrastructure/delivery.repository';
+import { AddAgencyBasics } from '../components/AddAgencyBasics';
 import { StageRail } from '../components/StageRail';
 import { TemplateImprovements } from '../components/TemplateImprovements';
 import { StageScreen } from './StageScreen';
@@ -119,8 +120,13 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
             </span>
           )}
 
-          <div className="flex items-center gap-1.5">
-            {/* Renders nothing at all unless this project's checklists have
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Two offers that both cross the project/SOP line, and both render
+                nothing most of the time. This one comes down: the agency's own
+                routine, onto a checklist that was deep-copied before those steps
+                existed and so will never see them otherwise. */}
+            <AddAgencyBasics checklists={checklists} />
+            {/* And this one goes up, unless this project's checklists have
                 drifted from the SOPs they were copied from. The way back to the
                 template belongs here rather than on a stage: what a project
                 learned is rarely confined to the stage you happen to be in. */}

@@ -58,12 +58,31 @@ walkthrough videos at the end: none of that is specific to Webflow or to
 branding. It used to be written into the Webflow SOP only, so a brand project got
 no Slack channel, no welcome email and no kickoff call from its checklist at all.
 
-Those steps now live once, in `AGENCY_START` and `AGENCY_CLOSE` in
-`src/lib/sop-templates.ts`, and `withAgencyBasics` wraps them around every
-template. Each SOP opens with *Start: client setup* and ends with *Close:
-handover & sign-off*, and adding a step to how the agency works adds it to every
-project type at once. A template's own sections are written without an `order`
-and numbered by the wrapper, so inserting a stage is a one-line edit.
+Those steps live once, as `AGENCY_START` and `AGENCY_CLOSE` in
+`src/lib/sop-templates.ts`, and are applied **when a checklist is created** —
+wrapped around whatever template it came from. Every checklist opens with *Start:
+client setup* and ends with *Close: handover & sign-off*, and adding a step to how
+the agency works adds it to every project type at once.
+
+Applying them at creation rather than baking them into the templates matters more
+than it sounds. The first attempt wrapped the two built-in templates in code, and
+that reached almost nothing: every real project here runs from a template
+somebody wrote in the Checklist Creator, and those got none of it. A custom
+template now gets the basics exactly like a built-in one. If a template already
+spells out one of these steps, its own wording wins and nothing is duplicated.
+
+### Projects that already exist
+
+A checklist is a deep copy taken at creation, so changing how new ones are made
+does nothing for the projects already running. Those catch up through *Add the
+standard steps* on the Delivery tab, which offers what the checklist is missing
+and lets someone choose.
+
+Nothing is added silently, because a project that already does these steps almost
+certainly words them differently — "Create Slack Channel with Client" against
+"Create the shared Slack channel with the client" — and no title match spots that
+reliably. `basicsGap` scores the resemblance, names the step it might duplicate,
+and leaves that one unticked. Running it twice adds nothing the second time.
 
 ### Gates and what is late
 

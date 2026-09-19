@@ -22,6 +22,7 @@ import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
 import { checklistService } from '@/services/ChecklistService';
 import type { ChecklistItemStatus, ProjectChecklist, ProjectLink, SOPTemplate } from '@/types';
+import type { MissingBasic } from '../domain/delivery.basics';
 import type { Improvement } from '../domain/delivery.feedback';
 import type {
   CheckStatus,
@@ -365,6 +366,18 @@ export const deliveryRepository = {
    */
   saveTemplateImprovements(templateId: string, improvements: Improvement[]): Promise<void> {
     return checklistService.saveTemplateImprovements(templateId, improvements);
+  },
+
+  /**
+   * Puts the agency's own routine onto a checklist that was copied before it
+   * existed.
+   *
+   * One checklist per call, because each is its own document and its own deep
+   * copy — a project with several has several gaps, and the caller saves them one
+   * at a time so it can say honestly how far it got.
+   */
+  addAgencyBasics(checklistId: string, chosen: MissingBasic[]): Promise<void> {
+    return checklistService.addAgencyBasics(checklistId, chosen);
   },
 
   /** This project's per-page QC questions, replacing whatever was there. */

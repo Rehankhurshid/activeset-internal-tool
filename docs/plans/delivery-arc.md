@@ -123,7 +123,14 @@ about checklist items.
 
 Added along the way, not in the original plan: **the agency basics**. Slack, the
 welcome email, the cadence and the walkthrough were only in the Webflow SOP, so a
-brand project got none of them. They now live once and wrap every template.
+brand project got none of them.
+
+First attempt wrapped them around the two built-in templates in code, which
+reached almost nothing — every real project runs from a template somebody wrote
+in the Checklist Creator. They are now applied when a checklist is created,
+whatever template it came from, and an existing project can pull in what it is
+missing from the Delivery tab. A checklist is a deep copy, so nothing else would
+have reached the projects already running.
 
 ## Bugs found on the way, to fix in phase 2
 

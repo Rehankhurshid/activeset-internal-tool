@@ -12,6 +12,7 @@ import {
   stageWithRole,
 } from './delivery.arc';
 import { SOP_TEMPLATES } from '@/lib/sop-templates';
+import { agencyBasicsFor } from './delivery.basics';
 import { AUTO_CHECK_IDS } from './delivery.types';
 import type {
   ChecklistItem,
@@ -342,13 +343,12 @@ describe('the shipped Webflow SOP', () => {
     assert.match(pages!.title, /Page Development/);
   });
 
-  it('keeps the things the team does on every single project', () => {
-    const kickoff = webflow.sections
-      .filter((s) => s.role === 'kickoff')
-      .flatMap((s) => s.items.map((i) => i.title.toLowerCase()));
-    assert.ok(kickoff.some((t) => t.includes('kickoff call')), 'no kickoff call');
-    assert.ok(kickoff.some((t) => t.includes('welcome email')), 'no welcome email');
-    assert.ok(kickoff.some((t) => t.includes('slack channel')), 'no slack channel');
+  it('still says what is specific to a website build', () => {
+    // The agency-wide steps moved out; what is left has to be the Webflow part.
+    const titles = webflow.sections.flatMap((s) => s.items.map((i) => i.title.toLowerCase()));
+    assert.ok(titles.some((t) => t.includes('screaming frog') || t.includes('scan the live site')));
+    assert.ok(titles.some((t) => t.includes('webflow')));
+    assert.ok(titles.some((t) => t.includes('redirect')));
   });
 
   it('names only scan signals the resolver implements', () => {
@@ -381,10 +381,12 @@ describe('the shipped Webflow SOP', () => {
   });
 });
 
-describe('the agency basics, which every project type gets', () => {
+describe('the agency basics, which every project gets', () => {
   // Getting the client into Slack, the welcome email and the walkthrough are not
-  // Webflow facts. They used to live only in the Webflow SOP, so a brand project
-  // got none of them.
+  // Webflow facts. They are applied when a checklist is created rather than
+  // baked into a template, because almost every real project runs from a
+  // template somebody wrote themselves — wrapping only the built-ins reached
+  // nothing.
   const COMMON = [
     'kickoff call',
     'slack channel',
@@ -398,22 +400,48 @@ describe('the agency basics, which every project type gets', () => {
   ];
 
   for (const template of SOP_TEMPLATES) {
-    it(`are all in "${template.name}"`, () => {
-      const titles = template.sections.flatMap((s) => s.items.map((i) => i.title.toLowerCase()));
+    it(`reach a checklist made from "${template.name}"`, () => {
+      const sections = agencyBasicsFor(
+        template.sections.map((s, order) => ({
+          id: `sec_${order}`,
+          title: s.title,
+          order,
+          role: s.role,
+          items: s.items.map((i, n) => item(i.title, i.status, n)),
+        })),
+      );
+      const titles = sections.flatMap((s) => s.items.map((i) => i.title.toLowerCase()));
       for (const needle of COMMON) {
         assert.ok(titles.some((t) => t.includes(needle)), `${template.id} is missing "${needle}"`);
       }
     });
+  }
 
-    it(`opens "${template.name}" with client setup and ends it with sign-off`, () => {
-      const first = template.sections[0];
-      const last = template.sections[template.sections.length - 1];
-      assert.equal(first.role, 'kickoff');
-      assert.match(first.title, /client setup/i);
-      assert.equal(last.role, 'client_review');
-      assert.match(last.title, /sign-off/i);
-    });
+  it('reach a checklist made from a template nobody shipped', () => {
+    // The whole point: a custom template gets them too.
+    const custom = agencyBasicsFor([
+      { id: 's1', title: 'My own stage', order: 0, items: [item('Do the thing', 'not_started', 0)] },
+    ]);
+    const titles = custom.flatMap((s) => s.items.map((i) => i.title.toLowerCase()));
+    for (const needle of COMMON) {
+      assert.ok(titles.some((t) => t.includes(needle)), `a custom template is missing "${needle}"`);
+    }
+  });
 
+  it('open the arc with client setup and close it with sign-off', () => {
+    const sections = agencyBasicsFor([
+      { id: 's1', title: 'My own stage', order: 0, items: [] },
+    ]);
+    const arc = deliveryArc([checklist('c1', sections.map((s) => ({
+      title: s.title, order: s.order, role: s.role, items: [],
+    })))]);
+    assert.match(arc[0].title, /client setup/i);
+    assert.equal(arc[0].role, 'kickoff');
+    assert.match(arc[arc.length - 1].title, /sign-off/i);
+    assert.equal(arc[arc.length - 1].role, 'client_review');
+  });
+
+  for (const template of SOP_TEMPLATES) {
     it(`numbers "${template.name}" without gaps or repeats`, () => {
       assert.deepEqual(
         template.sections.map((s) => s.order),
@@ -421,8 +449,7 @@ describe('the agency basics, which every project type gets', () => {
       );
     });
 
-    it(`says each of "${template.name}" only once`, () => {
-      // The whole point of sharing them is that they stop being duplicated.
+    it(`says each step of "${template.name}" only once`, () => {
       const titles = template.sections.flatMap((s) => s.items.map((i) => i.title.toLowerCase().trim()));
       const seen = new Set<string>();
       for (const title of titles) {

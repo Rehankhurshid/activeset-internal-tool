@@ -26,6 +26,11 @@ import { DatabaseError, logError } from '@/lib/errors';
 // The one place a service reaches into a module: the diff between a project's
 // checklist and its template is delivery's own idea of what counts as process.
 import { applyImprovements, type Improvement } from '@/modules/delivery/domain/delivery.feedback';
+import {
+    agencyBasicsFor,
+    sectionsWithBasics,
+    type MissingBasic,
+} from '@/modules/delivery/domain/delivery.basics';
 
 const CHECKLISTS_COLLECTION = COLLECTIONS.PROJECT_CHECKLISTS;
 
@@ -126,15 +131,22 @@ export const checklistService = {
             if (templates.length === 0) throw new DatabaseError(`No valid templates found for IDs: ${tIds.join(', ')}`);
 
             // Merge sections from all templates
-            const mergedSections: ChecklistSection[] = [];
+            const merged: ChecklistSection[] = [];
             templates.forEach(t => {
                 const newSections = instantiateTemplate(t);
                 // Adjust order to append sequentially
                 newSections.forEach((s) => {
-                    s.order = mergedSections.length;
-                    mergedSections.push(s);
+                    s.order = merged.length;
+                    merged.push(s);
                 });
             });
+
+            // How the agency runs any engagement — Slack, the welcome email, the
+            // cadence, the walkthrough — wrapped around whatever the template
+            // says. Applied here rather than baked into the templates, because
+            // most real projects run from a template somebody wrote in the
+            // Checklist Creator, and those would otherwise get none of it.
+            const mergedSections = agencyBasicsFor(merged);
 
             // Use the name of the first template (or a combined name)
             const templateName = templates.map(t => t.name).join(' + ');
@@ -376,6 +388,22 @@ export const checklistService = {
             logError(error, 'getSOPTemplates');
             throw new DatabaseError('Failed to fetch SOP templates');
         }
+    },
+
+    /**
+     * Add the agency basics to a checklist that never got them.
+     *
+     * A checklist is a deep copy, so a project created before these existed —
+     * or from a template that does not include them — keeps whatever it started
+     * with forever. The caller has already chosen which steps to add, because
+     * the same step worded differently is not something a title match can be
+     * trusted to spot.
+     */
+    async addAgencyBasics(checklistId: string, chosen: MissingBasic[]): Promise<void> {
+        if (chosen.length === 0) return;
+        const checklist = await this.getChecklist(checklistId);
+        if (!checklist) throw new DatabaseError('That checklist no longer exists');
+        await this.updateSections(checklistId, sectionsWithBasics(checklist.sections ?? [], chosen));
     },
 
     /**

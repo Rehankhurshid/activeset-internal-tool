@@ -43,7 +43,7 @@ const makeItems = (items: ItemSpec[]): SOPTemplateItem[] =>
  * {@link withAgencyBasics}, so adding a step to how the agency works adds it to
  * every project type at once.
  */
-const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
+export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
     title: 'Start: client setup',
     emoji: '\u{1F91D}',
     role: 'kickoff',
@@ -78,7 +78,7 @@ const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
     ]),
 };
 
-const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
+export const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
     title: 'Close: handover & sign-off',
     emoji: '\u2705',
     role: 'client_review',
@@ -105,15 +105,20 @@ const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
 };
 
 /**
- * Wraps a template's own stages with the agency basics and numbers the result.
+ * Numbers a template's stages.
  *
  * Sections are written without an `order` and numbered here, so inserting a
  * stage is a one-line edit rather than a renumbering exercise.
+ *
+ * The agency basics are deliberately NOT added here any more. Wrapping them
+ * around the built-in templates only reached projects made from those two, and
+ * every real project here runs from a template somebody wrote in the Checklist
+ * Creator — so the steps that are supposed to be common reached almost nothing.
+ * They are applied when a checklist is created instead, whatever template it
+ * came from. See `agencyBasicsFor` and `ChecklistService.createChecklist`.
  */
-function withAgencyBasics(
-    sections: Omit<SOPTemplateSection, 'order'>[],
-): SOPTemplateSection[] {
-    return [AGENCY_START, ...sections, AGENCY_CLOSE].map((section, order) => ({ ...section, order }));
+function numbered(sections: Omit<SOPTemplateSection, 'order'>[]): SOPTemplateSection[] {
+    return sections.map((section, order) => ({ ...section, order }));
 }
 
 export const SOP_TEMPLATES: SOPTemplate[] = [
@@ -122,7 +127,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
         name: 'Website Migration to Webflow',
         description: 'Complete SOP for migrating a website to Webflow — from input gathering to launch.',
         icon: '📄',
-        sections: withAgencyBasics([
+        sections: numbered([
             {
                 title: 'Input',
                 emoji: '📥',
@@ -343,7 +348,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
         name: 'Brand Evolution',
         description: 'Complete SOP for brand evolution — from kickoff questionnaire through research, moodboards, stylescapes, logo, collateral to brand book handover.',
         icon: '🎨',
-        sections: withAgencyBasics([
+        sections: numbered([
             {
                 title: 'Input & Requirements',
                 emoji: '📥',
