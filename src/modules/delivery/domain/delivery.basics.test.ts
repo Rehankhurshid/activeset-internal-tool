@@ -84,16 +84,15 @@ describe('what a project is missing', () => {
     assert.deepEqual(empty.alreadyPresent, []);
   });
 
-  it('does not confuse booking the kickoff call with holding it', () => {
-    // These are two different steps and one of them gates the whole project.
-    // Scoring shared words against the *shorter* title made "Hold the kickoff
-    // call" look like a 0.67 match for it, so the blocking first step of every
-    // engagement arrived unticked, blamed on a step that was not it.
+  it('does not confuse scheduling the kickoff call with running it', () => {
+    // Two different steps, and scheduling it gates the whole project. Scoring
+    // shared words against the *shorter* title made a 0.67 match out of these,
+    // so the blocking first step of every engagement arrived unticked, blamed
+    // on a step that was not it. Being flagged is fine; being unticked is not.
     const hasHold = checklist([section('Planning', 0, ['Hold the kickoff call'])]);
-    const book = basicsGap(hasHold).missing.find((m) => /^Book the kickoff call/.test(m.item.title));
-    assert.ok(book, 'booking the call should still be offered');
-    assert.equal(book!.resembles, undefined);
-    assert.equal(book!.likelyDuplicate, undefined);
+    const schedule = basicsGap(hasHold).missing.find((m) => /^Schedule the kickoff call/.test(m.item.title));
+    assert.ok(schedule, 'scheduling the call should still be offered');
+    assert.equal(schedule!.likelyDuplicate, undefined, 'and must not arrive unticked');
   });
 
   it('does not confuse the internal kickoff with the client call either', () => {
@@ -219,6 +218,69 @@ describe('a checklist being created', () => {
     assert.deepEqual(next.map((s) => s.order), next.map((_, i) => i));
     for (const s of next) {
       assert.deepEqual(s.items.map((i) => i.order), s.items.map((_, i) => i));
+    }
+  });
+});
+
+describe('what the standard steps actually carry', () => {
+  const all = [...AGENCY_START.items, ...AGENCY_CLOSE.items];
+  const byTitle = (pattern: RegExp) => all.find((i) => pattern.test(i.title));
+
+  it('records when the kickoff call happened and where the recording is', () => {
+    // "It happened" is a tick. When, and where the recording is, are what
+    // anyone needs three weeks later.
+    const run = byTitle(/^Run the kickoff call/);
+    assert.ok(run, 'there should be a step for running the call');
+    const ids = run!.fields?.map((f) => f.type);
+    assert.ok(ids?.includes('date'));
+    assert.ok(ids?.includes('url'));
+  });
+
+  it('separates scheduling the call from running it, and says which is which', () => {
+    // "Book" and "Hold" read as the same thing at a glance.
+    assert.ok(byTitle(/^Schedule the kickoff call/));
+    assert.ok(byTitle(/^Run the kickoff call/));
+    for (const step of [byTitle(/^Schedule the kickoff call/), byTitle(/^Run the kickoff call/)]) {
+      assert.ok(step?.howTo, `${step?.title} should explain itself`);
+    }
+  });
+
+  it('lets the Slack step record the channel and who was invited', () => {
+    const slack = byTitle(/Slack channel/);
+    const types = slack?.fields?.map((f) => f.type);
+    assert.ok(types?.includes('emails'), 'no way to record who was invited');
+    assert.ok(slack?.links?.length, 'no way to get to Slack');
+  });
+
+  it('gives the cadence step a message with the options to offer', () => {
+    const cadence = byTitle(/sync cadence/i);
+    assert.ok(cadence?.template?.body, 'no message to send');
+    assert.ok((cadence?.template?.options?.length ?? 0) >= 2, 'no options to choose between');
+  });
+
+  it('gives every standard step something beyond its title', () => {
+    for (const step of all) {
+      const hasContext =
+        Boolean(step.howTo) ||
+        Boolean(step.links?.length) ||
+        Boolean(step.fields?.length) ||
+        Boolean(step.template?.body);
+      assert.ok(hasContext, `"${step.title}" is a bare checkbox`);
+    }
+  });
+
+  it('never ships a recorded value on a template step', () => {
+    // Values belong to a project. A template carrying one would hand the same
+    // answer to every future project.
+    for (const step of all) {
+      assert.equal((step as { values?: unknown }).values, undefined, `${step.title} carries values`);
+    }
+  });
+
+  it('gives every field a distinct id within its step', () => {
+    for (const step of all) {
+      const ids = (step.fields ?? []).map((f) => f.id);
+      assert.equal(new Set(ids).size, ids.length, `${step.title} repeats a field id`);
     }
   });
 });

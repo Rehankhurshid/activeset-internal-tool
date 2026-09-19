@@ -1,6 +1,8 @@
 import type {
   ChecklistItem,
+  ChecklistItemField,
   ChecklistItemLink,
+  ChecklistItemTemplate,
   ProjectChecklist,
   SOPTemplate,
   SOPTemplateItem,
@@ -29,6 +31,13 @@ export interface ItemGuidance {
   links?: ChecklistItemLink[];
   blocking?: boolean;
   autoCheck?: ChecklistItem['autoCheck'];
+  /**
+   * What the step asks you to record, and the message it offers to send. Both
+   * describe how the work is done, so both travel. What was actually recorded
+   * — `values` — never does: that is this build, not the process.
+   */
+  fields?: ChecklistItemField[];
+  template?: ChecklistItemTemplate;
 }
 
 export type ImprovementKind = 'changed' | 'added' | 'role';
@@ -59,7 +68,14 @@ function guidanceOf(item: ChecklistItem | SOPTemplateItem): ItemGuidance {
     links: item.links?.length ? item.links : undefined,
     blocking: item.blocking || undefined,
     autoCheck: item.autoCheck,
+    fields: item.fields?.length ? item.fields : undefined,
+    template: item.template?.body?.trim() ? item.template : undefined,
   };
+}
+
+/** Deep comparison by shape, which is enough for two small records of plain data. */
+function same(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
 function sameGuidance(a: ItemGuidance, b: ItemGuidance): boolean {
@@ -67,7 +83,9 @@ function sameGuidance(a: ItemGuidance, b: ItemGuidance): boolean {
     (a.howTo ?? '') === (b.howTo ?? '') &&
     sameLinks(a.links, b.links) &&
     Boolean(a.blocking) === Boolean(b.blocking) &&
-    a.autoCheck === b.autoCheck
+    a.autoCheck === b.autoCheck &&
+    same(a.fields, b.fields) &&
+    same(a.template, b.template)
   );
 }
 
@@ -78,6 +96,8 @@ function guidanceOnly(after: ItemGuidance & { role?: StageRole }): ItemGuidance 
     links: after.links,
     blocking: after.blocking,
     autoCheck: after.autoCheck,
+    fields: after.fields,
+    template: after.template,
   };
 }
 
@@ -97,6 +117,13 @@ function describe(before: ItemGuidance, after: ItemGuidance): string {
   }
   if (before.autoCheck !== after.autoCheck) {
     parts.push(after.autoCheck ? 'answered by a scan' : 'no longer answered by a scan');
+  }
+  if (!same(before.fields, after.fields)) {
+    const to = after.fields?.length ?? 0;
+    parts.push(to === 0 ? 'nothing to record' : `${to} thing${to === 1 ? '' : 's'} to record`);
+  }
+  if (!same(before.template, after.template)) {
+    parts.push(before.template ? 'a reworded message' : 'a message to send');
   }
   return parts.join(', ') || 'no visible change';
 }
@@ -238,6 +265,8 @@ export function applyImprovements(
         title: added.itemTitle,
         status: 'not_started',
         order: items.length,
+        // `guidanceOnly` is what keeps this build's recorded values, notes and
+        // assignee out of the template.
         ...guidanceOnly(added.after),
       });
     }

@@ -135,6 +135,74 @@ describe('what stays on the project', () => {
     assert.deepEqual(improvementsFor(project, SOURCE), []);
   });
 
+  it('carries what a step asks you to record back to the template', () => {
+    const project = checklist([
+      {
+        id: 's1', title: 'Input', order: 0, role: 'kickoff',
+        items: [
+          projectItem('Get the assets folder', {
+            fields: [{ id: 'folder', label: 'Drive folder', type: 'url', expected: true }],
+          }),
+        ],
+      },
+    ]);
+    const [found] = improvementsFor(project, SOURCE);
+    assert.match(found.summary, /to record/);
+    const next = applyImprovements(SOURCE, [found]);
+    assert.deepEqual(next.sections[0].items[0].fields, [
+      { id: 'folder', label: 'Drive folder', type: 'url', expected: true },
+    ]);
+  });
+
+  it('carries a message the team wrote back too', () => {
+    const project = checklist([
+      {
+        id: 's1', title: 'Input', order: 0, role: 'kickoff',
+        items: [
+          projectItem('Get the assets folder', {
+            template: { label: 'Copy the ask', body: 'Could you share a Drive folder with the logo and fonts?' },
+          }),
+        ],
+      },
+    ]);
+    const [found] = improvementsFor(project, SOURCE);
+    assert.match(found.summary, /message/);
+    const next = applyImprovements(SOURCE, [found]);
+    assert.equal(next.sections[0].items[0].template?.body, 'Could you share a Drive folder with the logo and fonts?');
+  });
+
+  it('never carries what this project recorded into the template', () => {
+    // A date and a meeting link are facts about this build. The question the
+    // step asks travels; the answer does not.
+    const project = checklist([
+      {
+        id: 's1', title: 'Input', order: 0, role: 'kickoff',
+        items: [
+          projectItem('Get the assets folder', {
+            fields: [{ id: 'folder', label: 'Drive folder', type: 'url' }],
+            values: { folder: 'https://drive.google.com/very-specific-client-folder' },
+          }),
+        ],
+      },
+    ]);
+    const next = applyImprovements(SOURCE, improvementsFor(project, SOURCE));
+    assert.ok(!JSON.stringify(next).includes('very-specific-client-folder'));
+    assert.equal((next.sections[0].items[0] as { values?: unknown }).values, undefined);
+  });
+
+  it('ignores a step whose only difference is what was recorded on it', () => {
+    const project = checklist([
+      {
+        id: 's1', title: 'Input', order: 0, role: 'kickoff',
+        items: [
+          projectItem('Get the assets folder', { values: { anything: 'at all' } }),
+          projectItem('Get the font files'),
+        ],
+      },
+    ]);
+    assert.deepEqual(improvementsFor(project, SOURCE), []);
+  });
+
   it('ignores a bare step added with nothing to say', () => {
     const project = checklist([
       { id: 's1', title: 'Input', order: 0, role: 'kickoff', items: [projectItem('Chase the client')] },

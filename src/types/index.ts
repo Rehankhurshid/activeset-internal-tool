@@ -604,6 +604,39 @@ export interface ChecklistItemLink {
   url: string;
 }
 
+/**
+ * Something worth writing down when a step is done.
+ *
+ * "The kickoff call happened" is a tick. *When* it happened and *where the
+ * recording is* are the things anyone actually needs three weeks later, and a
+ * tick cannot hold them. The values live on the item, beside the tick, rather
+ * than in a note somebody has to remember to write.
+ */
+export interface ChecklistItemField {
+  /** Stable key for the value map. */
+  id: string;
+  label: string;
+  type: 'date' | 'url' | 'text' | 'emails';
+  placeholder?: string;
+  /** Flagged as missing when the step is ticked without it. Never blocks the tick. */
+  expected?: boolean;
+}
+
+/**
+ * A message to copy and send, so the step does not begin with writing one.
+ *
+ * Most steps that wait on a client wait because nobody has asked yet, and
+ * "asking" means composing the same message again. `options` are the choices to
+ * put to them, e.g. weekly or every two weeks.
+ */
+export interface ChecklistItemTemplate {
+  /** What the button says, e.g. "Copy the message for the client". */
+  label?: string;
+  body: string;
+  /** Offered as alternatives to paste in; the first is the recommendation. */
+  options?: string[];
+}
+
 // Individual checklist item
 export interface ChecklistItem {
   id: string;
@@ -632,6 +665,12 @@ export interface ChecklistItem {
   blocking?: boolean;
   /** ISO date. What makes an item capable of being overdue. */
   dueDate?: string;
+  /** What to record when doing this step. */
+  fields?: ChecklistItemField[];
+  /** What was recorded, keyed by field id. Lives on the project, never on the template. */
+  values?: Record<string, string>;
+  /** A message to copy and send. */
+  template?: ChecklistItemTemplate;
 }
 
 // Section of the checklist (e.g., "Step 1: Project Planning & Kickoff")

@@ -112,6 +112,17 @@ carries:
   still read and shown as "Reference".
 - `blocking` and `dueDate` — what makes a stage gate, and what makes something
   capable of being overdue.
+- `fields` and `values` — what to write down when the step is done, and what was
+  written. "The kickoff call happened" is a tick; *when* it happened and *where
+  the recording is* are what anyone needs three weeks later, and a tick cannot
+  hold them. A field marked `expected` shows a quiet "not recorded" hint when the
+  step is ticked without it, and never blocks the tick.
+- `template` — a message to copy and send, with `options` when there is a choice
+  to put to the client. Most steps that wait on a client wait because nobody has
+  asked yet, and asking means composing the same message again.
+
+`values` is the only one of these that belongs to the project rather than the
+process. It never travels back to a template, and a template never ships one.
 
 These survive the template Markdown round trip, which the Creator performs on
 every tab switch. `src/lib/template-export.test.ts` asserts that the writer and
