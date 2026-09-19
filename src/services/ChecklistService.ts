@@ -48,21 +48,21 @@ function stripUndefined<T>(obj: T): T {
 
 /**
  * Instantiate a template into concrete ChecklistSections with unique IDs.
+ *
+ * Copying field by field is what makes a project's checklist its own — it can be
+ * edited afterwards without touching the template. The cost is that a field
+ * forgotten here is silently dropped on the way in, which is exactly what used
+ * to happen to every note, assignee and reference link an author wrote: the
+ * template carried them and the project never saw them. Spreading the item and
+ * then replacing the id keeps new fields working by default, so the next one
+ * added to `ChecklistItem` does not have to be remembered here.
  */
 function instantiateTemplate(template: SOPTemplate): ChecklistSection[] {
     return template.sections.map((section) => stripUndefined({
-        title: section.title,
-        emoji: section.emoji,
-        order: section.order,
-        // Without this the Delivery stages would never see a tagged template.
-        stage: section.stage,
+        ...section,
         id: `sec_${generateId()}`,
         items: section.items.map((item) => stripUndefined({
-            title: item.title,
-            emoji: item.emoji,
-            status: item.status,
-            order: item.order,
-            autoCheck: item.autoCheck,
+            ...item,
             id: `item_${generateId()}`,
         })),
     }));

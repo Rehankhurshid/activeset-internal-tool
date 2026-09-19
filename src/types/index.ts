@@ -576,6 +576,23 @@ export type AutoCheckId =
  */
 export type ChecklistStage = 'kickoff' | 'launch';
 
+/**
+ * The one thing about a delivery stage the app hardcodes.
+ *
+ * Every checklist section is a stage, in its own order, so an SOP's shape is the
+ * project's shape and a new SOP needs no code. A role marks the few stages where
+ * the app does more than show a list: the build grid lives in one, the client
+ * approves at one, readiness is decided at one. Several sections may share a
+ * role, and most have none.
+ */
+export type StageRole = 'kickoff' | 'pages' | 'client_review' | 'launch';
+
+/** One labelled link on a task: the tool, the reference, the example. */
+export interface ChecklistItemLink {
+  label: string;
+  url: string;
+}
+
 // Individual checklist item
 export interface ChecklistItem {
   id: string;
@@ -592,6 +609,18 @@ export interface ChecklistItem {
   /** When set, the latest page scans can answer this item. Optional: hand-written
    *  items are untouched, and a person's status always wins. */
   autoCheck?: AutoCheckId;
+  /**
+   * What to actually do, in a few lines. Shown inline under the title rather
+   * than behind a hover, because guidance nobody can see is guidance nobody
+   * follows — which is why the shipped SOP kept its URLs inside item titles.
+   */
+  howTo?: string;
+  /** The tools and references that do the job, each labelled so you know what you are opening. */
+  links?: ChecklistItemLink[];
+  /** Must be settled before this stage can close, and before the next one opens. */
+  blocking?: boolean;
+  /** ISO date. What makes an item capable of being overdue. */
+  dueDate?: string;
 }
 
 // Section of the checklist (e.g., "Step 1: Project Planning & Kickoff")
@@ -601,8 +630,16 @@ export interface ChecklistSection {
   emoji?: string;            // Section emoji (e.g., "📁", "🧱")
   items: ChecklistItem[];
   order: number;
-  /** Surfaces this section on a Delivery stage as well as the Checklist tab. */
+  /**
+   * @deprecated Superseded by `role`. Still read, so existing projects keep
+   * working: `kickoff` and `launch` map onto the roles of the same name.
+   */
   stage?: ChecklistStage;
+  /**
+   * What the Delivery tab does at this stage beyond listing its items. Most
+   * sections have no role — they are an ordinary step in the arc.
+   */
+  role?: StageRole;
 }
 
 // Full project checklist
@@ -625,8 +662,10 @@ export interface SOPTemplateSection {
   emoji?: string;
   items: SOPTemplateItem[];
   order: number;
-  /** Carried onto every checklist made from this template. */
+  /** @deprecated Superseded by `role`; still read so old templates keep working. */
   stage?: ChecklistStage;
+  /** Carried onto every checklist made from this template. */
+  role?: StageRole;
 }
 
 // SOP template definition (for the template selector)

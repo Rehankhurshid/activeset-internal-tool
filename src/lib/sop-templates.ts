@@ -1,13 +1,31 @@
-import { AutoCheckId, SOPTemplate, SOPTemplateItem } from '@/types';
+import { AutoCheckId, ChecklistItemLink, SOPTemplate, SOPTemplateItem } from '@/types';
 
 /**
  * SOP Templates — each defines a reusable checklist structure.
  * Items have no `id` here; IDs are generated at instantiation time.
+ *
+ * Two things are worth knowing before editing these.
+ *
+ * A section's `role` is what the Delivery tab does there beyond listing items.
+ * Every section is a stage in the arc whether or not it has a role, so there is
+ * no longer any such thing as a section Delivery cannot see.
+ *
+ * `howTo` and `links` exist because this helper used to accept only a title, and
+ * authors worked around it by writing URLs inside titles, where they render as
+ * unclickable text. Put the URL in `links` and the judgement call in `howTo`.
  */
 
-const makeItems = (
-    items: { title: string; emoji?: string; autoCheck?: AutoCheckId }[],
-): SOPTemplateItem[] =>
+type ItemSpec = {
+    title: string;
+    emoji?: string;
+    autoCheck?: AutoCheckId;
+    howTo?: string;
+    links?: ChecklistItemLink[];
+    /** Gates the stages after this one. Used sparingly: a gate on everything is a gate on nothing. */
+    blocking?: boolean;
+};
+
+const makeItems = (items: ItemSpec[]): SOPTemplateItem[] =>
     items.map((item, i) => ({
         ...item,
         status: 'not_started' as const,
@@ -25,40 +43,102 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 title: 'Input',
                 emoji: '📥',
                 order: 0,
-                // Surfaces on Delivery → Kickoff. The build is blocked on these.
-                stage: 'kickoff',
+                // The build cannot start without these, which is what `blocking` says.
+                role: 'kickoff',
                 items: makeItems([
-                    { title: 'Run ScreamingFrog tool and scan the site entirely & use the Sitemap.xml to download all the pages in the sitemap', emoji: '🐸' },
-                    { title: 'Access to the Original Project (Optional)', emoji: '✍️' },
-                    { title: 'Check with client if Copy and Structure remains the same (if not, it\'s a redesign project)', emoji: '📝' },
-                    { title: 'Folder for the Assets (Drive). If not, scrape using https://extract.pics/ for Images.', emoji: '📂' },
-                    { title: 'If they have Video with Sound (if required) — Vimeo (Paid), Netlify (100GB Free)', emoji: '📺' },
-                    { title: 'Client Webflow account with a Paid Plan (Post Website is ready on ActiveSet Account)', emoji: '🔒' },
-                    { title: 'Domain Registrar Access – share credentials or client handles themselves', emoji: '🌐' },
-                    { title: 'HubSpot Form: For HubSpot Form Integration, need the code from Client (Paid if customization needed)', emoji: '📄' },
-                    { title: 'Analytics: Google Tag Manager, Google Analytics & Microsoft Clarity Code', emoji: '📊' },
-                    { title: 'Font File from Client (If not, download from Google)', emoji: '⌨️' },
-                    { title: 'Map API key from client (If required)', emoji: '📍' },
-                    { title: 'Cookie Consent Banner: https://gr3f.co/c/60899/tFmEJ — Send this to client', emoji: '🍪' },
+                    {
+                        title: 'Scan the live site and get the full page list',
+                        emoji: '🐸',
+                        blocking: true,
+                        howTo: 'Crawl the whole site in Screaming Frog, then cross-check against sitemap.xml — a crawl misses orphan pages and a sitemap misses what is not in it. The combined list is what goes on the tracker.',
+                        links: [
+                            { label: 'Screaming Frog', url: 'https://www.screamingfrog.co.uk/seo-spider/' },
+                        ],
+                    },
+                    {
+                        title: 'Confirm with the client whether copy and structure stay the same',
+                        emoji: '📝',
+                        blocking: true,
+                        howTo: 'Ask plainly and get it in writing. If either changes it is a redesign, not a migration, and the scope and price are different. Settle this before anyone opens Webflow.',
+                    },
+                    {
+                        title: 'Get the assets folder',
+                        emoji: '📂',
+                        blocking: true,
+                        howTo: 'A Drive folder from the client is the good case. If they have nothing, scrape the images off the live site and flag that quality is whatever the old site had.',
+                        links: [{ label: 'extract.pics — scrape images', url: 'https://extract.pics/' }],
+                    },
+                    {
+                        title: 'Get the font files',
+                        emoji: '⌨️',
+                        blocking: true,
+                        howTo: 'Licensed fonts have to come from the client. If the face is on Google Fonts, download it there instead of asking.',
+                        links: [{ label: 'Google Fonts', url: 'https://fonts.google.com/' }],
+                    },
+                    { title: 'Access to the original project, if there is one', emoji: '✍️' },
+                    {
+                        title: 'Decide where video will be hosted, if the site has any',
+                        emoji: '📺',
+                        howTo: 'Webflow will not host video with sound at any useful size. Vimeo is the paid option and Netlify gives 100GB free. Decide before the build, because it changes how the section is built.',
+                    },
+                    {
+                        title: 'Client Webflow account on a paid plan',
+                        emoji: '🔒',
+                        howTo: 'Needed to transfer the finished site. The build happens on the ActiveSet account, so this only blocks launch, not development.',
+                    },
+                    {
+                        title: 'Domain registrar access, or the client does the DNS themselves',
+                        emoji: '🌐',
+                        howTo: 'Either works. What matters is knowing which one, before launch day rather than on it.',
+                    },
+                    {
+                        title: 'HubSpot form code, if they use HubSpot',
+                        emoji: '📄',
+                        howTo: 'The embed code comes from the client. Styling it to match the design is customisation and is billed.',
+                    },
+                    { title: 'Analytics: Google Tag Manager, Google Analytics and Microsoft Clarity codes', emoji: '📊' },
+                    { title: 'Map API key, if the site has a map', emoji: '📍' },
+                    {
+                        title: 'Send the client the cookie consent banner',
+                        emoji: '🍪',
+                        links: [{ label: 'Cookie banner signup', url: 'https://gr3f.co/c/60899/tFmEJ' }],
+                    },
                 ]),
             },
             {
                 title: 'Step 1: Project Planning & Kickoff',
                 emoji: '📁',
                 order: 1,
-                stage: 'kickoff',
+                role: 'kickoff',
                 items: makeItems([
-                    { title: 'Book the kickoff call as soon as the deal closes', emoji: '📅' },
-                    { title: 'Hold the kickoff call: scope, deadline, who does what, how we will talk', emoji: '📞' },
+                    { title: 'Book the kickoff call as soon as the deal closes', emoji: '📅', blocking: true },
+                    {
+                        title: 'Hold the kickoff call',
+                        emoji: '📞',
+                        blocking: true,
+                        howTo: 'Cover four things and nothing else: what is in scope, the deadline, who does what on both sides, and where we will talk day to day.',
+                    },
                     { title: 'Agree the sync cadence — weekly or every two weeks', emoji: '🔁' },
-                    { title: 'List all the pages from the live website that include the CMS collection', emoji: '📑' },
-                    { title: 'Define the Lead Developer, Backup Developer, Project Lead', emoji: '👥' },
-                    { title: 'Create Slack Channel with Client. Workflow: Setup Channel – Webflow Migration', emoji: '💬' },
-                    { title: 'Create the ClickUp Task List: ⚙️ One Click Setup', emoji: '☑️' },
+                    { title: 'List every page on the live site, including CMS collections', emoji: '📑' },
+                    { title: 'Name the Lead Developer, Backup Developer and Project Lead', emoji: '👥' },
+                    {
+                        title: 'Create the shared Slack channel with the client',
+                        emoji: '💬',
+                        howTo: 'Run the "Setup Channel – Webflow Migration" workflow so the channel is named and stocked the same way every time.',
+                    },
+                    {
+                        title: 'Create the ClickUp task list',
+                        emoji: '☑️',
+                        howTo: 'Use the ⚙️ One Click Setup so the list matches this SOP.',
+                    },
                     { title: 'Project Lead sends the welcome email introducing the team', emoji: '💌' },
                     { title: 'Share the project tracker with the client', emoji: '📊' },
-                    { title: 'Create the MarkUp Folder [MarkUp]', emoji: '📝' },
-                    { title: 'Internal kickoff: deadline, functionality, animations, strategy', emoji: '👥' },
+                    { title: 'Create the MarkUp folder', emoji: '📝', links: [{ label: 'MarkUp', url: 'https://www.markup.io/' }] },
+                    {
+                        title: 'Hold the internal kickoff',
+                        emoji: '👥',
+                        howTo: 'Developers and designer, without the client: deadline, functionality, animations, and anything in the design that will be expensive to build.',
+                    },
                 ]),
             },
             {
@@ -66,9 +146,13 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 emoji: '🎨',
                 order: 2,
                 items: makeItems([
-                    { title: 'Ensure styleguide consistency: spacing, typography, colors', emoji: '✒️' },
-                    { title: 'Component planning with designer', emoji: '💟' },
-                    { title: 'Responsive pre-check for tablet and mobile; flag issues early', emoji: '🗯️' },
+                    { title: 'Check the styleguide is consistent: spacing, typography, colours', emoji: '✒️' },
+                    { title: 'Plan the components with the designer', emoji: '💟' },
+                    {
+                        title: 'Pre-check tablet and mobile, and flag problems now',
+                        emoji: '🗯️',
+                        howTo: 'Anything that only works at desktop width is cheaper to raise with the designer today than to rebuild in Webflow next week.',
+                    },
                 ]),
             },
             {
@@ -76,15 +160,16 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 emoji: '🧱',
                 order: 3,
                 items: makeItems([
-                    { title: 'Add to Links Widget: Project Tracker (Google Sheet)', emoji: '📟' },
-                    { title: 'Add to Links Widget: MarkUp Folder', emoji: '📄' },
-                    { title: 'Add to Links Widget: ClickUp Tracker', emoji: '📄' },
-                    { title: 'Add to Links Widget: Figma Link', emoji: '📄' },
-                    { title: 'Duplicate Webflow Starter Project ↗ activeset-style-guide', emoji: '🍽️' },
-                    { title: 'Upload fonts from client if not on Google Fonts', emoji: '✒️' },
-                    { title: 'Fill Variables: Font, Colors, Typography', emoji: '✒️' },
-                    { title: 'Update Project Settings', emoji: '⚙️' },
-                    { title: 'Add Project Links Widget [Links Widget] https://app.activeset.co/', emoji: '⛴️' },
+                    {
+                        title: 'Add the project links to the widget',
+                        emoji: '📟',
+                        howTo: 'Tracker sheet, MarkUp folder, ClickUp list and Figma, so everyone finds them in one place instead of scrolling Slack.',
+                        links: [{ label: 'Links Widget', url: 'https://app.activeset.co/' }],
+                    },
+                    { title: 'Duplicate the Webflow starter project (activeset-style-guide)', emoji: '🍽️' },
+                    { title: 'Upload the client fonts, if they are not on Google Fonts', emoji: '✒️' },
+                    { title: 'Fill the variables: fonts, colours, typography', emoji: '✒️' },
+                    { title: 'Update the project settings', emoji: '⚙️' },
                 ]),
             },
             {
@@ -92,24 +177,38 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 emoji: '🗃️',
                 order: 4,
                 items: makeItems([
-                    { title: 'Check what content in Figma should become CMS', emoji: '🧑‍✈️' },
-                    { title: 'Create CMS collections with all required fields and proper field names', emoji: '🏑' },
-                    { title: 'Set up reference and multi-reference fields and connect them to related CMS collections', emoji: '📐' },
-                    { title: 'Build CMS Template Pages (Blog Template, Case Study Template)', emoji: '⛩️' },
-                    { title: 'Use Finsweet for filters, load-more, social, etc. https://finsweet.com/attributes', emoji: '🏁' },
+                    {
+                        title: 'Decide what in the design should be CMS',
+                        emoji: '🧑‍✈️',
+                        howTo: 'Anything the client will add to after launch. Getting this wrong means rebuilding pages later, so decide before building any of them.',
+                    },
+                    { title: 'Create the collections with proper field names', emoji: '🏑' },
+                    { title: 'Set up reference and multi-reference fields between collections', emoji: '📐' },
+                    { title: 'Build the CMS template pages (blog, case study)', emoji: '⛩️' },
+                    {
+                        title: 'Add filtering, load-more and sharing where needed',
+                        emoji: '🏁',
+                        links: [{ label: 'Finsweet Attributes', url: 'https://finsweet.com/attributes' }],
+                    },
                 ]),
             },
             {
                 title: 'Step 5: Page Development & Layout',
                 emoji: '🧩',
                 order: 5,
+                // The build itself: the page grid renders in this stage.
+                role: 'pages',
                 items: makeItems([
                     { title: 'Build a proper structure with correct class names', emoji: '🏗️' },
-                    { title: 'Build global components (Navbar, Footer, Buttons, Containers)', emoji: '🏗️' },
+                    { title: 'Build the global components: navbar, footer, buttons, containers', emoji: '🏗️' },
                     { title: 'Add animations and interactions (scroll, hover, page load, GSAP if needed)', emoji: '🌀' },
-                    { title: 'Make the page responsive for Tablet, Mobile Landscape, Mobile Portrait', emoji: '📲' },
-                    { title: 'Ensure all images are WebP and compressed with good quality', emoji: '🖼️' },
-                    { title: 'Develop a 404 page and a form success state', emoji: '🙅‍♂️' },
+                    { title: 'Make every page responsive: tablet, mobile landscape, mobile portrait', emoji: '📲' },
+                    {
+                        title: 'Compress every image and serve WebP',
+                        emoji: '🖼️',
+                        howTo: 'This is the single biggest lever on the speed score, and it is much slower to fix after every page is built.',
+                    },
+                    { title: 'Build the 404 page and the form success state', emoji: '🙅‍♂️' },
                 ]),
             },
             {
@@ -117,46 +216,77 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 emoji: '🔧',
                 order: 6,
                 items: makeItems([
-                    { title: 'Add SEO meta titles, descriptions, and Open Graph fields', emoji: '⚓' },
-                    { title: 'If form automation is required, use Zapier or Make', emoji: '⚓' },
-                    { title: 'Add custom JS/CSS code where required (GSAP, SplitType, smooth scroll)', emoji: '⚓' },
-                    { title: 'Configure Webflow forms (success message, required fields, validations)', emoji: '⚓' },
-                    { title: 'Add website favicon and webclip', emoji: '⚓' },
+                    { title: 'Add SEO titles, descriptions and Open Graph fields', emoji: '⚓', autoCheck: 'meta_description' },
+                    { title: 'Set up form automation, if it is needed (Zapier or Make)', emoji: '⚓' },
+                    { title: 'Add the custom JS and CSS (GSAP, SplitType, smooth scroll)', emoji: '⚓' },
+                    { title: 'Configure the forms: success message, required fields, validation', emoji: '⚓' },
+                    { title: 'Add the favicon and webclip', emoji: '⚓' },
+                    { title: 'Install the analytics the client sent in Input', emoji: '⚓' },
                 ]),
             },
             {
                 title: 'Step 7: QA & Pre-Launch Checklist',
                 emoji: '🧪',
-                stage: 'launch',
                 order: 7,
+                role: 'launch',
                 items: makeItems([
-                    { title: 'Test all pages on all breakpoints', emoji: '🏁' },
-                    { title: 'Verify all animations are smooth and device-optimized', emoji: '🏁' },
-                    { title: 'Check all links, buttons, and navigation', emoji: '🏁', autoCheck: 'links_resolve' },
-                    { title: 'Test all CMS data fetching properly on templates', emoji: '🏁' },
-                    { title: 'Test all forms (submit, error state, integration)', emoji: '🏁' },
-                    { title: 'Check website loading speed and optimize assets', emoji: '🏁' },
-                    { title: 'Validate SEO settings for all pages', emoji: '🏁', autoCheck: 'page_title' },
+                    { title: 'Test every page at every breakpoint', emoji: '🏁' },
+                    { title: 'Check the animations are smooth on a real device, not just the desktop preview', emoji: '🏁' },
+                    { title: 'Check every link, button and nav item', emoji: '🏁', autoCheck: 'links_resolve' },
+                    { title: 'Check the CMS data renders properly on the templates', emoji: '🏁' },
+                    { title: 'Test every form: submit, error state, and where the data lands', emoji: '🏁' },
+                    { title: 'Check the loading speed and optimise whatever is slow', emoji: '🏁' },
+                    { title: 'Check every page has a title and meta description', emoji: '🏁', autoCheck: 'page_title' },
+                    { title: 'Check every image has alt text', emoji: '🏁', autoCheck: 'image_alt' },
+                    { title: 'Proofread the copy', emoji: '🏁', autoCheck: 'spelling' },
                 ]),
             },
             {
                 title: 'Step 8: Client Review & Handover',
                 emoji: '🤝',
                 order: 8,
+                // Ends with the client's approval rather than ours.
+                role: 'client_review',
                 items: makeItems([
-                    { title: 'Share the staging and markup links for feedback' },
-                    { title: 'Fix the markup comments' },
-                    { title: 'Walkthrough Videos for Client' },
+                    { title: 'Share the staging and MarkUp links for feedback', emoji: '🔗' },
+                    { title: 'Work through the MarkUp comments', emoji: '💬' },
+                    {
+                        title: 'Record the walkthrough videos',
+                        emoji: '🎬',
+                        howTo: 'How to edit the CMS, how to publish, and anything custom. This is what stops the support questions six months from now.',
+                    },
+                    { title: 'Hand over the documentation and the video links', emoji: '📦' },
+                    {
+                        title: 'Get written approval to launch',
+                        emoji: '✅',
+                        blocking: true,
+                        howTo: 'In writing, from whoever can actually sign it off. Verbal approval on a call is not what you want to be relying on if the launch goes sideways.',
+                    },
                 ]),
             },
             {
                 title: 'Step 9: Launch',
                 emoji: '🚀',
-                stage: 'launch',
                 order: 9,
+                role: 'launch',
                 items: makeItems([
-                    { title: 'Connect domain and hosting settings' },
-                    { title: 'Publish and run final live checks' },
+                    {
+                        title: 'Set up the redirects from the old URLs',
+                        emoji: '↪️',
+                        blocking: true,
+                        howTo: 'Every old URL that is not carried over needs a 301, or the rankings that came with it are gone. The crawl from Input is the list to work from.',
+                    },
+                    { title: 'Transfer the project to the client Webflow account', emoji: '🔑' },
+                    { title: 'Connect the domain and the hosting settings', emoji: '🌐' },
+                    {
+                        title: 'Remove the staging noindex before publishing',
+                        emoji: '🔍',
+                        blocking: true,
+                        howTo: 'A site that launches with noindex still on is invisible to Google and nobody notices for weeks.',
+                    },
+                    { title: 'Publish', emoji: '🚀' },
+                    { title: 'Run the live checks: forms, links, analytics firing', emoji: '🧪' },
+                    { title: 'Submit the sitemap in Google Search Console', emoji: '🗺️' },
                 ]),
             },
             {
@@ -164,9 +294,10 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 emoji: '📦',
                 order: 10,
                 items: makeItems([
-                    { title: 'Fully functional, responsive, and optimized Webflow website' },
-                    { title: 'All client requirements met and approved' },
-                    { title: 'Handover documentation delivered' },
+                    { title: 'A responsive, optimised Webflow site the client owns', emoji: '🌐' },
+                    { title: 'Every requirement met and approved', emoji: '✅' },
+                    { title: 'Documentation and walkthrough videos handed over', emoji: '📚' },
+                    { title: 'Redirects in place and the sitemap submitted', emoji: '↪️' },
                 ]),
             },
         ],
@@ -181,6 +312,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 title: 'Input & Requirements',
                 emoji: '📥',
                 order: 0,
+                role: 'kickoff',
                 items: makeItems([
                     { title: 'Client brief / project scope document', emoji: '📄' },
                     { title: 'Existing brand assets (logo, colors, fonts, guidelines) if any', emoji: '🖼️' },
@@ -268,6 +400,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 title: 'Phase 6: Post-Production — Brand Book & Handover',
                 emoji: '📦',
                 order: 6,
+                role: 'client_review',
                 items: makeItems([
                     { title: 'Document the entire branding journey into a single brand book', emoji: '📖' },
                     { title: 'Include: logo usage guidelines, clear space grid, all logo variations', emoji: '🏷️' },

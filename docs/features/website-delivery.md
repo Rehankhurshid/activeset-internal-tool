@@ -15,66 +15,86 @@ maintained twice. Making the page the model removes the duplicate.
 The PeakXV SEO/AEO tracker and the metrics tracker are deliberately **not** in
 scope. Those are retainer reporting, a different job.
 
-## Checklists belong to the project, not to this module
+## The arc: every stage comes from the project's own SOP
 
-Kickoff and the site-wide launch list are **sections of the project's own
-checklist**, seeded from an editable SOP template and deep-copied per project.
-They are not held in code here.
+Delivery renders the project's whole run, start to end. **Every section of the
+project's checklist is a stage**, in the order the SOP puts them: a Webflow build
+shows eleven, a brand project shows nine, and a future Astro or Storyblok SOP
+shows whatever it has, with no code written for it.
 
-This was got wrong first time round: those lists were TypeScript constants in
-`webflow.stack.ts`, so every project got an identical list and nobody could add,
-remove or reword an item without a deploy. No two projects run exactly the same
-way, and the app already had a checklist system that solved this properly.
+This was got wrong twice. First the lists were TypeScript constants, so every
+project got an identical one and rewording an item needed a deploy. Then they
+were checklist sections but only two tags existed, `kickoff` and `launch`, so
+Delivery rendered four of the Webflow SOP's eleven sections and steps 2 through 6
+— design prep, Webflow setup, CMS, page development, integrations — appeared
+nowhere. Most of what the team actually does had no home.
 
-A checklist section carries an optional `stage` (`kickoff` or `launch`). The
-Delivery tab renders the sections tagged for the stage you are on; the Checklist
-tab shows every section as it always did; both tick the same item through
-`checklistService`. Untagged sections — which is every existing template until
-someone tags one — appear only on the Checklist tab, so nothing changed for
-them.
+### Roles
 
-### Tagging a section
+A section may also carry a **role**, which is the only thing about a stage this
+code hardcodes, because it is the only place the app does more than show a list:
 
-Two places, both per-section:
+| Role | What Delivery adds at that stage |
+| --- | --- |
+| `kickoff` | The sync cadence and the welcome email draft |
+| `pages` | The page grid — this is where the build happens |
+| `client_review` | Ends with the client approving |
+| `launch` | Readiness, derived from pages, per-page QC and this stage's items |
 
-- **This project only** — Checklist tab, press *Edit Structure*, then pick
-  Kickoff, Launch or *Not in Delivery* on the section header. Tagged sections
-  carry a small badge when you leave edit mode.
-- **Every future project** — Checklist Creator, the stage dropdown beside the
-  section title. Checklists are deep-copied at creation, so this changes new
-  checklists and leaves existing ones alone.
+Most sections have no role and are ordinary steps. Several may share one; the
+first plays host to that role's extras. A project whose SOP claims no `pages`
+stage still gets the grid, spliced in after the last kickoff stage, because a
+website gets built whether or not the SOP says where.
 
-The tag survives the Creator's Markdown tab as a `> Stage: kickoff` line under
-the section heading, and an item's scan signal as a `  - 🔍 Check: page_title`
-sub-bullet. Both are covered by `src/lib/template-export.test.ts`, because the
-editor round-trips through that format on every tab switch: a field the writer
-omits is not just missing from an export, it is deleted on the next save.
+Roles are set per section in two places: the Checklist tab under *Edit
+Structure* for one project, and the Checklist Creator for every future one. The
+tag that came before roles, `stage: 'kickoff' | 'launch'`, is still read and
+means the role of the same name, so no live project needs re-tagging.
 
-An empty stage says so and links to the Checklist tab rather than showing 0 of 0,
-which would read as finished.
+### Gates
 
-### The one exception: per-page QC
+A stage's items can be marked **blocking**. A later stage whose earlier blocking
+items are unsettled says what it is waiting on — and opens anyway. Nothing is
+disabled and no control is hidden, because a team that has to work out of order
+at 6pm on a Friday should not have to fight the tool. The gate is opt-in one item
+at a time, so a project that marks nothing blocking behaves exactly as before.
 
-Per-page QC stays in this module because the checklist model has no page axis and
-cannot ask one question of 26 pages. It is still per-project and editable: the
-Launch screen's *Edit checks* button rewrites the whole list onto the project,
-seeded from the stack until then. Renaming keeps existing answers, since they key
-off the check id; removing a check that pages have answered warns with the count
-and says the answers stop counting; adding one back later gives it a new id, so
-old answers do not return.
+## A task carries its context
 
-A check can name a scan signal, which answers it from the last page audit until a
-person says otherwise. Only the signals `resolveAutoCheck` implements are
-offered, and `pageChecksFor` drops any other value it finds on the document —
-a signal nothing computes would leave a check looking automatic and never
-answered.
+A checklist item used to be one line of title text. The helper every built-in
+template used accepted only a title, an emoji and a scan signal, so authors put
+URLs inside titles, where they rendered as unclickable plain text. An item now
+carries:
+
+- `howTo` — what to actually do, shown inline under the title. Never behind a
+  hover: guidance nobody can see is guidance nobody follows.
+- `links` — labelled tools and references. The older single `referenceLink` is
+  still read and shown as "Reference".
+- `blocking` and `dueDate` — what makes a stage gate, and what makes something
+  capable of being overdue.
+
+These survive the template Markdown round trip, which the Creator performs on
+every tab switch. `src/lib/template-export.test.ts` asserts that the writer and
+its own parser agree, because a field the format drops is not merely missing from
+an export — it is deleted from the template on the next save.
+
+To change what one project does, edit that project's checklist. To change what
+future projects do, edit the template.
+
+### The one thing that is not a checklist
+
+Per-page QC stays in this module, because a checklist has no page axis and cannot
+ask one question of 26 pages. It is per-project and editable too: *Edit checks*
+on the launch stage writes the list onto the project, seeded from the stack until
+then. Renaming keeps existing answers, since they key off the check id; removing
+an answered check warns with the number of pages affected.
 
 ## Stacks
 
-A stack definition holds only what is structural: the disciplines that become
-the page grid's columns and the tracker sheet's columns, plus a starting set of
-per-page QC questions. Nothing outside
-`src/modules/delivery/domain/stacks/` names a technology.
+A stack definition holds only what is structural: the disciplines that become the
+page grid's columns and the tracker sheet's columns, plus a starting set of
+per-page QC questions. Nothing outside `src/modules/delivery/domain/stacks/`
+names a technology, and the arc itself is stack-agnostic — it comes from the SOP.
 
 | Stack | State |
 | --- | --- |
@@ -84,31 +104,6 @@ per-page QC questions. Nothing outside
 
 Adding one means writing `<stack>.stack.ts` and listing it in `stacks/index.ts`.
 Projects with no stack fall back to Webflow.
-
-## The four stages
-
-**Kickoff** — the sections of the project's checklist tagged `kickoff`. In the
-shipped Webflow template that is "Input" (what the client owes us) and "Step 1:
-Project Planning & Kickoff" (what we do: book and hold the first call once the
-deal closes, open the Slack channel, send the welcome email, name the leads,
-create the ClickUp list and MarkUp folder, share the tracker, hold the internal
-kickoff). Beside it sit the two things that are not checklist items: the sync
-cadence and the welcome email draft.
-
-A project whose checklist has no section tagged `kickoff` is shown as not set up
-rather than as finished — zero of zero would read as done.
-
-**Build** — the page grid. One row per page, a status per discipline
-(`not_started`, `in_progress`, `blocked`, `in_review`, `completed`,
-`not_required`), assignee, expected date, design/staging/docs links and a review
-comment. Pages are imported from discovered links rather than typed.
-
-**Launch** — the sections tagged `launch`, plus the per-page QC. Readiness is
-derived: every applicable page built, and every launch checklist item settled.
-An item marked `skipped` counts as not applicable rather than done, which is the
-checklist's own way of saying a step does not apply to this project.
-
-**Handover** — walkthrough videos and the launch record.
 
 ## Automatic checks
 
@@ -133,7 +128,7 @@ Three rules matter:
 | --- | --- |
 | `projects/{id}/pages/{pageId}` | One document per page. Team-only in rules. |
 | `projects/{id}.delivery` | Stack, this project's page-check list, call cadence, tracker sheet id. |
-| `project_checklists` | Kickoff and launch live here, as tagged sections. Not a delivery collection — the Checklist tab owns it. |
+| `project_checklists` | Every stage of the arc lives here, as sections. Not a delivery collection — the Checklist tab owns it. |
 
 Pages are a subcollection, not an array on the project: a large site is hundreds
 of rows each carrying its own statuses and QC answers, and rewriting an array to
@@ -187,15 +182,20 @@ a very large package to carry into a serverless bundle for two endpoints.
 
 ## Files
 
-- Domain: `src/modules/delivery/domain/` — types, stack definitions, progress and
-  readiness derivations, sheet row building and parsing, kickoff email. All pure
-  and tested (`npm run test:delivery`).
+- Domain: `src/modules/delivery/domain/` — `delivery.arc.ts` is the spine (stages,
+  roles, progress, gates); alongside it are types, stack definitions, readiness
+  derivations, sheet row building and parsing, and the kickoff email. All pure and
+  tested (`npm run test:delivery`).
 - Storage: `src/modules/delivery/infrastructure/delivery.repository.ts`.
 - Server: `src/lib/google-api.ts` (auth and a minimal Sheets/Drive client),
   `src/lib/delivery-sheet-sync.ts` (sync, share, import),
   `src/app/api/delivery/[projectId]/sheet/route.ts`.
-- UI: `src/modules/delivery/ui/` — the page grid, launch checklists, kickoff
-  panel, tracker sheet card.
+- UI: `src/modules/delivery/ui/` — `DeliveryTab` picks a stage off `StageRail` and
+  hands it to `StageScreen`, which renders the items through `StageChecklist` and
+  composes the role extras (`KickoffExtras`, `LaunchExtras`, the page grid).
+- Authoring: `src/components/checklist/ChecklistSection.tsx` (role per project),
+  `src/components/checklist-creator/ChecklistEditor.tsx` (role and item context
+  per template), `src/lib/template-export.ts` (the Markdown round trip).
 
 ## Verification
 
@@ -207,8 +207,14 @@ a very large package to carry into a serverless bundle for two endpoints.
    generate the sheet and confirm the columns match what the client is used to.
 4. Import: point it at a copy of the Muffins tracker and confirm the page list
    and statuses come through, and that a second import changes nothing.
-5. Stages: on a project with an untagged checklist, confirm Kickoff says it is not
-   set up. Tag a section Kickoff from the Checklist tab, confirm it appears under
-   Kickoff, tick an item there and confirm the Checklist tab shows it ticked too.
-6. Page checks: rename a check and confirm existing answers survive; remove an
+5. The arc: open a project whose checklist came from the Webflow SOP and confirm
+   the rail shows every section, not just the tagged ones. Tick an item on a stage
+   and confirm the Checklist tab shows it ticked too.
+6. Roles: set a section to the build stage on the Checklist tab and confirm the
+   page grid moves into it and the separate Pages entry disappears.
+7. Gates: mark an item blocking, then open a later stage and confirm it names what
+   it is waiting on and still lets you work.
+8. Page checks: rename a check and confirm existing answers survive; remove an
    answered one and confirm the warning names the number of pages affected.
+9. Round trip: open a template in the Creator, switch to Markdown and back, and
+   confirm the how-to text, links and notes are all still there.

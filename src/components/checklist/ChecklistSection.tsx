@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChecklistSection as ChecklistSectionType, ChecklistItemStatus, ChecklistStage } from '@/types';
+import { ChecklistSection as ChecklistSectionType, ChecklistItemStatus, StageRole } from '@/types';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChecklistItemRow } from './ChecklistItem';
 import { ChevronRight, Plus, Trash2, GripVertical, Check } from 'lucide-react';
@@ -34,24 +34,35 @@ interface ChecklistSectionProps {
 }
 
 /**
- * Which Delivery stage this section drives, if any.
+ * What the Delivery tab does at this stage beyond listing its items.
  *
- * This is the link between the Checklist tab and the Kickoff and Launch stages:
- * a section tagged here is the list those stages show and tick. It is a choice
- * per section per project because no two builds run the same way — one needs a
- * content audit before kickoff, the next needs a Webflow seat and nothing else.
- * Untagged is the default and means "part of the checklist, not a stage".
+ * Every section is a stage in the delivery arc whether or not it has a role, so
+ * "no role" does not mean hidden — it means an ordinary step. A role marks the
+ * few places the app does something extra, and it is a choice per section per
+ * project because no two builds run the same way.
  */
-const STAGE_OPTIONS: { value: ChecklistStage | 'none'; label: string; hint: string }[] = [
-    { value: 'none', label: 'Not in Delivery', hint: 'Shows in the checklist only' },
-    { value: 'kickoff', label: 'Kickoff', hint: 'Everything before the build can start' },
-    { value: 'launch', label: 'Launch', hint: 'The site-wide checks before going live' },
+const ROLE_OPTIONS: { value: StageRole | 'none'; label: string; hint: string }[] = [
+    { value: 'none', label: 'Ordinary stage', hint: 'A step in the arc, nothing special' },
+    { value: 'kickoff', label: 'Kickoff', hint: 'Also shows the call cadence and welcome email' },
+    { value: 'pages', label: 'The build', hint: 'Also shows the page grid' },
+    { value: 'client_review', label: 'Client review', hint: 'Ends with the client approving' },
+    { value: 'launch', label: 'Launch', hint: 'Decides whether the site is ready to go live' },
 ];
 
-const STAGE_LABELS: Record<ChecklistStage, string> = {
+const ROLE_LABELS: Record<StageRole, string> = {
     kickoff: 'Kickoff',
+    pages: 'The build',
+    client_review: 'Client review',
     launch: 'Launch',
 };
+
+/** Reads the tag sections carried before roles existed. */
+function roleOfSection(section: ChecklistSectionType): StageRole | undefined {
+    if (section.role) return section.role;
+    if (section.stage === 'kickoff') return 'kickoff';
+    if (section.stage === 'launch') return 'launch';
+    return undefined;
+}
 
 function computeProgress(items: { status: ChecklistItemStatus }[]) {
     if (items.length === 0) return { completed: 0, total: 0, percent: 0 };
@@ -81,6 +92,7 @@ export function ChecklistSectionBlock({
 }: ChecklistSectionProps) {
     const [isOpen, setIsOpen] = React.useState(defaultOpen);
     const progress = computeProgress(section.items);
+    const role = roleOfSection(section);
 
     const progressColor =
         progress.percent === 100
@@ -150,9 +162,9 @@ export function ChecklistSectionBlock({
                                 <>
                                     <span className="text-xl mr-2">{section.emoji || '📋'}</span>
                                     <h4 className="font-semibold text-sm truncate">{section.title}</h4>
-                                    {section.stage && (
+                                    {role && (
                                         <span className="flex-shrink-0 rounded border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                            {STAGE_LABELS[section.stage]}
+                                            {ROLE_LABELS[role]}
                                         </span>
                                     )}
                                 </>
@@ -187,22 +199,25 @@ export function ChecklistSectionBlock({
                                             variant="outline"
                                             size="sm"
                                             className="h-7 px-2 text-xs font-normal"
-                                            title="Which Delivery stage this section drives"
+                                            title="What Delivery does at this stage"
                                         >
-                                            {section.stage ? STAGE_LABELS[section.stage] : 'Not in Delivery'}
+                                            {role ? ROLE_LABELS[role] : 'Ordinary stage'}
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-60">
-                                        {STAGE_OPTIONS.map((option) => {
-                                            const selected = (section.stage ?? 'none') === option.value;
+                                    <DropdownMenuContent align="end" className="w-64">
+                                        {ROLE_OPTIONS.map((option) => {
+                                            const selected = (role ?? 'none') === option.value;
                                             return (
                                                 <DropdownMenuItem
                                                     key={option.value}
                                                     onClick={() =>
                                                         onUpdateSection?.({
                                                             // `updateSections` strips undefined before writing, so
-                                                            // this is how the tag is removed rather than blanked.
-                                                            stage: option.value === 'none' ? undefined : option.value,
+                                                            // this is how a role is removed rather than blanked.
+                                                            // The deprecated tag goes with it, or it would win again
+                                                            // on the next read.
+                                                            role: option.value === 'none' ? undefined : option.value,
+                                                            stage: undefined,
                                                         })
                                                     }
                                                     className="gap-2"

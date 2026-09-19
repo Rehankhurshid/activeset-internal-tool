@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  CalendarClock,
   CheckCircle2,
   Circle,
   CircleDot,
@@ -10,6 +11,7 @@ import {
   ListChecks,
   MoreHorizontal,
   SkipForward,
+  TriangleAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -21,25 +23,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { daysBetweenIso, todayIso } from '@/lib/review-status';
 import { cn } from '@/lib/utils';
-import type {
-  ChecklistItem,
-  ChecklistItemStatus,
-  ChecklistStage,
-  ProjectChecklist,
-} from '@/types';
-import { sectionsForStage, stageProgress } from '../../domain/delivery.checklist';
+import type { ChecklistItem, ChecklistItemLink, ChecklistItemStatus } from '@/types';
+import type { SectionStage } from '../../domain/delivery.arc';
 import type { AutoCheckVerdict } from '../../domain/delivery.types';
 import { deliveryRepository } from '../../infrastructure/delivery.repository';
 
 /**
- * A delivery stage, rendered from the project's own checklist.
+ * The items of one stage of the arc.
  *
- * The list is not held here. Whoever runs the project decides what kickoff or
- * launch means for it — by editing the checklist on the project, or the SOP
- * template it came from — and tags the section with a stage. This renders the
- * sections tagged for one stage, and a tick writes to the same item the
- * Checklist tab writes to, so the two can never disagree.
+ * This is the only place a stage's items are rendered. Every stage goes through
+ * it — the ones the app does something extra at and the eight that are just a
+ * list — so a task looks and behaves the same wherever you meet it, and a tick
+ * writes to the same item the Checklist tab writes to.
  */
 
 /** Status vocabulary, icons and cycle order, as the Checklist tab uses them. */
@@ -75,14 +72,44 @@ const STATUS_CONFIG: Record<
 
 const STATUS_ORDER: ChecklistItemStatus[] = ['not_started', 'in_progress', 'completed', 'skipped'];
 
-const STAGE_LABELS: Record<ChecklistStage, string> = {
-  kickoff: 'kickoff',
-  launch: 'launch',
-};
-
 /** One item's identity across every checklist on the project. */
 function itemKey(checklistId: string, sectionId: string, itemId: string): string {
   return `${checklistId}:${sectionId}:${itemId}`;
+}
+
+/**
+ * The item's links, with the older single `referenceLink` folded in unlabelled.
+ *
+ * Live projects still carry that field, and the SOP crammed URLs into titles
+ * before labelled links existed. Reading both means nothing has to be migrated
+ * for a link to become clickable.
+ */
+function linksOf(item: ChecklistItem): ChecklistItemLink[] {
+  const links = (item.links ?? []).filter((link) => link.url);
+  if (item.referenceLink && !links.some((link) => link.url === item.referenceLink)) {
+    return [...links, { label: 'Reference', url: item.referenceLink }];
+  }
+  return links;
+}
+
+/**
+ * A due date as a day, not an instant.
+ *
+ * Whatever wrote it may have written a full timestamp; only the date part means
+ * anything here. An answered item is never overdue — the date has done its job.
+ */
+function dueState(
+  dueDate: string | undefined,
+  answered: boolean,
+): { label: string; overdue: boolean } | null {
+  if (!dueDate) return null;
+  const day = dueDate.slice(0, 10);
+  const at = new Date(`${day}T00:00:00`);
+  if (Number.isNaN(at.getTime())) return null;
+  return {
+    label: at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    overdue: !answered && daysBetweenIso(day, todayIso()) > 0,
+  };
 }
 
 interface StageChecklistRowProps {
@@ -98,6 +125,8 @@ function StageChecklistRow({ item, status, verdict, onChange, disabled }: StageC
   const config = STATUS_CONFIG[status];
   const StatusIcon = config.icon;
   const answered = status === 'completed' || status === 'skipped';
+  const links = linksOf(item);
+  const due = dueState(item.dueDate, answered);
 
   return (
     <div className="group flex items-start gap-2.5 px-3 py-2 hover:bg-muted/40">
@@ -139,7 +168,18 @@ function StageChecklistRow({ item, status, verdict, onChange, disabled }: StageC
           {item.title}
         </p>
 
-        {item.notes && <p className="mt-0.5 text-xs text-muted-foreground">{item.notes}</p>}
+        {/* The how-to is inline and always visible. Guidance behind a hover is
+            guidance nobody reads, which is how the SOP ended up with URLs inside
+            item titles in the first place. */}
+        {item.howTo && (
+          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+            {item.howTo}
+          </p>
+        )}
+
+        {/* The how-to came with the SOP; a note is what happened on this
+            project. Italics keep the two apart without a label. */}
+        {item.notes && <p className="mt-1 text-xs italic text-muted-foreground/90">{item.notes}</p>}
 
         <div className="mt-1 flex flex-wrap items-center gap-2 empty:mt-0">
           {status === 'skipped' && (
@@ -149,6 +189,39 @@ function StageChecklistRow({ item, status, verdict, onChange, disabled }: StageC
             >
               Not applicable
             </Badge>
+          )}
+
+          {/* A settled item blocks nothing, so the mark goes away with the tick. */}
+          {item.blocking && !answered && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className="h-5 cursor-help gap-1 border-rose-500/40 px-1.5 text-[10px] font-normal text-rose-700 dark:text-rose-300"
+                >
+                  <TriangleAlert className="h-2.5 w-2.5" />
+                  Blocking
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[18rem]">
+                This stage is not finished until this is settled, and the stages after it say they
+                are waiting on it.
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {due && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]',
+                due.overdue
+                  ? 'bg-rose-500/10 font-medium text-rose-700 dark:text-rose-300'
+                  : 'bg-muted/60 text-muted-foreground',
+              )}
+            >
+              <CalendarClock className="h-2.5 w-2.5" />
+              {due.overdue ? `Overdue — ${due.label}` : `Due ${due.label}`}
+            </span>
           )}
 
           {verdict && verdict !== 'unknown' && (
@@ -174,17 +247,18 @@ function StageChecklistRow({ item, status, verdict, onChange, disabled }: StageC
             </Tooltip>
           )}
 
-          {item.referenceLink && (
+          {links.map((link) => (
             <a
-              href={item.referenceLink}
+              key={link.url}
+              href={link.url}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
             >
               <LinkIcon className="h-2.5 w-2.5" />
-              Reference
+              {link.label || 'Link'}
             </a>
-          )}
+          ))}
 
           {item.assignee && (
             <span className="inline-flex items-center rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
@@ -232,14 +306,12 @@ function StageChecklistRow({ item, status, verdict, onChange, disabled }: StageC
 }
 
 export interface StageChecklistProps {
+  /** Only for the link out to the Checklist tab when the stage has no items. */
   projectId: string;
-  /** Every checklist on the project; this picks the sections tagged for the stage. */
-  checklists: ProjectChecklist[];
-  stage: ChecklistStage;
+  /** The stage whose items these are. It carries the checklist a tick writes to. */
+  stage: SectionStage;
   /** Recorded against whatever a person completes, same as the Checklist tab. */
   userEmail?: string;
-  /** One line saying what this stage is for, shown when nothing is tagged for it. */
-  emptyHint?: string;
   /**
    * Item id → what the last scans make of it. Purely presentational: the parent
    * works these out, and a person's status always wins over them.
@@ -251,10 +323,8 @@ export interface StageChecklistProps {
 
 export function StageChecklist({
   projectId,
-  checklists,
   stage,
   userEmail,
-  emptyHint,
   autoVerdicts,
   disabled,
   className,
@@ -263,19 +333,14 @@ export function StageChecklist({
   // lands immediately rather than after a round trip.
   const [overrides, setOverrides] = useState<Record<string, ChecklistItemStatus>>({});
 
-  const sections = useMemo(() => sectionsForStage(checklists, stage), [checklists, stage]);
-  const untagged = useMemo(() => stageProgress(checklists, stage).untagged, [checklists, stage]);
-  const showChecklistName = checklists.length > 1;
+  const { checklistId, items } = stage;
+  const sectionId = stage.section.id;
 
   const serverStatuses = useMemo(() => {
     const map: Record<string, ChecklistItemStatus> = {};
-    for (const { checklistId, section } of sections) {
-      for (const item of section.items ?? []) {
-        map[itemKey(checklistId, section.id, item.id)] = item.status;
-      }
-    }
+    for (const item of items) map[itemKey(checklistId, sectionId, item.id)] = item.status;
     return map;
-  }, [sections]);
+  }, [items, checklistId, sectionId]);
 
   // Drop an optimistic tick once the stored data agrees with it, so a later
   // change by someone else is not masked by a stale local value.
@@ -293,12 +358,7 @@ export function StageChecklist({
   }, [serverStatuses]);
 
   const handleChange = useCallback(
-    async (
-      checklistId: string,
-      sectionId: string,
-      itemId: string,
-      status: ChecklistItemStatus,
-    ) => {
+    async (itemId: string, status: ChecklistItemStatus) => {
       const key = itemKey(checklistId, sectionId, itemId);
       const previous = overrides[key];
       setOverrides((prev) => ({ ...prev, [key]: status }));
@@ -320,34 +380,26 @@ export function StageChecklist({
         toast.error('Could not save that — it has been put back');
       }
     },
-    [overrides, userEmail],
+    [overrides, userEmail, checklistId, sectionId],
   );
 
-  if (untagged) {
+  if (items.length === 0) {
     return (
       <div
-        className={cn(
-          'rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center',
-          className,
-        )}
+        className={cn('rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center', className)}
       >
         <ListChecks className="mx-auto h-6 w-6 text-muted-foreground" />
-        <h3 className="mt-2 text-sm font-semibold">
-          {checklists.length === 0
-            ? 'This project has no checklist yet'
-            : `No checklist section is tagged ${STAGE_LABELS[stage]}`}
-        </h3>
+        <h3 className="mt-2 text-sm font-semibold">This stage has no items yet</h3>
         <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-          {emptyHint ? `${emptyHint} ` : ''}
-          Nothing is missing from the build — this stage just has not been set up. On the Checklist
-          tab, press Edit Structure and set a section to {STAGE_LABELS[stage]}; the SOP template a
-          checklist is made from can carry the tag too. Tag one and it appears here.
+          The stage exists — it is a section of this project&apos;s checklist — but nobody has said
+          what happens in it. Add the items there, or in the SOP template it came from, and they
+          appear here.
         </p>
         <Button asChild size="sm" variant="outline" className="mt-3 h-8 px-2.5 text-xs">
           {/* A plain link: the Checklist tab is chosen from the URL on load. */}
           <a href={`/modules/project-links/${projectId}?tab=checklist`}>
             <ListChecks className="h-3.5 w-3.5" />
-            {checklists.length === 0 ? 'Add a checklist' : 'Tag a section'}
+            Add items
             <ExternalLink className="h-3 w-3 text-muted-foreground" />
           </a>
         </Button>
@@ -356,55 +408,19 @@ export function StageChecklist({
   }
 
   return (
-    <div className={cn('space-y-3', className)}>
-      {sections.map(({ checklistId, checklistName, section }) => {
-        const items = [...(section.items ?? [])].sort((a, b) => a.order - b.order);
-        const statuses = items.map(
-          (item) => overrides[itemKey(checklistId, section.id, item.id)] ?? item.status,
-        );
-        const skipped = statuses.filter((status) => status === 'skipped').length;
-        const done = statuses.filter((status) => status === 'completed').length;
-        const total = items.length - skipped;
-
-        return (
-          <section key={`${checklistId}:${section.id}`} className="overflow-hidden rounded-lg border bg-card">
-            <header className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <span aria-hidden className="text-base leading-none">
-                  {section.emoji || '📋'}
-                </span>
-                <h3 className="truncate text-sm font-semibold">{section.title}</h3>
-                {showChecklistName && (
-                  <span className="truncate text-xs text-muted-foreground">{checklistName}</span>
-                )}
-              </div>
-              <p className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                {done} of {total}
-                {skipped > 0 && <span className="ml-1.5">· {skipped} skipped</span>}
-              </p>
-            </header>
-
-            <div className="divide-y divide-border/60">
-              {items.map((item, index) => (
-                <StageChecklistRow
-                  key={item.id}
-                  item={item}
-                  status={statuses[index]}
-                  verdict={autoVerdicts?.[item.id]}
-                  disabled={disabled}
-                  onChange={(status) => handleChange(checklistId, section.id, item.id, status)}
-                />
-              ))}
-
-              {items.length === 0 && (
-                <p className="px-3 py-3 text-xs text-muted-foreground">
-                  This section has no items yet. Add them on the Checklist tab.
-                </p>
-              )}
-            </div>
-          </section>
-        );
-      })}
+    <div className={cn('overflow-hidden rounded-lg border bg-card', className)}>
+      <div className="divide-y divide-border/60">
+        {items.map((item) => (
+          <StageChecklistRow
+            key={item.id}
+            item={item}
+            status={overrides[itemKey(checklistId, sectionId, item.id)] ?? item.status}
+            verdict={autoVerdicts?.[item.id]}
+            disabled={disabled}
+            onChange={(status) => handleChange(item.id, status)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

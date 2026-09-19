@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { SOPTemplate, SOPTemplateSection, SOPTemplateItem, ChecklistStage } from '@/types';
+import { SOPTemplate, SOPTemplateSection, SOPTemplateItem, ChecklistItemLink, StageRole } from '@/types';
 import { checklistService } from '@/services/ChecklistService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
@@ -26,11 +27,18 @@ import {
     Link as LinkIcon,
     Info,
     ArrowLeft,
+    ChevronDown,
+    ChevronRight,
     FileCode,
     Pencil,
+    X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { templateToMarkdown, parseMarkdownToTemplate } from '@/lib/template-export';
+// The scan signals come from the delivery domain, not from the component that
+// renders them, so the Creator does not depend on another screen's UI.
+import { AUTO_CHECK_IDS } from '@/modules/delivery/domain/delivery.types';
+import { AUTO_CHECK_DESCRIPTIONS } from '@/modules/delivery/ui/components/CheckStatusControl';
 import {
     DndContext,
     closestCenter,
@@ -49,8 +57,37 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-/** A Select cannot hold an empty value, so "untagged" needs a sentinel. */
-const NO_STAGE = 'none';
+/** A Select cannot hold an empty value, so "no role" and "no signal" need sentinels. */
+const NO_ROLE = 'none';
+const NO_CHECK = 'none';
+
+/**
+ * What a section's role is called on screen.
+ *
+ * Every section is a stage in the delivery arc now, so there is no such thing as
+ * a section Delivery cannot see — a role only says what the tab does there
+ * *beyond* listing the items. Hence "Ordinary stage" rather than the old "Not in
+ * Delivery", which described a behaviour that no longer exists.
+ */
+const ROLE_OPTIONS: { value: StageRole | typeof NO_ROLE; label: string; hint: string }[] = [
+    { value: NO_ROLE, label: 'Ordinary stage', hint: 'A step in Delivery like any other' },
+    { value: 'kickoff', label: 'Kickoff stage', hint: 'Also shows the cadence and welcome email' },
+    { value: 'pages', label: 'Page build stage', hint: 'Also shows the page grid' },
+    { value: 'client_review', label: 'Client review stage', hint: 'Ends with the client approving' },
+    { value: 'launch', label: 'Launch stage', hint: 'Readiness gate before going live' },
+];
+
+/**
+ * The role to show for a section authored before roles existed.
+ *
+ * `stage: 'kickoff' | 'launch'` means the role of the same name, so an old
+ * template reads correctly here and is saved as a role.
+ */
+const roleOf = (section: EditableSection): StageRole | undefined => {
+    if (section.role) return section.role;
+    if (section.stage === 'kickoff' || section.stage === 'launch') return section.stage;
+    return undefined;
+};
 
 // ── Internal editable types (add stable _uid for sortable) ──
 type EditableItem = SOPTemplateItem & { _uid: string };
@@ -76,14 +113,21 @@ const stripUid = (sections: EditableSection[]): SOPTemplateSection[] =>
         title: s.title,
         emoji: s.emoji,
         order: sIdx,
-        // Carried deliberately: a saved template that dropped these would quietly
-        // un-tag the Delivery stages and un-answer the scan-backed items.
-        stage: s.stage,
+        // The role is written and the deprecated `stage` is not, so saving is
+        // also the migration: an old tag comes in through `roleOf` and goes out
+        // as the role of the same name.
+        role: roleOf(s),
         items: s.items.map((it, iIdx) => ({
             title: it.title,
             emoji: it.emoji,
             status: it.status,
             autoCheck: it.autoCheck,
+            // Carried deliberately: a saved template that dropped any of these
+            // would quietly erase the guidance an author just wrote.
+            howTo: it.howTo,
+            links: it.links,
+            blocking: it.blocking,
+            dueDate: it.dueDate,
             notes: it.notes,
             referenceLink: it.referenceLink,
             hoverImage: it.hoverImage,
@@ -500,15 +544,26 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                 <TabsContent value="markdown" className="mt-4">
                     <Card>
                         <CardContent className="pt-6 space-y-3">
-                            <div className="text-xs text-muted-foreground leading-relaxed">
-                                Edit raw Markdown — use <code>##</code> for sections and <code>- [ ]</code> for items. Add{' '}
-                                <code>  - 🔗 Reference: URL</code> on a sub-bullet for reference links and{' '}
-                                <code>  - 🖼️ Image: URL</code> for hover images. Switch to <strong>Visual</strong> to preview, drag-reorder, or save.
+                            <div className="text-xs text-muted-foreground leading-relaxed space-y-1">
+                                <p>
+                                    Edit raw Markdown — <code>##</code> for a section, <code>- [ ]</code> for an item.
+                                    Under a section heading, <code>&gt; Role: kickoff | pages | client_review | launch</code>{' '}
+                                    says what Delivery does at that stage; leave it out for an ordinary one.
+                                </p>
+                                <p>
+                                    Everything on an item is a <code>Key: value</code> sub-bullet:{' '}
+                                    <code>📋 How-to:</code> (repeat the line for a second line of prose),{' '}
+                                    <code>🔗 Link: [Label](URL)</code>, <code>🖼️ Image: URL</code>,{' '}
+                                    <code>🔍 Check: page_title</code>, <code>🗒️ Notes:</code>,{' '}
+                                    <code>👤 Assignee: name@activeset.co</code>, <code>⛔ Blocking: yes</code>,{' '}
+                                    <code>📅 Due: 2026-01-31</code>. Anything else is ignored.
+                                </p>
+                                <p>Switch to <strong>Visual</strong> to preview, drag-reorder, or save.</p>
                             </div>
                             <Textarea
                                 value={markdown}
                                 onChange={(e) => setMarkdown(e.target.value)}
-                                placeholder={`# 📝 Template name\n> Description\n\n---\n\n## 📁 Section title\n- [ ] 📝 Item title\n  - 🔗 Reference: https://example.com`}
+                                placeholder={`# 📝 Template name\n> Description\n\n---\n\n## 📁 Section title\n\n> Role: kickoff\n\n- [ ] 📝 Item title\n  - 📋 How-to: What to actually do.\n  - 📋 How-to: A second line, if it needs one.\n  - 🔗 Link: [Screaming Frog](https://example.com)\n  - ⛔ Blocking: yes`}
                                 className="font-mono text-xs min-h-[480px]"
                                 spellCheck={false}
                             />
@@ -609,26 +664,38 @@ function SortableSectionCard({
                             className="font-medium text-lg"
                         />
                         {/*
-                          Tagging a stage here is what makes every checklist built
-                          from this template show up on Kickoff or Launch. It stays
-                          a per-section choice, and a project can change it on its
-                          own copy afterwards.
+                          Every section is a stage in Delivery, in this order. The
+                          role says what Delivery does there on top of listing the
+                          items, which is the only thing the app hardcodes — so
+                          most sections stay ordinary, and a project can change the
+                          role on its own copy afterwards.
                         */}
                         <Select
-                            value={section.stage ?? NO_STAGE}
+                            value={roleOf(section) ?? NO_ROLE}
                             onValueChange={(value) =>
                                 onUpdateSection(sIndex, {
-                                    stage: value === NO_STAGE ? undefined : (value as ChecklistStage),
+                                    role: value === NO_ROLE ? undefined : (value as StageRole),
+                                    // Drop the tag roles replaced, so the two cannot disagree.
+                                    stage: undefined,
                                 })
                             }
                         >
-                            <SelectTrigger className="w-[11rem] flex-shrink-0" aria-label="Delivery stage">
+                            <SelectTrigger
+                                className="w-[11rem] flex-shrink-0"
+                                aria-label="Stage role"
+                                title="Every section is a stage in Delivery. The role says what Delivery does there beyond listing the items."
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value={NO_STAGE}>Not in Delivery</SelectItem>
-                                <SelectItem value="kickoff">Kickoff stage</SelectItem>
-                                <SelectItem value="launch">Launch stage</SelectItem>
+                                {ROLE_OPTIONS.map((option) => (
+                                    // The label is all the trigger can show — Radix
+                                    // renders the chosen item's own text there — so
+                                    // the hint rides along as a tooltip instead.
+                                    <SelectItem key={option.value} value={option.value} title={option.hint}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -690,11 +757,40 @@ function SortableItemRow({
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: item._uid,
     });
+    // A template runs to 70-odd items, so everything but the title is folded
+    // away. Open by default would make the page unreadable and unscrollable.
+    const [expanded, setExpanded] = useState(false);
 
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
     };
+
+    /**
+     * The links to show, legacy single link included.
+     *
+     * `referenceLink` came before labelled links and is still read. Any edit here
+     * writes the whole list and clears it, so the first time an author touches
+     * the links of an old item it folds in and there is only one field again.
+     */
+    const links: ChecklistItemLink[] = [
+        ...(item.links || []),
+        ...(item.referenceLink ? [{ label: '', url: item.referenceLink }] : []),
+    ];
+    const writeLinks = (next: ChecklistItemLink[]) =>
+        onUpdateItem(sIndex, iIndex, { links: next, referenceLink: undefined });
+
+    // What the collapsed row admits to carrying, so nobody has to open 70 rows
+    // to find the one with the how-to on it.
+    const carried = [
+        item.howTo ? 'how-to' : null,
+        links.length ? `${links.length} link${links.length > 1 ? 's' : ''}` : null,
+        item.notes ? 'notes' : null,
+        item.assignee ? item.assignee : null,
+        item.dueDate ? `due ${item.dueDate}` : null,
+        item.autoCheck ? 'scan' : null,
+        item.blocking ? 'blocking' : null,
+    ].filter(Boolean) as string[];
 
     return (
         <div
@@ -738,28 +834,180 @@ function SortableItemRow({
                     placeholder="Checklist Item Title"
                     className="h-8 text-sm font-medium"
                 />
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 px-2 text-xs text-muted-foreground flex-shrink-0 mr-7"
+                    onClick={() => setExpanded((open) => !open)}
+                    aria-expanded={expanded}
+                >
+                    {expanded ? (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                    )}
+                    Details
+                </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pl-12">
-                <div className="relative">
-                    <LinkIcon className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
-                    <Input
-                        value={item.referenceLink || ''}
-                        onChange={(e) => onUpdateItem(sIndex, iIndex, { referenceLink: e.target.value })}
-                        placeholder="Reference Link (optional)"
-                        className="pl-8 h-7 text-xs"
-                    />
+            {!expanded && carried.length > 0 && (
+                <p className="pl-12 text-[11px] text-muted-foreground truncate">{carried.join(' · ')}</p>
+            )}
+
+            {expanded && (
+                <div className="pl-12 space-y-3">
+                    {/*
+                      The how-to is the point of all this: the SOP's judgement
+                      calls used to be crammed into item titles and parentheses
+                      because there was nowhere else to put them.
+                    */}
+                    <div className="space-y-1">
+                        <Label className="text-xs">How to do this</Label>
+                        <Textarea
+                            value={item.howTo || ''}
+                            onChange={(e) => onUpdateItem(sIndex, iIndex, { howTo: e.target.value })}
+                            placeholder="A few lines on what to actually do — the decision, not the theory."
+                            className="text-xs min-h-[72px]"
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <Label className="text-xs">Links</Label>
+                        {links.map((link, lIdx) => (
+                            <div key={lIdx} className="flex gap-2 items-center">
+                                <Input
+                                    value={link.label}
+                                    onChange={(e) =>
+                                        writeLinks(
+                                            links.map((l, i) =>
+                                                i === lIdx ? { ...l, label: e.target.value } : l,
+                                            ),
+                                        )
+                                    }
+                                    placeholder="Label"
+                                    className="h-7 text-xs w-1/3"
+                                />
+                                <div className="relative flex-1">
+                                    <LinkIcon className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                                    <Input
+                                        value={link.url}
+                                        onChange={(e) =>
+                                            writeLinks(
+                                                links.map((l, i) =>
+                                                    i === lIdx ? { ...l, url: e.target.value } : l,
+                                                ),
+                                            )
+                                        }
+                                        placeholder="https://…"
+                                        className="pl-8 h-7 text-xs"
+                                    />
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground flex-shrink-0"
+                                    onClick={() => writeLinks(links.filter((_, i) => i !== lIdx))}
+                                    aria-label="Remove link"
+                                >
+                                    <X className="h-3 w-3" />
+                                </Button>
+                            </div>
+                        ))}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground"
+                            onClick={() => writeLinks([...links, { label: '', url: '' }])}
+                        >
+                            <Plus className="h-3 w-3 mr-1" /> Add link
+                        </Button>
+                    </div>
+
+                    <div className="space-y-1">
+                        <Label className="text-xs">Notes</Label>
+                        <Textarea
+                            value={item.notes || ''}
+                            onChange={(e) => onUpdateItem(sIndex, iIndex, { notes: e.target.value })}
+                            placeholder="Anything worth knowing next time."
+                            className="text-xs min-h-[48px]"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                            <Label className="text-xs">Assignee</Label>
+                            <Input
+                                value={item.assignee || ''}
+                                onChange={(e) => onUpdateItem(sIndex, iIndex, { assignee: e.target.value })}
+                                placeholder="name@activeset.co"
+                                className="h-7 text-xs"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-xs">Due date</Label>
+                            <Input
+                                type="date"
+                                value={item.dueDate || ''}
+                                onChange={(e) => onUpdateItem(sIndex, iIndex, { dueDate: e.target.value || undefined })}
+                                className="h-7 text-xs"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-xs">Hover image</Label>
+                            <div className="relative">
+                                <Info className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                                <Input
+                                    value={item.hoverImage || ''}
+                                    onChange={(e) => onUpdateItem(sIndex, iIndex, { hoverImage: e.target.value })}
+                                    placeholder="Image URL (optional)"
+                                    className="pl-8 h-7 text-xs"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-xs">Answered by a scan</Label>
+                            {/*
+                              Only the signals the audit actually computes are
+                              offered: anything else would make an item look
+                              automatic and leave it unanswered forever.
+                            */}
+                            <Select
+                                value={item.autoCheck ?? NO_CHECK}
+                                onValueChange={(value) =>
+                                    onUpdateItem(sIndex, iIndex, {
+                                        autoCheck:
+                                            value === NO_CHECK
+                                                ? undefined
+                                                : (value as SOPTemplateItem['autoCheck']),
+                                    })
+                                }
+                            >
+                                <SelectTrigger className="h-7 text-xs" aria-label="Scan signal">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={NO_CHECK}>A person answers this</SelectItem>
+                                    {AUTO_CHECK_IDS.map((id) => (
+                                        <SelectItem key={id} value={id}>
+                                            Scan: {AUTO_CHECK_DESCRIPTIONS[id]}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Checkbox
+                            checked={!!item.blocking}
+                            onCheckedChange={(checked) =>
+                                onUpdateItem(sIndex, iIndex, { blocking: checked === true ? true : undefined })
+                            }
+                        />
+                        Blocking — this stage cannot close until it is settled
+                    </label>
                 </div>
-                <div className="relative">
-                    <Info className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
-                    <Input
-                        value={item.hoverImage || ''}
-                        onChange={(e) => onUpdateItem(sIndex, iIndex, { hoverImage: e.target.value })}
-                        placeholder="Hover Image URL (optional)"
-                        className="pl-8 h-7 text-xs"
-                    />
-                </div>
-            </div>
+            )}
         </div>
     );
 }

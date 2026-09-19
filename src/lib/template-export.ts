@@ -1,5 +1,113 @@
-import { SOPTemplate, SOPTemplateSection, SOPTemplateItem, ChecklistStage } from '@/types';
+import {
+    SOPTemplate,
+    SOPTemplateSection,
+    SOPTemplateItem,
+    ChecklistItemLink,
+    StageRole,
+} from '@/types';
 import jsPDF from 'jspdf';
+
+/**
+ * The Markdown format, in one place.
+ *
+ * This is not only an export. The Checklist Creator round-trips the whole
+ * template through it every time someone switches to the Markdown tab and back,
+ * so a field this format cannot carry is a field deleted from the template on
+ * the next save. That is why everything an item holds is written here, and why
+ * the test asserts `templateToMarkdown(parse(md)) === md`.
+ *
+ * Section facts are a `> Key: value` blockquote under the heading; item facts are
+ * `  - <emoji> Key: value` sub-bullets. `howTo` is the awkward one — several
+ * lines of prose, where a sub-bullet is a single line — so each of its lines
+ * becomes its own `How-to:` bullet and the parser joins them back. A file people
+ * hand-edit is worth more than one long line with escaped newlines in it.
+ */
+
+/** Every role the parser will accept, so a hand-typed one that matches nothing is dropped instead. */
+const STAGE_ROLES: StageRole[] = ['kickoff', 'pages', 'client_review', 'launch'];
+
+/**
+ * The item sub-bullet keys the parser understands, normalised (lower case, no
+ * spaces or hyphens). Aliases are here because people hand-write this format.
+ */
+const SUB_BULLET_KEYS = new Set([
+    'howto',
+    'link',
+    'links',
+    'reference',
+    'image',
+    'check',
+    'note',
+    'notes',
+    'assignee',
+    'owner',
+    'blocking',
+    'due',
+    'duedate',
+]);
+
+/**
+ * The role a section plays, tolerating the tag that came before roles existed.
+ *
+ * `stage: 'kickoff' | 'launch'` means exactly the roles of the same name, so a
+ * legacy template is written out as a role rather than kept on the deprecated
+ * field — opening the Markdown tab is how these quietly migrate.
+ */
+function roleOfSection(section: SOPTemplateSection): StageRole | undefined {
+    if (section.role) return section.role;
+    if (section.stage === 'kickoff' || section.stage === 'launch') return section.stage;
+    return undefined;
+}
+
+/**
+ * A fact that may span several lines, written as one bullet per line.
+ *
+ * A sub-bullet is a single line, and prose typed into a Textarea is not, so the
+ * key simply repeats. The parser joins repeats back with newlines, which makes
+ * the trip lossless for a blank line in the middle of a paragraph too.
+ */
+function multilineSubBullets(emoji: string, key: string, value: string): string[] {
+    return value
+        .split('\n')
+        .map((line) => `  - ${emoji} ${key}: ${line}`.replace(/\s+$/, ''));
+}
+
+/** Sub-bullets for one item: one line per fact it carries, in a fixed order so the file is stable. */
+function itemSubBullets(item: SOPTemplateItem): string[] {
+    const lines: string[] = [];
+
+    if (item.howTo) {
+        lines.push(...multilineSubBullets('📋', 'How-to', item.howTo));
+    }
+    for (const link of item.links || []) {
+        // Ordinary Markdown link syntax, so the label and the URL cannot be
+        // confused for one another no matter what punctuation the label uses.
+        lines.push(`  - 🔗 Link: [${link.label}](${link.url})`);
+    }
+    if (item.referenceLink) {
+        lines.push(`  - 🔗 Reference: ${item.referenceLink}`);
+    }
+    if (item.hoverImage) {
+        lines.push(`  - 🖼️ Image: ${item.hoverImage}`);
+    }
+    if (item.autoCheck) {
+        lines.push(`  - 🔍 Check: ${item.autoCheck}`);
+    }
+    if (item.notes) {
+        lines.push(...multilineSubBullets('🗒️', 'Notes', item.notes));
+    }
+    if (item.assignee) {
+        lines.push(`  - 👤 Assignee: ${item.assignee}`);
+    }
+    if (item.blocking) {
+        lines.push(`  - ⛔ Blocking: yes`);
+    }
+    if (item.dueDate) {
+        lines.push(`  - 📅 Due: ${item.dueDate}`);
+    }
+
+    return lines;
+}
 
 /**
  * Convert an SOP template to a formatted Markdown string.
@@ -21,26 +129,18 @@ export function templateToMarkdown(template: Partial<SOPTemplate>): string {
     for (const section of template.sections || []) {
         lines.push(`## ${section.emoji || '📁'} ${section.title}`);
         lines.push('');
-        // The editor round-trips through this format every time someone switches
-        // to the Markdown tab, so anything omitted here is silently erased. The
-        // stage tag drives the Kickoff and Launch screens, which makes losing it
-        // expensive rather than cosmetic.
-        if (section.stage) {
-            lines.push(`> Stage: ${section.stage}`);
+        // The role is what the Delivery tab does at this stage beyond listing
+        // its items, so losing it is expensive rather than cosmetic. Every
+        // section is a stage whether or not it has one.
+        const role = roleOfSection(section);
+        if (role) {
+            lines.push(`> Role: ${role}`);
             lines.push('');
         }
         for (const item of section.items || []) {
             const emoji = item.emoji ? `${item.emoji} ` : '';
             lines.push(`- [ ] ${emoji}${item.title}`);
-            if (item.referenceLink) {
-                lines.push(`  - 🔗 Reference: ${item.referenceLink}`);
-            }
-            if (item.hoverImage) {
-                lines.push(`  - 🖼️ Image: ${item.hoverImage}`);
-            }
-            if (item.autoCheck) {
-                lines.push(`  - 🔍 Check: ${item.autoCheck}`);
-            }
+            lines.push(...itemSubBullets(item));
         }
         lines.push('');
     }
@@ -69,12 +169,20 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
     const sectionRegex = /^##\s+(.+)$/;
     // Matches "- [ ] ..." or "- [x] ..." etc.
     const itemRegex = /^\s*-\s*\[[ xX]?\]\s*(.+)$/;
-    // Sub-bullet "  - 🔗 Reference: …" / "  - 🖼️ Image: …"
-    const subRefRegex = /^\s+-\s*(?:🔗|Reference|🌐)[^a-zA-Z0-9]*(?:Reference\s*:?\s*)?(.+)$/i;
-    const subImgRegex = /^\s+-\s*(?:🖼️?|Image)[^a-zA-Z0-9]*(?:Image\s*:?\s*)?(.+)$/i;
-    // Sub-bullet "  - 🔍 Check: page_title" — the scan signal that answers an item.
-    const subCheckRegex = /^\s+-\s*(?:🔍|Check)[^a-zA-Z0-9]*(?:Check\s*:?\s*)?(.+)$/i;
-    // Section-level "> Stage: kickoff", written under the section heading.
+    // Any indented sub-bullet under an item. What it means is decided below from
+    // its key, so an unknown one is skipped instead of landing in some field.
+    const subBulletRegex = /^\s+-\s*(.+)$/;
+    // Leading emoji on a sub-bullet: decoration, except on the older forms that
+    // carried the meaning in the emoji alone ("  - 🔗 https://…").
+    const leadingEmojiRegex = /^(\p{Extended_Pictographic}(?:️|⃣|\p{Emoji_Modifier}|‍\p{Extended_Pictographic})*)\s*/u;
+    // "How-to: …", "Notes: …" — the value may be empty, which is how a blank
+    // line inside a multi-line how-to survives the trip.
+    const keyedRegex = /^([A-Za-z][A-Za-z -]*?)\s*:\s*(.*)$/;
+    // "[Label](https://…)" — greedy, so a label containing "]" still parses.
+    const mdLinkRegex = /^\[(.*)\]\((.*)\)$/;
+    // Section-level "> Role: pages", written under the section heading, and the
+    // "> Stage: kickoff" that came before it.
+    const roleRegex = /^>\s*Role\s*:\s*(.+)$/i;
     const stageRegex = /^>\s*Stage\s*:\s*(.+)$/i;
     const blockquoteRegex = /^>\s*(.+)$/;
     const dividerRegex = /^---+\s*$/;
@@ -85,6 +193,28 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
         const m = trimmed.match(/^(\p{Extended_Pictographic}(?:️|⃣|\p{Emoji_Modifier}|‍\p{Extended_Pictographic})*)\s+(.+)$/u);
         if (m) return { emoji: m[1], title: m[2].trim() };
         return { title: trimmed };
+    };
+
+    /** A role name, accepting "client review" and "Client_Review" for the same thing. */
+    const parseRole = (raw: string): StageRole | undefined => {
+        const value = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
+        return STAGE_ROLES.find((role) => role === value);
+    };
+
+    /** Repeats of a multi-line key join back with newlines, in the order written. */
+    const appendLine = (existing: string | undefined, line: string): string =>
+        existing === undefined ? line : `${existing}\n${line}`;
+
+    const parseLink = (raw: string): ChecklistItemLink | undefined => {
+        const value = raw.trim();
+        const md = value.match(mdLinkRegex);
+        if (md) {
+            const url = md[2].trim();
+            // A link with no URL is not a link; better to drop it than to render
+            // a label that goes nowhere on every project made from this template.
+            return url ? { label: md[1].trim(), url } : undefined;
+        }
+        return value ? { label: '', url: value } : undefined;
     };
 
     const flushItem = () => {
@@ -161,37 +291,100 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
             continue;
         }
 
-        // Section-level stage tag. Checked before the item sub-bullets because it
-        // belongs to the section, and anything that is not a known stage is
+        // Section-level role. Checked before the item sub-bullets because it
+        // belongs to the section, and anything that is not a known role is
         // ignored rather than written through as a tag nothing will match.
         if (currentSection && !currentItem) {
+            const roleMatch = line.match(roleRegex);
+            if (roleMatch) {
+                currentSection.role = parseRole(roleMatch[1]);
+                continue;
+            }
+            // Legacy "> Stage: kickoff". Read as the role of the same name so an
+            // old file keeps working and comes out the other side as a role.
             const stageMatch = line.match(stageRegex);
             if (stageMatch) {
                 const value = stageMatch[1].trim().toLowerCase();
                 if (value === 'kickoff' || value === 'launch') {
-                    currentSection.stage = value as ChecklistStage;
+                    currentSection.role = value;
                 }
                 continue;
             }
         }
 
-        // Sub-bullet for current item (reference link)
+        // Sub-bullet for the current item. Its key decides what it is; a bullet
+        // whose key we do not know is dropped, because guessing would put a
+        // sentence into a URL field on every project made from this template.
         if (currentItem) {
-            const refMatch = line.match(subRefRegex);
-            if (refMatch) {
-                currentItem.referenceLink = refMatch[1].trim();
-                continue;
-            }
-            const imgMatch = line.match(subImgRegex);
-            if (imgMatch) {
-                currentItem.hoverImage = imgMatch[1].trim();
-                continue;
-            }
-            const checkMatch = line.match(subCheckRegex);
-            if (checkMatch) {
-                // Kept as written; the delivery domain validates it before ever
-                // treating a check as automatic.
-                currentItem.autoCheck = checkMatch[1].trim() as SOPTemplateItem['autoCheck'];
+            const subMatch = line.match(subBulletRegex);
+            if (subMatch) {
+                const body = subMatch[1].trim();
+                const emojiMatch = body.match(leadingEmojiRegex);
+                const emoji = emojiMatch?.[1];
+                const rest = emojiMatch ? body.slice(emojiMatch[0].length) : body;
+                const keyed = rest.match(keyedRegex);
+                const candidate = keyed ? keyed[1].trim().toLowerCase().replace(/[\s-]+/g, '') : '';
+                // A bare "https://…" looks keyed ("https:"), so a key only counts
+                // when it is one we actually know — otherwise the line is read as
+                // the older emoji-only form and the URL survives intact.
+                const key = SUB_BULLET_KEYS.has(candidate) ? candidate : '';
+                const value = key ? keyed![2].trim() : rest.trim();
+
+                switch (key) {
+                    case 'howto':
+                        currentItem.howTo = appendLine(currentItem.howTo, value);
+                        continue;
+                    case 'link':
+                    case 'links': {
+                        const link = parseLink(value);
+                        if (link) currentItem.links = [...(currentItem.links || []), link];
+                        continue;
+                    }
+                    case 'reference':
+                        currentItem.referenceLink = value;
+                        continue;
+                    case 'image':
+                        currentItem.hoverImage = value;
+                        continue;
+                    case 'check':
+                        // Kept as written; the delivery domain validates it before
+                        // ever treating a check as automatic.
+                        currentItem.autoCheck = value as SOPTemplateItem['autoCheck'];
+                        continue;
+                    case 'note':
+                    case 'notes':
+                        currentItem.notes = appendLine(currentItem.notes, value);
+                        continue;
+                    case 'assignee':
+                    case 'owner':
+                        currentItem.assignee = value;
+                        continue;
+                    case 'blocking':
+                        // Only an affirmative sets the flag. "Blocking: no" is the
+                        // same as not writing the line, which is what the writer does.
+                        if (/^(yes|true|1)$/i.test(value)) currentItem.blocking = true;
+                        continue;
+                    case 'due':
+                    case 'duedate':
+                        currentItem.dueDate = value;
+                        continue;
+                }
+
+                // Older files put the meaning in the emoji alone, with no key.
+                if (!key) {
+                    if (emoji === '🔗' || emoji === '🌐') {
+                        currentItem.referenceLink = value;
+                        continue;
+                    }
+                    if (emoji === '🖼️' || emoji === '🖼') {
+                        currentItem.hoverImage = value;
+                        continue;
+                    }
+                    if (emoji === '🔍') {
+                        currentItem.autoCheck = value as SOPTemplateItem['autoCheck'];
+                        continue;
+                    }
+                }
                 continue;
             }
         }

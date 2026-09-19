@@ -73,7 +73,7 @@ interface KickoffEmailDialogProps {
   portalUrl?: string;
 }
 
-/** Lets the Kickoff screen open this draft from elsewhere on the page. */
+/** Lets a caller open this draft from elsewhere on the page, not only its own trigger. */
 export interface KickoffEmailDialogHandle {
   open: () => void;
 }

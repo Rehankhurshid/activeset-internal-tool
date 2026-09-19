@@ -34,11 +34,29 @@ export {
   resolveCheck,
 } from './domain/delivery.progress';
 
-// The project's own checklist, read as a delivery stage. Kickoff and the
-// site-wide launch list live there, not in this module, so they can differ per
-// project and are edited in one place.
-export { itemsForStage, sectionsForStage, stageProgress } from './domain/delivery.checklist';
-export type { StageProgress, StageSection } from './domain/delivery.checklist';
+// The project's whole delivery arc, read off its own SOP checklist. Every
+// section is a stage, in the SOP's order, so what a project does can differ from
+// the next one without touching this module.
+export {
+  arcProgress,
+  currentStageKey,
+  deliveryArc,
+  gateFor,
+  itemsWithRole,
+  roleOf,
+  roleProgress,
+  sectionStagesOf,
+  stageWithRole,
+} from './domain/delivery.arc';
+export type {
+  ArcEntry,
+  ArcOptions,
+  PagesStage,
+  RoleProgress,
+  SectionStage,
+  StageBase,
+  StageProgress,
+} from './domain/delivery.arc';
 export type {
   BuildLaunchReadinessInput,
   CheckProgress,
@@ -51,8 +69,7 @@ export { deliveryRepository, normalizePagePath, titleFromPath } from './infrastr
 
 export { DeliveryTab } from './ui/screens/DeliveryTab';
 export { DeliveryScreen } from './ui/screens/DeliveryScreen';
-export { KickoffScreen } from './ui/screens/KickoffScreen';
-export { LaunchScreen } from './ui/screens/LaunchScreen';
+export { StageScreen } from './ui/screens/StageScreen';
 export { TrackerSheetCard } from './ui/components/TrackerSheetCard';
 export { buildKickoffEmail } from './domain/kickoff.email';
 export {
