@@ -1,6 +1,12 @@
 import { FatalError, getWorkflowMetadata } from 'workflow';
 import { pageScanner } from '@/services/PageScanner';
-import { projectsService } from '@/services/database';
+import {
+  linkOf,
+  loadLinkAuditAdmin,
+  loadProjectDocAdmin,
+  saveImageAltResultsAdmin,
+  setImageScanJobAdmin,
+} from '@/lib/audit-admin';
 import type { ImageScanJob } from '@/types';
 
 export interface ImageScanPageRef {
@@ -33,12 +39,12 @@ async function scanPageAndPersist(
   }
 
   // Read "before" count from the current link snapshot.
-  const project = await projectsService.getProject(projectId);
+  const project = await loadProjectDocAdmin(projectId);
   if (!project) {
     // Project was deleted mid-scan — don't retry forever.
     throw new FatalError(`Project ${projectId} no longer exists`);
   }
-  const link = project.links.find((l) => l.id === page.linkId);
+  const link = linkOf(project, page.linkId);
   if (!link) {
     return {
       linkId: page.linkId,
@@ -51,13 +57,13 @@ async function scanPageAndPersist(
     };
   }
 
+  const previous = await loadLinkAuditAdmin(projectId, page.linkId);
   const before =
-    (link.auditResult?.categories?.seo as { imagesWithoutAlt?: number } | undefined)
-      ?.imagesWithoutAlt ?? 0;
+    (previous?.categories?.seo as { imagesWithoutAlt?: number } | undefined)?.imagesWithoutAlt ?? 0;
 
   const result = await pageScanner.scanImagesOnly(page.url);
 
-  await projectsService.saveImageAltResults(projectId, page.linkId, {
+  await saveImageAltResultsAdmin(projectId, page.linkId, {
     totalImages: result.totalImages,
     uniqueMissingAltCount: result.uniqueMissingAltCount,
     images: result.images,
@@ -84,7 +90,7 @@ async function heartbeatJob(
 ): Promise<void> {
   'use step';
   try {
-    await projectsService.setImageScanJob(projectId, job);
+    await setImageScanJobAdmin(projectId, job);
   } catch (error) {
     // Heartbeat failures shouldn't kill the workflow — progress just won't
     // advance in the UI for this tick. Log and move on.
@@ -98,7 +104,7 @@ async function heartbeatJob(
 async function clearJob(projectId: string): Promise<void> {
   'use step';
   try {
-    await projectsService.setImageScanJob(projectId, null);
+    await setImageScanJobAdmin(projectId, null);
   } catch (error) {
     console.error('[imageScanWorkflow] Clear job failed:', error);
   }

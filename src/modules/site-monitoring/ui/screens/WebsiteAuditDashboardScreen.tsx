@@ -4,6 +4,25 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import NextLink from "next/link"
 import { type ProjectLink, type FolderPageTypes } from "@/modules/site-monitoring"
 import type { ImageScanJob } from "@/types"
+import type { WebflowConfig } from "@/types/webflow"
+import { fetchForProject } from "@/lib/api-client"
+import {
+  collectFindings,
+  findingsForPage,
+  fixListMarkdown,
+  fixesRollup,
+  imageFingerprint,
+  READINESS_LABEL,
+  readinessOf,
+  type AltFinding,
+  type LinkFinding,
+} from "../../domain/audit-findings"
+import { useAuditDecisions } from "../hooks/useAuditDecisions"
+import { AuditHeader, type FixTarget } from "../components/audit/AuditHeader"
+import { AltTextTab } from "../components/audit/AltTextTab"
+import { LinksTab } from "../components/audit/LinksTab"
+import { PageFixes } from "../components/audit/PageFixes"
+import { isToday } from "../components/audit/relative-time"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -21,7 +40,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import {
-  AlertTriangle,
   Loader2,
   Search,
   Play,
@@ -41,7 +59,6 @@ import {
   ArrowUpDown,
   ImageIcon,
   LinkIcon,
-  RefreshCw,
 } from "lucide-react"
 import {
   Tooltip,
@@ -61,6 +78,10 @@ interface WebsiteAuditDashboardProps {
   pathToLocaleMap?: Record<string, string>;  // Path prefix to locale mapping
   isReadOnly?: boolean;
   imageScanJob?: ImageScanJob;
+  /** Lets the Alt text tab write alt back to Webflow when a token is configured. */
+  webflowConfig?: WebflowConfig;
+  /** Recorded on decisions ("marked decorative by …"). */
+  userEmail?: string;
 }
 
 interface AuditPageRow {
@@ -101,76 +122,8 @@ interface CompactImageItem {
   altApplicable?: boolean;
 }
 
-interface MissingAltImageIssue {
-  key: string;
-  pageId: string;
-  pageTitle: string;
-  pageUrl: string;
-  imageSrc: string;
-  imageFingerprint: string;
-  inMainContent: boolean;
-  occurrences: number;
-  repeatedAcrossPages: boolean;
-  repeatedPageCount: number;
-  repeatedTotalOccurrences: number;
-  lastScan?: string;
-  lastScanRelative: string;
-}
-
-interface MissingAltPageGroup {
-  pageId: string;
-  pageTitle: string;
-  pageUrl: string;
-  lastScan?: string;
-  lastScanRelative: string;
-  issues: MissingAltImageIssue[];
-  uniqueImageCount: number;
-  totalOccurrences: number;
-  repeatedImageCount: number;
-  mainContentImageCount: number;
-}
-
-interface MissingAltUniqueImageGroup {
-  imageFingerprint: string;
-  imageSrc: string;
-  inMainContent: boolean;
-  totalOccurrences: number;
-  pageCount: number;
-  lastScan?: string;
-  lastScanRelative: string;
-  pages: {
-    pageId: string;
-    pageTitle: string;
-    pageUrl: string;
-    occurrences: number;
-  }[];
-}
-
-interface BrokenLinkIssueRow {
-  key: string;
-  pageId: string;
-  pageTitle: string;
-  pageUrl: string;
-  href: string;
-  status: number;
-  text: string;
-  error?: string;
-  checkedAt?: string;
-  checkedRelative: string;
-}
-
-const ISSUE_STATUSES = new Set(['Blocked', 'Scan failed', 'Content changed', 'Tech-only change']);
-type AuditTab = 'pages' | 'missing-alt' | 'broken-links'
-type MissingAltAreaFilter = 'all' | 'main' | 'other'
-type MissingAltRepeatFilter = 'all' | 'repeated' | 'single'
-type MissingAltSortMode = 'impact' | 'recent' | 'alphabetical'
-type MissingAltViewMode = 'page' | 'unique'
-
-const toTimestamp = (value?: string): number => {
-  if (!value) return 0
-  const ts = new Date(value).getTime()
-  return Number.isFinite(ts) ? ts : 0
-}
+const ISSUE_STATUSES = new Set(['Blocked', 'Scan failed', 'Fix needed', 'Template fix pending', 'Content changed', 'Tech-only change']);
+type AuditTab = 'pages' | 'alt' | 'links'
 
 const getImageFingerprint = (rawSrc: string): string => {
   const src = rawSrc.trim()
@@ -248,34 +201,6 @@ const collectNonApplicableImageFingerprints = (
   return fingerprints
 }
 
-const compareMissingAltIssues = (
-  a: MissingAltImageIssue,
-  b: MissingAltImageIssue,
-  sortMode: MissingAltSortMode
-): number => {
-  if (sortMode === "recent") {
-    return toTimestamp(b.lastScan) - toTimestamp(a.lastScan)
-  }
-
-  if (sortMode === "alphabetical") {
-    const titleSort = a.pageTitle.localeCompare(b.pageTitle)
-    if (titleSort !== 0) return titleSort
-    return a.imageSrc.localeCompare(b.imageSrc)
-  }
-
-  if (a.repeatedPageCount !== b.repeatedPageCount) return b.repeatedPageCount - a.repeatedPageCount
-  if (a.inMainContent !== b.inMainContent) return a.inMainContent ? -1 : 1
-  if (a.occurrences !== b.occurrences) return b.occurrences - a.occurrences
-  return toTimestamp(b.lastScan) - toTimestamp(a.lastScan)
-}
-
-const getRepeatedUsageLabel = (issue: MissingAltImageIssue): string => {
-  if (issue.repeatedTotalOccurrences <= issue.repeatedPageCount) {
-    return `Repeated on ${issue.repeatedPageCount} pages (once each)`
-  }
-  return `Repeated on ${issue.repeatedPageCount} pages • ${issue.repeatedTotalOccurrences} total occurrences`
-}
-
 export function WebsiteAuditDashboard({
   links,
   projectId,
@@ -284,6 +209,8 @@ export function WebsiteAuditDashboard({
   pathToLocaleMap = {},
   isReadOnly = false,
   imageScanJob,
+  webflowConfig,
+  userEmail,
 }: WebsiteAuditDashboardProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -295,26 +222,22 @@ export function WebsiteAuditDashboard({
   const [isEditingFolderTypes, setIsEditingFolderTypes] = useState(false)
   const [pendingFolderTypes, setPendingFolderTypes] = useState<FolderPageTypes>({})
   const [selectedPage, setSelectedPage] = useState<AuditPageRow | null>(null)
-  const [isCheckingAllBrokenLinks, setIsCheckingAllBrokenLinks] = useState(false)
-  const [brokenLinkCheckProgress, setBrokenLinkCheckProgress] = useState({
+  const [checkAllState, setCheckAllState] = useState({
+    running: false,
     current: 0,
     total: 0,
     currentUrl: "",
   })
+  const checkAllAbortRef = useRef(false)
+  const [recheckingPageIds, setRecheckingPageIds] = useState<Set<string>>(new Set())
+  const [verifyingFingerprints, setVerifyingFingerprints] = useState<Set<string>>(new Set())
+  const { decisions, record: recordDecision, clear: clearDecision } = useAuditDecisions(projectId, !isReadOnly)
   const [isScanningAllImages, setIsScanningAllImages] = useState(false)
   const [imageScanProgress, setImageScanProgress] = useState({
     current: 0,
     total: 0,
     currentUrl: "",
   })
-  const [scanningImagePageIds, setScanningImagePageIds] = useState<Set<string>>(new Set())
-  const [missingAltSearch, setMissingAltSearch] = useState("")
-  const [missingAltAreaFilter, setMissingAltAreaFilter] = useState<MissingAltAreaFilter>("all")
-  const [missingAltRepeatFilter, setMissingAltRepeatFilter] = useState<MissingAltRepeatFilter>("all")
-  const [missingAltSortMode, setMissingAltSortMode] = useState<MissingAltSortMode>("impact")
-  const [missingAltViewMode, setMissingAltViewMode] = useState<MissingAltViewMode>("page")
-  const [collapsedMissingAltPages, setCollapsedMissingAltPages] = useState<Set<string>>(new Set())
-  const [missingAltPreviewErrors, setMissingAltPreviewErrors] = useState<Set<string>>(new Set())
 
   // Tracks whether this tab is the one actively orchestrating the bulk scan.
   // Only the owning tab should update/clear the persisted job document.
@@ -440,7 +363,8 @@ export function WebsiteAuditDashboard({
     setPendingFolderTypes({})
     setIsEditingFolderTypes(false)
     
-    // Persist locally
+    // Local copy for the read-only share view, which cannot write; the project
+    // document is the source of truth so teammates see the same classification.
     try {
       if (typeof window !== "undefined") {
         window.localStorage.setItem(`folderPageTypes:${projectId}`, JSON.stringify(updated))
@@ -448,10 +372,13 @@ export function WebsiteAuditDashboard({
     } catch {
       // ignore
     }
-    
-    // Reload to apply the change
-    window.location.reload()
-  }, [folderTypes, pendingFolderTypes, projectId])
+    if (isReadOnly) return
+    try {
+      await siteMonitoringRepository.updateFolderPageTypes(projectId, updated)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save folder types')
+    }
+  }, [folderTypes, pendingFolderTypes, projectId, isReadOnly])
 
   // Cancel edit mode
   const cancelEditMode = useCallback(() => {
@@ -519,14 +446,18 @@ export function WebsiteAuditDashboard({
         
         setIsBulkScanning(false)
         
+        // The project subscription has already delivered the new audits; the
+        // table re-derives from `links`, so nothing needs a reload — a reload
+        // would throw away every filter, expanded group and open sheet.
         if (data.status === 'completed') {
-          console.log('[BulkScan] Completed:', data.summary)
-          // Refresh the page to show updated results
-          window.location.reload()
+          const summary = data.summary as { contentChanged?: number; failed?: number } | undefined
+          const changed = summary?.contentChanged ?? 0
+          const failed = summary?.failed ?? 0
+          toast.success(
+            `Scan complete · ${data.total} page${data.total === 1 ? '' : 's'}${changed ? ` · ${changed} changed` : ''}${failed ? ` · ${failed} failed` : ''}`
+          )
         } else if (data.status === 'cancelled') {
-          console.log('[BulkScan] Cancelled by user')
-          // Refresh to show partial results
-          window.location.reload()
+          toast.info('Scan stopped — results so far are saved')
         } else {
           console.error('[BulkScan] Failed:', data.error)
         }
@@ -699,6 +630,11 @@ export function WebsiteAuditDashboard({
     return undefined;
   }, [pathToLocaleMap]);
 
+  // Everything the three tabs show, derived once. One finding per thing
+  // someone would fix; the tabs and the per-page readiness all read from it.
+  const findings = useMemo(() => collectFindings(links, decisions), [links, decisions])
+  const rollup = useMemo(() => fixesRollup(findings), [findings])
+
   // 1. Process Links into Page Data
   const pagesData = useMemo<AuditPageRow[]>(() => {
     const targetLinkIds = bulkScanProgress.targetLinkIds
@@ -708,13 +644,16 @@ export function WebsiteAuditDashboard({
     return links.map(link => {
       const audit = link.auditResult;
 
-      // Determine display status based on both changeStatus and deployment status
+      // One readiness state per page, derived from the findings the other two
+      // tabs work from. Change status only shows when nothing needs fixing.
+      const readiness = readinessOf(link, findings)
       let displayStatus = "No change";
-      if (!audit) displayStatus = "Pending";
-      else if (audit.canDeploy === false) displayStatus = "Blocked";
-      else if (audit.changeStatus === 'CONTENT_CHANGED') displayStatus = "Content changed";
-      else if (audit.changeStatus === 'TECH_CHANGE_ONLY') displayStatus = "Tech-only change";
-      if (audit?.changeStatus === 'SCAN_FAILED') displayStatus = "Scan failed";
+      if (readiness === 'unscanned') displayStatus = "Pending";
+      else if (readiness === 'blocked' || readiness === 'scan_failed' || readiness === 'fix_needed' || readiness === 'template_fix_pending') {
+        displayStatus = READINESS_LABEL[readiness];
+      }
+      else if (audit?.changeStatus === 'CONTENT_CHANGED') displayStatus = "Content changed";
+      else if (audit?.changeStatus === 'TECH_CHANGE_ONLY') displayStatus = "Tech-only change";
 
       // Override status during bulk scan based on scan state
       if (isBulkScanning) {
@@ -740,12 +679,13 @@ export function WebsiteAuditDashboard({
       }
 
       // Findings aggregation
-      const findings = [];
-      if ((audit?.categories?.placeholders?.issues?.length || 0) > 0) findings.push("Placeholders");
-      if ((audit?.categories?.spelling?.issues?.length || 0) > 0) findings.push("Spelling");
-      if ((audit?.categories?.seo?.issues || []).some((issue) => issue && !isNiceToHaveSeoIssue(issue))) findings.push("SEO");
-      if ((audit?.categories?.technical?.issues?.length || 0) > 0) findings.push("Technical");
-      if ((audit?.score || 0) < 50) findings.push("Low Score");
+      const pageFindings = [];
+      if (displayStatus !== "Content changed" && audit?.changeStatus === 'CONTENT_CHANGED') pageFindings.push("Changed");
+      if ((audit?.categories?.placeholders?.issues?.length || 0) > 0) pageFindings.push("Placeholders");
+      if ((audit?.categories?.spelling?.issues?.length || 0) > 0) pageFindings.push("Spelling");
+      if ((audit?.categories?.seo?.issues || []).some((issue) => issue && !isNiceToHaveSeoIssue(issue))) pageFindings.push("SEO");
+      if ((audit?.categories?.technical?.issues?.length || 0) > 0) pageFindings.push("Technical");
+      if ((audit?.score || 0) < 50) pageFindings.push("Low Score");
 
       // Detect locale from URL if not already set
       const detectedLocale = link.locale || detectLocaleFromUrl(link.url);
@@ -762,12 +702,13 @@ export function WebsiteAuditDashboard({
         lastScanRelative: audit?.lastRun ? getRelativeTime(audit.lastRun) : "Never",
         lastScanTimestamp: audit?.lastRun || "",
         score: audit?.score || 0,
-        findings,
+        findings: pageFindings,
         rawAudit: audit
       };
     });
   }, [
     links,
+    findings,
     isBulkScanning,
     bulkScanProgress.currentUrl,
     bulkScanProgress.startedAt,
@@ -847,8 +788,12 @@ export function WebsiteAuditDashboard({
         return 5
       case 'Scan failed':
         return 4
+      case 'Fix needed':
+        return 3.5
       case 'Content changed':
         return 3
+      case 'Template fix pending':
+        return 2.5
       case 'Tech-only change':
         return 2
       case 'Pending':
@@ -884,8 +829,8 @@ export function WebsiteAuditDashboard({
         if (severityDiff !== 0) return severityDiff;
         return a.score - b.score;
       }
-      // Recent (default)
-      return new Date(b.lastScan).getTime() - new Date(a.lastScan).getTime();
+      // Recent (default) — ISO timestamps, not the localised display string
+      return new Date(b.lastScanTimestamp || 0).getTime() - new Date(a.lastScanTimestamp || 0).getTime();
     });
   }, [pagesData, searchQuery, statusFilter, localeFilter, pageTypeFilter, sortBy, normalizeLocale, getFolderPatternFromUrl, folderTypes, getSeverityRank]);
 
@@ -1089,7 +1034,9 @@ export function WebsiteAuditDashboard({
     const techOnly = pagesData.filter(p => p.status === 'Tech-only change').length;
     const blocked = pagesData.filter(p => p.status === 'Blocked').length;
     const failed = pagesData.filter(p => p.status === 'Scan failed').length;
-    const avgScore = total > 0 ? Math.round(pagesData.reduce((acc, p) => acc + p.score, 0) / total) : 0;
+    // Only scanned pages carry a score; a never-scanned page is not a zero.
+    const scored = pagesData.filter(p => p.rawAudit);
+    const avgScore = scored.length > 0 ? Math.round(scored.reduce((acc, p) => acc + p.score, 0) / scored.length) : 0;
     const issueCount = changed + techOnly + blocked + failed;
 
     return { total, changed, techOnly, blocked, failed, avgScore, issueCount };
@@ -1103,8 +1050,6 @@ export function WebsiteAuditDashboard({
     return latest || null;
   }, [pagesData]);
 
-  const criticalIssues = pagesData.filter((page) => page.status === "Blocked")
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case "No change":
@@ -1115,6 +1060,10 @@ export function WebsiteAuditDashboard({
         return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
       case "Blocked":
         return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
+      case "Fix needed":
+        return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+      case "Template fix pending":
+        return "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/20"
       case "Scan failed":
         return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20"
       case "Scanning...":
@@ -1138,6 +1087,10 @@ export function WebsiteAuditDashboard({
         return "bg-blue-500"
       case "Blocked":
         return "bg-red-500"
+      case "Fix needed":
+        return "bg-amber-500"
+      case "Template fix pending":
+        return "bg-violet-500"
       case "Scan failed":
         return "bg-slate-400"
       case "Scanning...":
@@ -1496,417 +1449,9 @@ export function WebsiteAuditDashboard({
     ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 60000))
     : 0
 
-  const missingAltIssues = useMemo<MissingAltImageIssue[]>(() => {
-    const issuesMap = new Map<string, MissingAltImageIssue>()
-    const imageUsageMap = new Map<string, { pageIds: Set<string>; totalOccurrences: number }>()
-
-    links.forEach((link) => {
-      const snapshot = link.auditResult?.contentSnapshot as
-        | { images?: { src: string; alt?: string; inMainContent?: boolean }[] }
-        | undefined
-      const images = snapshot?.images || []
-      const lastScan = link.auditResult?.lastRun
-      const lastScanRelative = lastScan ? getRelativeTime(lastScan) : "Never"
-
-      images.forEach((image: { src: string; alt?: string; inMainContent?: boolean }) => {
-        const imageSrc = image?.src?.trim()
-        const hasAltText = !!image?.alt?.trim()
-        if (!imageSrc || hasAltText || isIgnoredAltAuditImage(imageSrc)) return
-        const imageFingerprint = getImageFingerprint(imageSrc)
-
-        const key = `${link.id}:${imageSrc}`
-        const existing = issuesMap.get(key)
-        const usage = imageUsageMap.get(imageFingerprint) || { pageIds: new Set<string>(), totalOccurrences: 0 }
-
-        usage.pageIds.add(link.id)
-        usage.totalOccurrences += 1
-        imageUsageMap.set(imageFingerprint, usage)
-
-        if (existing) {
-          existing.occurrences += 1
-          existing.inMainContent = existing.inMainContent || !!image.inMainContent
-          return
-        }
-
-        issuesMap.set(key, {
-          key,
-          pageId: link.id,
-          pageTitle: link.title || "Untitled",
-          pageUrl: link.url,
-          imageSrc,
-          imageFingerprint,
-          inMainContent: !!image.inMainContent,
-          occurrences: 1,
-          repeatedAcrossPages: false,
-          repeatedPageCount: 1,
-          repeatedTotalOccurrences: 1,
-          lastScan,
-          lastScanRelative,
-        })
-      })
-    })
-
-    return Array.from(issuesMap.values())
-      .map((issue) => {
-        const usage = imageUsageMap.get(issue.imageFingerprint)
-        const repeatedPageCount = usage?.pageIds.size || 1
-        const repeatedTotalOccurrences = usage?.totalOccurrences || issue.occurrences
-        return {
-          ...issue,
-          repeatedAcrossPages: repeatedPageCount > 1,
-          repeatedPageCount,
-          repeatedTotalOccurrences,
-        }
-      })
-      .sort((a, b) => compareMissingAltIssues(a, b, "impact"))
-  }, [links])
-
-  const pagesWithMissingAltCount = useMemo(
-    () => new Set(missingAltIssues.map((issue) => issue.pageId)).size,
-    [missingAltIssues]
-  )
-
-  const repeatedMissingAltImagesCount = useMemo(
-    () => new Set(
-      missingAltIssues
-        .filter((issue) => issue.repeatedAcrossPages)
-        .map((issue) => issue.imageFingerprint)
-    ).size,
-    [missingAltIssues]
-  )
-
-  const uniqueMissingAltImagesCount = useMemo(
-    () => new Set(missingAltIssues.map((issue) => issue.imageFingerprint)).size,
-    [missingAltIssues]
-  )
-
-  const repeatedMissingAltPagesCount = useMemo(
-    () => new Set(
-      missingAltIssues
-        .filter((issue) => issue.repeatedAcrossPages)
-        .map((issue) => issue.pageId)
-    ).size,
-    [missingAltIssues]
-  )
-
-  const repeatedMissingAltPagesByImage = useMemo(() => {
-    const pageMap = new Map<string, { pageId: string; pageTitle: string; pageUrl: string }[]>()
-
-    missingAltIssues.forEach((issue) => {
-      const existingPages = pageMap.get(issue.imageFingerprint) || []
-      if (!existingPages.some((page) => page.pageId === issue.pageId)) {
-        existingPages.push({
-          pageId: issue.pageId,
-          pageTitle: issue.pageTitle,
-          pageUrl: issue.pageUrl,
-        })
-        pageMap.set(issue.imageFingerprint, existingPages)
-      }
-    })
-
-    return pageMap
-  }, [missingAltIssues])
-
-  const filteredMissingAltIssues = useMemo<MissingAltImageIssue[]>(() => {
-    const query = missingAltSearch.trim().toLowerCase()
-
-    return missingAltIssues
-      .filter((issue) => {
-        if (missingAltAreaFilter === "main" && !issue.inMainContent) return false
-        if (missingAltAreaFilter === "other" && issue.inMainContent) return false
-        if (missingAltRepeatFilter === "repeated" && !issue.repeatedAcrossPages) return false
-        if (missingAltRepeatFilter === "single" && issue.repeatedAcrossPages) return false
-
-        if (!query) return true
-
-        return (
-          issue.pageTitle.toLowerCase().includes(query) ||
-          issue.pageUrl.toLowerCase().includes(query) ||
-          issue.imageSrc.toLowerCase().includes(query)
-        )
-      })
-      .sort((a, b) => compareMissingAltIssues(a, b, missingAltSortMode))
-  }, [missingAltIssues, missingAltAreaFilter, missingAltRepeatFilter, missingAltSearch, missingAltSortMode])
-
-  const missingAltPageGroups = useMemo<MissingAltPageGroup[]>(() => {
-    const pageMap = new Map<string, MissingAltPageGroup>()
-
-    filteredMissingAltIssues.forEach((issue) => {
-      const existing = pageMap.get(issue.pageId)
-      if (!existing) {
-        pageMap.set(issue.pageId, {
-          pageId: issue.pageId,
-          pageTitle: issue.pageTitle,
-          pageUrl: issue.pageUrl,
-          lastScan: issue.lastScan,
-          lastScanRelative: issue.lastScanRelative,
-          issues: [issue],
-          uniqueImageCount: 1,
-          totalOccurrences: issue.occurrences,
-          repeatedImageCount: issue.repeatedAcrossPages ? 1 : 0,
-          mainContentImageCount: issue.inMainContent ? 1 : 0,
-        })
-        return
-      }
-
-      existing.issues.push(issue)
-      existing.uniqueImageCount += 1
-      existing.totalOccurrences += issue.occurrences
-      if (issue.repeatedAcrossPages) existing.repeatedImageCount += 1
-      if (issue.inMainContent) existing.mainContentImageCount += 1
-
-      if (toTimestamp(issue.lastScan) > toTimestamp(existing.lastScan)) {
-        existing.lastScan = issue.lastScan
-        existing.lastScanRelative = issue.lastScanRelative
-      }
-    })
-
-    return Array.from(pageMap.values())
-      .map((group) => ({
-        ...group,
-        issues: [...group.issues].sort((a, b) => compareMissingAltIssues(a, b, missingAltSortMode)),
-      }))
-      .sort((a, b) => {
-        if (missingAltSortMode === "recent") {
-          return toTimestamp(b.lastScan) - toTimestamp(a.lastScan)
-        }
-
-        if (missingAltSortMode === "alphabetical") {
-          return a.pageTitle.localeCompare(b.pageTitle)
-        }
-
-        if (a.repeatedImageCount !== b.repeatedImageCount) return b.repeatedImageCount - a.repeatedImageCount
-        if (a.mainContentImageCount !== b.mainContentImageCount) return b.mainContentImageCount - a.mainContentImageCount
-        if (a.totalOccurrences !== b.totalOccurrences) return b.totalOccurrences - a.totalOccurrences
-        return toTimestamp(b.lastScan) - toTimestamp(a.lastScan)
-      })
-  }, [filteredMissingAltIssues, missingAltSortMode])
-
-  const missingAltUniqueImageGroups = useMemo<MissingAltUniqueImageGroup[]>(() => {
-    const imageMap = new Map<string, MissingAltUniqueImageGroup>()
-
-    filteredMissingAltIssues.forEach((issue) => {
-      const existing = imageMap.get(issue.imageFingerprint)
-      if (!existing) {
-        imageMap.set(issue.imageFingerprint, {
-          imageFingerprint: issue.imageFingerprint,
-          imageSrc: issue.imageSrc,
-          inMainContent: issue.inMainContent,
-          totalOccurrences: issue.occurrences,
-          pageCount: 1,
-          lastScan: issue.lastScan,
-          lastScanRelative: issue.lastScanRelative,
-          pages: [
-            {
-              pageId: issue.pageId,
-              pageTitle: issue.pageTitle,
-              pageUrl: issue.pageUrl,
-              occurrences: issue.occurrences,
-            },
-          ],
-        })
-        return
-      }
-
-      existing.totalOccurrences += issue.occurrences
-      existing.inMainContent = existing.inMainContent || issue.inMainContent
-
-      if (toTimestamp(issue.lastScan) > toTimestamp(existing.lastScan)) {
-        existing.lastScan = issue.lastScan
-        existing.lastScanRelative = issue.lastScanRelative
-      }
-
-      const existingPage = existing.pages.find((page) => page.pageId === issue.pageId)
-      if (existingPage) {
-        existingPage.occurrences += issue.occurrences
-      } else {
-        existing.pages.push({
-          pageId: issue.pageId,
-          pageTitle: issue.pageTitle,
-          pageUrl: issue.pageUrl,
-          occurrences: issue.occurrences,
-        })
-      }
-      existing.pageCount = existing.pages.length
-    })
-
-    return Array.from(imageMap.values())
-      .map((group) => ({
-        ...group,
-        pages: [...group.pages].sort((a, b) => {
-          if (b.occurrences !== a.occurrences) return b.occurrences - a.occurrences
-          return a.pageTitle.localeCompare(b.pageTitle)
-        }),
-      }))
-      .sort((a, b) => {
-        if (missingAltSortMode === "recent") {
-          return toTimestamp(b.lastScan) - toTimestamp(a.lastScan)
-        }
-        if (missingAltSortMode === "alphabetical") {
-          return a.imageSrc.localeCompare(b.imageSrc)
-        }
-        if (a.pageCount !== b.pageCount) return b.pageCount - a.pageCount
-        if (a.totalOccurrences !== b.totalOccurrences) return b.totalOccurrences - a.totalOccurrences
-        if (a.inMainContent !== b.inMainContent) return a.inMainContent ? -1 : 1
-        return toTimestamp(b.lastScan) - toTimestamp(a.lastScan)
-      })
-  }, [filteredMissingAltIssues, missingAltSortMode])
-
-  // Default new page groups to collapsed. Rendering every group's image table at
-  // once can OOM the renderer on sites with hundreds of pages and thousands of
-  // missing-ALT rows (Chrome "Aw, Snap!" / Error code 5).
-  const seenMissingAltPageIdsRef = useRef<Set<string>>(new Set())
-  useEffect(() => {
-    if (missingAltPageGroups.length === 0) return
-    const newIds: string[] = []
-    for (const group of missingAltPageGroups) {
-      if (!seenMissingAltPageIdsRef.current.has(group.pageId)) {
-        seenMissingAltPageIdsRef.current.add(group.pageId)
-        newIds.push(group.pageId)
-      }
-    }
-    if (newIds.length === 0) return
-    setCollapsedMissingAltPages((prev) => {
-      const next = new Set(prev)
-      for (const id of newIds) next.add(id)
-      return next
-    })
-  }, [missingAltPageGroups])
-
-  const areAllMissingAltPagesCollapsed = useMemo(
-    () =>
-      missingAltPageGroups.length > 0 &&
-      missingAltPageGroups.every((group) => collapsedMissingAltPages.has(group.pageId)),
-    [missingAltPageGroups, collapsedMissingAltPages]
-  )
-
-  const toggleMissingAltPageCollapse = useCallback((pageId: string) => {
-    setCollapsedMissingAltPages((prev) => {
-      const next = new Set(prev)
-      if (next.has(pageId)) next.delete(pageId)
-      else next.add(pageId)
-      return next
-    })
-  }, [])
-
-  const collapseAllMissingAltPages = useCallback(() => {
-    setCollapsedMissingAltPages(new Set(missingAltPageGroups.map((group) => group.pageId)))
-  }, [missingAltPageGroups])
-
-  const expandAllMissingAltPages = useCallback(() => {
-    setCollapsedMissingAltPages(new Set())
-  }, [])
-
-  const markMissingAltPreviewError = useCallback((issueKey: string) => {
-    setMissingAltPreviewErrors((prev) => {
-      if (prev.has(issueKey)) return prev
-      const next = new Set(prev)
-      next.add(issueKey)
-      return next
-    })
-  }, [])
-
-  const brokenLinkIssues = useMemo<BrokenLinkIssueRow[]>(() => {
-    const issues: BrokenLinkIssueRow[] = []
-
-    links.forEach((link) => {
-      const linkCategory = link.auditResult?.categories?.links
-      const checkedAt = linkCategory?.checkedAt
-      const checkedRelative = checkedAt ? getRelativeTime(checkedAt) : "Not checked"
-      const brokenLinks = linkCategory?.brokenLinks || []
-
-      brokenLinks.forEach((broken, index) => {
-        if (!broken?.href) return
-        issues.push({
-          key: `${link.id}:${broken.href}:${index}`,
-          pageId: link.id,
-          pageTitle: link.title || "Untitled",
-          pageUrl: link.url,
-          href: broken.href,
-          status: broken.status,
-          text: broken.text || "",
-          error: broken.error,
-          checkedAt,
-          checkedRelative,
-        })
-      })
-    })
-
-    return issues.sort((a, b) => {
-      if (a.status !== b.status) return b.status - a.status
-      return toTimestamp(b.checkedAt) - toTimestamp(a.checkedAt)
-    })
-  }, [links])
-
-  const pagesWithBrokenLinksCount = useMemo(
-    () => new Set(brokenLinkIssues.map((issue) => issue.pageId)).size,
-    [brokenLinkIssues]
-  )
-
-  const handleCheckBrokenLinksAcrossSite = useCallback(async () => {
-    if (isReadOnly) return
-    if (isCheckingAllBrokenLinks) return
-
-    const pagesToCheck = links.filter(link => !!link.auditResult && !!link.url)
-    if (pagesToCheck.length === 0) return
-
-    setIsCheckingAllBrokenLinks(true)
-    setBrokenLinkCheckProgress({
-      current: 0,
-      total: pagesToCheck.length,
-      currentUrl: "",
-    })
-
-    try {
-      for (let i = 0; i < pagesToCheck.length; i += 1) {
-        const page = pagesToCheck[i]
-
-        setBrokenLinkCheckProgress({
-          current: i + 1,
-          total: pagesToCheck.length,
-          currentUrl: page.url,
-        })
-
-        try {
-          const response = await fetch('/api/check-links', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              projectId,
-              linkId: page.id,
-              url: page.url
-            })
-          })
-
-          if (!response.ok) {
-            console.error(`[BrokenLinks] Failed check for ${page.url}`)
-            continue
-          }
-
-          const result = await response.json()
-          await siteMonitoringRepository.saveBrokenLinkResults(projectId, page.id, {
-            totalChecked: result.totalChecked || 0,
-            totalLinks: result.totalLinks || 0,
-            brokenLinks: result.brokenLinks || [],
-            validLinks: result.validLinks || 0,
-          })
-        } catch (error) {
-          console.error(`[BrokenLinks] Error checking ${page.url}:`, error)
-        }
-      }
-    } finally {
-      setIsCheckingAllBrokenLinks(false)
-      setBrokenLinkCheckProgress(prev => ({
-        ...prev,
-        current: prev.total,
-        currentUrl: "",
-      }))
-    }
-  }, [isReadOnly, isCheckingAllBrokenLinks, links, projectId])
-
   const runImageScanForLink = useCallback(async (
     link: ProjectLink
-  ): Promise<{ before: number; after: number } | null> => {
+  ): Promise<{ before: number; after: number; images: { src: string; alt?: string }[] } | null> => {
     if (!link?.id || !link?.url) return null
 
     const before =
@@ -1929,67 +1474,20 @@ export function WebsiteAuditDashboard({
     }
 
     const after = Number((payload as { uniqueMissingAltCount?: number })?.uniqueMissingAltCount ?? 0)
-    return { before, after }
+    const images = ((payload as { images?: { src: string; alt?: string }[] })?.images ?? [])
+    return { before, after, images }
   }, [projectId])
-
-  const handleScanImagesForPage = useCallback(async (pageId: string) => {
-    if (isReadOnly || isScanningAllImages) return
-    const link = links.find((item) => item.id === pageId)
-    if (!link?.url) return
-
-    const pageLabel = link.title || getCompactUrl(link.url)
-    const toastId = `image-scan:${pageId}`
-    toast.loading(`Scanning images on ${pageLabel}…`, { id: toastId })
-
-    setScanningImagePageIds((prev) => new Set(prev).add(pageId))
-    try {
-      const delta = await runImageScanForLink(link)
-      if (delta) {
-        const resolved = Math.max(0, delta.before - delta.after)
-        if (resolved > 0) {
-          toast.success(
-            `Resolved ALT text for ${resolved} image${resolved === 1 ? '' : 's'} on ${pageLabel}`,
-            { id: toastId }
-          )
-        } else if (delta.after === 0) {
-          toast.success(`No missing ALT text on ${pageLabel}`, { id: toastId })
-        } else {
-          toast.info(
-            `${delta.after} image${delta.after === 1 ? '' : 's'} still missing ALT on ${pageLabel}`,
-            { id: toastId }
-          )
-        }
-      } else {
-        toast.dismiss(toastId)
-      }
-    } catch (error) {
-      console.error('[ImageScan] Failed page image scan:', error)
-      toast.error(error instanceof Error ? error.message : 'Image scan failed', { id: toastId })
-    } finally {
-      setScanningImagePageIds((prev) => {
-        const next = new Set(prev)
-        next.delete(pageId)
-        return next
-      })
-    }
-  }, [isReadOnly, isScanningAllImages, links, runImageScanForLink])
 
   const handleScanAllImagesAcrossSite = useCallback(async () => {
     if (isReadOnly || isScanningAllImages) return
 
-    // Only rescan pages that already have missing ALT recorded. If no prior data
-    // exists (first pass), fall back to all links so we can discover offenders.
-    // Order pages by impact (repeated > main-content > occurrences > recency)
-    // using the already-sorted missingAltPageGroups. So the most impactful
-    // pages get scanned first, matching the UI's default sort.
-    const linksById = new Map(links.map((link) => [link.id, link]))
-    const pageIdsWithMissingAlt = new Set(missingAltIssues.map((issue) => issue.pageId))
-    const pagesToScan: ProjectLink[] =
-      pageIdsWithMissingAlt.size > 0
-        ? missingAltPageGroups
-            .map((group) => linksById.get(group.pageId))
-            .filter((link): link is ProjectLink => !!link?.url)
-        : links.filter((link) => !!link.url)
+    // Every page, every time. Scanning only pages that already had a finding
+    // meant a newly added image could never be discovered after the first pass.
+    // Pages with open findings go first so the visible list updates soonest.
+    const flagged = new Set(findings.alt.flatMap((f) => f.pages.map((p) => p.pageId)))
+    const pagesToScan: ProjectLink[] = [...links]
+      .filter((link) => !!link.url)
+      .sort((a, b) => Number(flagged.has(b.id)) - Number(flagged.has(a.id)))
 
     if (pagesToScan.length === 0) return
 
@@ -2039,7 +1537,7 @@ export function WebsiteAuditDashboard({
       toast.error(error instanceof Error ? error.message : 'Failed to start scan', { id: startToastId })
       setIsScanningAllImages(false)
     }
-  }, [isReadOnly, isScanningAllImages, links, missingAltIssues, missingAltPageGroups, projectId])
+  }, [isReadOnly, isScanningAllImages, links, findings.alt, projectId])
 
   const handleCancelBulkImageScan = useCallback(async () => {
     if (!imageScanJob?.runId) return
@@ -2061,11 +1559,200 @@ export function WebsiteAuditDashboard({
     }
   }, [imageScanJob?.runId, projectId])
 
-  const hasMissingAltFilters =
-    !!missingAltSearch.trim() ||
-    missingAltAreaFilter !== "all" ||
-    missingAltRepeatFilter !== "all" ||
-    missingAltSortMode !== "impact"
+  // ── Decisions and fixes ───────────────────────────────────────────────
+
+  const by = userEmail || 'team'
+  const canWriteWebflow = !isReadOnly && !!webflowConfig?.siteId && !!webflowConfig?.hasApiToken
+
+  const handleSaveAlt = useCallback(async (finding: AltFinding, altText: string) => {
+    if (!finding.webflowAssetId) return
+    const response = await fetchForProject(projectId, `/api/webflow/assets/${finding.webflowAssetId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ altText }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok || !(payload as { success?: boolean }).success) {
+      const message = (payload as { error?: string }).error || `Webflow refused the update (${response.status})`
+      toast.error(message)
+      throw new Error(message)
+    }
+    await recordDecision({ kind: 'alt', fingerprint: finding.fingerprint, decision: 'fixed_unverified', altText, by })
+    toast.success('Saved to Webflow — publish the site, then verify')
+  }, [projectId, recordDecision, by])
+
+  const handleMarkFixed = useCallback(async (finding: AltFinding) => {
+    await recordDecision({ kind: 'alt', fingerprint: finding.fingerprint, decision: 'fixed_unverified', by })
+    toast.success('Marked fixed — verify once the site is published')
+  }, [recordDecision, by])
+
+  const handleMarkDecorative = useCallback(async (finding: AltFinding) => {
+    await recordDecision({ kind: 'alt', fingerprint: finding.fingerprint, decision: 'decorative', by })
+  }, [recordDecision, by])
+
+  const handleUndoAlt = useCallback(async (finding: AltFinding) => {
+    await clearDecision('alt', finding.fingerprint)
+  }, [clearDecision])
+
+  const handleVerifyAlt = useCallback(async (finding: AltFinding) => {
+    const page = finding.pages[0]
+    const link = page ? links.find((l) => l.id === page.pageId) : undefined
+    if (!link) return
+    setVerifyingFingerprints((prev) => new Set(prev).add(finding.fingerprint))
+    try {
+      const result = await runImageScanForLink(link)
+      const seen = result?.images.find((img) => imageFingerprint(img.src) === finding.fingerprint)
+      if (!seen || seen.alt?.trim()) {
+        await recordDecision({ kind: 'alt', fingerprint: finding.fingerprint, decision: 'verified', altText: finding.decision?.altText, by })
+        toast.success(seen ? 'Verified — the alt text is live' : 'Verified — the image is no longer on the page')
+      } else {
+        toast.warning('Still no alt text on the live page. If you saved it in Webflow, the site needs publishing.')
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Verification failed')
+    } finally {
+      setVerifyingFingerprints((prev) => {
+        const next = new Set(prev)
+        next.delete(finding.fingerprint)
+        return next
+      })
+    }
+  }, [links, runImageScanForLink, recordDecision, by])
+
+  const handlePublishSite = useCallback(async () => {
+    if (!webflowConfig?.siteId) return
+    const toastId = `publish-${projectId}`
+    toast.loading('Publishing site…', { id: toastId })
+    try {
+      const response = await fetchForProject(projectId, `/api/webflow/sites/${webflowConfig.siteId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'publish' }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error((payload as { error?: string }).error || `Publish failed (${response.status})`)
+      toast.success('Site published — give it a minute, then verify', { id: toastId })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Publish failed', { id: toastId })
+    }
+  }, [projectId, webflowConfig?.siteId])
+
+  const handleIgnoreLink = useCallback(async (finding: LinkFinding, reason: string) => {
+    await recordDecision({ kind: 'link', fingerprint: finding.fingerprint, decision: 'ignored', reason, by })
+  }, [recordDecision, by])
+
+  const handleUndoLink = useCallback(async (finding: LinkFinding) => {
+    await clearDecision('link', finding.fingerprint)
+  }, [clearDecision])
+
+  /** Re-check every link on one page and store the result — one audit document. */
+  const checkLinksOnPage = useCallback(async (link: ProjectLink) => {
+    const response = await fetch('/api/check-links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, linkId: link.id, url: link.url }),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error((result as { error?: string }).error || `Link check failed for ${link.url}`)
+    await siteMonitoringRepository.saveBrokenLinkResults(projectId, link.id, {
+      totalChecked: result.totalChecked || 0,
+      totalLinks: result.totalLinks || 0,
+      brokenLinks: result.brokenLinks || [],
+      unverifiableLinks: result.unverifiableLinks || [],
+      validLinks: result.validLinks || 0,
+    })
+    return result as { brokenLinks?: unknown[]; unverifiableLinks?: unknown[] }
+  }, [projectId])
+
+  const handleRecheckPage = useCallback(async (pageId: string) => {
+    const link = links.find((l) => l.id === pageId)
+    if (!link?.url) return
+    setRecheckingPageIds((prev) => new Set(prev).add(pageId))
+    try {
+      const result = await checkLinksOnPage(link)
+      const broken = result.brokenLinks?.length ?? 0
+      toast.success(broken === 0 ? `No dead links on ${getCompactUrl(link.url)}` : `${broken} dead link${broken === 1 ? '' : 's'} on ${getCompactUrl(link.url)}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Link check failed')
+    } finally {
+      setRecheckingPageIds((prev) => {
+        const next = new Set(prev)
+        next.delete(pageId)
+        return next
+      })
+    }
+  }, [links, checkLinksOnPage])
+
+  /**
+   * Check every scanned page, three at a time, from this tab. Stoppable, and it
+   * says when it is done. The old loop was sequential, silent on failure, and
+   * erased the "couldn't verify" list on every page it touched.
+   */
+  const handleCheckAllLinks = useCallback(async () => {
+    if (isReadOnly || checkAllState.running) return
+    const pages = links.filter((l) => !!l.auditResult && !!l.url)
+    if (pages.length === 0) return
+
+    checkAllAbortRef.current = false
+    setCheckAllState({ running: true, current: 0, total: pages.length, currentUrl: '' })
+
+    let done = 0
+    let failures = 0
+    let stopped = false
+    const queue = [...pages]
+    const worker = async () => {
+      while (queue.length > 0) {
+        if (checkAllAbortRef.current) { stopped = true; return }
+        const page = queue.shift()!
+        setCheckAllState((prev) => ({ ...prev, currentUrl: page.url }))
+        try {
+          await checkLinksOnPage(page)
+        } catch (error) {
+          failures += 1
+          console.error('[Links] check failed for', page.url, error)
+        } finally {
+          done += 1
+          setCheckAllState((prev) => ({ ...prev, current: done }))
+        }
+      }
+    }
+    await Promise.all([worker(), worker(), worker()])
+
+    setCheckAllState({ running: false, current: 0, total: 0, currentUrl: '' })
+    if (stopped) toast.info(`Stopped after ${done} of ${pages.length} pages — results so far are saved`)
+    else if (failures > 0) toast.warning(`Checked ${done} pages · ${failures} could not be checked`)
+    else toast.success(`Checked ${done} page${done === 1 ? '' : 's'}`)
+  }, [isReadOnly, checkAllState.running, links, checkLinksOnPage])
+
+  const handleCancelCheckAll = useCallback(() => {
+    checkAllAbortRef.current = true
+  }, [])
+
+  const openTab = useCallback((target: FixTarget) => {
+    setSelectedPage(null)
+    setActiveAuditTab(target)
+  }, [])
+
+  const showPagesWithStatus = useCallback((status: string) => {
+    setStatusFilter(status)
+    setActiveAuditTab('pages')
+  }, [])
+
+  const handleCopyFixList = useCallback(async () => {
+    const site = (() => { try { return links[0] ? new URL(links[0].url).hostname : undefined } catch { return undefined } })()
+    await navigator.clipboard.writeText(fixListMarkdown(findings, site))
+    toast.success('Fix list copied as Markdown')
+  }, [findings, links])
+
+  const totals = useMemo(() => ({
+    pages: links.length,
+    scanned: scannedPagesCount,
+    scannedToday: links.filter((l) => isToday(l.auditResult?.lastRun)).length,
+    lastScanAt: latestScanAt,
+  }), [links, scannedPagesCount, latestScanAt])
+
+  const openAltCount = findings.alt.filter((f) => f.state === 'open' || f.state === 'regressed').length
+  const openLinkCount = findings.links.filter((f) => f.state === 'open').length
 
   return (
     <div className="space-y-3 text-foreground">
@@ -2110,10 +1797,20 @@ export function WebsiteAuditDashboard({
         </div>
       )}
 
+      <AuditHeader
+        findings={findings}
+        rollup={rollup}
+        totals={totals}
+        onShowBlocked={() => showPagesWithStatus('Blocked')}
+        onShowFailed={() => showPagesWithStatus('Scan failed')}
+        onOpenTab={openTab}
+        onCopyFixList={handleCopyFixList}
+      />
+
       <Tabs
         value={activeAuditTab}
         onValueChange={(value) => {
-          if (value === "pages" || value === "missing-alt" || value === "broken-links") {
+          if (value === "pages" || value === "alt" || value === "links") {
             setActiveAuditTab(value)
             if (value !== "pages") {
               setSelectedPage(null)
@@ -2126,36 +1823,24 @@ export function WebsiteAuditDashboard({
           <TabsList className="w-full sm:w-auto">
             <TabsTrigger value="pages" className="gap-2 flex-1 sm:flex-none">
               <span>Pages</span>
-              <span className="text-xs text-muted-foreground">{filteredPages.length}</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{filteredPages.length}</span>
             </TabsTrigger>
-            <TabsTrigger value="missing-alt" className="gap-2 flex-1 sm:flex-none">
+            <TabsTrigger value="alt" className="gap-2 flex-1 sm:flex-none">
               <ImageIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">Missing ALT</span>
-              <span className="sm:hidden">ALT</span>
-              <span className="text-xs text-muted-foreground">{uniqueMissingAltImagesCount}</span>
+              <span className="hidden sm:inline">Alt text</span>
+              <span className="sm:hidden">Alt</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{openAltCount}</span>
             </TabsTrigger>
-            <TabsTrigger value="broken-links" className="gap-2 flex-1 sm:flex-none">
+            <TabsTrigger value="links" className="gap-2 flex-1 sm:flex-none">
               <LinkIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">Broken Links</span>
-              <span className="sm:hidden">Links</span>
-              <span className="text-xs text-muted-foreground">{brokenLinkIssues.length}</span>
+              <span>Links</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{openLinkCount}</span>
             </TabsTrigger>
           </TabsList>
           <p className="text-xs text-muted-foreground tabular-nums">
-            {metrics.total} pages · {metrics.issueCount} issues · {metrics.changed} changed · {metrics.techOnly} tech · avg {metrics.avgScore}
-            {' · '}last scan {latestScanAt ? getRelativeTime(latestScanAt) : "never"}
+            avg score {metrics.avgScore} · {metrics.changed} changed · {metrics.techOnly} tech-only
           </p>
         </div>
-
-        {criticalIssues.length > 0 && (
-          <div className="flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2 text-xs text-red-700 dark:text-red-400">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              <span className="font-medium">{criticalIssues.length} deployment blocker{criticalIssues.length !== 1 ? "s" : ""}</span>
-              {" — open a row to review details."}
-            </span>
-          </div>
-        )}
 
         <TabsContent value="pages" className="mt-0">
           {/* Pages Table */}
@@ -2192,6 +1877,8 @@ export function WebsiteAuditDashboard({
                     <SelectItem value="Content changed">Changed</SelectItem>
                     <SelectItem value="Tech-only change">Tech-only</SelectItem>
                     <SelectItem value="Blocked">Blocked</SelectItem>
+                    <SelectItem value="Fix needed">Fix needed</SelectItem>
+                    <SelectItem value="Template fix pending">Template fix pending</SelectItem>
                     <SelectItem value="Scan failed">Failed</SelectItem>
                   </SelectContent>
                 </Select>
@@ -2753,695 +2440,51 @@ export function WebsiteAuditDashboard({
       </Card>
         </TabsContent>
 
-        <TabsContent value="missing-alt" className="mt-0">
-          <Card className="overflow-hidden">
-            <CardHeader className="py-4 px-4 border-b bg-gradient-to-r from-muted/45 via-background to-muted/25">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <CardTitle className="text-base">Images Missing ALT Text</CardTitle>
-                  <CardDescription>
-                    {uniqueMissingAltImagesCount} unique image URL{uniqueMissingAltImagesCount === 1 ? "" : "s"} missing ALT text across the scanned site.
-                  </CardDescription>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="h-7 px-2.5 font-normal">
-                    Images Missing ALT {uniqueMissingAltImagesCount}
-                  </Badge>
-                  <Badge variant="secondary" className="h-7 px-2.5 font-normal">
-                    Occurrences {missingAltIssues.length}
-                  </Badge>
-                  <Badge variant="secondary" className="h-7 px-2.5 font-normal">
-                    Pages {pagesWithMissingAltCount}
-                  </Badge>
-                  <Badge variant="secondary" className="h-7 px-2.5 font-normal">
-                    Repeated Assets {repeatedMissingAltImagesCount}
-                  </Badge>
-                  <Badge variant="secondary" className="h-7 px-2.5 font-normal">
-                    Repeated Pages {repeatedMissingAltPagesCount}
-                  </Badge>
-                  {!isReadOnly && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8"
-                      onClick={handleScanAllImagesAcrossSite}
-                      disabled={isScanningAllImages || links.length === 0}
-                    >
-                      {isScanningAllImages ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                          Scanning images...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-1.5" />
-                          Scan All Images
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 space-y-4">
-              {!isReadOnly && isScanningAllImages && (
-                <div className="space-y-2 rounded-md border p-3">
-                  <div className="flex items-center justify-between text-sm gap-2">
-                    <span className="font-medium">
-                      Scanning images {imageScanProgress.current} of {imageScanProgress.total} pages
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">
-                        {imageScanProgress.total > 0
-                          ? Math.round((imageScanProgress.current / imageScanProgress.total) * 100)
-                          : 0}
-                        %
-                      </span>
-                      {imageScanJob?.runId && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={handleCancelBulkImageScan}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  <Progress
-                    value={
-                      imageScanProgress.total > 0
-                        ? (imageScanProgress.current / imageScanProgress.total) * 100
-                        : 0
-                    }
-                    className="h-2"
-                  />
-                  {imageScanProgress.currentUrl && (
-                    <div className="text-xs text-muted-foreground truncate" title={imageScanProgress.currentUrl}>
-                      Current: {imageScanProgress.currentUrl}
-                    </div>
-                  )}
-                  <div className="text-[11px] text-muted-foreground">
-                    Scan runs on the server — it keeps going if you close or refresh this tab.
-                  </div>
-                </div>
-              )}
-
-              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="relative w-full lg:max-w-sm">
-                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Search page or image URL..."
-                      value={missingAltSearch}
-                      onChange={(e) => setMissingAltSearch(e.target.value)}
-                      className="h-8 pl-8 text-sm"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center rounded-md border bg-background p-0.5">
-                      <Button
-                        type="button"
-                        variant={missingAltViewMode === "page" ? "secondary" : "ghost"}
-                        size="sm"
-                        className="h-7 px-2.5 text-xs"
-                        onClick={() => setMissingAltViewMode("page")}
-                      >
-                        Page view
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={missingAltViewMode === "unique" ? "secondary" : "ghost"}
-                        size="sm"
-                        className="h-7 px-2.5 text-xs"
-                        onClick={() => setMissingAltViewMode("unique")}
-                      >
-                        Unique images
-                      </Button>
-                    </div>
-
-                    <Select
-                      value={missingAltAreaFilter}
-                      onValueChange={(value) => setMissingAltAreaFilter(value as MissingAltAreaFilter)}
-                    >
-                      <SelectTrigger className="h-8 min-w-[130px] text-xs">
-                        Area: {missingAltAreaFilter === "all" ? "All" : missingAltAreaFilter === "main" ? "Main" : "Other"}
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All areas</SelectItem>
-                        <SelectItem value="main">Main content</SelectItem>
-                        <SelectItem value="other">Other areas</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    <Select
-                      value={missingAltRepeatFilter}
-                      onValueChange={(value) => setMissingAltRepeatFilter(value as MissingAltRepeatFilter)}
-                    >
-                      <SelectTrigger className="h-8 min-w-[160px] text-xs">
-                        Repeat: {missingAltRepeatFilter === "all" ? "All" : missingAltRepeatFilter === "repeated" ? "Repeated only" : "Unique only"}
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All images</SelectItem>
-                        <SelectItem value="repeated">Repeated across pages</SelectItem>
-                        <SelectItem value="single">Unique to one page</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    <Select
-                      value={missingAltSortMode}
-                      onValueChange={(value) => setMissingAltSortMode(value as MissingAltSortMode)}
-                    >
-                      <SelectTrigger className="h-8 min-w-[130px] text-xs">
-                        Sort: {missingAltSortMode === "impact" ? "Impact" : missingAltSortMode === "recent" ? "Recent" : "A-Z"}
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="impact">Impact</SelectItem>
-                        <SelectItem value="recent">Most recent</SelectItem>
-                        <SelectItem value="alphabetical">Alphabetical</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {missingAltViewMode === "page" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8"
-                        onClick={areAllMissingAltPagesCollapsed ? expandAllMissingAltPages : collapseAllMissingAltPages}
-                        disabled={missingAltPageGroups.length === 0}
-                      >
-                        {areAllMissingAltPagesCollapsed ? (
-                          <>
-                            <ChevronsUpDown className="h-3.5 w-3.5 mr-1.5" />
-                            Expand all
-                          </>
-                        ) : (
-                          <>
-                            <ChevronsDownUp className="h-3.5 w-3.5 mr-1.5" />
-                            Collapse all
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {hasMissingAltFilters && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs text-muted-foreground">Filters:</span>
-                    {!!missingAltSearch.trim() && (
-                      <Badge variant="secondary" className="text-xs gap-1 pl-2 pr-1 py-0.5">
-                        Search: &quot;{missingAltSearch.trim().length > 20 ? `${missingAltSearch.trim().slice(0, 20)}...` : missingAltSearch.trim()}&quot;
-                        <button
-                          onClick={() => setMissingAltSearch("")}
-                          className="ml-0.5 hover:bg-muted rounded-sm"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    {missingAltAreaFilter !== "all" && (
-                      <Badge variant="secondary" className="text-xs gap-1 pl-2 pr-1 py-0.5">
-                        Area: {missingAltAreaFilter === "main" ? "Main" : "Other"}
-                        <button
-                          onClick={() => setMissingAltAreaFilter("all")}
-                          className="ml-0.5 hover:bg-muted rounded-sm"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    {missingAltRepeatFilter !== "all" && (
-                      <Badge variant="secondary" className="text-xs gap-1 pl-2 pr-1 py-0.5">
-                        Repeat: {missingAltRepeatFilter === "repeated" ? "Repeated" : "Unique"}
-                        <button
-                          onClick={() => setMissingAltRepeatFilter("all")}
-                          className="ml-0.5 hover:bg-muted rounded-sm"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    {missingAltSortMode !== "impact" && (
-                      <Badge variant="secondary" className="text-xs gap-1 pl-2 pr-1 py-0.5">
-                        Sort: {missingAltSortMode === "recent" ? "Recent" : "A-Z"}
-                        <button
-                          onClick={() => setMissingAltSortMode("impact")}
-                          className="ml-0.5 hover:bg-muted rounded-sm"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    <button
-                      onClick={() => {
-                        setMissingAltSearch("")
-                        setMissingAltAreaFilter("all")
-                        setMissingAltRepeatFilter("all")
-                        setMissingAltSortMode("impact")
-                      }}
-                      className="text-xs text-muted-foreground hover:text-foreground underline ml-1"
-                    >
-                      Clear all
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {missingAltIssues.length === 0 ? (
-                <div className="rounded-md border p-8 text-center text-muted-foreground">
-                  No missing ALT text found in the current scans.
-                </div>
-              ) : filteredMissingAltIssues.length === 0 ? (
-                <div className="rounded-md border p-8 text-center text-muted-foreground">
-                  No results for the active filters.
-                </div>
-              ) : missingAltViewMode === "page" ? (
-                <div className="space-y-3">
-                  {missingAltPageGroups.map((group) => {
-                    const isCollapsed = collapsedMissingAltPages.has(group.pageId)
-                    return (
-                      <div key={group.pageId} className="rounded-lg border bg-card overflow-hidden">
-                        <button
-                          type="button"
-                          className="w-full px-4 py-3 text-left hover:bg-muted/25 transition-colors"
-                          onClick={() => toggleMissingAltPageCollapse(group.pageId)}
-                        >
-                          <div className="flex items-start gap-3">
-                            {isCollapsed ? (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                            )}
-
-                            <div className="min-w-0 flex-1">
-                              <div className="font-semibold truncate" title={group.pageTitle}>
-                                {group.pageTitle}
-                              </div>
-                              <div className="text-xs text-muted-foreground font-mono truncate" title={group.pageUrl}>
-                                {getCompactUrl(group.pageUrl)}
-                              </div>
-                            </div>
-
-                            <div className="hidden md:flex flex-wrap items-center justify-end gap-1.5 shrink-0">
-                              <Badge variant="destructive" className="text-xs">
-                                Missing {group.uniqueImageCount}
-                              </Badge>
-                              <Badge variant="secondary" className="text-xs">
-                                Occurrences {group.totalOccurrences}
-                              </Badge>
-                              {group.repeatedImageCount > 0 && (
-                                <Badge variant="secondary" className="text-xs">
-                                  Repeated {group.repeatedImageCount}
-                                </Badge>
-                              )}
-                              <Badge variant={group.mainContentImageCount > 0 ? "destructive" : "outline"} className="text-xs">
-                                Main {group.mainContentImageCount}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                {group.lastScanRelative}
-                              </Badge>
-                              {!isReadOnly && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={(event) => {
-                                    event.preventDefault()
-                                    event.stopPropagation()
-                                    handleScanImagesForPage(group.pageId)
-                                  }}
-                                  disabled={isScanningAllImages || scanningImagePageIds.has(group.pageId)}
-                                >
-                                  {scanningImagePageIds.has(group.pageId) ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      Scanning...
-                                    </>
-                                  ) : (
-                                    'Scan Images'
-                                  )}
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-
-                        {!isCollapsed && (
-                          <div className="border-t overflow-x-auto">
-                            <Table className="table-fixed">
-                              <TableHeader>
-                                <TableRow className="hover:bg-transparent bg-muted/15">
-                                  <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[56%]">Image URL</TableHead>
-                                  <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[10%] text-center">Count</TableHead>
-                                  <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[12%]">Area</TableHead>
-                                  <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[14%]">Repeat Signal</TableHead>
-                                  <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[8%]">Last Scan</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {group.issues.map((issue) => {
-                                  const repeatedPages = repeatedMissingAltPagesByImage.get(issue.imageFingerprint) || []
-                                  const repeatedPageNames = repeatedPages
-                                    .filter((page) => page.pageId !== issue.pageId)
-                                    .map((page) => page.pageTitle)
-                                  return (
-                                    <TableRow key={issue.key} className="hover:bg-muted/25">
-                                      <TableCell className="max-w-[620px]">
-                                        <div className="flex items-start gap-3">
-                                          <a
-                                            href={issue.imageSrc}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="shrink-0 h-14 w-14 rounded-md border bg-muted/20 overflow-hidden flex items-center justify-center"
-                                            title="Open image in new tab"
-                                          >
-                                            {missingAltPreviewErrors.has(issue.key) ? (
-                                              <span className="text-[9px] text-muted-foreground px-1 text-center leading-tight">
-                                                No preview
-                                              </span>
-                                            ) : (
-                                              <img
-                                                src={issue.imageSrc}
-                                                alt=""
-                                                loading="lazy"
-                                                className="h-full w-full object-cover"
-                                                onError={() => markMissingAltPreviewError(issue.key)}
-                                              />
-                                            )}
-                                          </a>
-
-                                          <div className="min-w-0 flex-1">
-                                            <a
-                                              href={issue.imageSrc}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              className="text-sm text-primary hover:underline font-mono truncate block"
-                                              title={issue.imageSrc}
-                                            >
-                                              {issue.imageSrc}
-                                            </a>
-                                            {issue.repeatedAcrossPages ? (
-                                              <div className="mt-1.5 space-y-1">
-                                                <Badge variant="secondary" className="text-[10px] font-medium">
-                                                  {getRepeatedUsageLabel(issue)}
-                                                </Badge>
-                                                <div
-                                                  className="text-[11px] text-muted-foreground truncate"
-                                                  title={repeatedPageNames.join(", ")}
-                                                >
-                                                  Also on:{" "}
-                                                  {repeatedPageNames.length > 0
-                                                    ? `${repeatedPageNames.slice(0, 3).join(", ")}${repeatedPageNames.length > 3 ? ` +${repeatedPageNames.length - 3} more` : ""}`
-                                                    : "Current page only"}
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              <div className="mt-1 text-[11px] text-muted-foreground">
-                                                Unique image in current scan scope.
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        <Badge variant="outline" className="text-xs tabular-nums">
-                                          {issue.occurrences}
-                                        </Badge>
-                                      </TableCell>
-                                      <TableCell>
-                                        <Badge variant={issue.inMainContent ? "destructive" : "secondary"} className="text-xs">
-                                          {issue.inMainContent ? "Main" : "Other"}
-                                        </Badge>
-                                      </TableCell>
-                                      <TableCell>
-                                        {issue.repeatedAcrossPages ? (
-                                          <Badge variant="secondary" className="text-xs">
-                                            Shared asset
-                                          </Badge>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground">Single page</span>
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="text-xs text-muted-foreground" title={issue.lastScan || ""}>
-                                        {issue.lastScanRelative}
-                                      </TableCell>
-                                    </TableRow>
-                                  )
-                                })}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-lg border bg-card overflow-x-auto">
-                  <Table className="table-fixed">
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent bg-muted/15">
-                        <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[48%]">Unique Image</TableHead>
-                        <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[22%]">Appears On Pages</TableHead>
-                        <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[10%] text-center">Occurrences</TableHead>
-                        <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[10%]">Area</TableHead>
-                        <TableHead className="h-9 text-[11px] uppercase tracking-wide text-muted-foreground w-[10%]">Last Scan</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {missingAltUniqueImageGroups.map((group) => (
-                        <TableRow key={group.imageFingerprint} className="hover:bg-muted/25">
-                          <TableCell className="max-w-[560px]">
-                            <div className="flex items-start gap-3">
-                              <a
-                                href={group.imageSrc}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="shrink-0 h-14 w-14 rounded-md border bg-muted/20 overflow-hidden flex items-center justify-center"
-                                title="Open image in new tab"
-                              >
-                                {missingAltPreviewErrors.has(group.imageFingerprint) ? (
-                                  <span className="text-[9px] text-muted-foreground px-1 text-center leading-tight">
-                                    No preview
-                                  </span>
-                                ) : (
-                                  <img
-                                    src={group.imageSrc}
-                                    alt=""
-                                    loading="lazy"
-                                    className="h-full w-full object-cover"
-                                    onError={() => markMissingAltPreviewError(group.imageFingerprint)}
-                                  />
-                                )}
-                              </a>
-                              <div className="min-w-0 flex-1">
-                                <a
-                                  href={group.imageSrc}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-sm text-primary hover:underline font-mono truncate block"
-                                  title={group.imageSrc}
-                                >
-                                  {group.imageSrc}
-                                </a>
-                                <Badge variant="secondary" className="mt-1.5 text-[10px] font-medium">
-                                  Appears on {group.pageCount} page{group.pageCount === 1 ? "" : "s"}
-                                </Badge>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="max-w-[320px]">
-                            <div className="flex flex-wrap gap-1.5">
-                              {group.pages.slice(0, 4).map((page) => (
-                                <a
-                                  key={`${group.imageFingerprint}-${page.pageId}`}
-                                  href={page.pageUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-xs px-2 py-1 rounded-md border hover:bg-muted/40 text-muted-foreground hover:text-foreground truncate max-w-[240px]"
-                                  title={page.pageUrl}
-                                >
-                                  {page.pageTitle}
-                                </a>
-                              ))}
-                              {group.pages.length > 4 && (
-                                <span className="text-xs px-2 py-1 rounded-md border text-muted-foreground">
-                                  +{group.pages.length - 4} more
-                                </span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="outline" className="text-xs tabular-nums">
-                              {group.totalOccurrences}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={group.inMainContent ? "destructive" : "secondary"} className="text-xs">
-                              {group.inMainContent ? "Main" : "Other"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground" title={group.lastScan || ""}>
-                            {group.lastScanRelative}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="alt" className="mt-0">
+          <AltTextTab
+            findings={findings.alt}
+            isReadOnly={isReadOnly}
+            canWriteWebflow={canWriteWebflow}
+            onSaveAlt={handleSaveAlt}
+            onMarkFixed={handleMarkFixed}
+            onMarkDecorative={handleMarkDecorative}
+            onUndo={handleUndoAlt}
+            onVerify={handleVerifyAlt}
+            verifyingFingerprints={verifyingFingerprints}
+            onPublishSite={canWriteWebflow ? handlePublishSite : undefined}
+            scanAll={{
+              running: isScanningAllImages,
+              current: imageScanProgress.current,
+              total: imageScanProgress.total,
+              currentUrl: imageScanProgress.currentUrl,
+              start: handleScanAllImagesAcrossSite,
+              cancel: handleCancelBulkImageScan,
+              disabled: links.length === 0,
+            }}
+          />
         </TabsContent>
 
-        <TabsContent value="broken-links" className="mt-0">
-          <Card>
-            <CardHeader className="py-4 px-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="text-base">Broken Links Across Site</CardTitle>
-                  <CardDescription>
-                    Based on link-check results saved per scanned page.
-                  </CardDescription>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="h-7 px-2.5 font-normal">
-                    Broken {brokenLinkIssues.length}
-                  </Badge>
-                  <Badge variant="secondary" className="h-7 px-2.5 font-normal">
-                    Pages {pagesWithBrokenLinksCount}
-                  </Badge>
-                  <Badge variant="secondary" className="h-7 px-2.5 font-normal">
-                    Checked {linkCheckedPagesCount}/{scannedPagesCount}
-                  </Badge>
-                  {!isReadOnly && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8"
-                      onClick={handleCheckBrokenLinksAcrossSite}
-                      disabled={isCheckingAllBrokenLinks || scannedPagesCount === 0}
-                    >
-                      {isCheckingAllBrokenLinks ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                          Checking...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-1.5" />
-                          Check All Scanned
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!isReadOnly && isCheckingAllBrokenLinks && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">
-                      Checking {brokenLinkCheckProgress.current} of {brokenLinkCheckProgress.total} pages
-                    </span>
-                    <span className="text-muted-foreground">
-                      {brokenLinkCheckProgress.total > 0
-                        ? Math.round((brokenLinkCheckProgress.current / brokenLinkCheckProgress.total) * 100)
-                        : 0}
-                      %
-                    </span>
-                  </div>
-                  <Progress
-                    value={
-                      brokenLinkCheckProgress.total > 0
-                        ? (brokenLinkCheckProgress.current / brokenLinkCheckProgress.total) * 100
-                        : 0
-                    }
-                    className="h-2"
-                  />
-                  {brokenLinkCheckProgress.currentUrl && (
-                    <div className="text-xs text-muted-foreground truncate" title={brokenLinkCheckProgress.currentUrl}>
-                      Current: {brokenLinkCheckProgress.currentUrl}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="overflow-x-auto rounded-md border">
-                {brokenLinkIssues.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground">
-                    {isReadOnly
-                      ? "No broken links found in this shared snapshot."
-                      : "No broken links found yet. Run \"Check All Scanned\" to refresh site-wide link health."}
-                  </div>
-                ) : (
-                  <Table className="table-fixed">
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-                        <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[24%]">Page</TableHead>
-                        <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[34%]">Broken URL</TableHead>
-                        <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[10%]">Status</TableHead>
-                        <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[20%]">Anchor Text / Error</TableHead>
-                        <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[12%]">Checked</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {brokenLinkIssues.map((issue) => (
-                        <TableRow key={issue.key} className="hover:bg-muted/35">
-                          <TableCell className="font-medium max-w-[230px]">
-                            <div className="font-semibold truncate" title={issue.pageTitle}>
-                              {issue.pageTitle}
-                            </div>
-                            <div className="text-xs text-muted-foreground font-mono truncate" title={issue.pageUrl}>
-                              {getCompactUrl(issue.pageUrl)}
-                            </div>
-                          </TableCell>
-                          <TableCell className="max-w-[360px]">
-                            <a
-                              href={issue.href}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-sm text-primary hover:underline font-mono truncate block"
-                              title={issue.href}
-                            >
-                              {issue.href}
-                            </a>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="destructive" className="text-xs tabular-nums">
-                              {issue.status === 0 ? "Error" : issue.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="max-w-[260px]">
-                            {issue.text ? (
-                              <div className="text-sm truncate" title={issue.text}>
-                                {issue.text}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-muted-foreground">No anchor text</div>
-                            )}
-                            {issue.error && (
-                              <div className="text-xs text-red-600 dark:text-red-400 truncate" title={issue.error}>
-                                {issue.error}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground" title={issue.checkedAt || ""}>
-                            {issue.checkedRelative}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="links" className="mt-0">
+          <LinksTab
+            broken={findings.links}
+            unverifiable={findings.unverifiable}
+            isReadOnly={isReadOnly}
+            onIgnore={handleIgnoreLink}
+            onUndo={handleUndoLink}
+            onRecheckPage={handleRecheckPage}
+            recheckingPageIds={recheckingPageIds}
+            checkAll={{
+              running: checkAllState.running,
+              current: checkAllState.current,
+              total: checkAllState.total,
+              currentUrl: checkAllState.currentUrl,
+              start: handleCheckAllLinks,
+              cancel: handleCancelCheckAll,
+              disabled: scannedPagesCount === 0,
+            }}
+            checkedPages={linkCheckedPagesCount}
+            scannedPages={scannedPagesCount}
+          />
         </TabsContent>
       </Tabs>
 
@@ -3495,6 +2538,8 @@ export function WebsiteAuditDashboard({
                     )}
                   </div>
                 </div>
+
+                <PageFixes findings={findingsForPage(findings, selectedPage.id)} onOpenTab={openTab} />
 
                 <div className="rounded-md border p-3 space-y-2">
                   <p className="text-xs text-muted-foreground">Main issues</p>

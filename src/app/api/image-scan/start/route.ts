@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { start } from 'workflow/api';
 import { imageScanWorkflow, type ImageScanPageRef } from '@/workflows/image-scan';
-import { projectsService } from '@/services/database';
+import { AuditAdminUnavailableError, loadProjectDocAdmin } from '@/lib/audit-admin';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Reject if a running job already exists to prevent accidental duplicates.
-    const project = await projectsService.getProject(projectId);
+    const project = await loadProjectDocAdmin(projectId);
     if (!project) {
       return NextResponse.json(
         { error: 'Project not found' },
@@ -72,6 +72,9 @@ export async function POST(request: NextRequest) {
       { headers: corsHeaders }
     );
   } catch (error) {
+    if (error instanceof AuditAdminUnavailableError) {
+      return NextResponse.json({ error: error.message }, { status: 503, headers: corsHeaders });
+    }
     console.error('[image-scan/start] Failed:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Internal Server Error' },

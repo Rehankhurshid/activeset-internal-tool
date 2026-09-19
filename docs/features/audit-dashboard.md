@@ -369,6 +369,30 @@ This prevents excessive API costs on CMS-heavy sections like `/blogs/*` or `/pro
 
 ---
 
+## The fix loop (2026-09-20 redesign)
+
+The three tabs read from one roll-up instead of three separate lists. See
+[docs/plans/audit-redesign.md](../plans/audit-redesign.md) for the reasoning and
+the inventory of what was wrong before.
+
+| Piece | Where | What it does |
+|-------|-------|--------------|
+| `collectFindings` / `fixesRollup` / `readinessOf` | `src/modules/site-monitoring/domain/audit-findings.ts` | Pure. One finding per image asset or dead URL across the whole site; the Fixes table ("8 template images → 1 fix → 294 pages"); per-page readiness derived from findings. Tested in `audit-findings.test.ts`. |
+| `AuditHeader` | `ui/components/audit/AuditHeader.tsx` | "Ready to ship?" with the blocked page named and a click-through, plus the Fixes table and "Copy fix list" (Markdown). |
+| `AltTextTab` | `ui/components/audit/AltTextTab.tsx` | By image. Save alt straight to Webflow (asset id is in the CDN filename), Decorative, Fixed it, Verify (rescans one page), Publish site. Jev's decorative probability only orders the list. |
+| `LinksTab` | `ui/components/audit/LinksTab.tsx` | By destination URL. Broken and "couldn't verify" (bot-blocks) never mixed; Ignore with a reason; Recheck; stoppable "Check all pages". |
+| `PageFixes` | `ui/components/audit/PageFixes.tsx` | "Fixes on this page" inside the row sheet, linking to the tab that clears them. |
+| `audit_decisions` | `projects/{id}/audit_decisions/{id}` via `infrastructure/audit-decisions.repository.ts` | `decorative`, `ignored`, `fixed_unverified`, `verified`, keyed by finding fingerprint so a rescan cannot resurrect a decision. Team-only in rules. |
+
+Alt text written through the Webflow API is not live until the site is
+published, so Save records `fixed_unverified`; Verify rescans a page and either
+marks `verified` or, if a newer scan still shows no alt, flags the row as
+regressed with the publish hint.
+
+Image-only scans (`/api/scan-images`, `/api/image-scan/*`) run on firebase-admin
+via `src/lib/audit-admin.ts` and write one audit document. They no longer touch
+`lastRun`; `categories.seo.imageScanCheckedAt` carries the date.
+
 ## UI State Management
 
 ### Dashboard States
@@ -378,7 +402,9 @@ This prevents excessive API costs on CMS-heavy sections like `/blogs/*` or `/pro
 | **No change** | Hashes identical | Green badge |
 | **Content changed** | Text content modified | Orange badge |
 | **Tech-only change** | Scripts/styles changed, text same | Blue badge |
-| **Blocked** | Placeholders detected | Red badge |
+| **Blocked** | Placeholders detected — the only state that stops a launch | Red badge |
+| **Fix needed** | Ready to ship otherwise, but carries an open alt-text or dead-link finding that only this page has | Amber badge |
+| **Template fix pending** | Its only open findings are shared assets (nav, footer, CMS template) already listed as one fix on the Alt text / Links tabs | Violet badge |
 | **Scan failed** | Error during audit | Gray badge |
 | **Pending** | Never scanned | Gray badge |
 | **Scanning...** | Currently being scanned | Blue badge with pulse animation |
@@ -585,8 +611,8 @@ type FolderPageTypes = Record<string, 'static' | 'collection'>;
 }
 ```
 
-- Stored at project level (`folderPageTypes` field)
-- Also persisted to localStorage for offline access
+- Saved to the project document (`folderPageTypes`) via `projectsService.updateProjectFolderPageTypes`, so every teammate sees the same classification. Before 2026-09-20 this only ever reached localStorage.
+- Mirrored to localStorage for the read-only share view, which cannot write
 - Unclassified folders default to "static" behavior
 
 
@@ -763,7 +789,7 @@ Captures page at multiple viewport widths via `ScreenshotService`:
 > [!WARNING]
 > Current limitations to be aware of:
 
-1. **No Firestore indexes** - Queries use in-memory sorting to avoid index requirements (see `orderBy` comments in services)
+1. **Pages table is not virtualised** - groups default to collapsed because expanding every group on a 300+ page site has crashed the tab
 2. **Full source storage** - `audit_logs` grows large; no automatic cleanup
 3. **Rate limiting** - LanguageTool public API has limits; can self-host for production
 4. **Single locale** - Only `en-US` spell checking currently supported

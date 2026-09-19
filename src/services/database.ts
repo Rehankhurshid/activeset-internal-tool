@@ -892,7 +892,7 @@ export const projectsService = {
       const updatedLinks = project.links.map(link =>
         link.id === linkId ? { ...link, ...updates } : link
       );
-      await this.updateProjectLinks(projectId, updatedLinks);
+      await this.updateProjectLinks(projectId, updatedLinks, { changedLinkIds: [linkId] });
     } catch (error) {
       logError(error, 'updateLink');
       if (error instanceof DatabaseError) throw error;
@@ -973,9 +973,10 @@ export const projectsService = {
       const currentSeo = (currentCategories as { seo?: Record<string, unknown> }).seo || {};
       const currentSnapshot = (currentAudit as { contentSnapshot?: Record<string, unknown> }).contentSnapshot || {};
 
+      // `lastRun` is when the page's content was last audited; an image pass
+      // is not that, so it is left alone and `imageScanCheckedAt` carries the date.
       const nextAuditResult = ({
         ...currentAudit,
-        lastRun: results.checkedAt,
         categories: {
           ...currentCategories,
           seo: {
@@ -995,7 +996,7 @@ export const projectsService = {
       const updatedLinks = project.links.map((l) =>
         l.id === linkId ? { ...l, auditResult: nextAuditResult } : l
       );
-      await this.updateProjectLinks(projectId, updatedLinks);
+      await this.updateProjectLinks(projectId, updatedLinks, { changedLinkIds: [linkId] });
     } catch (error) {
       logError(error, 'saveImageAltResults');
       if (error instanceof DatabaseError) throw error;

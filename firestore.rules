@@ -78,6 +78,14 @@ service cloud.firestore {
         allow read, write: if canAccessProjectById();
       }
 
+      // Decisions the team records against audit findings: "this image is
+      // decorative", "ignore this dead link", "alt text written, awaiting a
+      // rescan". Keyed by finding fingerprint so a rescan cannot resurrect a
+      // call someone already made. Team-only, same as the audits themselves.
+      match /audit_decisions/{decisionId} {
+        allow read, write: if canAccessProjectById();
+      }
+
       // ────────────────────────────────────────────────────────────────────
       // Updates the team posts to the client's portal. Team-only. Rules do NOT
       // cascade into subcollections, so anything not matched here (portal_views)

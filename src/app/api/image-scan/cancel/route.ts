@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRun } from 'workflow/api';
-import { projectsService } from '@/services/database';
+import { setImageScanJobAdmin } from '@/lib/audit-admin';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Always clear the UI job doc — even if the run was already finished.
-    await projectsService.setImageScanJob(projectId, null);
+    await setImageScanJobAdmin(projectId, null);
 
     return NextResponse.json({ success: true }, { headers: corsHeaders });
   } catch (error) {

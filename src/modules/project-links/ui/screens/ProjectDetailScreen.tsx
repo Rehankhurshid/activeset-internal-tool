@@ -602,6 +602,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             detectedLocales={project.detectedLocales}
                             pathToLocaleMap={project.pathToLocaleMap}
                             imageScanJob={project.imageScanJob}
+                            webflowConfig={project.webflowConfig}
+                            userEmail={user.email ?? undefined}
                         />
                     </TabsContent>
 
