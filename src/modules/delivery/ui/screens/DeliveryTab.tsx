@@ -17,6 +17,7 @@ import { getStack } from '../../domain/stacks';
 import type { ProjectPage } from '../../domain/delivery.types';
 import { deliveryRepository } from '../../infrastructure/delivery.repository';
 import { StageRail } from '../components/StageRail';
+import { TemplateImprovements } from '../components/TemplateImprovements';
 import { StageScreen } from './StageScreen';
 
 interface DeliveryTabProps {
@@ -118,7 +119,14 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
             </span>
           )}
 
-          <p className="text-xs text-muted-foreground">{stack.name} build</p>
+          <div className="flex items-center gap-1.5">
+            {/* Renders nothing at all unless this project's checklists have
+                drifted from the SOPs they were copied from. The way back to the
+                template belongs here rather than on a stage: what a project
+                learned is rarely confined to the stage you happen to be in. */}
+            <TemplateImprovements checklists={checklists} />
+            <p className="text-xs text-muted-foreground">{stack.name} build</p>
+          </div>
         </div>
 
         {progress.total > 0 && (

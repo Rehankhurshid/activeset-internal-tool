@@ -21,7 +21,8 @@ import { fetchAuthed } from '@/lib/api-client';
 import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
 import { checklistService } from '@/services/ChecklistService';
-import type { ChecklistItemStatus, ProjectChecklist, ProjectLink } from '@/types';
+import type { ChecklistItemStatus, ProjectChecklist, ProjectLink, SOPTemplate } from '@/types';
+import type { Improvement } from '../domain/delivery.feedback';
 import type {
   CheckStatus,
   CreateProjectPageInput,
@@ -346,6 +347,24 @@ export const deliveryRepository = {
     userEmail?: string,
   ): Promise<void> {
     return checklistService.updateItemStatus(checklistId, sectionId, itemId, status, userEmail);
+  },
+
+  /**
+   * The SOP a checklist was copied from, or null when it is gone — a template
+   * can be deleted while the projects made from it are still running.
+   */
+  getSOPTemplate(templateId: string): Promise<SOPTemplate | null> {
+    return checklistService.getSOPTemplate(templateId);
+  },
+
+  /**
+   * The one write that travels from a project back towards the process.
+   *
+   * Passed through untouched, errors included: the one raised for a built-in
+   * template says what to do instead, and wrapping it would lose that.
+   */
+  saveTemplateImprovements(templateId: string, improvements: Improvement[]): Promise<void> {
+    return checklistService.saveTemplateImprovements(templateId, improvements);
   },
 
   /** This project's per-page QC questions, replacing whatever was there. */

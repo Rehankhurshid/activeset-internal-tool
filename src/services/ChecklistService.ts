@@ -143,6 +143,9 @@ export const checklistService = {
             const checklist: Omit<ProjectChecklist, 'id'> = {
                 projectId,
                 templateId: primaryTemplateId, // Use first ID as primary ref
+                // All of them, so a merged checklist can offer improvements back
+                // to every template it came from rather than only the first.
+                templateIds: templates.map(t => t.id),
                 templateName,
                 createdAt: new Date(),
                 updatedAt: new Date(),

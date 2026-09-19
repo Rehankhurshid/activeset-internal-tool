@@ -658,6 +658,15 @@ export interface ProjectChecklist {
   id: string;                // Firestore doc ID
   projectId: string;         // Reference to project
   templateId: string;        // e.g., "webflow_migration_v1"
+  /**
+   * Every template this checklist was built from, in order.
+   *
+   * A checklist can merge several, and `templateId` records only the first — so
+   * without this the sections that came from the second template match nothing
+   * when improvements are offered back, and are skipped in silence. Absent on
+   * checklists created before this existed; read `templateIds ?? [templateId]`.
+   */
+  templateIds?: string[];
   templateName: string;      // e.g., "Website Migration to Webflow"
   sections: ChecklistSection[];
   createdAt: Date;
