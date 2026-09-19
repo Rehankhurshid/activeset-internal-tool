@@ -39,6 +39,8 @@ export async function POST(request: NextRequest) {
       totalChecked: summary.totalChecked,
       totalLinks: summary.totalLinks,
       brokenLinks: summary.brokenLinks,
+      // Kept apart so the UI can say "could not verify" instead of losing them.
+      unverifiableLinks: summary.unverifiableLinks,
       validLinks: summary.validLinks,
       checkedAt: summary.checkedAt,
     });

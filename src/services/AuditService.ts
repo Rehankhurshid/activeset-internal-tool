@@ -7,7 +7,7 @@ import {
     limit,
     getDocs,
     deleteDoc,
-    doc
+    doc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { DatabaseError, logError } from '@/lib/errors';
@@ -75,22 +75,41 @@ export const auditService = {
 
     // Get the most recent previous audit log for a link
     async getLatestAuditLog(projectId: string, linkId: string): Promise<AuditLogEntry | null> {
+        // One document, newest first. Each audit log carries the page's full
+        // HTML, so the unbounded form of this query downloaded every scan the
+        // page has ever had — megabytes, growing nightly — to read the newest.
+        // The composite index lives in firestore.indexes.json; until it is
+        // deployed Firestore refuses the ordered query, so the old unbounded
+        // read stays as a fallback rather than silently returning nothing and
+        // breaking every diff.
         try {
-            // Query without orderBy first to avoid index requirements
+            const q = query(
+                collection(db, AUDIT_LOGS_COLLECTION),
+                where('projectId', '==', projectId),
+                where('linkId', '==', linkId),
+                orderBy('timestamp', 'desc'),
+                limit(1)
+            );
+            const snapshot = await getDocs(q);
+            return snapshot.empty ? null : (snapshot.docs[0].data() as AuditLogEntry);
+        } catch (error) {
+            if (!isMissingIndexError(error)) {
+                logError(error, 'getLatestAuditLog');
+                return null;
+            }
+            console.warn('[getLatestAuditLog] composite index not deployed; falling back to the unbounded query. Deploy firestore.indexes.json.');
+        }
+
+        try {
             const q = query(
                 collection(db, AUDIT_LOGS_COLLECTION),
                 where('projectId', '==', projectId),
                 where('linkId', '==', linkId)
-                // orderBy('timestamp', 'desc') // Requires index, doing in memory for now
             );
-
             const snapshot = await getDocs(q);
             if (snapshot.empty) return null;
-
-            // Manual sort locally
             const docs = snapshot.docs.map(d => d.data() as AuditLogEntry);
             docs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
             return docs[0];
         } catch (error) {
             logError(error, 'getLatestAuditLog');
@@ -230,6 +249,12 @@ export const auditService = {
 };
 
 // Static class wrapper for use in API routes
+/** Firestore's answer when an ordered query needs an index that is not deployed. */
+function isMissingIndexError(error: unknown): boolean {
+    const e = error as { code?: string; message?: string } | undefined;
+    return e?.code === 'failed-precondition' || /requires an index/i.test(e?.message ?? '');
+}
+
 export class AuditService {
     static async saveAuditLog(entry: AuditLogEntry): Promise<string> {
         return auditService.saveAuditLog(entry);

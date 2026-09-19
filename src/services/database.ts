@@ -273,8 +273,22 @@ function linkAuditDoc(projectId: string, linkId: string) {
 }
 
 /** Save audit results for multiple links to the subcollection. */
-async function saveLinkAudits(projectId: string, links: ProjectLink[]): Promise<void> {
-  const linksWithAudit = links.filter(l => l.auditResult);
+/**
+ * Write audit documents for `links`, or only for `onlyLinkIds` when given.
+ *
+ * A single-page rescan used to rewrite the audit of every page on the project,
+ * so one manual rescan on a forty-page site was forty-one document writes and
+ * forty redundant deep clones. Callers that touched one page pass its id.
+ * Callers that genuinely changed several, or that predate this, pass nothing
+ * and keep the old write-everything behaviour.
+ */
+async function saveLinkAudits(
+  projectId: string,
+  links: ProjectLink[],
+  onlyLinkIds?: readonly string[],
+): Promise<void> {
+  const wanted = onlyLinkIds ? new Set(onlyLinkIds) : null;
+  const linksWithAudit = links.filter(l => l.auditResult && (!wanted || wanted.has(l.id)));
   if (linksWithAudit.length === 0) return;
 
   // Batch writes (max 500 per batch)
@@ -797,7 +811,11 @@ export const projectsService = {
   },
 
   // Update project links — audit results go to subcollection, link metadata to project doc
-  async updateProjectLinks(projectId: string, links: ProjectLink[]): Promise<void> {
+  async updateProjectLinks(
+    projectId: string,
+    links: ProjectLink[],
+    options: { changedLinkIds?: readonly string[] } = {},
+  ): Promise<void> {
     if (isLocalProjectBypassEnabled()) {
       updateLocalProject(projectId, (project) => ({ ...project, links }));
       return;
@@ -805,7 +823,7 @@ export const projectsService = {
 
     // Save audit results to subcollection (non-blocking — don't fail the whole save if this errors)
     try {
-      await saveLinkAudits(projectId, links);
+      await saveLinkAudits(projectId, links, options.changedLinkIds);
     } catch (error) {
       console.error(`[projectsService] Failed to save audit subcollection for ${projectId}, falling back to inline:`, error);
       // Fall back to saving with inline audit results (old behavior)
@@ -890,6 +908,8 @@ export const projectsService = {
       totalChecked: number;
       totalLinks: number;
       brokenLinks: { href: string; status: number; text: string; error?: string }[];
+      /** Answered with a bot-block or rate limit; not counted against the page. */
+      unverifiableLinks?: { href: string; status: number; text: string; reason: string }[];
       validLinks: number;
     }
   ): Promise<void> {
@@ -915,6 +935,7 @@ export const projectsService = {
               internalLinks: (currentLinks as { internalLinks?: number }).internalLinks || 0,
               externalLinks: (currentLinks as { externalLinks?: number }).externalLinks || 0,
               brokenLinks: results.brokenLinks,
+              unverifiableLinks: results.unverifiableLinks ?? [],
               checkedAt: new Date().toISOString(),
               status: results.brokenLinks.length > 0 ? 'failed' : 'passed',
               score: results.brokenLinks.length === 0 ? 100 : Math.max(0, 100 - (results.brokenLinks.length * 20)),

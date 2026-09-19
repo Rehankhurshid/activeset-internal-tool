@@ -43,6 +43,12 @@ export async function OPTIONS() {
     return NextResponse.json({}, { headers: corsHeaders });
 }
 
+// Headless Chromium and a real network fan-out; the platform default
+// duration is not enough for the first slow page, and puppeteer cannot run
+// on the edge runtime at all. The bulk path allows 300.
+export const runtime = 'nodejs';
+export const maxDuration = 120;
+
 export async function POST(request: NextRequest) {
     try {
         const { projectId, linkId, url } = await request.json();
@@ -80,11 +86,6 @@ export async function POST(request: NextRequest) {
         // Perform scan
         const scanResult = await pageScanner.scan(targetUrl);
 
-        // Started here and awaited at assembly time so the round trip to
-        // TypeSafe overlaps the link check and the screenshot instead of adding
-        // to them. It never rejects; failure resolves to undefined.
-        const judgmentPromise = judgeScannedPage({ url: targetUrl, scanResult, previous: prevResult });
-
         let linksCategory = scanResult.categories.links;
         try {
             const linkCheckSummary = await checkBrokenLinks(
@@ -96,6 +97,8 @@ export async function POST(request: NextRequest) {
                 ...linksCategory,
                 totalLinks: linkCheckSummary.totalLinks,
                 brokenLinks: linkCheckSummary.brokenLinks,
+                // Carried separately so a bot-blocked profile link never fails the page.
+                unverifiableLinks: linkCheckSummary.unverifiableLinks,
                 status: brokenCount > 0 ? 'failed' : 'passed',
                 score: brokenCount === 0 ? 100 : Math.max(0, 100 - brokenCount * 20),
                 checkedAt: linkCheckSummary.checkedAt,
@@ -103,6 +106,17 @@ export async function POST(request: NextRequest) {
         } catch (linkCheckError) {
             console.warn(`[scan-pages] Link checking failed for ${targetUrl}:`, linkCheckError);
         }
+
+        // Started after the link check and awaited at assembly, so the round
+        // trip to TypeSafe overlaps the screenshot — the long step — rather
+        // than adding to it. It has to come after the links: started earlier
+        // it judged the scanner's hardcoded empty broken-link list, and the
+        // triage never fired. Never rejects; failure resolves to undefined.
+        const judgmentPromise = judgeScannedPage({
+            url: targetUrl,
+            scanResult: { ...scanResult, categories: { ...scanResult.categories, links: linksCategory } },
+            previous: prevResult,
+        });
 
         // Scan Result validation
         if (!scanResult || !scanResult.contentSnapshot) {
@@ -132,8 +146,11 @@ export async function POST(request: NextRequest) {
         if (changeStatus === 'CONTENT_CHANGED' || changeStatus === 'TECH_CHANGE_ONLY') {
             // Get previous source from audit_logs
             try {
-                const prevLog = await AuditService.getLatestAuditLog(projectId, linkId);
-                // Generate diff if checking content
+                // Only the content diff needs the previous HTML; a tech-only
+                // change never reads it, so it is not fetched for one.
+                const prevLog = changeStatus === 'CONTENT_CHANGED'
+                    ? await AuditService.getLatestAuditLog(projectId, linkId)
+                    : null;
                 if (changeStatus === 'CONTENT_CHANGED' && prevLog?.htmlSource) {
                     diffPatch = generateDiffPatch(prevLog.htmlSource, scanResult.htmlSource || '') || undefined;
 
@@ -199,15 +216,11 @@ export async function POST(request: NextRequest) {
                 );
                 console.log(`[scan-pages] Screenshot uploaded to Storage`);
                 
-                // Get previous screenshot URL from audit logs for comparison
+                // The stored audit already carries the previous screenshot;
+                // no history read is needed to copy one URL out of a log that
+                // also carries the whole page source.
                 if (!isFirstScan) {
-                    const prevLog = await AuditService.getLatestAuditLog(projectId, linkId);
-                    if (prevLog?.screenshotUrl) {
-                        previousScreenshotUrl = prevLog.screenshotUrl;
-                    } else if (prevLog?.screenshot) {
-                        // Backward compatibility: old logs may have base64
-                        previousScreenshotUrl = prevLog.screenshot;
-                    }
+                    previousScreenshotUrl = prevResult?.screenshotUrl || prevResult?.screenshot || undefined;
                 }
             } catch (screenshotError) {
                 console.warn('[scan-pages] Screenshot capture/upload failed:', screenshotError);
@@ -215,14 +228,9 @@ export async function POST(request: NextRequest) {
             }
         } else {
             console.log(`[scan-pages] Skipping screenshot: no significant change`);
-            // Preserve existing screenshot URL if available
-            const prevLog = await AuditService.getLatestAuditLog(projectId, linkId);
-            if (prevLog?.screenshotUrl) {
-                screenshotUrl = prevLog.screenshotUrl;
-            } else if (prevLog?.screenshot) {
-                // Backward compatibility
-                screenshotUrl = prevLog.screenshot;
-            }
+            // Keep what the stored audit already has; same reasoning as above.
+            screenshotUrl = prevResult?.screenshotUrl || prevResult?.screenshot || undefined;
+            previousScreenshotUrl = prevResult?.previousScreenshotUrl;
         }
 
         const judgment = await judgmentPromise;
@@ -257,7 +265,7 @@ export async function POST(request: NextRequest) {
             auditResult: compactAuditResult(auditResult)
         });
 
-        await projectsService.updateProjectLinks(projectId, updatedLinks);
+        await projectsService.updateProjectLinks(projectId, updatedLinks, { changedLinkIds: [linkId] });
 
         // Save to audit_logs for history ONLY if content changed
         // This saves ~80% storage costs by skipping NO_CHANGE pages

@@ -8,7 +8,7 @@ import {
     getDocs,
     doc,
     getDoc,
-    deleteDoc
+    deleteDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { logError } from '@/lib/errors';
@@ -38,26 +38,42 @@ export const changeLogService = {
      * Get the most recent entry for a link (for comparison with new scan)
      */
     async getLatestEntry(linkId: string): Promise<ChangeLogEntry | null> {
+        // One document, newest first. Every change-log entry carries a full
+        // content snapshot, and the only thing the scan asks of this is whether
+        // an entry exists at all — the unbounded form downloaded the page's
+        // entire history to answer yes or no. Index in firestore.indexes.json;
+        // the unbounded read stays as a fallback until it is deployed.
         try {
-            // Query without orderBy to avoid index requirement, sort in memory
+            const q = query(
+                collection(db, CHANGE_LOG_COLLECTION),
+                where('linkId', '==', linkId),
+                orderBy('timestamp', 'desc'),
+                limit(1)
+            );
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) return null;
+            const d = snapshot.docs[0];
+            return { id: d.id, ...d.data() } as ChangeLogEntry;
+        } catch (error) {
+            const e = error as { code?: string; message?: string } | undefined;
+            const missingIndex = e?.code === 'failed-precondition' || /requires an index/i.test(e?.message ?? '');
+            if (!missingIndex) {
+                logError(error, 'changeLogService.getLatestEntry');
+                console.error('Failed to get latest change log entry:', error);
+                return null;
+            }
+            console.warn('[getLatestEntry] composite index not deployed; falling back to the unbounded query. Deploy firestore.indexes.json.');
+        }
+
+        try {
             const q = query(
                 collection(db, CHANGE_LOG_COLLECTION),
                 where('linkId', '==', linkId)
             );
-
             const snapshot = await getDocs(q);
             if (snapshot.empty) return null;
-
-            // Sort locally by timestamp descending
-            const docs = snapshot.docs.map(d => ({
-                id: d.id,
-                ...d.data()
-            } as ChangeLogEntry));
-
-            docs.sort((a, b) =>
-                new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            );
-
+            const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ChangeLogEntry));
+            docs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             return docs[0];
         } catch (error) {
             logError(error, 'changeLogService.getLatestEntry');

@@ -255,14 +255,21 @@ async function markQueuedNotificationFailed(scanId: string, error: string): Prom
 async function listProcessableScanNotifications(
   batchSize: number = DEFAULT_BATCH_SIZE
 ): Promise<ScanNotificationJob[]> {
-  const queries = await Promise.all([
-    getDocs(query(getCollectionRef(), where('status', '==', 'pending'), limit(batchSize))),
-    getDocs(query(getCollectionRef(), where('status', '==', 'failed'), limit(batchSize))),
-    getDocs(query(getCollectionRef(), where('status', '==', 'processing'), limit(batchSize))),
-  ]);
+  // One read, not three. This drain is called on a one-minute timer as a
+  // crash-recovery fallback, so at idle its queries are paid every minute to
+  // find an empty queue. A single `in` over the three statuses returns the
+  // same documents; the limit is widened to match the three separate caps it
+  // replaces, and the slice at the end still enforces `batchSize`.
+  const snapshot = await getDocs(
+    query(
+      getCollectionRef(),
+      where('status', 'in', ['pending', 'failed', 'processing']),
+      limit(batchSize * 3)
+    )
+  );
 
-  const jobs = queries
-    .flatMap((snapshot) => snapshot.docs.map((docSnap) => docToJob(docSnap.id, docSnap.data())))
+  const jobs = snapshot.docs
+    .map((docSnap) => docToJob(docSnap.id, docSnap.data()))
     .filter((job): job is ScanNotificationJob => Boolean(job))
     .filter((job) => job.status !== 'processing' || isProcessingLockExpired(job))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));

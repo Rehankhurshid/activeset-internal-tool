@@ -173,10 +173,24 @@ export async function loadAllProjectsAdmin(): Promise<Project[]> {
   return projects;
 }
 
-async function updateProjectLinksAdmin(projectId: string, links: ProjectLink[]): Promise<void> {
+/**
+ * Persist the links array and the audit documents for `changedLinkIds`.
+ *
+ * This used to write every audited link's document on every call, and it is
+ * called once per chunk of five pages — so a forty-page site wrote its forty
+ * audits eight times over, each one deep-cloned and compacted again, to land
+ * five. Only what this run actually scanned is written now. The links array on
+ * the project document is still rewritten whole; that is a separate problem.
+ */
+async function updateProjectLinksAdmin(
+  projectId: string,
+  links: ProjectLink[],
+  changedLinkIds: readonly string[],
+): Promise<void> {
   const ref = adminDb.collection(PROJECTS_COLLECTION_NAME).doc(projectId);
 
-  const linksWithAudit = links.filter((l) => l.auditResult);
+  const changed = new Set(changedLinkIds);
+  const linksWithAudit = links.filter((l) => l.auditResult && changed.has(l.id));
   for (let i = 0; i < linksWithAudit.length; i += ADMIN_BATCH_SIZE) {
     const batch = adminDb.batch();
     const chunk = linksWithAudit.slice(i, i + ADMIN_BATCH_SIZE);
@@ -527,12 +541,15 @@ export async function getActiveScanJobsForProject(projectId: string): Promise<Sc
 }
 
 export async function getAllActiveScanJobs(): Promise<ScanJob[]> {
-  const [queuedSnapshot, runningSnapshot] = await Promise.all([
-    getDocs(query(getCollectionRef(), where('status', '==', 'queued'), limit(50))),
-    getDocs(query(getCollectionRef(), where('status', '==', 'running'), limit(50))),
-  ]);
+  // One read, not two. This runs from a cron on a timer whether or not any
+  // scan exists, so at idle it is pure cost: every query here is paid roughly
+  // fifteen hundred times a day to learn that nothing is running. A single
+  // `in` over both statuses needs no composite index and returns the same set.
+  const snapshot = await getDocs(
+    query(getCollectionRef(), where('status', 'in', ['queued', 'running']), limit(100))
+  );
 
-  const jobs = [...queuedSnapshot.docs, ...runningSnapshot.docs]
+  const jobs = snapshot.docs
     .map((docSnap) => docToJob(docSnap.id, docSnap.data()))
     .filter((job): job is ScanJob => Boolean(job));
 
@@ -690,13 +707,16 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
     };
 
     // Run in parallel chunks of PARALLEL_CONCURRENCY
+    // Every link written this invocation, so the final persist after the loop
+    // covers a chunk whose own write failed rather than re-writing nothing.
+    const persistedLinkIds: string[] = [];
     for (let i = 0; i < remainingTargetIds.length; i += PARALLEL_CONCURRENCY) {
       // Check cancellation between chunks
       if (i > 0) {
         const latestJob = await getScanJob(scanId);
         if (!latestJob || latestJob.status === 'cancelled' || latestJob.cancelRequested) {
           if (shouldPersistProjectLinks) {
-            await updateProjectLinksAdmin(project.id, projectLinks);
+            await updateProjectLinksAdmin(project.id, projectLinks, persistedLinkIds);
           }
           if (completedBatchLinkIds.length > 0) {
             await recordCompletedLinks(scanId, completedBatchLinkIds, summary);
@@ -727,9 +747,10 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
       }
 
       // Persist per-chunk so progress survives a mid-batch function timeout.
+      persistedLinkIds.push(...chunkCompletedLinkIds);
       if (shouldPersistProjectLinks) {
         try {
-          await updateProjectLinksAdmin(project.id, projectLinks);
+          await updateProjectLinksAdmin(project.id, projectLinks, persistedLinkIds);
           shouldPersistProjectLinks = false;
         } catch (error) {
           console.error(`[scan-jobs] Failed to persist project links for ${scanId} (chunk ${i}):`, error);
@@ -743,7 +764,7 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
     }
 
     if (shouldPersistProjectLinks) {
-      await updateProjectLinksAdmin(project.id, projectLinks);
+      await updateProjectLinksAdmin(project.id, projectLinks, persistedLinkIds);
     }
 
     const finalJob = await releaseScanJobAfterBatch(scanId, summary);
@@ -793,17 +814,13 @@ async function scanSinglePage(
   const targetUrl = resolveScanTargetUrl(link.url, projectLinks);
 
   // Prefetch changelog history and audit log in parallel with page scan
-  const [scanResult, latestChangeLog, prevAuditLog] = await Promise.all([
+  // The previous audit log is deliberately not read here. Every log carries
+  // the page's full HTML and it is only used to build a content diff, which
+  // most nightly scans never do — it is fetched on that path alone, below.
+  const [scanResult, latestChangeLog] = await Promise.all([
     pageScanner.scan(targetUrl),
     changeLogService.getLatestEntry(link.id),
-    prevResult ? AuditService.getLatestAuditLog(projectId, link.id) : Promise.resolve(null),
   ]);
-
-  // Started here and awaited at assembly time so the round trip to TypeSafe
-  // overlaps the link check and the screenshot rather than adding to them —
-  // the nightly cron scans every page of every live project on one budget.
-  // It never rejects; failure resolves to undefined.
-  const judgmentPromise = judgeScannedPage({ url: targetUrl, scanResult, previous: prevResult });
 
   let linksCategory = scanResult.categories.links;
   try {
@@ -817,6 +834,8 @@ async function scanSinglePage(
       ...linksCategory,
       totalLinks: linkCheckSummary.totalLinks,
       brokenLinks: linkCheckSummary.brokenLinks,
+      // Carried separately so a bot-blocked profile link never fails the page.
+      unverifiableLinks: linkCheckSummary.unverifiableLinks,
       status: brokenCount > 0 ? 'failed' : 'passed',
       score: brokenCount === 0 ? 100 : Math.max(0, 100 - brokenCount * 20),
       checkedAt: linkCheckSummary.checkedAt,
@@ -824,6 +843,17 @@ async function scanSinglePage(
   } catch (error) {
     console.warn(`[scan-jobs] Link checking failed for ${targetUrl}:`, error);
   }
+
+  // Started after the link check and awaited at assembly, so the round trip
+  // to TypeSafe overlaps the screenshot — the long step — rather than adding
+  // to it. It has to come after the links: started earlier it judged the
+  // scanner's hardcoded empty broken-link list, and the triage never fired.
+  // Never rejects; failure resolves to undefined.
+  const judgmentPromise = judgeScannedPage({
+    url: targetUrl,
+    scanResult: { ...scanResult, categories: { ...scanResult.categories, links: linksCategory } },
+    previous: prevResult,
+  });
 
   const changeStatus = computeChangeStatus(
     scanResult.fullHash,
@@ -838,6 +868,9 @@ async function scanSinglePage(
 
   if (changeStatus === 'CONTENT_CHANGED' || changeStatus === 'TECH_CHANGE_ONLY') {
     try {
+      const prevAuditLog = changeStatus === 'CONTENT_CHANGED' && prevResult
+        ? await AuditService.getLatestAuditLog(projectId, link.id)
+        : null;
       if (changeStatus === 'CONTENT_CHANGED' && prevAuditLog?.htmlSource) {
         diffPatch = generateDiffPatch(prevAuditLog.htmlSource, scanResult.htmlSource || '') || undefined;
 

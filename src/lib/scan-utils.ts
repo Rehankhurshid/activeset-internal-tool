@@ -246,6 +246,13 @@ export function compactAuditResult(
             .map(issue => truncateString(issue, limits.longText));
     }
 
+    // Same cap for the links that could not be verified. Uncapped, a footer
+    // full of bot-blocked social profiles would grow the audit on every page.
+    if (compact.categories?.links?.unverifiableLinks) {
+        compact.categories.links.unverifiableLinks =
+            compact.categories.links.unverifiableLinks.slice(0, limits.brokenLinks);
+    }
+
     // Limit brokenLinks array
     if (compact.categories?.links?.brokenLinks) {
         compact.categories.links.brokenLinks =

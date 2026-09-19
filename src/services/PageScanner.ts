@@ -65,6 +65,8 @@ export interface PageScanResult {
             totalLinks: number;
             internalLinks: number;
             externalLinks: number;
+            /** Bot-blocked or rate-limited: unanswered, not broken. Filled by the link checker, not the scanner. */
+            unverifiableLinks?: { href: string; status: number; text: string; reason: string }[];
             brokenLinks: { href: string; status: number; text: string; error?: string }[];
             checkedAt?: string;
             score: number;
@@ -444,13 +446,12 @@ export class PageScanner {
     /**
      * Extract and validate JSON-LD schema markup
      */
-    private extractSchemaMarkup(htmlSource: string): {
+    private extractSchemaMarkup($: CheerioRoot): {
         hasSchema: boolean;
         schemaTypes: string[];
         issues: { type: string; message: string }[];
         rawSchemas: object[];
     } {
-        const $ = cheerio.load(htmlSource);
         const schemas: object[] = [];
         const schemaTypes: string[] = [];
         const issues: { type: string; message: string }[] = [];
@@ -855,10 +856,13 @@ export class PageScanner {
 
         const htmlSource = await response.text();
 
-        // Extract new metadata BEFORE removing scripts
-        const schemaResult = this.extractSchemaMarkup(htmlSource);
-
+        // One parse. This used to build the DOM twice from the same string —
+        // once inside the schema extractor, once here — and a full cheerio load
+        // of a 300 KB page is the most expensive CPU step in the scan. Schema
+        // still has to come out before scripts are stripped below, because
+        // JSON-LD lives in a <script> tag.
         const $ = cheerio.load(htmlSource);
+        const schemaResult = this.extractSchemaMarkup($);
 
         // Extract additional metadata before content cleaning
         const openGraphResult = this.extractOpenGraph($);

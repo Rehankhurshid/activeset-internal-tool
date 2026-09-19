@@ -196,6 +196,9 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
   const [scanning, setScanning] = useState(false)
   const [checkingLinks, setCheckingLinks] = useState(false)
   const [brokenLinks, setBrokenLinks] = useState<{ href: string; status: number; text: string; error?: string }[]>([])
+  // Kept apart from broken: a bot-blocked profile link is not a fault on the
+  // page, but silently dropping it would make people think it was checked.
+  const [unverifiableLinks, setUnverifiableLinks] = useState<{ href: string; status: number; text: string; reason: string }[]>([])
   const [linksCheckedAt, setLinksCheckedAt] = useState<string | null>(null)
   const [schemaExpanded, setSchemaExpanded] = useState(false)
   const [capturingScreenshot, setCapturingScreenshot] = useState(false)
@@ -241,6 +244,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
       if (response.ok) {
         const result = await response.json();
         setBrokenLinks(result.brokenLinks || []);
+        setUnverifiableLinks(result.unverifiableLinks || []);
         setLinksCheckedAt(new Date().toISOString());
         // Persist results to Firestore
         try {
@@ -248,6 +252,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
             totalChecked: result.totalChecked,
             totalLinks: result.totalLinks,
             brokenLinks: result.brokenLinks || [],
+            unverifiableLinks: result.unverifiableLinks || [],
             validLinks: result.validLinks,
           });
         } catch {
@@ -292,6 +297,7 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
           // Load persisted broken link data
           if (link.auditResult?.categories?.links?.brokenLinks) {
             setBrokenLinks(link.auditResult.categories.links.brokenLinks);
+            setUnverifiableLinks(link.auditResult.categories.links.unverifiableLinks || []);
             setLinksCheckedAt(link.auditResult.categories.links.checkedAt || null);
           }
         }
@@ -803,11 +809,33 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
                     ) : linksCheckedAt ? (
                       <div className="flex items-center gap-2 text-xs text-green-600 pt-3 border-t border-neutral-100 dark:border-neutral-800">
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        All links valid
+                        {unverifiableLinks.length > 0 ? 'No broken links' : 'All links valid'}
                         <span className="text-neutral-400 ml-auto">{getRelativeTime(linksCheckedAt)}</span>
                       </div>
                     ) : (
                       <p className="text-xs text-neutral-500 pt-3 border-t border-neutral-100 dark:border-neutral-800">Click refresh to check for broken links</p>
+                    )}
+                    {/* Not counted as issues and not coloured red: these answered
+                        with a bot-block or a rate limit, which says nothing about
+                        whether a person can open them. Shown so nobody assumes
+                        they were checked and found fine. */}
+                    {unverifiableLinks.length > 0 && (
+                      <div className="space-y-1.5 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+                        <div className="flex items-center gap-2 text-xs font-medium text-amber-600 mb-2">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          {unverifiableLinks.length} could not be verified
+                        </div>
+                        {unverifiableLinks.slice(0, 5).map((link, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-amber-50 dark:bg-amber-950/30">
+                            <span className="font-mono text-amber-600 font-medium shrink-0">{link.status}</span>
+                            <span className="truncate text-neutral-600 dark:text-neutral-400">{link.href}</span>
+                            <span className="ml-auto shrink-0 text-[10px] text-neutral-400">{link.reason.replace('-', ' ')}</span>
+                          </div>
+                        ))}
+                        {unverifiableLinks.length > 5 && (
+                          <p className="text-[10px] text-neutral-400 pl-2">and {unverifiableLinks.length - 5} more…</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </PanelCard>

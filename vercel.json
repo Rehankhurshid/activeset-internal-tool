@@ -10,11 +10,7 @@
     },
     {
       "path": "/api/cron/scan-jobs",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/scan-notifications",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/refrens-sync",

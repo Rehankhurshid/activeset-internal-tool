@@ -35,20 +35,24 @@ async function launchBrowser(): Promise<Browser> {
     }) as unknown as Browser;
 }
 
+// Chrome's WebP encoder refuses any side longer than this, and page.screenshot
+// hands back an empty buffer rather than throwing. Long marketing pages
+// (activeset.co is ~19,800px) were silently uploading 0-byte files.
+const WEBP_MAX_DIMENSION = 16383;
+
+// After the scroll walk, keep waiting only while lazy images are still
+// landing. Locally the ones that are going to arrive do so within ~100ms of
+// each other; the quiet window leaves headroom for Lambda's colder network
+// path, and the budget is a backstop so a stalled page cannot eat the scan.
+const LAZY_QUIET_MS = 400;
+const LAZY_BUDGET_MS = 1500;
+
 export interface ScreenshotResult {
-    screenshot: string; // Base64 encoded WebP
-    fullPageScreenshot?: string; // Full page screenshot (optional)
+    screenshot: Uint8Array; // WebP bytes, ready for uploadBytes
     viewport: {
         width: number;
         height: number;
     };
-    capturedAt: string;
-}
-
-export interface ResponsiveScreenshotResult {
-    mobile: string; // Base64 WebP at 375px width
-    tablet: string; // Base64 WebP at 768px width
-    desktop: string; // Base64 WebP at 1280px width
     capturedAt: string;
 }
 
@@ -67,7 +71,7 @@ export class ScreenshotService {
     }
 
     /**
-     * Capture a screenshot of a URL after scrolling to trigger animations.
+     * Capture a full-page screenshot of a URL after walking it so lazy content loads.
      * @param url The page URL to capture
      * @param options Screenshot options
      */
@@ -76,63 +80,49 @@ export class ScreenshotService {
         options: {
             width?: number;
             height?: number;
-            waitForSelector?: string;
-            scrollDelay?: number;
-            fullPage?: boolean;
         } = {}
     ): Promise<ScreenshotResult> {
         const {
             width = 1280,
-            height = 800,
-            scrollDelay = 100,
-            fullPage = false
+            height = 800
         } = options;
 
         const browser = await this.getBrowser();
         const page = await browser.newPage();
 
         try {
-            // Set viewport
             await page.setViewport({ width, height });
 
-            // Navigate to the page
             await page.goto(url, {
                 waitUntil: 'domcontentloaded',
                 timeout: 15000
             });
 
-            // Scroll through the page to trigger lazy loading
-            await this.scrollPage(page, scrollDelay);
+            await this.triggerLazyContent(page);
 
-            // Scroll back to top for the screenshot
-            await page.evaluate(() => window.scrollTo(0, 0));
-            await new Promise(resolve => setTimeout(resolve, 200));
+            // Shrink the render scale just enough for the whole page to fit under
+            // the encoder's limit. Cropping would lose the footer, and going via
+            // PNG + sharp costs a second encode for the same result.
+            const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+            if (pageHeight > WEBP_MAX_DIMENSION) {
+                const deviceScaleFactor = Math.floor((WEBP_MAX_DIMENSION / pageHeight) * 100) / 100;
+                await page.setViewport({ width, height, deviceScaleFactor });
+            }
 
-            // Capture full page screenshot (captures entire scrollable page, not just viewport)
-            const screenshotBuffer = await page.screenshot({
+            // Full page on purpose: the UI shows current vs previous at full width,
+            // so a viewport-only shot would miss changes below the fold.
+            const screenshot = await page.screenshot({
                 type: 'webp',
                 quality: 80,
-                encoding: 'binary',
                 fullPage: true
-            }) as Buffer;
+            });
 
-            const screenshot = screenshotBuffer.toString('base64');
-
-            // Optionally capture full page screenshot
-            let fullPageScreenshot: string | undefined;
-            if (fullPage) {
-                const fullPageBuffer = await page.screenshot({
-                    type: 'webp',
-                    quality: 80,
-                    encoding: 'binary',
-                    fullPage: true
-                }) as Buffer;
-                fullPageScreenshot = fullPageBuffer.toString('base64');
+            if (screenshot.byteLength === 0) {
+                throw new Error(`Screenshot of ${url} came back empty (page height ${pageHeight}px)`);
             }
 
             return {
                 screenshot,
-                fullPageScreenshot,
                 viewport: { width, height },
                 capturedAt: new Date().toISOString()
             };
@@ -240,87 +230,76 @@ export class ScreenshotService {
     }
 
     /**
-     * Scroll through the page to trigger lazy loading
+     * Walk the page so lazy content starts loading before the full-page capture.
+     *
+     * Native loading="lazy" and IntersectionObserver-driven images only start
+     * once they come near the viewport, and fullPage capture does not scroll
+     * for us. Yielding one frame per step is what lets those observers fire;
+     * the fixed 100ms sleeps this replaces were a proxy for that plus download
+     * time. Download time is now waited for explicitly, and adaptively: some
+     * images never finish (marquee clones, hidden slides, Framer's own lazy
+     * swap), so "all pending images loaded" is not a condition that can be
+     * waited for. Instead the wait ends once nothing new has landed for a
+     * quiet window.
      */
-    private async scrollPage(page: Page, delay: number): Promise<void> {
-        await page.evaluate(async (scrollDelay) => {
-            const scrollHeight = document.body.scrollHeight;
-            const viewportHeight = window.innerHeight;
-            const scrollStep = viewportHeight * 1.5;
+    private async triggerLazyContent(page: Page): Promise<void> {
+        await page.evaluate(async (quietMs, budgetMs) => {
+            // rAF can stall on a throttled tab; a stuck frame must not hang the scan.
+            const frame = () =>
+                new Promise<void>((resolve) => {
+                    let done = false;
+                    const finish = () => {
+                        if (!done) {
+                            done = true;
+                            resolve();
+                        }
+                    };
+                    requestAnimationFrame(finish);
+                    setTimeout(finish, 50);
+                });
 
-            // Scroll down in steps
-            for (let scrollPos = 0; scrollPos < scrollHeight; scrollPos += scrollStep) {
-                window.scrollTo(0, scrollPos);
-                await new Promise(r => setTimeout(r, scrollDelay));
+            const step = window.innerHeight;
+            // Re-read the height each step: lazy content grows the page as it lands.
+            for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
+                window.scrollTo(0, y);
+                await frame();
             }
+            window.scrollTo(0, document.documentElement.scrollHeight);
+            await frame();
 
-            // Scroll to absolute bottom
-            window.scrollTo(0, scrollHeight);
-            await new Promise(r => setTimeout(r, scrollDelay));
-        }, delay);
-    }
+            window.scrollTo(0, 0);
+            await frame();
 
-    /**
-     * Capture screenshots at multiple viewport sizes for responsive testing.
-     * @param url The page URL to capture
-     */
-    async captureResponsiveScreenshots(url: string): Promise<ResponsiveScreenshotResult> {
-        const viewports = [
-            { name: 'mobile', width: 375, height: 812 },   // iPhone X
-            { name: 'tablet', width: 768, height: 1024 },  // iPad
-            { name: 'desktop', width: 1280, height: 800 }  // Desktop
-        ] as const;
+            // Only images that occupy layout can show up in the shot; display:none
+            // ones stay pending forever and would only stretch the wait.
+            const pending = Array.from(document.images).filter((img) => {
+                if (img.complete) return false;
+                const rect = img.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            });
+            if (pending.length === 0) return;
 
-        const browser = await this.getBrowser();
-        const page = await browser.newPage();
-
-        const screenshots: Record<string, string> = {};
-
-        try {
-            for (const { name, width, height } of viewports) {
-                // Set viewport
-                await page.setViewport({ width, height });
-
-                // Navigate to the page (or just reload if already loaded)
-                if (name === 'mobile') {
-                    await page.goto(url, {
-                        waitUntil: 'networkidle2',
-                        timeout: 30000
-                    });
-                    await page.waitForFunction(() => document.readyState === 'complete', { timeout: 10000 });
-                } else {
-                    // Just resize and wait for layout to settle
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-
-                // Scroll to trigger lazy loading
-                await this.scrollPage(page, 300);
-
-                // Scroll back to top
-                await page.evaluate(() => window.scrollTo(0, 0));
-                await new Promise(resolve => setTimeout(resolve, 300));
-
-                // Capture full page screenshot
-                const screenshotBuffer = await page.screenshot({
-                    type: 'webp',
-                    quality: 80,
-                    encoding: 'binary',
-                    fullPage: true
-                }) as Buffer;
-
-                screenshots[name] = screenshotBuffer.toString('base64');
-            }
-
-            return {
-                mobile: screenshots.mobile,
-                tablet: screenshots.tablet,
-                desktop: screenshots.desktop,
-                capturedAt: new Date().toISOString()
+            const start = performance.now();
+            let lastLanded = start;
+            let remaining = pending.length;
+            const landed = () => {
+                remaining -= 1;
+                lastLanded = performance.now();
             };
+            for (const img of pending) {
+                img.addEventListener('load', landed, { once: true });
+                img.addEventListener('error', landed, { once: true });
+            }
 
-        } finally {
-            await page.close();
-        }
+            while (
+                remaining > 0 &&
+                performance.now() - lastLanded < quietMs &&
+                performance.now() - start < budgetMs
+            ) {
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            await frame();
+        }, LAZY_QUIET_MS, LAZY_BUDGET_MS);
     }
 
     /**

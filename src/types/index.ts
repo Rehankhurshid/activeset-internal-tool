@@ -106,6 +106,15 @@ export interface AuditResult {
       internalLinks: number;
       externalLinks: number;
       brokenLinks: { href: string; status: number; text: string; error?: string }[];
+      /**
+       * Links the checker could not get an answer about — LinkedIn's 999
+       * bot-block, a WAF 403, a 429 from a burst we caused. Kept apart from
+       * `brokenLinks` so a page is never marked failing over a link that
+       * works fine for a person, and so the UI can say "could not verify"
+       * rather than making them silently disappear. Absent on audits from
+       * before this existed.
+       */
+      unverifiableLinks?: { href: string; status: number; text: string; reason: string }[];
       checkedAt?: string; // ISO timestamp when links were last checked
       score: number;
     };
