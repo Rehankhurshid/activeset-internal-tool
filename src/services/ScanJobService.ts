@@ -826,7 +826,9 @@ async function scanSinglePage(
   try {
     const linkCheckSummary = await checkBrokenLinks(
       scanResult.contentSnapshot.links || [],
-      targetUrl
+      targetUrl,
+      // The scan may run on staging; links are judged against the live host.
+      { liveOrigin: link.url }
     );
     const brokenCount = linkCheckSummary.brokenLinks.length;
 

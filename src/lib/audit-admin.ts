@@ -144,3 +144,24 @@ export async function setImageScanJobAdmin(projectId: string, job: ImageScanJob 
 export function linkOf(project: Project, linkId: string): ProjectLink | undefined {
   return (project.links ?? []).find((l) => l.id === linkId);
 }
+
+/**
+ * Persist a full rescan of one page: the audit document, and the link's own
+ * row in the project's links array (a rescan can refresh its title). Only the
+ * one audit document is written.
+ */
+export async function saveScannedLinkAdmin(projectId: string, link: ProjectLink): Promise<void> {
+  const ref = projectRef(projectId);
+  if (link.auditResult) {
+    await ref
+      .collection(LINK_AUDITS)
+      .doc(link.id)
+      .set(stripUndefined(compactAuditResult(link.auditResult, 'standard')));
+  }
+  const snap = await ref.get();
+  const links = ((snap.data() as Project | undefined)?.links ?? []) as ProjectLink[];
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { auditResult, ...bare } = link;
+  const next = links.map((l) => (l.id === link.id ? { ...l, ...bare } : l));
+  await ref.update({ links: stripUndefined(next), updatedAt: AdminTimestamp.now() });
+}

@@ -280,3 +280,38 @@ describe('fixesRollup and readiness', () => {
     assert.match(md, /only-here\.png \| example\.com\/solo/);
   });
 });
+
+describe('stored hrefs', () => {
+  it('resolves a relative href against the page it was found on', () => {
+    const links = [
+      page('a', {
+        categories: {
+          links: { status: 'failed', totalLinks: 1, internalLinks: 1, externalLinks: 0, score: 80, brokenLinks: [{ href: '/enroll', status: 404, text: 'Get started' }] },
+        } as AuditResult['categories'],
+      }),
+    ];
+    const { links: broken } = collectFindings(links);
+    assert.equal(broken[0].href, 'https://example.com/enroll');
+    assert.equal(broken[0].fingerprint, 'https://example.com/enroll');
+  });
+
+  it('re-files bot-block statuses stored as broken by older checks under unverifiable', () => {
+    const links = [
+      page('a', {
+        categories: {
+          links: {
+            status: 'failed', totalLinks: 2, internalLinks: 0, externalLinks: 2, score: 60,
+            brokenLinks: [
+              { href: 'https://www.linkedin.com/company/x', status: 429, text: 'LinkedIn' },
+              { href: 'https://example.com/dead', status: 404, text: 'Dead' },
+            ],
+          },
+        } as AuditResult['categories'],
+      }),
+    ];
+    const f = collectFindings(links);
+    assert.deepEqual(f.links.map((l) => l.href), ['https://example.com/dead']);
+    assert.equal(f.unverifiable.length, 1);
+    assert.equal(f.unverifiable[0].reason, 'rate-limited');
+  });
+});

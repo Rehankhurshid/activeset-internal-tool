@@ -294,3 +294,35 @@ test('TtlCache expires, bounds its size and shares in-flight work', async () => 
   assert.equal(y, 9);
   assert.equal(computed, 1);
 });
+
+test('a same-site link missing on staging is re-checked on the live origin', async () => {
+  const { fetchImpl, calls } = stubFetch({
+    'https://site.webflow.io/enroll': 404,
+    'https://www.site.com/enroll': 200,
+    'https://site.webflow.io/gone': 404,
+    'https://www.site.com/gone': 404,
+    'https://other.example/x': 404,
+  });
+  const result = await checkBrokenLinks(
+    [link('/enroll', 'Get started', false), link('/gone', 'Old', false), link('https://other.example/x')],
+    'https://site.webflow.io/pricing',
+    { fetchImpl, useCache: false, liveOrigin: 'https://www.site.com/pricing' }
+  );
+  // The app route exists on the live host: not broken.
+  assert.deepEqual(result.brokenLinks.map((b) => b.href).sort(), ['/gone', 'https://other.example/x']);
+  assert.equal(result.validLinks, 1);
+  // Live re-check only for same-site paths; the external 404 is not retried elsewhere.
+  assert.ok(calls.some((c) => c.url === 'https://www.site.com/enroll'));
+  assert.ok(calls.some((c) => c.url === 'https://www.site.com/gone'));
+  assert.equal(calls.filter((c) => c.url.startsWith('https://www.site.com/x')).length, 0);
+});
+
+test('without a live origin, or when it matches the page, nothing is re-checked', async () => {
+  const { fetchImpl, calls } = stubFetch({ 'https://www.site.com/enroll': 404 });
+  await checkBrokenLinks([link('/enroll', 'x', false)], 'https://www.site.com/', {
+    fetchImpl,
+    useCache: false,
+    liveOrigin: 'https://www.site.com/',
+  });
+  assert.equal(calls.length, 1);
+});

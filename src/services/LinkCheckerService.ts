@@ -66,6 +66,16 @@ export interface LinkCheckOptions {
   useCache?: boolean;
   /** Injection point for tests; defaults to the global fetch. */
   fetchImpl?: typeof fetch;
+  /**
+   * The origin visitors actually use, when `pageUrl` is a staging copy.
+   *
+   * Sites are often stitched together at the live domain: Webflow serves the
+   * marketing pages and a web app answers `/enroll` or `/advisor/login` behind
+   * the same host. On the staging host those paths do not exist, so a link
+   * that works for every visitor 404s for us. A same-site link that fails on
+   * staging is re-checked on the live origin and is only broken if both fail.
+   */
+  liveOrigin?: string;
 }
 
 type ResolvedOptions = {
@@ -75,6 +85,7 @@ type ResolvedOptions = {
   concurrency: number;
   useCache: boolean;
   fetchImpl: typeof fetch;
+  liveOrigin?: string;
 };
 
 const DEFAULT_OPTIONS = {
@@ -332,12 +343,34 @@ function resolveOptions(options?: LinkCheckOptions): ResolvedOptions {
     concurrency: options?.concurrency ?? options?.batchSize ?? DEFAULT_OPTIONS.concurrency,
     useCache: options?.useCache ?? DEFAULT_OPTIONS.useCache,
     fetchImpl: options?.fetchImpl ?? fetch,
+    liveOrigin: originOf(options?.liveOrigin),
   };
 }
 
 // The page itself was fetched by the scanner moments before this runs, so its
 // in-page anchors are settled without a request.
 const SELF_VERDICT: UrlVerdict = { verdict: 'ok', status: 200 };
+
+function originOf(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The same path on the live origin, when `url` sits on the staging one. */
+function liveEquivalent(url: string, pageOrigin: string | undefined, liveOrigin: string | undefined): string | null {
+  if (!pageOrigin || !liveOrigin || pageOrigin === liveOrigin) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.origin !== pageOrigin) return null;
+    return `${liveOrigin}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
 
 export async function checkBrokenLinks(
   links: Pick<LinkInfo, 'href' | 'text' | 'isExternal'>[],
@@ -364,11 +397,22 @@ export async function checkBrokenLinks(
   const verdicts = new Map<string, UrlVerdict>();
   if (selfUrl && seen.has(selfUrl)) verdicts.set(selfUrl, SELF_VERDICT);
 
+  const pageOrigin = originOf(pageUrl);
+  const settle = (url: string) =>
+    cfg.useCache ? verdictCache.resolve(url, () => checkUrl(url, cfg), ttlFor) : checkUrl(url, cfg);
+
   const toFetch = uniqueUrls.filter((url) => url !== selfUrl).slice(0, cfg.maxLinksToCheck);
   await runPool(toFetch, cfg.concurrency, async (url) => {
-    const verdict = cfg.useCache
-      ? await verdictCache.resolve(url, () => checkUrl(url, cfg), ttlFor)
-      : await checkUrl(url, cfg);
+    let verdict = await settle(url);
+    // A same-site path that is missing on staging may only exist on the live
+    // host (see `liveOrigin`). Ask there before calling it broken.
+    if (verdict.verdict === 'broken' && verdict.status !== 0) {
+      const live = liveEquivalent(url, pageOrigin, cfg.liveOrigin);
+      if (live) {
+        const liveVerdict = await settle(live);
+        if (liveVerdict.verdict === 'ok') verdict = liveVerdict;
+      }
+    }
     verdicts.set(url, verdict);
   });
 

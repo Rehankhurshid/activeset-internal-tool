@@ -32,17 +32,45 @@ export function imageFingerprint(rawSrc: string): string {
   }
 }
 
-/** One destination, however many pages point at it. Fragment dropped, trailing slash kept. */
-export function linkFingerprint(href: string): string {
+/**
+ * The href as a visitor's browser would resolve it. The scanner stores hrefs
+ * as written (`/enroll`), so without the page they came from they would render
+ * as links into *this* app.
+ */
+export function absoluteHref(href: string, pageUrl?: string): string {
   const trimmed = href.trim();
   try {
-    const parsed = new URL(trimmed);
+    return new URL(trimmed, pageUrl).toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+/** One destination, however many pages point at it. Fragment dropped, trailing slash kept. */
+export function linkFingerprint(href: string, pageUrl?: string): string {
+  const trimmed = href.trim();
+  try {
+    const parsed = new URL(trimmed, pageUrl);
     parsed.hash = '';
     return `${parsed.protocol}//${parsed.host.toLowerCase()}${parsed.pathname}${parsed.search}`;
   } catch {
     return trimmed.split('#')[0].toLowerCase();
   }
 }
+
+/**
+ * Statuses that mean "the server would not talk to a script", not "dead".
+ * Link checks from before 2026-09-20 filed these under `brokenLinks`; they are
+ * re-read as unverifiable so a LinkedIn 999 from April stops counting as broken
+ * until the page happens to be rechecked.
+ */
+const UNVERIFIABLE_STATUSES = new Set([999, 403, 429, 401]);
+const UNVERIFIABLE_REASON: Record<number, string> = {
+  999: 'bot-blocked',
+  403: 'bot-blocked',
+  429: 'rate-limited',
+  401: 'auth-required',
+};
 
 /**
  * Firestore document id for a decision. Ids cannot contain `/` and are capped
@@ -309,11 +337,12 @@ export function collectFindings(
     const linkCategory = audit.categories?.links;
     const linkChecked = linkCategory?.checkedAt;
     const mattersBy = new Map(
-      (audit.categories?.judgment?.brokenLinks ?? []).map((j) => [linkFingerprint(j.href), j.matters]),
+      (audit.categories?.judgment?.brokenLinks ?? []).map((j) => [linkFingerprint(j.href, link.url), j.matters]),
     );
+    const legacyUnverifiable = (linkCategory?.brokenLinks ?? []).filter((b) => b?.href && UNVERIFIABLE_STATUSES.has(b.status));
     for (const b of linkCategory?.brokenLinks ?? []) {
-      if (!b?.href) continue;
-      const fp = linkFingerprint(b.href);
+      if (!b?.href || UNVERIFIABLE_STATUSES.has(b.status)) continue;
+      const fp = linkFingerprint(b.href, link.url);
       const occurrence: LinkOccurrence = { ...pageOf(link, linkChecked), text: b.text || '' };
       const matters = mattersBy.get(fp);
       const existing = broken.get(fp);
@@ -327,7 +356,7 @@ export function collectFindings(
         broken.set(fp, {
           kind: 'link',
           fingerprint: fp,
-          href: b.href,
+          href: absoluteHref(b.href, link.url),
           status: b.status,
           error: b.error,
           texts: occurrence.text ? [occurrence.text] : [],
@@ -338,15 +367,19 @@ export function collectFindings(
         });
       }
     }
-    for (const u of linkCategory?.unverifiableLinks ?? []) {
+    const unverifiableHere = [
+      ...(linkCategory?.unverifiableLinks ?? []),
+      ...legacyUnverifiable.map((b) => ({ href: b.href, status: b.status, text: b.text, reason: UNVERIFIABLE_REASON[b.status] ?? 'bot-blocked' })),
+    ];
+    for (const u of unverifiableHere) {
       if (!u?.href) continue;
-      const fp = linkFingerprint(u.href);
+      const fp = linkFingerprint(u.href, link.url);
       const occurrence: LinkOccurrence = { ...pageOf(link, linkChecked), text: u.text || '' };
       const existing = unverifiable.get(fp);
       if (existing) {
         if (!existing.pages.some((p) => p.pageId === link.id)) existing.pages.push(occurrence);
       } else {
-        unverifiable.set(fp, { fingerprint: fp, href: u.href, status: u.status, reason: u.reason, pages: [occurrence] });
+        unverifiable.set(fp, { fingerprint: fp, href: absoluteHref(u.href, link.url), status: u.status, reason: u.reason, pages: [occurrence] });
       }
     }
   }

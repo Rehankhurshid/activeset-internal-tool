@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { projectsService } from '@/services/database';
+import { loadProjectAdmin } from '@/services/ScanJobService';
+import { AuditAdminUnavailableError, saveScannedLinkAdmin } from '@/lib/audit-admin';
 import { pageScanner } from '@/services/PageScanner';
 import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditService } from '@/services/AuditService';
@@ -9,7 +10,7 @@ import { checkBrokenLinks } from '@/services/LinkCheckerService';
 import { judgeScannedPage } from '@/services/PageJudgmentService';
 import { computeChangeStatus, computeFieldChanges, generateDiffPatch, computeBodyTextDiff, compactAuditResult } from '@/lib/scan-utils';
 import { resolveScanTargetUrl } from '@/lib/scan-target-url';
-import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot } from '@/types';
+import { FieldChange, ExtendedContentSnapshot } from '@/types';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -62,8 +63,9 @@ export async function POST(request: NextRequest) {
 
         console.log(`[scan-pages] Scanning page: ${url} (Link ID: ${linkId})`);
 
-        // Check if project exists
-        const project = await projectsService.getProject(projectId);
+        // Check if project exists. firebase-admin: a route handler has no signed-in
+        // user, and the browser SDK is refused by the rules here.
+        const project = await loadProjectAdmin(projectId);
         if (!project) {
             return NextResponse.json(
                 { error: 'Project not found' },
@@ -90,7 +92,9 @@ export async function POST(request: NextRequest) {
         try {
             const linkCheckSummary = await checkBrokenLinks(
                 scanResult.contentSnapshot.links || [],
-                targetUrl
+                targetUrl,
+                // The scan may run on staging; links are judged against the live host.
+                { liveOrigin: url }
             );
             const brokenCount = linkCheckSummary.brokenLinks.length;
             linksCategory = {
@@ -265,7 +269,7 @@ export async function POST(request: NextRequest) {
             auditResult: compactAuditResult(auditResult)
         });
 
-        await projectsService.updateProjectLinks(projectId, updatedLinks, { changedLinkIds: [linkId] });
+        await saveScannedLinkAdmin(projectId, updatedLinks[linkIndex]);
 
         // Save to audit_logs for history ONLY if content changed
         // This saves ~80% storage costs by skipping NO_CHANGE pages
@@ -337,6 +341,9 @@ export async function POST(request: NextRequest) {
         }, { headers: corsHeaders });
 
     } catch (error) {
+        if (error instanceof AuditAdminUnavailableError) {
+            return NextResponse.json({ error: error.message }, { status: 503, headers: corsHeaders });
+        }
         console.error('[scan-pages] Scan failed:', error);
         return NextResponse.json(
             { error: error instanceof Error ? error.message : 'Internal Server Error' },
