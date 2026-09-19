@@ -4,6 +4,7 @@ import type {
   ProjectChecklist,
   StageRole,
 } from '@/types';
+import { daysBetweenIso, todayIso } from '@/lib/review-status';
 
 /**
  * The delivery arc: a project's whole run, start to end, read off its own SOP.
@@ -58,6 +59,8 @@ export interface StageProgress {
   outstanding: string[];
   /** Outstanding items marked as gating the stage. */
   blocking: string[];
+  /** Outstanding items whose due date has passed. */
+  overdue: string[];
   complete: boolean;
 }
 
@@ -75,11 +78,23 @@ export function roleOf(section: ChecklistSection): StageRole | undefined {
   return undefined;
 }
 
-function progressOf(items: ChecklistItem[]): StageProgress {
+/**
+ * Late, as a day rather than an instant.
+ *
+ * Whatever wrote the date may have written a full timestamp; only the date part
+ * means anything. A settled item is never overdue — the date has done its job.
+ */
+function isOverdue(item: ChecklistItem, today: string): boolean {
+  if (!item.dueDate) return false;
+  return daysBetweenIso(item.dueDate.slice(0, 10), today) > 0;
+}
+
+function progressOf(items: ChecklistItem[], today: string): StageProgress {
   let done = 0;
   let skipped = 0;
   const outstanding: string[] = [];
   const blocking: string[] = [];
+  const overdue: string[] = [];
 
   for (const item of items) {
     if (item.status === 'completed') done += 1;
@@ -87,6 +102,7 @@ function progressOf(items: ChecklistItem[]): StageProgress {
     else {
       outstanding.push(item.title);
       if (item.blocking) blocking.push(item.title);
+      if (isOverdue(item, today)) overdue.push(item.title);
     }
   }
 
@@ -96,12 +112,13 @@ function progressOf(items: ChecklistItem[]): StageProgress {
     skipped,
     outstanding,
     blocking,
+    overdue,
     complete: items.length > 0 && outstanding.length === 0,
   };
 }
 
 /** Sections of one checklist in their own order, with their items sorted too. */
-function sectionStages(checklist: ProjectChecklist): Omit<SectionStage, 'position'>[] {
+function sectionStages(checklist: ProjectChecklist, today: string): Omit<SectionStage, 'position'>[] {
   return [...(checklist.sections ?? [])]
     .sort((a, b) => a.order - b.order)
     .map((section) => {
@@ -116,7 +133,7 @@ function sectionStages(checklist: ProjectChecklist): Omit<SectionStage, 'positio
         checklistName: checklist.templateName,
         section,
         items,
-        progress: progressOf(items),
+        progress: progressOf(items, today),
       };
     });
 }
@@ -145,6 +162,8 @@ export interface ArcOptions {
    * project in this app is a website build until a stack says otherwise.
    */
   includePages?: boolean;
+  /** The day to judge "overdue" against. Injectable so it can be tested. */
+  today?: string;
 }
 
 /**
@@ -155,9 +174,9 @@ export interface ArcOptions {
  */
 export function deliveryArc(
   checklists: ProjectChecklist[],
-  { includePages = true }: ArcOptions = {},
+  { includePages = true, today = todayIso() }: ArcOptions = {},
 ): ArcEntry[] {
-  const stages = checklists.flatMap(sectionStages);
+  const stages = checklists.flatMap((checklist) => sectionStages(checklist, today));
   const claimsPages = stages.some((stage) => stage.role === 'pages');
 
   const entries: Omit<ArcEntry, 'position'>[] = [...stages];
@@ -207,7 +226,7 @@ export interface RoleProgress extends StageProgress {
  */
 export function roleProgress(checklists: ProjectChecklist[], role: StageRole): RoleProgress {
   const stages = sectionStagesOf(deliveryArc(checklists)).filter((stage) => stage.role === role);
-  const progress = progressOf(stages.flatMap((stage) => stage.items));
+  const progress = progressOf(stages.flatMap((stage) => stage.items), todayIso());
   return {
     ...progress,
     complete: stages.length > 0 && progress.outstanding.length === 0,
@@ -222,7 +241,10 @@ export function roleProgress(checklists: ProjectChecklist[], role: StageRole): R
  * one that covers the SOP rather than the two ends of it.
  */
 export function arcProgress(checklists: ProjectChecklist[]): StageProgress {
-  return progressOf(sectionStagesOf(deliveryArc(checklists)).flatMap((stage) => stage.items));
+  return progressOf(
+    sectionStagesOf(deliveryArc(checklists)).flatMap((stage) => stage.items),
+    todayIso(),
+  );
 }
 
 /**

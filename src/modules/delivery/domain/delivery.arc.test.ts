@@ -13,14 +13,20 @@ import {
 } from './delivery.arc';
 import { SOP_TEMPLATES } from '@/lib/sop-templates';
 import { AUTO_CHECK_IDS } from './delivery.types';
-import type { ChecklistItemStatus, ChecklistSection, ProjectChecklist, StageRole } from '@/types';
+import type {
+  ChecklistItem,
+  ChecklistItemStatus,
+  ChecklistSection,
+  ProjectChecklist,
+  StageRole,
+} from '@/types';
 
 function item(
   title: string,
   status: ChecklistItemStatus,
   order: number,
-  extra: { blocking?: boolean } = {},
-) {
+  extra: Partial<ChecklistItem> = {},
+): ChecklistItem {
   return { id: `item_${title}`, title, status, order, ...extra };
 }
 
@@ -196,6 +202,64 @@ describe('progress', () => {
     const stage = sectionStagesOf(deliveryArc(gated))[0];
     assert.deepEqual(stage.progress.blocking, ['Assets']);
     assert.deepEqual(stage.progress.outstanding, ['Assets', 'Nice to have']);
+  });
+});
+
+describe('overdue', () => {
+  const dated = [
+    checklist('c1', [
+      {
+        title: 'Input',
+        order: 0,
+        items: [
+          { ...item('Late', 'not_started', 0), dueDate: '2026-09-01' },
+          { ...item('Due later', 'not_started', 1), dueDate: '2026-12-01' },
+          { ...item('Late but done', 'completed', 2), dueDate: '2026-09-01' },
+          { ...item('Late but skipped', 'skipped', 3), dueDate: '2026-09-01' },
+          item('No date', 'not_started', 4),
+        ],
+      },
+    ]),
+  ];
+
+  const stage = () => sectionStagesOf(deliveryArc(dated, { today: '2026-09-19' }))[0];
+
+  it('lists only what is late and still open', () => {
+    assert.deepEqual(stage().progress.overdue, ['Late']);
+  });
+
+  it('never calls a settled item overdue, whatever its date says', () => {
+    // The date has done its job once somebody has answered.
+    const titles = stage().progress.overdue;
+    assert.ok(!titles.includes('Late but done'));
+    assert.ok(!titles.includes('Late but skipped'));
+  });
+
+  it('reads a full timestamp as the day it names', () => {
+    const withTime = [
+      checklist('c1', [
+        {
+          title: 'Input', order: 0,
+          items: [{ ...item('Late', 'not_started', 0), dueDate: '2026-09-18T23:30:00.000Z' }],
+        },
+      ]),
+    ];
+    assert.deepEqual(
+      sectionStagesOf(deliveryArc(withTime, { today: '2026-09-19' }))[0].progress.overdue,
+      ['Late'],
+    );
+  });
+
+  it('does not call something due today late', () => {
+    const today = [
+      checklist('c1', [
+        { title: 'Input', order: 0, items: [{ ...item('Now', 'not_started', 0), dueDate: '2026-09-19' }] },
+      ]),
+    ];
+    assert.deepEqual(
+      sectionStagesOf(deliveryArc(today, { today: '2026-09-19' }))[0].progress.overdue,
+      [],
+    );
   });
 });
 

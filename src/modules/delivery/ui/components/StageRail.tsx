@@ -78,6 +78,7 @@ export function StageRail({ arc, activeKey, onSelect, openByKey, pagesProgress }
           ? Boolean(counted && counted.total > 0 && counted.done === counted.total)
           : entry.progress.complete;
         const blocked = entry.kind === 'section' && entry.progress.blocking.length > 0;
+        const late = entry.kind === 'section' && entry.progress.overdue.length > 0;
         const locked = openByKey?.[entry.key] === false;
 
         return (
@@ -117,6 +118,15 @@ export function StageRail({ arc, activeKey, onSelect, openByKey, pagesProgress }
               <span
                 aria-label="has a blocking item"
                 className="size-1.5 shrink-0 rounded-full bg-rose-500"
+              />
+            )}
+            {/* Late, but not holding anything up. Amber rather than rose, and
+                shown only when nothing here is blocking, so one chip never
+                carries two dots competing for the same glance. */}
+            {late && !blocked && (
+              <span
+                aria-label={`${entry.progress.overdue.length} overdue`}
+                className="size-1.5 shrink-0 rounded-full bg-amber-500"
               />
             )}
             {locked && <Lock className="h-3 w-3 shrink-0 opacity-50" />}

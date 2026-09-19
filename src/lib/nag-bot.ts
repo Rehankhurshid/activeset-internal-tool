@@ -5,6 +5,7 @@ import {
   hasFirebaseAdminCredentials,
 } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
+import { getBaseUrl } from '@/lib/base-url';
 import {
   lookupUserIdByEmail,
   mention,
@@ -15,6 +16,7 @@ import {
 
 const TASKS_COLLECTION = COLLECTIONS.TASKS;
 const PROJECTS_COLLECTION = COLLECTIONS.PROJECTS;
+const CHECKLISTS_COLLECTION = COLLECTIONS.PROJECT_CHECKLISTS;
 const NAG_MODEL = process.env.NAG_AI_MODEL || 'google/gemini-2.5-flash';
 
 // A task is "stale" once it has been sitting open this long with no due date.
@@ -58,7 +60,10 @@ interface NagTask {
   daysOverdue: number;
   projectId: string;
   projectName?: string;
-  clickupUrl?: string;
+  /** Where to go to deal with it. ClickUp for a task, the Delivery stage for a step. */
+  url?: string;
+  /** Which list it came from, so the message can say so. */
+  source: 'task' | 'checklist';
 }
 
 type ToneTier =
@@ -278,9 +283,12 @@ function buildBlocks(
 ): SlackBlock[] {
   const lines = tasks.slice(0, 8).map((t) => {
     const emoji = PRIORITY_EMOJI[t.priority];
-    const link = t.clickupUrl ? `<${t.clickupUrl}|${t.title}>` : `*${t.title}*`;
+    const link = t.url ? `<${t.url}|${t.title}>` : `*${t.title}*`;
     const project = t.projectName ? ` _(${t.projectName})_` : '';
-    return `${emoji} ${link} — ${shortStatus(t)}${project}`;
+    // A delivery step and a ClickUp task read identically otherwise, and they
+    // are opened in different places.
+    const where = t.source === 'checklist' ? ' · delivery step' : '';
+    return `${emoji} ${link} — ${shortStatus(t)}${project}${where}`;
   });
   const extra =
     tasks.length > 8 ? `\n_…and ${tasks.length - 8} more, all rooting for you._` : '';
@@ -360,6 +368,85 @@ export interface RunNagBotResult {
   results?: AssigneeResult[];
 }
 
+/**
+ * Dated checklist steps that are somebody's problem right now.
+ *
+ * Delivery stages are the project's own SOP, and a step there is as real a
+ * commitment as a task — but the bot only ever read the `tasks` collection, so
+ * an overdue step assigned to someone was chased by nothing.
+ *
+ * Only steps with **both an assignee and a due date** take part. A Webflow
+ * project's SOP is seventy-odd steps, and the staleness rule that works for
+ * tasks — "open three days with no due date" — would put most of them in Slack
+ * on day four and train everyone to ignore the whole message. An undated step
+ * is not late; it is just not scheduled.
+ */
+async function loadChecklistNags(
+  today: string,
+): Promise<{ candidates: NagTask[]; skippedNonTeam: number }> {
+  const snap = await adminDb.collection(CHECKLISTS_COLLECTION).get();
+  const base = getBaseUrl();
+
+  const candidates: NagTask[] = [];
+  let skippedNonTeam = 0;
+
+  for (const doc of snap.docs) {
+    const data = doc.data() as Record<string, unknown>;
+    const projectId = (data.projectId as string) ?? '';
+    if (!projectId) continue;
+
+    const createdTs = data.createdAt as { toDate?: () => Date } | undefined;
+    const createdAt = createdTs?.toDate?.() ?? new Date();
+
+    const sections = (data.sections ?? []) as {
+      title?: string;
+      items?: {
+        id?: string;
+        title?: string;
+        status?: string;
+        assignee?: string;
+        dueDate?: string;
+      }[];
+    }[];
+
+    for (const section of sections) {
+      for (const item of section.items ?? []) {
+        if (item.status === 'completed' || item.status === 'skipped') continue;
+
+        const assignee = item.assignee?.toLowerCase().trim();
+        if (!assignee) continue;
+        if (!isTeamMember(assignee)) {
+          skippedNonTeam += 1;
+          continue;
+        }
+
+        const dueDate = item.dueDate;
+        if (!dueDate) continue;
+
+        const daysOverdue = daysBetween(dueDate, today);
+        if (daysOverdue < -UPCOMING_WINDOW_DAYS) continue;
+
+        candidates.push({
+          id: `${doc.id}:${item.id ?? item.title ?? ''}`,
+          assignee,
+          title: item.title ?? 'Untitled step',
+          // Checklist steps carry no priority of their own. Claiming one would
+          // distort the bot's tone, which is picked from how late things are.
+          priority: 'medium',
+          dueDate,
+          createdAt,
+          daysOverdue,
+          projectId,
+          url: `${base}/modules/project-links/${projectId}?tab=delivery`,
+          source: 'checklist',
+        });
+      }
+    }
+  }
+
+  return { candidates, skippedNonTeam };
+}
+
 export async function runNagBot(opts: RunNagBotOptions = {}): Promise<RunNagBotResult> {
   if (!hasFirebaseAdminCredentials) {
     return { ok: false, reason: 'firebase-admin not configured' };
@@ -418,9 +505,15 @@ export async function runNagBot(opts: RunNagBotOptions = {}): Promise<RunNagBotR
       createdAt,
       daysOverdue,
       projectId: (data.projectId as string) ?? '',
-      clickupUrl: data.clickupUrl as string | undefined,
+      url: data.clickupUrl as string | undefined,
+      source: 'task',
     });
   }
+
+  // Delivery stages are the same commitment as a task, from a different list.
+  const fromChecklists = await loadChecklistNags(today);
+  candidates.push(...fromChecklists.candidates);
+  skippedNonTeam += fromChecklists.skippedNonTeam;
 
   if (candidates.length === 0) {
     return {

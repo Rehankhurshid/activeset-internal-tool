@@ -109,10 +109,11 @@ about checklist items.
 1. ~~**The spine.**~~ Done. Stages from sections, roles, the migration, the rail.
 2. ~~**Context on tasks.**~~ Done. `howTo` and `links`, the carry-through fixes,
    the Creator's item editor, the SOP rewrite.
-3. **Gates and ownership.** Blocking items and gates are done. Due dates exist
-   and an item shows as overdue on its row; what is left is surfacing an overdue
-   item somewhere you are not already looking — the stage rail, the dashboard,
-   and the nag bot, which today reads only the `tasks` collection.
+3. ~~**Gates and ownership.**~~ Done. Blocking items, gates, due dates, an
+   overdue marker on the stage rail, and the nag bot, which now reads delivery
+   steps as well as the `tasks` collection. Only steps with both an assignee and
+   a due date take part: a Webflow SOP is seventy-odd steps, and the staleness
+   rule that works for tasks would put most of them in Slack on day four.
 4. ~~**The template feedback loop.**~~ Done. `delivery.feedback.ts` diffs a
    project's checklist against its source template and offers the guidance back;
    built-in templates are code and are refused with an explanation.

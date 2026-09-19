@@ -65,13 +65,20 @@ handover & sign-off*, and adding a step to how the agency works adds it to every
 project type at once. A template's own sections are written without an `order`
 and numbered by the wrapper, so inserting a stage is a one-line edit.
 
-### Gates
+### Gates and what is late
 
 A stage's items can be marked **blocking**. A later stage whose earlier blocking
 items are unsettled says what it is waiting on — and opens anyway. Nothing is
 disabled and no control is hidden, because a team that has to work out of order
 at 6pm on a Friday should not have to fight the tool. The gate is opt-in one item
 at a time, so a project that marks nothing blocking behaves exactly as before.
+
+An item with a due date shows as overdue on its own row, and its stage carries an
+amber dot on the rail so you can see it without opening the stage. The Slack
+nudge bot reads delivery steps too, not only the `tasks` collection. Only steps
+with **both an assignee and a due date** are chased: a Webflow SOP is seventy-odd
+steps, and the "open three days with no due date" rule that works for tasks would
+put most of them in Slack on day four and train everyone to ignore the message.
 
 ## A task carries its context
 
