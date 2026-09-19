@@ -86,6 +86,14 @@ service cloud.firestore {
         allow read, write: if canAccessProjectById();
       }
 
+      // Alt text drafted by the local classifier (`npm run alt project <id>`),
+      // which runs against Ollama on a laptop and writes here with the admin
+      // SDK. The browser only ever reads them: a suggestion fills the field,
+      // a person still decides. Team-only.
+      match /alt_suggestions/{suggestionId} {
+        allow read, write: if canAccessProjectById();
+      }
+
       // ────────────────────────────────────────────────────────────────────
       // Updates the team posts to the client's portal. Team-only. Rules do NOT
       // cascade into subcollections, so anything not matched here (portal_views)

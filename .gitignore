@@ -43,3 +43,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 schema-output.json
+
+# Local alt-text classifier cache (image bytes -> judgment)
+.cache/

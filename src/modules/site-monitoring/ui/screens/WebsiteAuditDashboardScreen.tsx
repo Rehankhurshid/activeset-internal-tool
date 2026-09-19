@@ -18,6 +18,7 @@ import {
   type LinkFinding,
 } from "../../domain/audit-findings"
 import { useAuditDecisions } from "../hooks/useAuditDecisions"
+import { useAltSuggestions } from "../hooks/useAltSuggestions"
 import { AuditHeader, type FixTarget } from "../components/audit/AuditHeader"
 import { AltTextTab } from "../components/audit/AltTextTab"
 import { LinksTab } from "../components/audit/LinksTab"
@@ -232,6 +233,7 @@ export function WebsiteAuditDashboard({
   const [recheckingPageIds, setRecheckingPageIds] = useState<Set<string>>(new Set())
   const [verifyingFingerprints, setVerifyingFingerprints] = useState<Set<string>>(new Set())
   const { decisions, record: recordDecision, clear: clearDecision } = useAuditDecisions(projectId, !isReadOnly)
+  const altSuggestions = useAltSuggestions(projectId, !isReadOnly)
   const [isScanningAllImages, setIsScanningAllImages] = useState(false)
   const [imageScanProgress, setImageScanProgress] = useState({
     current: 0,
@@ -2451,6 +2453,7 @@ export function WebsiteAuditDashboard({
             onUndo={handleUndoAlt}
             onVerify={handleVerifyAlt}
             verifyingFingerprints={verifyingFingerprints}
+            suggestions={altSuggestions}
             onPublishSite={canWriteWebflow ? handlePublishSite : undefined}
             scanAll={{
               running: isScanningAllImages,

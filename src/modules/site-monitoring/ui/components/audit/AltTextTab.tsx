@@ -10,6 +10,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  Sparkles,
   Undo2,
   Upload,
   X,
@@ -29,6 +30,7 @@ import {
 } from '../../../domain/audit-findings';
 import { FindingPages } from './FindingPages';
 import { relativeTime } from './relative-time';
+import type { AltSuggestionDoc } from '../../../infrastructure/alt-suggestions.repository';
 
 /**
  * Alt text, by image. The unit Webflow edits in is the asset, so that is the
@@ -50,6 +52,8 @@ export interface AltTextTabProps {
   onVerify: (finding: AltFinding) => Promise<void>;
   verifyingFingerprints: Set<string>;
   onPublishSite?: () => Promise<void>;
+  /** Drafts from the local classifier, by image fingerprint. Never applied on their own. */
+  suggestions?: Map<string, AltSuggestionDoc>;
   scanAll: {
     running: boolean;
     current: number;
@@ -75,6 +79,84 @@ const TONE = {
   green: 'text-green-600 dark:text-green-400',
 };
 
+const KIND_LABEL: Record<string, string> = {
+  decorative: 'Decorative',
+  informative: 'Informative',
+  functional: 'Link',
+  logo: 'Logo',
+  text_image: 'Text',
+  portrait: 'Person',
+  product: 'Product',
+  chart: 'Chart',
+  screenshot: 'Screenshot',
+  icon: 'Icon',
+};
+
+/**
+ * What the local classifier made of this image.
+ *
+ * It fills the box and says what it thought; it never saves anything. The
+ * model runs on a laptop and can be wrong in ways only a person looking at
+ * the page will catch, so the shape of this is "here is a draft", not "here
+ * is the answer".
+ */
+function SuggestionStrip({
+  suggestion,
+  onUse,
+  applied,
+}: {
+  suggestion: AltSuggestionDoc;
+  onUse: () => void;
+  applied: boolean;
+}) {
+  const decorative = suggestion.kind === 'decorative';
+  return (
+    <div className="rounded-md border border-dashed bg-muted/30 px-2.5 py-2 space-y-1.5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <Sparkles className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+          {KIND_LABEL[suggestion.kind] ?? suggestion.kind}
+        </Badge>
+        {suggestion.needsReview && (
+          <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-500/40 text-amber-700 dark:text-amber-400">
+            check this one
+          </Badge>
+        )}
+        {suggestion.verified === true && (
+          <Badge variant="secondary" className="text-[10px] h-4 px-1.5">self-checked</Badge>
+        )}
+        <span className="ml-auto text-[10px] text-muted-foreground">
+          {suggestion.model} · {relativeTime(suggestion.generatedAt)}
+        </span>
+      </div>
+
+      <p className="text-xs">
+        {decorative ? (
+          <span className="text-muted-foreground">
+            Reads as decorative — an empty alt is probably right here.
+          </span>
+        ) : (
+          <span>{suggestion.alt || <span className="text-muted-foreground">no text drafted</span>}</span>
+        )}
+      </p>
+
+      {suggestion.observation && (
+        <p className="text-[11px] text-muted-foreground">Saw: {suggestion.observation}</p>
+      )}
+      {suggestion.notes.map((note, index) => (
+        <p key={index} className="text-[11px] text-muted-foreground">↳ {note}</p>
+      ))}
+
+      {!decorative && suggestion.alt && (
+        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onUse} disabled={applied}>
+          {applied ? <Check className="h-3 w-3 mr-1" /> : null}
+          {applied ? 'In the box' : 'Use this'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function Thumb({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -97,6 +179,7 @@ function Thumb({ src, alt }: { src: string; alt: string }) {
 
 function AltRow({
   finding,
+  suggestion,
   isReadOnly,
   canWriteWebflow,
   onSaveAlt,
@@ -107,6 +190,7 @@ function AltRow({
   verifying,
 }: {
   finding: AltFinding;
+  suggestion?: AltSuggestionDoc;
   isReadOnly: boolean;
   canWriteWebflow: boolean;
   onSaveAlt: AltTextTabProps['onSaveAlt'];
@@ -116,7 +200,8 @@ function AltRow({
   onVerify: AltTextTabProps['onVerify'];
   verifying: boolean;
 }) {
-  const [draft, setDraft] = useState(finding.decision?.altText ?? '');
+  // A decision someone already made wins over a fresh draft.
+  const [draft, setDraft] = useState(finding.decision?.altText ?? suggestion?.alt ?? '');
   const [busy, setBusy] = useState<'save' | 'decorative' | 'fixed' | 'undo' | null>(null);
   const name = fileNameOf(finding.src);
   const jev = jevLine(finding);
@@ -176,6 +261,14 @@ function AltRow({
               A scan after the fix still found no alt on this image.
               {finding.decision?.altText ? ` "${finding.decision.altText}" was saved — was the site published?` : ''}
             </p>
+          )}
+
+          {!isReadOnly && open && suggestion && (
+            <SuggestionStrip
+              suggestion={suggestion}
+              applied={draft.trim() === suggestion.alt.trim() && !!suggestion.alt}
+              onUse={() => setDraft(suggestion.alt)}
+            />
           )}
 
           {!isReadOnly && open && (
@@ -348,7 +441,15 @@ export function AltTextTab(props: AltTextTabProps) {
     onUndo: props.onUndo,
     onVerify: props.onVerify,
   };
-  const row = (f: AltFinding) => <AltRow key={f.fingerprint} finding={f} verifying={props.verifyingFingerprints.has(f.fingerprint)} {...rowProps} />;
+  const row = (f: AltFinding) => (
+    <AltRow
+      key={f.fingerprint}
+      finding={f}
+      suggestion={props.suggestions?.get(f.fingerprint)}
+      verifying={props.verifyingFingerprints.has(f.fingerprint)}
+      {...rowProps}
+    />
+  );
 
   return (
     <Card className="overflow-hidden">

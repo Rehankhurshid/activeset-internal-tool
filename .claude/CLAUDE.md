@@ -71,6 +71,7 @@ Feature documentation is located in `/docs/features/`:
 | Project Links | [docs/features/project-links.md](../docs/features/project-links.md) |
 | Audit Dashboard | [docs/features/audit-dashboard.md](../docs/features/audit-dashboard.md) |
 | Webflow Pages | [docs/features/webflow-pages.md](../docs/features/webflow-pages.md) |
+| Alt text (local Ollama) | [docs/features/alt-text.md](../docs/features/alt-text.md) |
 | Proposals | [docs/features/proposal.md](../docs/features/proposal.md) |
 | Settings Module | [docs/features/settings.md](../docs/features/settings.md) |
 
@@ -92,6 +93,7 @@ API documentation is in `/docs/misc/`:
 | `projects/{id}/portal_views` | Server-only subcollection. One row per counted client portal open |
 | `projects/{id}/pages` | Website delivery. One document per page being built (see docs/features/website-delivery.md) |
 | `projects/{id}/audit_decisions` | Team decisions on audit findings (decorative / ignored / fixed / verified), keyed by finding fingerprint (see docs/plans/audit-redesign.md) |
+| `projects/{id}/alt_suggestions` | Alt text drafted locally by Ollama via `npm run alt project <id>`; read-only in the app (see docs/features/alt-text.md) |
 
 ## Common Patterns
 
