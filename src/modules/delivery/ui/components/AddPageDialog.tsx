@@ -80,48 +80,50 @@ export function AddPageDialog({ open, onOpenChange, onAdd }: AddPageDialogProps)
         </DialogHeader>
 
         <form
-          className="space-y-3"
+          className="flex min-h-0 flex-col gap-3 overflow-hidden"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
           }}
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="delivery-add-path" className="text-xs">
-              Path
-            </Label>
-            <Input
-              id="delivery-add-path"
-              value={path}
-              onChange={(event) => handlePathChange(event.target.value)}
-              placeholder="/pricing"
-              autoFocus
-              className="h-8 font-mono text-xs"
-            />
-            {path.trim() && (
-              <p className="font-mono text-[10px] text-muted-foreground">
-                Stored as {normalizePagePath(path)}
-              </p>
-            )}
-          </div>
+          <div className="min-h-0 space-y-3 overflow-y-auto">
+            <div className="space-y-1.5">
+              <Label htmlFor="delivery-add-path" className="text-xs">
+                Path
+              </Label>
+              <Input
+                id="delivery-add-path"
+                value={path}
+                onChange={(event) => handlePathChange(event.target.value)}
+                placeholder="/pricing"
+                autoFocus
+                className="h-8 font-mono text-xs"
+              />
+              {path.trim() && (
+                <p className="font-mono text-[10px] text-muted-foreground">
+                  Stored as {normalizePagePath(path)}
+                </p>
+              )}
+            </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="delivery-add-title" className="text-xs">
-              Title
-            </Label>
-            <Input
-              id="delivery-add-title"
-              value={title}
-              onChange={(event) => {
-                setTitleTouched(true);
-                setTitle(event.target.value);
-              }}
-              placeholder="Pricing"
-              className="h-8 text-xs"
-            />
-          </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="delivery-add-title" className="text-xs">
+                Title
+              </Label>
+              <Input
+                id="delivery-add-title"
+                value={title}
+                onChange={(event) => {
+                  setTitleTouched(true);
+                  setTitle(event.target.value);
+                }}
+                placeholder="Pricing"
+                className="h-8 text-xs"
+              />
+            </div>
 
-          {error && <p className="text-xs text-destructive">{error}</p>}
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </div>
 
           <DialogFooter>
             <Button

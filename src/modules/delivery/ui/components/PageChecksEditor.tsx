@@ -269,7 +269,7 @@ export function PageChecksEditor({
 
   return (
     <Dialog open={open} onOpenChange={(next) => (saving ? undefined : onOpenChange(next))}>
-      <DialogContent className="max-h-[92vh] gap-3 sm:max-w-3xl">
+      <DialogContent className="gap-3 sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="text-base">Page checks</DialogTitle>
           <DialogDescription className="text-xs">
@@ -278,13 +278,13 @@ export function PageChecksEditor({
           </DialogDescription>
         </DialogHeader>
 
-        <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-          {saved
-            ? `This project has its own list. The ${stackName} starting set no longer applies to it.`
-            : `This project is still on the ${stackName} starting set — nothing is saved against it yet. Saving any edit here stores this whole list on the project, and it stops following the stack.`}
-        </p>
+        <div className="-mx-1 space-y-3 px-1">
+          <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+            {saved
+              ? `This project has its own list. The ${stackName} starting set no longer applies to it.`
+              : `This project is still on the ${stackName} starting set — nothing is saved against it yet. Saving any edit here stores this whole list on the project, and it stops following the stack.`}
+          </p>
 
-        <div className="-mx-1 max-h-[46vh] overflow-y-auto px-1">
           <div className="space-y-1.5">
             {rows.map((row, index) => {
               const answered = row.id ? (answeredCounts[row.id] ?? 0) : 0;
@@ -450,62 +450,62 @@ export function PageChecksEditor({
               <option key={name} value={name} />
             ))}
           </datalist>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={addRow}>
-            <Plus className="size-3.5" />
-            Add a check
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-8 text-xs"
-            onClick={() => setConfirmReset(true)}
-            disabled={confirmReset}
-          >
-            <RotateCcw className="size-3.5" />
-            Reset to the {stackName} default
-          </Button>
-        </div>
-
-        {confirmReset && (
-          <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs">
-            <p>
-              This replaces the {rows.length} {rows.length === 1 ? 'check' : 'checks'} in this list with
-              the {defaultChecks.length} the {stackName} stack starts from. Anything you added or
-              renamed goes; answers given under a check that is not in the default stop being shown.
-              Nothing is written until you save.
-            </p>
-            <div className="mt-1.5 flex gap-1.5">
-              <Button type="button" size="sm" className="h-7 text-xs" onClick={applyDefaults}>
-                Load the default
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs"
-                onClick={() => setConfirmReset(false)}
-              >
-                Cancel
-              </Button>
-            </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={addRow}>
+              <Plus className="size-3.5" />
+              Add a check
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs"
+              onClick={() => setConfirmReset(true)}
+              disabled={confirmReset}
+            >
+              <RotateCcw className="size-3.5" />
+              Reset to the {stackName} default
+            </Button>
           </div>
-        )}
 
-        {removedWithAnswers.length > 0 && (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
-            Saving this list drops {removedWithAnswers.length}{' '}
-            {removedWithAnswers.length === 1 ? 'check' : 'checks'} that{' '}
-            {removedWithAnswers.length === 1 ? 'has' : 'have'} already been answered, across{' '}
-            {removedWithAnswers.reduce((total, [, count]) => total + count, 0)} page answers. Those
-            answers stay on the page documents but stop being shown and stop counting.
-          </p>
-        )}
+          {confirmReset && (
+            <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs">
+              <p>
+                This replaces the {rows.length} {rows.length === 1 ? 'check' : 'checks'} in this list with
+                the {defaultChecks.length} the {stackName} stack starts from. Anything you added or
+                renamed goes; answers given under a check that is not in the default stop being shown.
+                Nothing is written until you save.
+              </p>
+              <div className="mt-1.5 flex gap-1.5">
+                <Button type="button" size="sm" className="h-7 text-xs" onClick={applyDefaults}>
+                  Load the default
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => setConfirmReset(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
 
-        {error && <p className="text-xs text-destructive">{error}</p>}
+          {removedWithAnswers.length > 0 && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Saving this list drops {removedWithAnswers.length}{' '}
+              {removedWithAnswers.length === 1 ? 'check' : 'checks'} that{' '}
+              {removedWithAnswers.length === 1 ? 'has' : 'have'} already been answered, across{' '}
+              {removedWithAnswers.reduce((total, [, count]) => total + count, 0)} page answers. Those
+              answers stay on the page documents but stop being shown and stop counting.
+            </p>
+          )}
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
 
         <DialogFooter className="gap-1.5">
           <Button

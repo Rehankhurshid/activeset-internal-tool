@@ -281,7 +281,7 @@ export function AddAgencyBasics({ checklists, className }: AddAgencyBasicsProps)
 
       {/* A column rather than the default grid: the list is the only part that
           should scroll, so Add stays on screen however long the gap is. */}
-      <DialogContent className="flex max-h-[92vh] flex-col gap-3 sm:max-w-2xl">
+      <DialogContent className="gap-3 sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-base">Add the standard steps</DialogTitle>
           <DialogDescription className="text-xs">
@@ -292,7 +292,7 @@ export function AddAgencyBasics({ checklists, className }: AddAgencyBasicsProps)
           </DialogDescription>
         </DialogHeader>
 
-        <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
+        <div className="-mx-1 space-y-4 px-1">
           {gaps.map((gap) => (
             <div key={gap.checklistId} className="space-y-2">
               {/* Named only when there is more than one: on a project with a

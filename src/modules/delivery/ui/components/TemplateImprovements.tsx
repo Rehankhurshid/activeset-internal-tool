@@ -421,7 +421,7 @@ export function TemplateImprovements({ checklists, className }: TemplateImprovem
 
       {/* A column rather than the default grid: the list is the only part that
           should scroll, so Save stays on screen however long the diff is. */}
-      <DialogContent className="flex max-h-[92vh] flex-col gap-3 sm:max-w-3xl">
+      <DialogContent className="gap-3 sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="text-base">Send improvements back to the SOP</DialogTitle>
           <DialogDescription className="text-xs">
@@ -454,7 +454,7 @@ export function TemplateImprovements({ checklists, className }: TemplateImprovem
           </div>
         )}
 
-        <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
+        <div className="-mx-1 space-y-4 px-1">
           {groups.map((group) => (
             <div key={group.templateId} className="space-y-2">
               {/* Named even when there is only one, so it is always obvious

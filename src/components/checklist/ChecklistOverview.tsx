@@ -8,7 +8,7 @@ import {
     SOPTemplate,
 } from '@/types';
 import { checklistService } from '@/services/ChecklistService';
-import { ChecklistSectionBlock, SortableChecklistSection } from './ChecklistSection';
+import { SortableChecklistSection } from './ChecklistSection';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -37,6 +37,7 @@ import {
     Dialog,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
@@ -49,7 +50,6 @@ import {
     ListChecks,
     Trash2,
 } from 'lucide-react';
-import { SOP_TEMPLATES } from '@/lib/sop-templates';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
@@ -296,6 +296,14 @@ export function ChecklistOverview({
             .filter((section) => section.items.length > 0);
     };
 
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
+
     if (checklists.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -357,12 +365,12 @@ export function ChecklistOverview({
                                     );
                                 })}
                             </div>
-                            <div className="flex justify-end gap-2 mt-4">
+                            <DialogFooter className="mt-4">
                                 <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>Cancel</Button>
                                 <Button onClick={handleCreateChecklist} disabled={selectedTemplateIds.length === 0 || creating}>
                                     {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create Checklist'}
                                 </Button>
-                            </div>
+                            </DialogFooter>
                         </DialogContent>
                     </Dialog>
                 )}
@@ -580,12 +588,12 @@ export function ChecklistOverview({
                                                 );
                                             })}
                                         </div>
-                                        <div className="flex justify-end gap-2 mt-4">
+                                        <DialogFooter className="mt-4">
                                             <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>Cancel</Button>
                                             <Button onClick={handleCreateChecklist} disabled={selectedTemplateIds.length === 0 || creating}>
                                                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create Checklist'}
                                             </Button>
-                                        </div>
+                                        </DialogFooter>
                                     </DialogContent>
                                 </Dialog>
                             </div>
