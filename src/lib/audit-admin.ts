@@ -50,6 +50,13 @@ export async function loadProjectDocAdmin(projectId: string): Promise<Project | 
   return { id: snap.id, ...(snap.data() as Omit<Project, 'id'>) } as Project;
 }
 
+/** Every project document, no audits. For picking which projects to scan. */
+export async function loadAllProjectDocsAdmin(): Promise<Project[]> {
+  if (!hasFirebaseAdminCredentials) throw new AuditAdminUnavailableError();
+  const snap = await adminDb.collection(COLLECTIONS.PROJECTS).get();
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Project, 'id'>) }) as Project);
+}
+
 export async function loadLinkAuditAdmin(projectId: string, linkId: string): Promise<AuditResult | null> {
   const snap = await projectRef(projectId).collection(LINK_AUDITS).doc(linkId).get();
   return snap.exists ? (snap.data() as AuditResult) : null;

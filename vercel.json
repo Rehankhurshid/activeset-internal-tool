@@ -9,6 +9,10 @@
       "schedule": "0 1 * * *"
     },
     {
+      "path": "/api/cron/health-report",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/scan-jobs",
       "schedule": "*/5 * * * *"
     },

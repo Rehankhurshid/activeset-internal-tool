@@ -13,7 +13,10 @@ import { db } from '@/lib/firebase';
 import { COLLECTIONS } from '@/lib/constants';
 import { loadProjectAdmin } from '@/services/ScanJobService';
 import { generateHealthReport } from '@/services/HealthReportGenerator';
-import { sendScanCompletionNotification } from '@/services/NotificationService';
+import { sendAlertNotifications, sendScanCompletionNotification } from '@/services/NotificationService';
+import { detectAnomalies } from '@/services/AnomalyDetector';
+import { alertService } from '@/services/AlertService';
+import { linksScannedSince, previousLinksFrom } from '@/lib/audit-previous';
 
 export interface ScanNotificationSummary {
   noChange: number;
@@ -29,6 +32,8 @@ export interface ScanNotificationJob {
   scannedPages: number;
   totalPages: number;
   summary: ScanNotificationSummary;
+  /** When the scan job started; anomaly detection only looks at pages scanned since. */
+  startedAt?: string;
   status: 'pending' | 'processing' | 'sent' | 'failed';
   attempts: number;
   createdAt: string;
@@ -46,6 +51,7 @@ interface QueueScanNotificationInput {
   scannedPages: number;
   totalPages: number;
   summary?: Partial<ScanNotificationSummary>;
+  startedAt?: string;
 }
 
 interface ProcessScanNotificationResult {
@@ -180,6 +186,7 @@ export async function ensureScanNotificationQueued(
       scannedPages: input.scannedPages,
       totalPages: input.totalPages,
       summary: normalizeSummary(input.summary),
+      ...(input.startedAt ? { startedAt: input.startedAt } : {}),
       status: 'pending',
       attempts: 0,
       createdAt,
@@ -307,6 +314,28 @@ export async function processQueuedScanNotification(
 
     const report = generateHealthReport([project]);
     const projectHealth = report.projects[0] || null;
+
+    // Anomalies: this scan against the one before it, for the pages this job
+    // actually scanned. Runs here, at completion, so it no longer depends on a
+    // cron waiting around for the scan to finish.
+    try {
+      const scanned = linksScannedSince(
+        project.links.filter((l) => l.source === 'auto'),
+        claimedJob.startedAt
+      );
+      const anomalies = detectAnomalies(project.id, project.name, scanned, previousLinksFrom(scanned));
+      if (anomalies.length > 0) {
+        console.log(`[scan-notify] ${anomalies.length} anomalies for ${project.name}`);
+        await alertService.createAlerts(anomalies);
+        await sendAlertNotifications(anomalies, {
+          projectId: project.id,
+          projectName: project.name,
+          baseUrl: getBaseUrl(),
+        });
+      }
+    } catch (error) {
+      console.error(`[scan-notify] Anomaly detection failed for ${scanId}:`, error);
+    }
 
     console.log(`[scan-notify] Sending Slack/Email for ${scanId} (project: ${project.name})`);
 

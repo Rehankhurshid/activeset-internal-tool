@@ -31,6 +31,16 @@ export interface ContentSnapshot {
   headings: string[]; // All H1-H3 headings
 }
 
+export interface PreviousAuditSummary {
+  lastRun: string;
+  score: number;
+  changeStatus?: ChangeStatus;
+  title: string;
+  h1: string;
+  metaDescription: string;
+  wordCount: number;
+}
+
 export interface AuditResult {
   score: number;
   summary: string;
@@ -48,6 +58,12 @@ export interface AuditResult {
   previousScreenshot?: string; // DEPRECATED: Base64 PNG of previous scan's screenshot
   screenshotUrl?: string; // URL to screenshot in Firebase Storage
   previousScreenshotUrl?: string; // URL to previous screenshot in Firebase Storage
+  /**
+   * The handful of numbers from the scan before this one, kept so anomaly
+   * detection can compare without a snapshot of the whole project taken before
+   * the scan started. See `src/lib/audit-previous.ts`.
+   */
+  previous?: PreviousAuditSummary;
   screenshotCapturedAt?: string; // ISO timestamp when screenshot was taken
   mobileScreenshot?: string; // Base64 PNG at 375px width
   tabletScreenshot?: string; // Base64 PNG at 768px width

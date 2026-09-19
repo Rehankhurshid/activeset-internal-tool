@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadProjectAdmin } from '@/services/ScanJobService';
 import { AuditAdminUnavailableError, saveScannedLinkAdmin } from '@/lib/audit-admin';
+import { previousSummaryOf } from '@/lib/audit-previous';
 import { pageScanner } from '@/services/PageScanner';
 import { getScreenshotService } from '@/services/ScreenshotService';
 import { AuditService } from '@/services/AuditService';
@@ -259,6 +260,7 @@ export async function POST(request: NextRequest) {
             screenshotCapturedAt: screenshotUrl ? lastRunTimestamp : undefined,
             fieldChanges: fieldChanges.length > 0 ? fieldChanges : undefined, // Store field changes for UI
             diffSummary, // Store diff summary for display
+            previous: previousSummaryOf(prevResult),
         });
 
         // Update project link with compact auditResult to stay under Firestore 1MB limit

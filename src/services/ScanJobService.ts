@@ -28,6 +28,7 @@ import {
   generateDiffPatch,
 } from '@/lib/scan-utils';
 import { resolveScanTargetUrl } from '@/lib/scan-target-url';
+import { previousSummaryOf } from '@/lib/audit-previous';
 import { ensureScanNotificationQueued } from '@/services/ScanNotificationQueueService';
 import { AuditResult, ChangeLogEntry, ChangeStatus, FieldChange, Project, ProjectLink } from '@/types';
 
@@ -614,7 +615,7 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
       throw new Error(`Project not found: ${claimedJob.projectId}`);
     }
 
-    let projectLinks = [...project.links];
+    const projectLinks = [...project.links];
     let summary = normalizeSummary(claimedJob.summary);
     let shouldPersistProjectLinks = false;
     const completedBatchLinkIds: string[] = [];
@@ -632,6 +633,7 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
           scannedPages: getSuccessfulScanCount(finalJob),
           totalPages: finalJob.total,
           summary: finalJob.summary,
+          startedAt: finalJob.startedAt,
         });
       }
 
@@ -780,6 +782,7 @@ export async function processScanJobBatch(scanId: string): Promise<ProcessScanJo
         scannedPages: getSuccessfulScanCount(finalJob),
         totalPages: finalJob.total,
         summary: finalJob.summary,
+        startedAt: finalJob.startedAt,
       });
     }
 
@@ -953,6 +956,7 @@ async function scanSinglePage(
     screenshotUrl,
     previousScreenshotUrl,
     screenshotCapturedAt: screenshotUrl ? lastRunTimestamp : undefined,
+    previous: previousSummaryOf(prevResult),
   });
 
   const updatedLink: ProjectLink = {

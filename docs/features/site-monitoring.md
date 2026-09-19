@@ -140,10 +140,23 @@ Reports are stored in Firestore `health_reports` collection with per-project bre
 
 | Endpoint | Schedule | Purpose |
 |----------|----------|---------|
-| `/api/cron/daily-scan` | Daily | Scans all current projects, anomaly detection, health report |
-| `/api/cron/scan-jobs` | Every few minutes | Resumes stalled scans, processes notification queue |
+| `/api/cron/daily-scan` | 00:30 UTC | Starts one durable scan job per active project with discovered pages, then returns. Resumes a stalled job if one exists. |
+| `/api/cron/health-report` | 04:00 UTC | Cross-project daily health report + Slack/email, from whatever the scans have written by then |
+| `/api/cron/scan-jobs` | Every 5 minutes | Resumes stalled scans, processes notification queue |
 | `/api/cron/scan-notifications` | Every few minutes | Fallback: drains pending notifications |
 | `/api/cron/cleanup` | Daily/Weekly | Removes old audit logs and change history |
+
+Anomaly detection runs when a scan job **completes**, in
+`ScanNotificationQueueService.processQueuedScanNotification`, comparing each
+scanned page against the `previous` summary stored on its audit
+(`src/lib/audit-previous.ts`). It no longer depends on the daily cron waiting
+for scans to finish.
+
+Internal calls from cron routes must use `getRequestBaseUrl()`
+(`NEXT_PUBLIC_BASE_URL`), never the request's host header: a Vercel cron
+invokes the generated `*.vercel.app` URL, which sits behind deployment
+protection and answers internal fetches with a 302 to SSO. That is what
+silently broke the daily scan until 2026-09-20.
 
 All cron endpoints require `CRON_SECRET` in production, via the `Authorization: Bearer` header (what Vercel Cron sends) or `x-cron-secret`. When the variable is unset, production requests are rejected; local runs pass.
 
