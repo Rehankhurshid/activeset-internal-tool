@@ -81,6 +81,9 @@ const MAX_IMAGES = 12;
 /** Flagged words checked per page, for the same reason. */
 const MAX_SPELLING_CANDIDATES = 20;
 
+/** Broken links triaged per page. Past this, the ordering stops earning its cost. */
+const MAX_BROKEN_LINKS = 15;
+
 export interface JudgePageInput {
   url: string;
   title?: string;
@@ -91,6 +94,10 @@ export interface JudgePageInput {
   images?: { src: string; alt?: string }[];
   /** What the spell checker flagged, which is mostly brand names and jargon. */
   spellingCandidates?: { word: string; suggestion?: string }[];
+  /** What the link checker found dead, for triage by likely impact. */
+  brokenLinks?: { href: string; text?: string }[];
+  /** Schema types declared on the page, to check against what the page is. */
+  schemaTypes?: string[];
 }
 
 /**
@@ -153,20 +160,78 @@ function pageQuestions(input: JudgePageInput): Record<string, JevQuestion> {
     };
   }
 
+  // One question per image, but not the same question — code picks which, so
+  // neither asks Jev to reason through two branches at once.
+  //
+  // An image with no alt text is not automatically a fault. A divider, a
+  // texture, an icon beside a label that already says the word: those are
+  // supposed to have an empty alt, and a screen reader is better off skipping
+  // them. Flagging all of them is what turns an accessibility report into
+  // something nobody opens.
   const images = (input.images ?? []).slice(0, MAX_IMAGES);
-  images.forEach((_, i) => {
+  images.forEach((image, i) => {
+    if (!image.alt?.trim()) {
+      questions[`decorative_${i}`] = {
+        type: 'noul',
+        instructions: {
+          question: `\`images[${i}]\` has no alt text. Is it decorative, so empty alt text is correct?`,
+          focus: `Judge from \`images[${i}].src\` and what this page is about. Ask whether someone who cannot see it would miss anything.`,
+        },
+        criteria: {
+          true: 'Purely visual — a divider, background texture, spacer, flourish, or an icon sitting beside a label that already says the same thing. A screen reader is better off skipping it.',
+          false: 'Carries information: a photo of a person or place, a product, a screenshot, a chart, a logo identifying something, or an image that is itself a link or a button.',
+        },
+      };
+      return;
+    }
+
     questions[`alt_${i}`] = {
       type: 'noul',
       instructions: {
         question: `Is the alt text in \`images[${i}].alt\` useful to someone who cannot see the image?`,
-        focus: 'Judge the words against `images[' + i + '].src` and the page subject. Decorative images are a separate matter; judge only whether the text earns its place.',
+        focus: `Judge the words against \`images[${i}].src\` and the page subject.`,
       },
       criteria: {
         true: 'It says what the image shows, specifically enough to be worth reading aloud.',
-        false: 'Empty, a file name, a dimension, a generic word like "image", "photo" or "banner", keyword stuffing, or text that does not match what the image plainly is.',
+        false: 'A file name, a dimension, a generic word like "image", "photo" or "banner", keyword stuffing, or text that does not match what the image plainly is.',
       },
     };
   });
+
+  // Broken links, in order of who cares. The checker says a link is dead; it
+  // cannot say whether anyone was going to click it, and forty dead links with
+  // no order of attack is a list that gets skipped entirely.
+  const broken = (input.brokenLinks ?? []).slice(0, MAX_BROKEN_LINKS);
+  broken.forEach((_, i) => {
+    questions[`link_${i}`] = {
+      type: 'noul',
+      instructions: {
+        question: `\`brokenLinks[${i}]\` does not resolve. Would a visitor to this page plausibly click it?`,
+        focus: 'Judge from its link text and where it points, against what this page is for.',
+      },
+      criteria: {
+        true: 'Something a visitor is reasonably likely to click — a call to action, a navigation item, a link inside the main content, a link to a service or case study.',
+        false: 'Peripheral — a boilerplate footer link, a legal or credit link, a stray social icon, or a tracking or utility URL that was never meant to be followed by a person.',
+      },
+    };
+  });
+
+  // Schema markup that is present but wrong is worse than none: it tells a
+  // search engine something untrue with confidence. Whether the declared type
+  // matches the page is a judgment; whether schema exists is not.
+  if (input.schemaTypes?.length) {
+    questions.schema_type_fits = {
+      type: 'noul',
+      instructions: {
+        question: 'Do the types in `schemaTypes` describe what this page actually is?',
+        focus: 'Judge against `title`, `h1` and `copy`.',
+      },
+      criteria: {
+        true: 'The types match the page — an article marked as an article, a product as a product, a contact page as a contact page.',
+        false: 'The types describe something else: a blog post marked only as an organisation, a service page marked as a product, or a type that plainly belongs to a different page.',
+      },
+    };
+  }
 
   const flagged = (input.spellingCandidates ?? []).slice(0, MAX_SPELLING_CANDIDATES);
   flagged.forEach((candidate, i) => {
@@ -199,6 +264,7 @@ export async function judgePage(input: JudgePageInput): Promise<PageJudgment | n
 
   const images = (input.images ?? []).slice(0, MAX_IMAGES);
   const flagged = (input.spellingCandidates ?? []).slice(0, MAX_SPELLING_CANDIDATES);
+  const broken = (input.brokenLinks ?? []).slice(0, MAX_BROKEN_LINKS);
 
   const result = await askJev(
     {
@@ -209,6 +275,8 @@ export async function judgePage(input: JudgePageInput): Promise<PageJudgment | n
       copy: input.copy?.slice(0, COPY_EXCERPT_CHARS),
       images: images.map((image) => ({ src: image.src, alt: image.alt ?? '' })),
       spellingCandidates: flagged.map((c) => ({ word: c.word })),
+      brokenLinks: broken.map((link) => ({ href: link.href, text: link.text ?? '' })),
+      schemaTypes: input.schemaTypes,
     },
     questions,
   );
@@ -222,10 +290,24 @@ export async function judgePage(input: JudgePageInput): Promise<PageJudgment | n
     copyIsFinal: noulOf(result, 'copy_is_final'),
     altText: images
       .map((image, i) => {
+        const decorative = noulOf(result, `decorative_${i}`);
         const meaningful = noulOf(result, `alt_${i}`);
-        return meaningful === undefined ? null : { src: image.src, alt: image.alt ?? '', meaningful };
+        if (decorative === undefined && meaningful === undefined) return null;
+        return {
+          src: image.src,
+          alt: image.alt ?? '',
+          ...(decorative !== undefined ? { decorative } : {}),
+          ...(meaningful !== undefined ? { meaningful } : {}),
+        };
       })
       .filter((row): row is NonNullable<typeof row> => row !== null),
+    brokenLinks: broken
+      .map((link, i) => {
+        const matters = noulOf(result, `link_${i}`);
+        return matters === undefined ? null : { href: link.href, text: link.text ?? '', matters };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null),
+    schemaTypeFits: noulOf(result, 'schema_type_fits'),
     // Everything except what Jev is confident is not a mistake. That asymmetry
     // is deliberate and measured — see SPELLING_DISMISS_AT. A flag it never
     // answered is kept too: an unanswered question is not an acquittal.

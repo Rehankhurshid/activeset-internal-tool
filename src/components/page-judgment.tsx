@@ -128,12 +128,21 @@ export function PageJudgmentContent({ judgment, rawSpellingIssues, checkedAtLabe
     )
   }
 
-  // Only the images worth a person's time: a pass is the expected outcome and
-  // listing thirty of them buries the two that are wrong.
+  // Each image is read on the question that was actually asked of it. An image
+  // with alt text was judged on whether the text is useful; one without was
+  // judged on whether it is decorative, because an empty alt is correct on a
+  // divider and wrong on a product photo.
+  //
+  // Only the images worth a person's time are listed: a pass is the expected
+  // outcome and showing thirty of them buries the two that are wrong.
   const weakAlts = (judgment.altText ?? [])
-    .map((image) => ({ ...image, verdict: readJudgment(image.meaningful) }))
+    .map((image) => {
+      const empty = !image.alt.trim()
+      const probability = empty ? image.decorative : image.meaningful
+      return { ...image, empty, probability, verdict: readJudgment(probability) }
+    })
     .filter((image) => image.verdict === 'fail' || image.verdict === 'uncertain')
-    .sort((a, b) => a.meaningful - b.meaningful)
+    .sort((a, b) => (a.probability ?? 1) - (b.probability ?? 1))
 
   const altsChecked = judgment.altText?.length ?? 0
   const realSpelling = judgment.realSpellingIssues ?? []
@@ -159,7 +168,8 @@ export function PageJudgmentContent({ judgment, rawSpellingIssues, checkedAtLabe
           </div>
           {weakAlts.length === 0 ? (
             <p className="text-[11px] text-neutral-400">
-              Every image checked has alt text worth reading aloud.
+              Every image is either described usefully, or deliberately empty because it
+              is decorative.
             </p>
           ) : (
             <div className="space-y-1.5 max-h-40 overflow-y-auto">
@@ -171,7 +181,7 @@ export function PageJudgmentContent({ judgment, rawSpellingIssues, checkedAtLabe
                     className="flex items-start gap-2 text-[11px] py-1.5 px-2 rounded bg-neutral-50 dark:bg-neutral-800/50"
                   >
                     <span className={`font-mono tabular-nums shrink-0 ${style.className}`}>
-                      {percent(image.meaningful)}
+                      {image.probability === undefined ? '—' : percent(image.probability)}
                     </span>
                     <div className="min-w-0">
                       <div className="font-mono text-neutral-600 dark:text-neutral-400 truncate">

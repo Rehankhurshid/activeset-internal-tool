@@ -54,6 +54,14 @@ export async function judgeScannedPage({
     url,
     snapshot: scanResult.contentSnapshot,
     spellingIssues: scanResult.categories?.spelling?.issues,
+    // Populated by the link checker, which runs alongside the scan. Absent on a
+    // page whose links have not been checked yet, and that is fine — the
+    // triage simply has nothing to order.
+    brokenLinks: scanResult.categories?.links?.brokenLinks?.map((link) => ({
+      href: link.href,
+      text: link.text,
+    })),
+    schemaTypes: scanResult.categories?.schema?.schemaTypes,
   });
 
   try {

@@ -108,6 +108,51 @@ item or a per-page QC question can name any of them:
 | `alt_text_meaningful` | Does every image's alt text say what the image shows? |
 | `copy_is_final` | Is there placeholder or filler copy left on the page? |
 
+### Missing alt text is not automatically a fault
+
+An empty alt is *correct* on a decorative image — a divider, a background
+texture, an icon beside a label that already says the word — and a screen reader
+is better off skipping it. Flagging every empty alt is what turns an
+accessibility report into something nobody opens.
+
+So each image gets one question, and code picks which, so neither asks Jev to
+reason through two branches. Alt text present: is it useful? Alt text absent: is
+the image decorative?
+
+Measured on the ActiveSet homepage, which has five images with no alt at all:
+
+| Image | Question | Answer |
+| --- | --- | --- |
+| Keatech project cover | decorative? | 0.17 — no, it needs alt text |
+| Udemy project thumbnail | decorative? | 0.25 — no |
+| One unidentified asset | decorative? | 0.57 — genuinely unsure, left to a person |
+| `salman.png` with `alt="Rehan Portrait"` | alt useful? | 0.32 — no |
+| `arth.avif` with `alt="Rehan Portrait"` | alt useful? | 0.13 — no |
+
+That run found a real bug: seven team headshots on the homepage all carry
+`alt="Rehan Portrait"`.
+
+### Broken links, in order of who cares
+
+The link checker says a link is dead. It cannot say whether anyone was going to
+click it, and forty dead links with no order of attack is a list that gets
+skipped. Each one is judged on whether a visitor would plausibly click it:
+
+| Link | Answer |
+| --- | --- |
+| "Start a Project" → `/contact` | 0.90 |
+| "Read the Keatech case study" | 0.85 |
+| "Webflow Development" → services page | 0.84 |
+| "Cookie Policy" | 0.15 |
+| A bare Twitter intent URL | 0.14 |
+| A Segment analytics script URL | 0.03 |
+
+### Schema that is present but wrong
+
+Schema markup declaring the wrong type is worse than none: it tells a search
+engine something untrue, confidently. Whether schema exists is mechanical;
+whether the declared type matches the page is a judgment.
+
 It also filters the spell checker. The raw checker flags every brand, product and
 technical term, which is what made that column unreadable. Jev is asked, per flag,
 whether it is genuinely a mistake, and only the survivors count. When it has not

@@ -569,8 +569,29 @@ export interface PageJudgment {
   metaDescriptionAccurate?: number;
   /** Probability the copy is finished, rather than still carrying filler. */
   copyIsFinal?: number;
-  /** Per image: how likely its alt text is useful to someone who cannot see it. */
-  altText?: { src: string; alt: string; meaningful: number }[];
+  /**
+   * Per image, one of two questions depending on whether it has alt text at all.
+   *
+   * An empty alt is *correct* on a decorative image — a divider, a texture, an
+   * icon beside a label that already says the word — and wrong on one that
+   * carries meaning. Flagging every empty alt is what makes an accessibility
+   * report something people stop opening.
+   */
+  altText?: {
+    src: string;
+    alt: string;
+    /** Empty alt: probability the image is decorative, so empty is right. */
+    decorative?: number;
+    /** Non-empty alt: probability the text is useful to someone who cannot see it. */
+    meaningful?: number;
+  }[];
+  /**
+   * Per broken link: would a visitor plausibly click it? Forty broken links with
+   * no order of attack is a list nobody works through.
+   */
+  brokenLinks?: { href: string; text: string; matters: number }[];
+  /** Probability the declared schema type matches what the page actually is. */
+  schemaTypeFits?: number;
   /** Spell-checker flags Jev agreed were real mistakes, not brand names. */
   realSpellingIssues?: { word: string; suggestion?: string }[];
   /** How many flags were put to it, so "none real" differs from "none asked". */

@@ -169,10 +169,21 @@ export function resolveAutoCheck(id: AutoCheckId, audit: AuditResult | undefined
     case 'alt_text_meaningful': {
       const alts = audit.categories?.judgment?.altText;
       if (!alts || alts.length === 0) return 'unknown';
-      // One bad alt fails the page: the check asks whether the page is ready,
-      // and it is not while an image reads as "banner" to a screen reader.
-      if (alts.some((image) => image.meaningful <= JUDGMENT_FAIL_AT)) return 'fail';
-      return alts.every((image) => image.meaningful >= JUDGMENT_PASS_AT) ? 'pass' : 'unknown';
+
+      // Each image is judged on the question that applies to it: an image with
+      // alt text on whether the text is useful, an image without on whether it
+      // is decorative. A decorative image with empty alt is correct, not a
+      // fault — treating every empty alt as a bug is what makes an
+      // accessibility report something people stop opening.
+      const verdicts = alts.map((image) =>
+        image.alt.trim() ? fromProbability(image.meaningful) : fromProbability(image.decorative),
+      );
+
+      // One genuinely bad image fails the page: the check asks whether the page
+      // is ready, and it is not while an image reads as "banner" to a screen
+      // reader or a product photo is skipped entirely.
+      if (verdicts.includes('fail')) return 'fail';
+      return verdicts.every((verdict) => verdict === 'pass') ? 'pass' : 'unknown';
     }
     default:
       return 'unknown';

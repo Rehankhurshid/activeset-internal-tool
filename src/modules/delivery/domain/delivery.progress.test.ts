@@ -259,6 +259,44 @@ describe('judgments, which are probabilities rather than measurements', () => {
     assert.equal(resolveAutoCheck('copy_is_final', noJudgment), 'unknown');
   });
 
+  it('does not fault an empty alt on a decorative image', () => {
+    // A divider or a background texture is supposed to have an empty alt, and
+    // a screen reader is better off skipping it. Flagging every empty alt is
+    // what makes an accessibility report something people stop opening.
+    const decorative = judged({
+      altText: [
+        { src: 'divider.svg', alt: '', decorative: 0.93 },
+        { src: 'team.jpg', alt: 'The founding team on stage', meaningful: 0.95 },
+      ],
+    });
+    assert.equal(resolveAutoCheck('alt_text_meaningful', decorative), 'pass');
+  });
+
+  it('fails an empty alt on an image that carries meaning', () => {
+    const missing = judged({
+      altText: [{ src: 'keatech-cover.webp', alt: '', decorative: 0.17 }],
+    });
+    assert.equal(resolveAutoCheck('alt_text_meaningful', missing), 'fail');
+  });
+
+  it('judges each image on the question that was actually asked of it', () => {
+    // An image with alt text is judged on whether the text is useful; one
+    // without, on whether it should have any. Reading the wrong field would
+    // silently pass everything.
+    const mixed = judged({
+      altText: [
+        { src: 'divider.svg', alt: '', decorative: 0.9 },
+        { src: 'salman.png', alt: 'Rehan Portrait', meaningful: 0.13 },
+      ],
+    });
+    assert.equal(resolveAutoCheck('alt_text_meaningful', mixed), 'fail');
+  });
+
+  it('stays unknown while a decorative call is uncertain', () => {
+    const unsure = judged({ altText: [{ src: 'core.webp', alt: '', decorative: 0.57 }] });
+    assert.equal(resolveAutoCheck('alt_text_meaningful', unsure), 'unknown');
+  });
+
   it('fails a page as soon as one image has useless alt text', () => {
     // The check asks whether the page is ready, and it is not while an image
     // reads as "banner" to a screen reader.

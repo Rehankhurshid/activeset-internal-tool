@@ -94,10 +94,15 @@ export interface PageJudgmentInput {
   copy?: string;
   images?: { src: string; alt?: string }[];
   spellingCandidates?: { word: string; suggestion?: string }[];
+  brokenLinks?: { href: string; text?: string }[];
+  schemaTypes?: string[];
 }
 
 /** Sections sampled for the copy excerpt. The scanner only extracts ten. */
 const MAX_SECTIONS_IN_COPY = 10;
+
+/** Matches the cap in `jev-qa.ts`; trimming here keeps the request small. */
+const MAX_BROKEN_LINKS_JUDGED = 15;
 
 /** Images put to Jev. It judges at most twelve; sending more is wasted state. */
 const MAX_IMAGES_JUDGED = 12;
@@ -120,6 +125,10 @@ export function buildPageJudgmentInput(params: {
   url: string;
   snapshot?: ContentSnapshot | ExtendedContentSnapshot;
   spellingIssues?: { word: string; suggestion?: string }[];
+  /** What the link checker found dead, for triage by likely impact. */
+  brokenLinks?: { href: string; text?: string }[];
+  /** Schema types the page declares, to check against what the page is. */
+  schemaTypes?: string[];
 }): PageJudgmentInput {
   const { url, snapshot } = params;
   const extended = snapshot as ExtendedContentSnapshot | undefined;
@@ -160,5 +169,12 @@ export function buildPageJudgmentInput(params: {
       params.spellingIssues && params.spellingIssues.length > 0
         ? params.spellingIssues.slice(0, MAX_SPELLING_CANDIDATES)
         : undefined,
+    // Triaged rather than re-checked: the link checker already decided these
+    // are dead, and the judgment is only about which ones anyone would miss.
+    brokenLinks:
+      params.brokenLinks && params.brokenLinks.length > 0
+        ? params.brokenLinks.slice(0, MAX_BROKEN_LINKS_JUDGED)
+        : undefined,
+    schemaTypes: params.schemaTypes?.length ? params.schemaTypes : undefined,
   };
 }
