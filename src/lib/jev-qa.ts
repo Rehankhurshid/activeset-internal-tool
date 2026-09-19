@@ -38,14 +38,17 @@ import type { PageJudgment } from '@/types';
 /**
  * Probability bands.
  *
- * **These are starting points, not calibrated values.** Nothing here has been
- * measured against ActiveSet's own pages yet. Watch the first few real scans and
- * move them; a band that is wrong is worse than no check, because people stop
- * reading a signal that cries wolf.
+ * Sanity-checked against Jev 1.13 on hand-built cases, not yet against a real
+ * corpus of ActiveSet pages. On those cases the answers sat well clear of the
+ * bands: a homepage title on a pricing page scored 0.04, `alt="image1"` 0.03,
+ * and a properly descriptive alt 0.96. That is reassuring about the separation,
+ * and says nothing about the rate on a hundred real pages.
  *
  * The bands are deliberately wide, leaving a large uncertain middle. Erring
  * towards "ask a person" costs a glance. Erring towards "passed" ships a page
- * with a placeholder still on it.
+ * with a placeholder still on it. Watch the first real scans and move them; a
+ * band that is wrong is worse than no check, because people stop reading a
+ * signal that cries wolf.
  */
 export const JEV_THRESHOLDS = {
   /** At or above this, the judgment is treated as a pass. */
@@ -53,6 +56,21 @@ export const JEV_THRESHOLDS = {
   /** At or below this, a fail. Between the two, unknown. */
   fail: 0.35,
 } as const;
+
+/**
+ * The spelling filter runs the other way round, and measured data is why.
+ *
+ * Asked whether a flagged word is genuinely misspelled, Jev answered 0.03 for
+ * "Webflow", 0.06 for "Finsweet" and 0.08 for "Storyblok" — brand names, dropped
+ * cleanly. But it answered 0.74 for "seperate", a real typo, which would have
+ * fallen just under the 0.75 pass bar and been thrown away as a brand name.
+ *
+ * The two mistakes cost very different amounts. Keeping a brand name puts one
+ * noisy flag in front of a person who dismisses it in a second. Dropping a real
+ * typo ships the typo. So a flag survives unless Jev is confident it is *not* a
+ * mistake, which is the `fail` band, and the whole uncertain middle is kept.
+ */
+export const SPELLING_DISMISS_AT = JEV_THRESHOLDS.fail;
 
 /** How much page copy Jev sees. Accuracy drops as irrelevant context grows. */
 const COPY_EXCERPT_CHARS = 2_500;
@@ -199,11 +217,12 @@ export async function judgePage(input: JudgePageInput): Promise<PageJudgment | n
         return meaningful === undefined ? null : { src: image.src, alt: image.alt ?? '', meaningful };
       })
       .filter((row): row is NonNullable<typeof row> => row !== null),
-    // Only what Jev thinks is a real mistake. The rest were brand names, which
-    // is what made the raw spell-check output unusable.
+    // Everything except what Jev is confident is not a mistake. That asymmetry
+    // is deliberate and measured — see SPELLING_DISMISS_AT. A flag it never
+    // answered is kept too: an unanswered question is not an acquittal.
     realSpellingIssues: flagged
       .map((candidate, i) => ({ candidate, probability: noulOf(result, `spelling_${i}`) }))
-      .filter((row) => (row.probability ?? 0) >= JEV_THRESHOLDS.pass)
+      .filter((row) => row.probability === undefined || row.probability > SPELLING_DISMISS_AT)
       .map((row) => row.candidate),
     spellingCandidatesChecked: flagged.length,
   };

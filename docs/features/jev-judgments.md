@@ -41,11 +41,31 @@ behaviour that stays trustworthy once people rely on it.
 | 0.35 to 0.75 | unknown — a person decides |
 | 0.35 and below | fail |
 
-**These numbers are not calibrated.** Nothing here has been measured against
-ActiveSet's own pages. They are deliberately wide, leaving a large uncertain
-middle, because erring towards "ask a person" costs a glance while erring
-towards "passed" ships a page with a placeholder on it. Watch the first real
-scans and move them. They live in `JEV_THRESHOLDS` in `src/lib/jev-qa.ts`.
+**These numbers are only sanity-checked, not calibrated.** Against Jev 1.13 on
+hand-built cases the answers sat well clear of the bands:
+
+| Case | Answer |
+| --- | --- |
+| Title "Home \| Acme" on a pricing page | 0.04 |
+| `alt="image1"` | 0.03 |
+| `alt="A bar chart of monthly revenue growing from January to June"` | 0.96 |
+
+That is reassuring about separation and says nothing about the rate across a
+hundred real pages. The bands are deliberately wide because erring towards "ask
+a person" costs a glance while erring towards "passed" ships a page with a
+placeholder on it. Watch the first real scans and move them. They live in
+`JEV_THRESHOLDS` in `src/lib/jev-qa.ts`.
+
+### Spelling runs the other way round
+
+Measured, and the reason matters. Jev scored "Webflow" 0.03, "Finsweet" 0.06 and
+"Storyblok" 0.08 — brand names, dropped cleanly. But it scored "seperate", a real
+typo, at **0.74**, which would have fallen just under the 0.75 pass bar and been
+thrown away as a brand name.
+
+So a flag survives unless Jev is confident it is *not* a mistake. Keeping a brand
+name puts one noisy flag in front of someone who dismisses it in a second.
+Dropping a real typo ships the typo.
 
 ## What it judges
 
@@ -80,6 +100,18 @@ That near-miss caused a real bug before this existed.
 Code still finds the candidates, cheaply and across every step on the project.
 Jev judges each pair. That split is the point: code does the part it is good at,
 the model does the part it is good at.
+
+Measured on the exact pairs that broke the old matcher:
+
+| Pair | Answer |
+| --- | --- |
+| "Schedule the kickoff call" vs "Hold the kickoff call" | 0.23 — different work |
+| "Hold the internal kickoff" vs "Hold the kickoff call" | 0.27 — different work |
+| "Get written approval" vs "Share the staging and MarkUp links" | 0.12 — different work |
+| "Create the shared Slack channel with the client" vs "Create Slack Channel with Client. Workflow: Setup Channel" | 0.88 — duplicate |
+| "Record the walkthrough videos" vs "Walkthrough Videos for Client" | 0.78 — duplicate |
+
+Word overlap scored the first pair 0.67 and called it a duplicate.
 
 ## Where the questions live
 
