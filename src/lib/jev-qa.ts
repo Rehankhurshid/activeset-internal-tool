@@ -131,15 +131,24 @@ function pageQuestions(input: JudgePageInput): Record<string, JevQuestion> {
   }
 
   if (input.copy) {
+    // Narrowly about placeholders, and explicit that the text is scraped.
+    //
+    // The first version asked whether the copy was "finished, ready for a client
+    // to see", and scored a real agency homepage 0.12. It was right to: what it
+    // was shown was navigation soup — "PROJECTSSERVICES Recent projects01/02/" —
+    // because extracted body text is menu labels run together with prose. Jev
+    // answers the question you wrote, so the question has to be about the thing
+    // that survives bad extraction.
     questions.copy_is_final = {
       type: 'noul',
       instructions: {
-        question: 'Is `copy` finished copy, ready for a client to see?',
-        focus: 'Look for filler left in by mistake, not for writing quality.',
+        question: 'Is `copy` free of placeholder and filler text?',
+        focus:
+          'This text was scraped from the page, so it includes navigation labels, runs words together and reads badly. That is extraction, not the page. Judge only whether placeholder content is present.',
       },
       criteria: {
-        true: 'Real sentences about this business throughout.',
-        false: 'Contains lorem ipsum, "your text here", a bracketed placeholder, a TODO, duplicated dummy paragraphs, or an obvious note from the builder to themselves.',
+        true: 'No placeholder content. Menu labels, fragments and awkward joins are artefacts of scraping and do not count.',
+        false: 'Contains lorem ipsum, "your text here", a bracketed placeholder such as [Client Name], a TODO, or a note the builder left themselves.',
       },
     };
   }

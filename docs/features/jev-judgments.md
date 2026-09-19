@@ -67,6 +67,35 @@ So a flag survives unless Jev is confident it is *not* a mistake. Keeping a bran
 name puts one noisy flag in front of someone who dismisses it in a second.
 Dropping a real typo ships the typo.
 
+### A question that was wrong, and how it showed
+
+Worth reading before adding a question of your own. `copy_is_final` originally
+asked "is this finished copy, ready for a client to see?" and scored the
+ActiveSet homepage **0.12** — a confident fail on a live, finished site.
+
+Jev was right and the question was wrong. What it had been shown was not prose:
+
+```
+PROJECTSSERVICES Recent projects01/02/Udemy01/02/CanopyDESIGN & DEVELOPMENT01/…
+```
+
+Extracted body text is navigation labels run together with copy. Asked whether
+that was ready for a client, the only honest answer is no. The question now asks
+the narrow thing that survives bad extraction — is there placeholder content —
+and says outright that the text was scraped and reads badly.
+
+| Copy | Before | After |
+| --- | --- | --- |
+| Real homepage, nav soup, no placeholder | 0.12 | 0.79 |
+| Same shape with lorem ipsum in it | — | 0.03 |
+| `[Client Name]` left in | — | 0.03 |
+| "TODO: rewrite once Priya sends the copy" | — | 0.02 |
+| Clean prose | — | 0.96 |
+
+This is the documented jaggedness in action: Jev "answers the question you wrote,
+not the one you meant". When a judgment looks wrong, read the state it was given
+before blaming the model.
+
 ## What it judges
 
 Four new signals join the eight the scanner already computes, and a checklist
