@@ -6,6 +6,7 @@ import { AuditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
 import { uploadScreenshot } from '@/services/ScreenshotStorageService';
 import { checkBrokenLinks } from '@/services/LinkCheckerService';
+import { judgeScannedPage } from '@/services/PageJudgmentService';
 import { computeChangeStatus, computeFieldChanges, generateDiffPatch, computeBodyTextDiff, compactAuditResult } from '@/lib/scan-utils';
 import { resolveScanTargetUrl } from '@/lib/scan-target-url';
 import { ChangeStatus, FieldChange, ExtendedContentSnapshot, ContentSnapshot } from '@/types';
@@ -78,6 +79,11 @@ export async function POST(request: NextRequest) {
 
         // Perform scan
         const scanResult = await pageScanner.scan(targetUrl);
+
+        // Started here and awaited at assembly time so the round trip to
+        // TypeSafe overlaps the link check and the screenshot instead of adding
+        // to them. It never rejects; failure resolves to undefined.
+        const judgmentPromise = judgeScannedPage({ url: targetUrl, scanResult, previous: prevResult });
 
         let linksCategory = scanResult.categories.links;
         try {
@@ -219,6 +225,8 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        const judgment = await judgmentPromise;
+
         // Save audit result to project link (remove undefined values for Firestore)
         const auditResult = removeUndefined({
             score: scanResult.score,
@@ -232,6 +240,7 @@ export async function POST(request: NextRequest) {
             categories: {
                 ...scanResult.categories,
                 links: linksCategory,
+                judgment,
             },
             screenshotUrl, // URL to screenshot in Firebase Storage
             previousScreenshotUrl, // URL to previous screenshot for comparison UI

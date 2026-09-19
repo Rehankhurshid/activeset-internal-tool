@@ -109,6 +109,8 @@ export interface AuditResult {
       checkedAt?: string; // ISO timestamp when links were last checked
       score: number;
     };
+    /** What Jev made of the page. Absent until a scan runs with a key configured. */
+    judgment?: PageJudgment;
     openGraph?: {
       status: 'passed' | 'failed' | 'warning' | 'info';
       hasOpenGraph: boolean;
@@ -552,8 +554,36 @@ export interface DatabaseOperationContext {
 export type ChecklistItemStatus = 'not_started' | 'in_progress' | 'completed' | 'skipped';
 
 /**
+ * What Jev made of a page, stored on the audit beside the mechanical checks.
+ *
+ * Probabilities rather than verdicts, deliberately: the thresholds that turn
+ * them into pass or fail live in one reviewable place and can be moved without
+ * rescanning anything. Every field is optional, because a judgment that was
+ * never asked for is a different thing from one that came back negative.
+ */
+export interface PageJudgment {
+  checkedAt: string;
+  /** Probability the title describes this page rather than being boilerplate. */
+  titleDescribesPage?: number;
+  /** Probability the meta description matches what the page actually says. */
+  metaDescriptionAccurate?: number;
+  /** Probability the copy is finished, rather than still carrying filler. */
+  copyIsFinal?: number;
+  /** Per image: how likely its alt text is useful to someone who cannot see it. */
+  altText?: { src: string; alt: string; meaningful: number }[];
+  /** Spell-checker flags Jev agreed were real mistakes, not brand names. */
+  realSpellingIssues?: { word: string; suggestion?: string }[];
+  /** How many flags were put to it, so "none real" differs from "none asked". */
+  spellingCandidatesChecked?: number;
+}
+
+/**
  * Signals the page audit already computes, which a checklist item can name so
  * it answers itself instead of asking a person for something a crawler knows.
+ *
+ * The first eight are measurements: a title exists, a link resolves. The last
+ * four are judgments, and they are the ones that catch a page passing every
+ * mechanical check with `alt="image1"` and lorem ipsum in the third section.
  */
 export type AutoCheckId =
   | 'page_title'
@@ -563,7 +593,11 @@ export type AutoCheckId =
   | 'open_graph'
   | 'links_resolve'
   | 'schema'
-  | 'spelling';
+  | 'spelling'
+  | 'title_describes_page'
+  | 'meta_description_accurate'
+  | 'alt_text_meaningful'
+  | 'copy_is_final';
 
 /**
  * Which stage of a website build a checklist section belongs to.

@@ -85,6 +85,25 @@ export function buildPageProgress(stack: StackDefinition, pages: ProjectPage[]):
  * has not failed anything, and showing it as a failure would train the team to
  * ignore the column.
  */
+/**
+ * The bands a judgment is read against.
+ *
+ * Mirrors `JEV_THRESHOLDS` in `src/lib/jev-qa.ts`, which is where they are
+ * documented and where they should be changed. Duplicated as plain numbers
+ * rather than imported because this module is pure domain and runs in the
+ * browser, while the Jev client is server-only — importing it here would drag
+ * an API client into the client bundle to read two constants.
+ */
+const JUDGMENT_PASS_AT = 0.75;
+const JUDGMENT_FAIL_AT = 0.35;
+
+function fromProbability(probability: number | undefined): AutoCheckVerdict {
+  if (typeof probability !== 'number') return 'unknown';
+  if (probability >= JUDGMENT_PASS_AT) return 'pass';
+  if (probability <= JUDGMENT_FAIL_AT) return 'fail';
+  return 'unknown';
+}
+
 export function resolveAutoCheck(id: AutoCheckId, audit: AuditResult | undefined): AutoCheckVerdict {
   if (!audit) return 'unknown';
   const seo = audit.categories?.seo;
@@ -127,7 +146,33 @@ export function resolveAutoCheck(id: AutoCheckId, audit: AuditResult | undefined
     case 'spelling': {
       const spelling = audit.categories?.spelling;
       if (!spelling) return 'unknown';
+      // Jev's filtered list when there is one: the raw spell checker flags every
+      // brand and product name, and a check that is wrong most of the time
+      // teaches people to ignore the column it sits in.
+      const judged = audit.categories?.judgment?.realSpellingIssues;
+      if (judged) return judged.length === 0 ? 'pass' : 'fail';
       return spelling.issues.length === 0 ? 'pass' : 'fail';
+    }
+
+    // The judgments. Each is a probability, and the band between the thresholds
+    // stays `unknown` on purpose — an uncertain judgment asks a person rather
+    // than guessing, and unknown already means "nobody has checked".
+    case 'title_describes_page':
+      return fromProbability(audit.categories?.judgment?.titleDescribesPage);
+
+    case 'meta_description_accurate':
+      return fromProbability(audit.categories?.judgment?.metaDescriptionAccurate);
+
+    case 'copy_is_final':
+      return fromProbability(audit.categories?.judgment?.copyIsFinal);
+
+    case 'alt_text_meaningful': {
+      const alts = audit.categories?.judgment?.altText;
+      if (!alts || alts.length === 0) return 'unknown';
+      // One bad alt fails the page: the check asks whether the page is ready,
+      // and it is not while an image reads as "banner" to a screen reader.
+      if (alts.some((image) => image.meaningful <= JUDGMENT_FAIL_AT)) return 'fail';
+      return alts.every((image) => image.meaningful >= JUDGMENT_PASS_AT) ? 'pass' : 'unknown';
     }
     default:
       return 'unknown';

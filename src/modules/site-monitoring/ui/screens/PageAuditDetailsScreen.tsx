@@ -40,6 +40,7 @@ import {
   LinkIcon,
   History,
   BarChart3,
+  Sparkles,
 } from "lucide-react"
 import { siteMonitoringRepository } from "@/modules/site-monitoring/infrastructure/site-monitoring.repository"
 import { type ProjectLink, type FieldChange, type ContentBlock, type BlockChange, type TextElement, type TextChange } from "@/modules/site-monitoring"
@@ -50,6 +51,7 @@ import { ScreenshotDiff } from "@/components/screenshot-diff"
 import { ChangeDiffViewer, ChangeSummaryBadge } from "@/components/change-diff-viewer"
 import { HtmlPreview } from "@/components/html-preview"
 import { VisualDiffViewer } from "@/components/visual-diff-viewer"
+import { PageJudgmentContent, pageJudgmentHealth } from "@/components/page-judgment"
 
 // --- Animated Score Ring ---
 function ScoreRing({ score, size = 120, strokeWidth = 10 }: { score: number; size?: number; strokeWidth?: number }) {
@@ -679,6 +681,29 @@ export function PageDetails({ projectId, linkId }: PageDetailsProps) {
               {/* AUDIT PANELS — 2-column premium grid                  */}
               {/* ═══════════════════════════════════════════════════════ */}
               <div className="grid lg:grid-cols-2 gap-4">
+                {/* Judgment Panel — the questions the other panels cannot ask */}
+                <PanelCard
+                  icon={Sparkles}
+                  title="Judgment"
+                  health={pageJudgmentHealth(audit?.categories?.judgment)}
+                  badge={
+                    <Badge variant="outline" className="text-[10px] font-normal">
+                      probabilities, not checks
+                    </Badge>
+                  }
+                  className="lg:col-span-2"
+                >
+                  <PageJudgmentContent
+                    judgment={audit?.categories?.judgment}
+                    rawSpellingIssues={spellingErrors}
+                    checkedAtLabel={
+                      audit?.categories?.judgment?.checkedAt
+                        ? getRelativeTime(audit.categories.judgment.checkedAt)
+                        : undefined
+                    }
+                  />
+                </PanelCard>
+
                 {/* SEO Health Panel */}
                 <PanelCard
                   icon={Search}

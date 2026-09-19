@@ -94,6 +94,10 @@ const AUTO_CHECK_ID_MAP: Record<AutoCheckId, true> = {
   links_resolve: true,
   schema: true,
   spelling: true,
+  title_describes_page: true,
+  meta_description_accurate: true,
+  alt_text_meaningful: true,
+  copy_is_final: true,
 };
 
 export const AUTO_CHECK_IDS = Object.keys(AUTO_CHECK_ID_MAP) as AutoCheckId[];

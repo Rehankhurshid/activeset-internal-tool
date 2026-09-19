@@ -27,6 +27,12 @@ export const AUTO_CHECK_DESCRIPTIONS: Record<AutoCheckId, string> = {
   links_resolve: 'no link on the page is broken',
   schema: 'structured data is present',
   spelling: 'no spelling issues were found',
+  // Judgments rather than measurements: these read what the page says, not
+  // whether a tag is present.
+  title_describes_page: 'the title describes this page, not the company in general',
+  meta_description_accurate: 'the meta description matches what the page actually says',
+  alt_text_meaningful: 'every image\u2019s alt text says what the image shows',
+  copy_is_final: 'no placeholder or filler copy is left on the page',
 };
 
 /**

@@ -19,6 +19,7 @@ import { AuditLogEntry, AuditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
 import { uploadScreenshot } from '@/services/ScreenshotStorageService';
 import { checkBrokenLinks } from '@/services/LinkCheckerService';
+import { judgeScannedPage } from '@/services/PageJudgmentService';
 import {
   compactAuditResult,
   computeBodyTextDiff,
@@ -798,6 +799,12 @@ async function scanSinglePage(
     prevResult ? AuditService.getLatestAuditLog(projectId, link.id) : Promise.resolve(null),
   ]);
 
+  // Started here and awaited at assembly time so the round trip to TypeSafe
+  // overlaps the link check and the screenshot rather than adding to them —
+  // the nightly cron scans every page of every live project on one budget.
+  // It never rejects; failure resolves to undefined.
+  const judgmentPromise = judgeScannedPage({ url: targetUrl, scanResult, previous: prevResult });
+
   let linksCategory = scanResult.categories.links;
   try {
     const linkCheckSummary = await checkBrokenLinks(
@@ -892,6 +899,8 @@ async function scanSinglePage(
     previousScreenshotUrl = prevResult?.previousScreenshotUrl;
   }
 
+  const judgment = await judgmentPromise;
+
   const auditResult = removeUndefined({
     score: scanResult.score,
     summary: diffSummary || (changeStatus === 'NO_CHANGE' ? 'No changes detected.' : 'Changes detected.'),
@@ -904,6 +913,7 @@ async function scanSinglePage(
     categories: {
       ...scanResult.categories,
       links: linksCategory,
+      judgment,
     },
     screenshotUrl,
     previousScreenshotUrl,

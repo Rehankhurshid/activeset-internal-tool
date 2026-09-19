@@ -226,3 +226,101 @@ describe('pageChecksFor', () => {
     assert.deepEqual(pageChecksFor(stack, { pageChecks: custom }).map((c) => c.id), ['a', 'b']);
   });
 });
+
+describe('judgments, which are probabilities rather than measurements', () => {
+  const judged = (judgment: Record<string, unknown>) =>
+    ({ categories: { judgment } }) as unknown as AuditResult;
+
+  it('passes a confident yes', () => {
+    assert.equal(
+      resolveAutoCheck('title_describes_page', judged({ titleDescribesPage: 0.9 })),
+      'pass',
+    );
+  });
+
+  it('fails a confident no', () => {
+    assert.equal(
+      resolveAutoCheck('meta_description_accurate', judged({ metaDescriptionAccurate: 0.1 })),
+      'fail',
+    );
+  });
+
+  it('leaves the uncertain middle unknown rather than guessing', () => {
+    // Unknown already means "nobody has checked", and a person's answer beats
+    // the machine's. An uncertain judgment should ask, not decide.
+    for (const p of [0.4, 0.5, 0.6, 0.7]) {
+      assert.equal(resolveAutoCheck('copy_is_final', judged({ copyIsFinal: p })), 'unknown', `at ${p}`);
+    }
+  });
+
+  it('says unknown when the judgment was never made', () => {
+    assert.equal(resolveAutoCheck('title_describes_page', judged({})), 'unknown');
+    const noJudgment = { categories: {} } as unknown as AuditResult;
+    assert.equal(resolveAutoCheck('copy_is_final', noJudgment), 'unknown');
+  });
+
+  it('fails a page as soon as one image has useless alt text', () => {
+    // The check asks whether the page is ready, and it is not while an image
+    // reads as "banner" to a screen reader.
+    const alts = judged({
+      altText: [
+        { src: 'a.png', alt: 'The founding team on stage', meaningful: 0.95 },
+        { src: 'b.png', alt: 'banner', meaningful: 0.05 },
+      ],
+    });
+    assert.equal(resolveAutoCheck('alt_text_meaningful', alts), 'fail');
+  });
+
+  it('passes only when every image is clearly fine', () => {
+    const allGood = judged({
+      altText: [
+        { src: 'a.png', alt: 'The founding team on stage', meaningful: 0.95 },
+        { src: 'b.png', alt: 'A dashboard showing monthly revenue', meaningful: 0.88 },
+      ],
+    });
+    assert.equal(resolveAutoCheck('alt_text_meaningful', allGood), 'pass');
+
+    const oneMiddling = judged({
+      altText: [
+        { src: 'a.png', alt: 'The founding team on stage', meaningful: 0.95 },
+        { src: 'b.png', alt: 'Team photo', meaningful: 0.55 },
+      ],
+    });
+    assert.equal(resolveAutoCheck('alt_text_meaningful', oneMiddling), 'unknown');
+  });
+
+  it('says unknown for a page with no images judged', () => {
+    assert.equal(resolveAutoCheck('alt_text_meaningful', judged({ altText: [] })), 'unknown');
+  });
+});
+
+describe('spelling, once the brand names are filtered out', () => {
+  it('prefers the judged list over the raw spell-checker flags', () => {
+    // The raw checker flags every product name. A check that is wrong most of
+    // the time teaches people to ignore the column it sits in.
+    const withBrands = {
+      categories: {
+        spelling: { issues: [{ word: 'Webflow' }, { word: 'Finsweet' }] },
+        judgment: { realSpellingIssues: [], spellingCandidatesChecked: 2 },
+      },
+    } as unknown as AuditResult;
+    assert.equal(resolveAutoCheck('spelling', withBrands), 'pass');
+  });
+
+  it('still fails on a mistake the judgment agreed was real', () => {
+    const realMistake = {
+      categories: {
+        spelling: { issues: [{ word: 'recieve' }] },
+        judgment: { realSpellingIssues: [{ word: 'recieve' }], spellingCandidatesChecked: 1 },
+      },
+    } as unknown as AuditResult;
+    assert.equal(resolveAutoCheck('spelling', realMistake), 'fail');
+  });
+
+  it('falls back to the raw flags when nothing judged the page', () => {
+    const unjudged = {
+      categories: { spelling: { issues: [{ word: 'recieve' }] } },
+    } as unknown as AuditResult;
+    assert.equal(resolveAutoCheck('spelling', unjudged), 'fail');
+  });
+});

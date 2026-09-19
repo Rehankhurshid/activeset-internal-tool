@@ -337,6 +337,30 @@ export function compactAuditResult(
             .map(landmark => truncateString(landmark, limits.longText));
     }
 
+    // The Jev judgment travels with the audit, so it is trimmed on the same
+    // terms as everything else: the probabilities are the point, the image URLs
+    // and alt strings beside them are what could grow.
+    if (compact.categories?.judgment) {
+        const judgment = compact.categories.judgment;
+        if (judgment.altText) {
+            judgment.altText = judgment.altText
+                .slice(0, limits.snapshotImages)
+                .map(image => ({
+                    src: truncateString(image.src, limits.urlText),
+                    alt: truncateString(image.alt, limits.imageAlt),
+                    meaningful: image.meaningful,
+                }));
+        }
+        if (judgment.realSpellingIssues) {
+            judgment.realSpellingIssues = judgment.realSpellingIssues
+                .slice(0, limits.spellingIssues)
+                .map(issue => ({
+                    word: truncateString(issue.word, limits.longText),
+                    suggestion: issue.suggestion ? truncateString(issue.suggestion, limits.longText) : undefined,
+                }));
+        }
+    }
+
     // Remove screenshots from project doc (kept in audit_logs)
     delete compact.screenshot;
     delete compact.previousScreenshot;
