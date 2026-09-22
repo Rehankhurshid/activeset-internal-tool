@@ -73,6 +73,8 @@ interface ImageRow {
   fingerprint: string;
   title: string;
   subtitle?: string;
+  /** The CMS item's own name — who or what the image is of, for certain. */
+  record?: string;
   currentAlt: string;
   missing: boolean;
 }
@@ -130,6 +132,7 @@ function toRows(entries: CmsImageEntry[]): ImageRow[] {
       fingerprint,
       title: entry.itemName,
       subtitle: entry.fieldDisplayName,
+      record: entry.itemName,
       currentAlt: entry.currentAlt ?? '',
       missing: entry.isMissingAlt,
     });
@@ -689,12 +692,38 @@ function ImageLine({
   onPick: (on: boolean) => void;
 }) {
   const draft = library.draftFor(row.src);
-  const done = library.indexFor(row.src)?.optimise;
-  const seed = row.missing ? (draft && draft.kind !== 'decorative' ? draft.alt : '') : row.currentAlt;
+  const indexed = library.indexFor(row.src);
+  const done = indexed?.optimise;
+
+  // A held portrait whose draft names someone other than the CMS item is the
+  // dangerous case: the box used to be filled with the model's guess and a
+  // Save button beside it, and one click published "Priya Sharma, Head of
+  // Design" on Srividhya Ramaratnam's photo. Offer the item's own name
+  // instead, and show the guess only as a warning.
+  const wrongName =
+    row.missing &&
+    !!row.record &&
+    draft?.kind === 'portrait' &&
+    !!draft.alt &&
+    !draft.alt.toLowerCase().includes(row.record.toLowerCase());
+  const seed = !row.missing
+    ? row.currentAlt
+    : wrongName
+      ? row.record!
+      : draft && draft.kind !== 'decorative'
+        ? draft.alt
+        : '';
+
   const [value, setValue] = useState<string | null>(null);
+  /** What was saved, kept on screen until Webflow and the index confirm it. */
+  const [saved, setSaved] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const text = value ?? seed;
-  const changed = text.trim() !== row.currentAlt.trim() && (value !== null || needsLook);
+  const text = value ?? saved ?? seed;
+  const landed =
+    saved !== null && indexed?.alt?.state === 'added' && (indexed.alt.text ?? '').trim() === saved.trim();
+  const altAdded = landed || (row.missing && indexed?.alt?.state === 'added');
+  const changed =
+    text.trim() !== (saved ?? row.currentAlt).trim() && (value !== null || (needsLook && saved === null));
 
   return (
     <li
@@ -730,7 +759,17 @@ function ImageLine({
             </span>
           ) : (
             <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-              {!row.missing ? 'has ALT' : needsLook ? 'to review' : draft ? 'drafted' : 'missing'}
+              {saved !== null && !landed
+                ? 'saving…'
+                : altAdded
+                  ? 'ALT added'
+                  : !row.missing
+                    ? 'has ALT'
+                    : needsLook
+                      ? 'to review'
+                      : draft
+                        ? 'drafted'
+                        : 'missing'}
             </span>
           )}
         </div>
@@ -740,7 +779,7 @@ function ImageLine({
             onChange={(event) => setValue(event.target.value)}
             placeholder={draft?.kind === 'decorative' ? 'Reads as decorative — leave empty' : 'No ALT text yet'}
             key={draft?.alt ?? 'empty'}
-            className={`h-8 text-sm ${needsLook ? 'border-amber-500/50' : ''} ${draft && row.missing && value === null ? 'animate-in fade-in duration-700' : ''}`}
+            className={`h-8 text-sm ${needsLook && saved === null ? 'border-amber-500/50' : ''} ${draft && row.missing && value === null ? 'animate-in fade-in duration-700' : ''}`}
           />
           {changed && (
             <Button
@@ -751,6 +790,9 @@ function ImageLine({
                 setSaving(true);
                 try {
                   await library.saveAlt({ fingerprint: row.fingerprint, src: row.src, alt: text });
+                  // Keep showing what was saved. Clearing it used to put the
+                  // model's draft back in the box, with Save beside it again.
+                  setSaved(text);
                   setValue(null);
                 } finally {
                   setSaving(false);
@@ -761,6 +803,12 @@ function ImageLine({
             </Button>
           )}
         </div>
+        {wrongName && saved === null && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+            The model wrote “{draft!.alt}” — not the name on this CMS item, so it has been replaced with the item’s name.
+            Check it’s the right person, then Save.
+          </p>
+        )}
       </div>
     </li>
   );

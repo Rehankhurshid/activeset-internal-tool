@@ -13,7 +13,11 @@ import type { AltKind, ImageContext } from './types';
 export const MAX_ALT_CHARS = 125;
 
 /** Bumped whenever the prompt or rules change, so cached answers are not reused across versions. */
-export const PROMPT_VERSION = 5;
+/**
+ * Bumped whenever the prompt changes, which retires every cached answer made
+ * under the old one. 6: removed the example name the model was copying.
+ */
+export const PROMPT_VERSION = 6;
 
 interface KindRule {
   /** Shown to the model as the definition of the category. */
@@ -54,7 +58,11 @@ export const KIND_RULES: Record<AltKind, KindRule> = {
   portrait: {
     definition: 'A photograph of a person, usually a headshot or a team photo.',
     altRule:
-      'If the page names the person, use their name, and their role when the page gives it: "Priya Sharma, Head of Design". If the page does not name them, describe them only as far as the page cares about, and never guess a name, gender, age, ethnicity or mood.',
+      // No example name here. There used to be one — "Priya Sharma, Head of
+      // Design" — and the model copied it verbatim onto a photo of someone
+      // else, and borrowed its job title for Jevyn Ong's headshot. A concrete
+      // name in a prompt is a name the model can reach for.
+      'If the page names the person, write their name, and their role only when the page states it, in the form [name], [role]. Use exactly the name the page gives. If the page does not name them, describe them only as far as the page cares about, and never guess a name, a role, gender, age, ethnicity or mood.',
   },
   product: {
     definition: 'A thing being sold, shipped or demonstrated.',

@@ -8,6 +8,7 @@ import { decisionId } from '@/modules/site-monitoring/domain/audit-findings';
 import { resolveAssets } from '@/modules/site-monitoring/domain/webflow-assets';
 import { getWebflowTokenAdmin, loadProjectDocAdmin } from '@/lib/project-admin';
 import type { CmsUpdatePayload } from '@/types/webflow';
+import { recordInIndex } from '@/lib/image-index-admin';
 
 /**
  * Write drafted alt text back to Webflow, in bulk.
@@ -227,6 +228,44 @@ export async function runAltApply(
   }
 
   await recordApplied(projectId, suggestions, applied, payload.by ?? 'worker');
+
+  // What was written is now the truth about these images, so the draft store
+  // and the index say so. Without this, a person's correction landed in
+  // Webflow while the screen kept offering the model's draft back — for
+  // Srividhya Ramaratnam that draft was "Priya Sharma, Head of Design", with
+  // a Save button beside it.
+  const at = new Date().toISOString();
+  const project$ = adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId);
+  const overridden = new Set((payload.overrides ?? []).map((override) => override.fingerprint));
+  const written = suggestions.filter((suggestion) => applied.has(suggestion.fingerprint));
+  for (const suggestion of written.filter((s) => overridden.has(s.fingerprint))) {
+    await project$
+      .collection('alt_suggestions')
+      .doc(decisionId('alt', suggestion.fingerprint))
+      .set(
+        {
+          fingerprint: suggestion.fingerprint,
+          src: suggestion.src,
+          alt: suggestion.alt,
+          kind: suggestion.kind,
+          certainty: 'high',
+          needsReview: false,
+          notes: [`Written by ${payload.by ?? 'a person'}`],
+          reviewedBy: payload.by ?? null,
+          reviewedAt: at,
+          updatedAt: AdminTimestamp.now(),
+        },
+        { merge: true },
+      );
+  }
+  await recordInIndex(
+    projectId,
+    written.map((suggestion) => ({
+      fingerprint: suggestion.fingerprint,
+      src: suggestion.src,
+      alt: { state: suggestion.alt ? 'added' : 'decorative', text: suggestion.alt || undefined, at },
+    })),
+  );
   return result;
 }
 
