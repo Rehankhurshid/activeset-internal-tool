@@ -377,6 +377,14 @@ mid-run is reclaimed after five minutes, so a reboot loses nothing.
 
 ## Verification
 
+**Use "Run checks" in the app, not `npm run worker doctor` over SSH.** A shell
+does not inherit the service's environment block, so a hand-run doctor reports
+the *defaults* for everything set with `nssm set ... AppEnvironmentExtra` —
+keep-alive, the emit dir, the Bunny zone. The tell is the emit dir: the
+service has `C:\activeset\optimised-images`, a shell shows the repo-local
+one. "Run checks" executes inside the service and reports what is really
+running.
+
 1. `npm run worker doctor` on the PC ends in "Ready."
 2. `npm run test:image-budget` covers the 2× arithmetic, both failure
    directions and the roll-up — no browser needed.
