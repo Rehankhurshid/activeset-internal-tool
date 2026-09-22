@@ -2454,6 +2454,7 @@ export function WebsiteAuditDashboard({
             onVerify={handleVerifyAlt}
             verifyingFingerprints={verifyingFingerprints}
             suggestions={altSuggestions}
+            projectId={projectId}
             onPublishSite={canWriteWebflow ? handlePublishSite : undefined}
             scanAll={{
               running: isScanningAllImages,

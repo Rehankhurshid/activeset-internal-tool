@@ -54,6 +54,8 @@ export interface AltTextTabProps {
   onPublishSite?: () => Promise<void>;
   /** Drafts from the local classifier, by image fingerprint. Never applied on their own. */
   suggestions?: Map<string, AltSuggestionDoc>;
+  /** Needed only to print the command that generates the drafts. */
+  projectId?: string;
   scanAll: {
     running: boolean;
     current: number;
@@ -153,6 +155,58 @@ function SuggestionStrip({
           {applied ? 'In the box' : 'Use this'}
         </Button>
       )}
+    </div>
+  );
+}
+
+/**
+ * How you get drafts in the first place.
+ *
+ * The classifier runs on a laptop against Ollama, not in the browser, so
+ * without this the tab gives no hint the option exists — the rows simply look
+ * the way they always did. It shows the exact command with the real project
+ * id already in it, and gets out of the way once drafts start arriving.
+ */
+function DraftPrompt({ projectId, drafted, total }: { projectId?: string; drafted: number; total: number }) {
+  // Nothing to offer once every open finding already has a draft.
+  if (drafted >= total) return null;
+
+  const command = `npm run alt project ${projectId ?? '<projectId>'}`;
+  const partial = drafted > 0;
+
+  return (
+    <div className="mx-3 sm:mx-4 my-3 rounded-md border border-dashed px-3 py-2.5 space-y-2">
+      <div className="flex items-start gap-2">
+        <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-sm font-medium">
+            {partial ? `Draft the remaining ${total - drafted}` : 'Draft these with the local classifier'}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {partial
+              ? `${drafted} of ${total} already have a draft. Run it again to pick up the rest.`
+              : 'A vision model on your own Mac reads each image and writes a first draft into these boxes. Nothing is saved without you.'}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 min-w-0 truncate rounded bg-muted px-2 py-1 font-mono text-[11px]">{command}</code>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 shrink-0"
+          onClick={async () => {
+            await navigator.clipboard.writeText(command);
+            toast.success('Command copied — run it in the project folder');
+          }}
+        >
+          <Copy className="h-3.5 w-3.5 mr-1.5" />
+          Copy
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Needs Ollama running locally. <code className="font-mono">npm run alt doctor</code> checks the setup.
+      </p>
     </div>
   );
 }
@@ -407,7 +461,7 @@ function Section({
 }
 
 export function AltTextTab(props: AltTextTabProps) {
-  const { findings, isReadOnly, scanAll, onPublishSite } = props;
+  const { findings, isReadOnly, scanAll, onPublishSite, suggestions, projectId } = props;
   const [query, setQuery] = useState('');
   const [publishing, setPublishing] = useState(false);
 
@@ -499,6 +553,13 @@ export function AltTextTab(props: AltTextTabProps) {
           </div>
         ) : (
           <>
+            {!isReadOnly && groups.open.length > 0 && (
+              <DraftPrompt
+                projectId={projectId}
+                drafted={groups.open.filter((f) => suggestions?.has(f.fingerprint)).length}
+                total={groups.open.length}
+              />
+            )}
             <Section
               title="Needs alt text"
               count={groups.open.length}
