@@ -115,7 +115,10 @@ export async function putToBunny(
  * probe never accumulates.
  */
 export async function probeBunny(config: BunnyConfig): Promise<string> {
-  const path = '.activeset-probe';
+  // Not a dotfile: CDNs commonly refuse to serve those, which would make the
+  // pull-zone half of this probe fail for a reason that has nothing to do
+  // with whether the pull zone is set up correctly.
+  const path = 'activeset-probe.txt';
   const body = Buffer.from(`probe ${new Date().toISOString()}\n`);
 
   try {
@@ -124,7 +127,22 @@ export async function probeBunny(config: BunnyConfig): Promise<string> {
     return `write FAILED — ${error instanceof Error ? error.message : String(error)}`;
   }
 
-  if (!config.cdnHost) return 'write ok (no BUNNY_CDN_HOST, so archives are write-only)';
+  // The question that actually matters is whether an original can be got
+  // back, and the storage API answers it without involving a pull zone. A
+  // broken pull zone costs you a convenient URL; a broken read costs you the
+  // backup.
+  try {
+    const res = await fetch(`https://${config.host}/${config.zone}/${path}`, {
+      headers: { AccessKey: config.key },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return `write ok, but reading it back from storage returned ${res.status} — the archive may not be retrievable`;
+    if (!(await res.text()).startsWith('probe ')) return 'write ok, but storage returned different content';
+  } catch (error) {
+    return `write ok, but reading it back from storage failed — ${error instanceof Error ? error.message : String(error)}`;
+  }
+
+  if (!config.cdnHost) return 'write and read back ok (no pull zone, so archives are reachable through the storage API only)';
 
   try {
     const res = await fetch(`https://${config.cdnHost}/${path}`, {
@@ -132,13 +150,13 @@ export async function probeBunny(config: BunnyConfig): Promise<string> {
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {
-      return `write ok, but read back ${res.status} from ${config.cdnHost} — check the pull zone points at ${config.zone}`;
+      return `storage ok, but ${config.cdnHost} returned ${res.status} — backups are safe, the recorded URL would not open. Check the pull zone's origin is ${config.zone} and that token authentication is off.`;
     }
     const text = await res.text();
     return text.startsWith('probe ')
       ? 'write and read back ok'
-      : `write ok, but ${config.cdnHost} served something else — check the pull zone points at ${config.zone}`;
+      : `storage ok, but ${config.cdnHost} served something else — check the pull zone's origin is ${config.zone}`;
   } catch (error) {
-    return `write ok, but could not read back from ${config.cdnHost} — ${error instanceof Error ? error.message : String(error)}`;
+    return `storage ok, but ${config.cdnHost} is unreachable — ${error instanceof Error ? error.message : String(error)}`;
   }
 }
