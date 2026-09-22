@@ -63,6 +63,8 @@ export interface WeightFindingDoc extends WeightAssessment {
   hasSrcset?: boolean;
   optimisedBytes?: number;
   optimisedPath?: string;
+  /** Which encoding won — or why the image was left untouched. */
+  optimisedHow?: string;
   format: string;
   measuredAt: string;
 }

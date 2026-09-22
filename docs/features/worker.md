@@ -277,9 +277,43 @@ So the worker resizes the files and writes them to `WORKER_EMIT_DIR`, named
 Replacing them is a drag into Designer. The report's "Copy list" button gives
 you the whole job as text.
 
-Formats: AVIF stays AVIF, PNG stays PNG, everything else becomes WebP at
-quality 82. The saving shown is then **measured**, not the area estimate the
-app shows before a file has been encoded.
+### The encoding: perceptually lossless, then smallest
+
+"Lossless" stops meaning much the moment you resize — the resample has already
+thrown pixels away. So the bar is *perceptually* lossless: a file nobody could
+pick out of a line-up beside the original. Two candidates are encoded and the
+smaller one ships:
+
+- **True lossless WebP**, which reproduces the resized pixels exactly.
+- **WebP at quality 90** with chroma at full resolution, the accepted
+  visually-lossless setting for continuous-tone images.
+
+Picking either one for *everything* is the mistake. Measured on six real
+ActiveSet images at their 2× target widths:
+
+| | original | lossless everywhere | this rule |
+|---|---|---|---|
+| total | 470 KB | 884 KB (**+88%**) | 294 KB (−38%) |
+
+Lossless wins on wordmarks and flat graphics, where a handful of colours
+compress to nothing, and loses four to six times over on photographs and page
+screenshots. Because both candidates already clear the perceptual bar,
+choosing between them on size alone cannot cost quality.
+
+Four things the encoder refuses to do, each because the obvious version is
+worse than doing nothing:
+
+- **Return anything heavier than what the site already serves.** If neither
+  candidate beats the original, the image is left alone and the report says so
+  rather than leaving you hunting for a file that is deliberately absent.
+- **Flatten an animation.** The old encoder passed `animated: false`, which
+  turns an animated logo into a still of its first frame. Multi-page images
+  are skipped.
+- **Rasterise a vector.** An SVG has no business being pinned to a width.
+- **Downgrade AVIF to WebP.** A modern format stays in it, re-encoded at q70.
+
+The saving shown is then **measured**, not the area estimate the app shows
+before a file has been encoded, and each row says which candidate won.
 
 ## Collections
 

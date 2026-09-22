@@ -51,32 +51,90 @@ export interface StoredWeightFinding extends WeightAssessment {
   optimisedBytes?: number;
   /** Where the optimised file was written on the worker machine. */
   optimisedPath?: string;
+  /** Which encoding won, or why the image was left alone. */
+  optimisedHow?: string;
   format: string;
   measuredAt: string;
 }
 
-/** Keep the source format when it is already modern; otherwise WebP. */
-function targetFormat(format: string): 'webp' | 'avif' | 'jpeg' | 'png' {
-  if (format === 'avif') return 'avif';
-  if (format === 'png') return 'png';
-  return 'webp';
+/**
+ * How an image was re-encoded, and whether it was worth it.
+ *
+ * `null` from the encoder means "leave this one alone" — an animation we
+ * would flatten, a vector we would rasterise, or a file we cannot beat.
+ */
+export interface Encoded {
+  bytes: Buffer;
+  ext: string;
+  /** For the report: which candidate won, so a number can be argued with. */
+  how: string;
 }
 
-async function encodeAtWidth(
+/**
+ * Re-encode at a width without a visible change.
+ *
+ * "Lossless" gets slippery the moment you resize — the resample has already
+ * thrown pixels away — so the bar this aims at is *perceptually* lossless:
+ * a file nobody could pick out of a line-up beside the original.
+ *
+ * Two candidates, both of which clear that bar, and the smaller one wins:
+ *
+ * - **True lossless WebP** reproduces the resized pixels exactly. It is the
+ *   right answer for wordmarks and flat graphics, where a handful of colours
+ *   compress to almost nothing.
+ * - **WebP at quality 90**, with chroma kept at full resolution, is the
+ *   accepted visually-lossless setting for continuous-tone images.
+ *
+ * Choosing one of them for everything is what makes a size pass either
+ * pointless or actively harmful. Measured on six of ActiveSet's own images at
+ * their 2x target widths: true lossless beat q90 on the wordmark (11 KB
+ * against 14 KB) and lost badly on the OG photograph (145 KB against 33 KB)
+ * and a long page screenshot (662 KB against 227 KB). Lossless everywhere
+ * came out 88% *larger* than the originals; this rule came out 38% smaller,
+ * leaving two images untouched because nothing beat them. Because both
+ * candidates are already perceptually lossless, deciding between them on size
+ * alone cannot cost quality.
+ */
+export async function encodeAtWidth(
   buffer: Buffer,
   width: number,
   format: string,
-): Promise<{ bytes: Buffer; ext: string }> {
+): Promise<Encoded | null> {
+  // A vector has no business being rasterised to a fixed width, and sharp
+  // would happily do it.
+  if (format === 'svg') return null;
+
   const sharp = (await import('sharp')).default;
-  const pipeline = sharp(buffer, { failOn: 'none', animated: false }).resize({
-    width,
-    withoutEnlargement: true,
-  });
-  const chosen = targetFormat(format);
-  if (chosen === 'avif') return { bytes: await pipeline.avif({ quality: 55 }).toBuffer(), ext: 'avif' };
-  if (chosen === 'png') return { bytes: await pipeline.png({ compressionLevel: 9 }).toBuffer(), ext: 'png' };
-  return { bytes: await pipeline.webp({ quality: 82 }).toBuffer(), ext: 'webp' };
+
+  // An animation re-encoded with `animated: false` comes back as its first
+  // frame. Publishing a still of someone's animated logo is not an
+  // optimisation, so these are left alone and reported as untouched.
+  const probe = await sharp(buffer, { failOn: 'none' }).metadata();
+  if ((probe.pages ?? 1) > 1) return null;
+
+  const resized = () =>
+    sharp(buffer, { failOn: 'none' }).resize({ width, withoutEnlargement: true });
+
+  // AVIF is already better than anything WebP would produce; re-encoding it
+  // as WebP would be a downgrade dressed up as a saving.
+  if (format === 'avif') {
+    return { bytes: await resized().avif({ quality: 70, effort: 5 }).toBuffer(), ext: 'avif', how: 'AVIF q70' };
+  }
+
+  const [lossless, visuallyLossless] = await Promise.all([
+    resized().webp({ lossless: true, effort: 6 }).toBuffer(),
+    resized().webp({ quality: 90, alphaQuality: 100, smartSubsample: true, effort: 6 }).toBuffer(),
+  ]);
+
+  const winner =
+    lossless.byteLength <= visuallyLossless.byteLength
+      ? { bytes: lossless, ext: 'webp', how: 'WebP lossless' }
+      : { bytes: visuallyLossless, ext: 'webp', how: 'WebP q90' };
+
+  // Never hand back something heavier than what the site already serves.
+  return winner.bytes.byteLength < buffer.byteLength ? winner : null;
 }
+
 
 function safeFileName(src: string): string {
   const raw = decodeURIComponent(src.split('/').pop() || 'image').replace(/^[0-9a-f]{24}_/i, '');
@@ -186,17 +244,26 @@ export async function runImageBudget(
         const original = Buffer.from(await res.arrayBuffer());
         const key = imageFingerprint(assessment.src);
         const measurement = byFingerprint.get(key);
-        const { bytes, ext } = await encodeAtWidth(original, assessment.targetWidth, measurement?.format ?? '');
-        const base = safeFileName(assessment.src).replace(/\.[^.]+$/, '');
-        const outPath = path.join(dir, `${base}@${assessment.targetWidth}w.${ext}`);
-        await fs.writeFile(outPath, bytes);
-
         const finding = findings.find((item) => item.fingerprint === key);
-        if (finding) {
-          finding.optimisedBytes = bytes.byteLength;
-          finding.optimisedPath = outPath;
+        const encoded = await encodeAtWidth(original, assessment.targetWidth, measurement?.format ?? '');
+        if (!encoded) {
+          // Animated, vector, or already smaller than anything we can make.
+          // Saying so on the finding stops someone chasing a file that is
+          // deliberately absent from the folder.
+          if (finding) finding.optimisedHow = 'left alone — nothing smaller without a visible change';
+          continue;
         }
-        actualSaving += Math.max(0, original.byteLength - bytes.byteLength);
+
+        const base = safeFileName(assessment.src).replace(/\.[^.]+$/, '');
+        const outPath = path.join(dir, `${base}@${assessment.targetWidth}w.${encoded.ext}`);
+        await fs.writeFile(outPath, encoded.bytes);
+
+        if (finding) {
+          finding.optimisedBytes = encoded.bytes.byteLength;
+          finding.optimisedPath = outPath;
+          finding.optimisedHow = encoded.how;
+        }
+        actualSaving += Math.max(0, original.byteLength - encoded.bytes.byteLength);
       } catch (error) {
         console.error(`[image-budget] could not resize ${assessment.src}:`, error);
       }
