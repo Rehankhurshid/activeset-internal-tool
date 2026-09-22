@@ -136,10 +136,15 @@ export function WebflowAssetsDashboard({
   }, [assets, searchQuery, filter]);
 
   const visibleIds = useMemo(() => filteredAssets.map((asset) => asset.id), [filteredAssets]);
+  // Only images can want alt text. The library also holds PDFs, videos and
+  // fonts, and counting those inflated this number for everyone reading it.
   const missingAltCount = useMemo(
     () =>
       assets.filter(
-        (asset) => !(asset.altText || '').trim() && !shouldIgnoreMissingAlt(asset)
+        (asset) =>
+          (asset.contentType ?? '').startsWith('image/') &&
+          !(asset.altText || '').trim() &&
+          !shouldIgnoreMissingAlt(asset)
       ).length,
     [assets]
   );

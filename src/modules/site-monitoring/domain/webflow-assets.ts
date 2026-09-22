@@ -20,6 +20,8 @@
 
 export interface WebflowAssetSummary {
   id: string;
+  /** `image/png`, `application/pdf`, `video/mp4`. A library is not all pictures. */
+  contentType?: string;
   displayName?: string;
   originalFileName?: string;
   hostedUrl?: string;

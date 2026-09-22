@@ -37,16 +37,29 @@ export interface WebflowAltResult {
   siteName?: string;
   assetsSeen: number;
   cmsSeen: number;
+  /** Files in the library that are not images — PDFs, videos — and have no alt to write. */
+  notImages: number;
   drafted: number;
   decorative: number;
   needsReview: number;
   failed: number;
+  /** Why, for the first few. A bare count sends someone hunting through logs. */
+  failures: { src: string; error: string }[];
   saved: number;
 }
 
 /** Webflow marks an inherited-but-unset alt with this sentinel. */
 const BLANK_ALTS = new Set(['', '__wf_reserved_inherit']);
 const hasAlt = (value: string | null | undefined) => !BLANK_ALTS.has((value ?? '').trim());
+
+/**
+ * A Webflow asset library holds files, not images: PDFs, videos, fonts. They
+ * have no alt text and are not pictures, so feeding them to a vision model
+ * fails on every one — which is exactly what happened on Canopy, where three
+ * of the seven "missing alt" assets were two PDFs and an MP4.
+ */
+const isImage = (contentType: string | undefined) =>
+  !!contentType && contentType.startsWith('image/');
 
 async function listSiteAssets(siteId: string, token: string): Promise<WebflowAssetSummary[]> {
   const assets: WebflowAssetSummary[] = [];
@@ -74,6 +87,7 @@ export async function runWebflowAlt(
   if (!token) throw new Error('This project has no Webflow API token configured');
 
   const sources = payload.sources ?? ['assets', 'cms'];
+  let notImages = 0;
   // A named selection is already the answer to "which ones"; the missing/all
   // filter would only take rows back out of it.
   const chosen = payload.srcs?.length ? new Set(payload.srcs) : null;
@@ -88,6 +102,10 @@ export async function runWebflowAlt(
     assetsSeen = assets.length;
     for (const asset of assets) {
       if (!asset.hostedUrl) continue;
+      if (!isImage(asset.contentType)) {
+        notImages += 1;
+        continue;
+      }
       if (!wantAll && hasAlt(asset.altText)) continue;
       contexts.push({
         src: asset.hostedUrl,
@@ -164,10 +182,12 @@ export async function runWebflowAlt(
     siteName: project.name,
     assetsSeen,
     cmsSeen,
+    notImages,
     drafted: suggestions.filter((s) => s.kind !== 'decorative').length,
     decorative: suggestions.filter((s) => s.kind === 'decorative').length,
     needsReview: suggestions.filter((s) => s.needsReview).length,
     failed: failures.length,
+    failures: failures.slice(0, 10).map((f) => ({ src: f.context.src, error: f.error })),
     saved,
   };
 }

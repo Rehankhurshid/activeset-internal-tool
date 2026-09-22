@@ -133,8 +133,9 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
     log(
       green('  done'),
       `${result.drafted} described, ${result.decorative} decorative, ${result.needsReview} to review ` +
-        `(${result.assetsSeen} assets, ${result.cmsSeen} CMS images seen)`,
+        `(${result.assetsSeen} assets, ${result.cmsSeen} CMS images, ${result.notImages} not images)`,
     );
+    for (const failure of result.failures) log(red('  failed'), dim(`${failure.src}: ${failure.error}`));
     return result as unknown as Record<string, unknown>;
   }
 

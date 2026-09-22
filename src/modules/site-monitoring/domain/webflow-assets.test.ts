@@ -41,6 +41,17 @@ describe('normalising a name', () => {
   });
 });
 
+describe('a library is not all pictures', () => {
+  it('carries the content type, so non-images can be filtered out', () => {
+    // Regression: the first real run on Canopy fed two PDFs and an MP4 to a
+    // vision model, because "assets with no alt text" had been taken to mean
+    // "images with no alt text". All three failed, and the failure count was
+    // reported without a reason.
+    const asset: WebflowAssetSummary = { id: 'a1', contentType: 'application/pdf', displayName: 'form.pdf' };
+    assert.equal(asset.contentType?.startsWith('image/'), false);
+  });
+});
+
 describe('resolveAssets', () => {
   it('matches a variant URL exactly', () => {
     const assets = [
