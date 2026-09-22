@@ -178,30 +178,58 @@ export async function runAltApply(
   if (updates.length > 0) {
     await onProgress(`Writing ${updates.length} CMS fields`, 0.6);
     const grouped = groupUpdatesByItem(updates);
+    // Which images each item's PATCH carries, so an image counts as written
+    // only when its own item was accepted.
+    const fingerprintsByItem = new Map<string, string[]>();
+    for (const [i, update] of updates.entries()) {
+      const key = `${update.collectionId}::${update.itemId}`;
+      fingerprintsByItem.set(key, [...(fingerprintsByItem.get(key) ?? []), updateFingerprints[i]]);
+    }
     const byCollection = new Map<string, { id: string; fieldData: Record<string, unknown> }[]>();
     for (const entry of grouped.values()) {
+      // An item with nothing to change is what Webflow answers "Missing
+      // fields" to — and it failed the 24 good items in its batch with it.
+      if (Object.keys(entry.fieldData).length === 0) {
+        for (const fingerprint of fingerprintsByItem.get(`${entry.collectionId}::${entry.itemId}`) ?? []) {
+          result.skipped.push({ fingerprint, reason: 'this field type cannot carry ALT text' });
+        }
+        continue;
+      }
       const items = byCollection.get(entry.collectionId) ?? [];
       items.push({ id: entry.itemId, fieldData: entry.fieldData });
       byCollection.set(entry.collectionId, items);
     }
 
     const publishable = new Map<string, string[]>();
+    const accepted = (collectionId: string, chunk: { id: string }[]) => {
+      result.appliedToCms += chunk.length;
+      publishable.set(collectionId, [...(publishable.get(collectionId) ?? []), ...chunk.map((c) => c.id)]);
+      for (const item of chunk) {
+        for (const fingerprint of fingerprintsByItem.get(`${collectionId}::${item.id}`) ?? []) applied.add(fingerprint);
+      }
+    };
     for (const [collectionId, items] of byCollection) {
-      // Webflow caps a bulk PATCH; chunking also keeps one bad item from
-      // taking the whole collection down with it.
+      // Webflow caps a bulk PATCH at 100 items; 25 keeps each request small.
       for (let i = 0; i < items.length; i += 25) {
         const chunk = items.slice(i, i + 25);
         const res = await patchItems(collectionId, token, chunk);
         if (res.ok) {
-          result.appliedToCms += chunk.length;
-          publishable.set(collectionId, [...(publishable.get(collectionId) ?? []), ...chunk.map((c) => c.id)]);
-        } else {
-          result.failed.push({ where: `collection ${collectionId}`, error: `${res.status}: ${res.text.slice(0, 160)}` });
+          accepted(collectionId, chunk);
+          continue;
         }
+        // Webflow rejects the whole batch for one bad item. Send them one
+        // at a time so only that item fails and the rest still land.
+        if (chunk.length > 1 && res.status >= 400 && res.status < 500) {
+          for (const item of chunk) {
+            const single = await patchItems(collectionId, token, [item]);
+            if (single.ok) accepted(collectionId, [item]);
+            else result.failed.push({ where: `item ${item.id}`, error: `${single.status}: ${single.text.slice(0, 160)}` });
+          }
+          continue;
+        }
+        result.failed.push({ where: `collection ${collectionId}`, error: `${res.status}: ${res.text.slice(0, 160)}` });
       }
     }
-
-    for (const fingerprint of updateFingerprints) applied.add(fingerprint);
 
     if (payload.publish) {
       for (const [collectionId, itemIds] of publishable) {

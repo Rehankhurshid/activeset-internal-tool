@@ -131,7 +131,7 @@ Auth legend: **ID token + project** = `Authorization: Bearer <Firebase ID token>
 - [webflow-utils.ts](../../src/lib/webflow-utils.ts) — `formatForDisplay` (re-exported by [platform/webflow/utils.ts](../../src/platform/webflow/utils.ts), which nothing imports).
 - [project-admin.ts](../../src/lib/project-admin.ts) — `getWebflowTokenAdmin` (second reader of `project_secrets`, used by worker handlers).
 - `src/lib/cms/` — shared by API routes, worker handlers and the `cms-alt` CLI:
-  - [webflow-client.ts](../../src/lib/cms/webflow-client.ts) — `webflowFetch` (retries 429 up to 5×, honours `retry-after`, cap 60 s), `listCollections`, `getCollection`, `listItems`, `patchItems`, `publishItems`, `buildHeaders`.
+  - [webflow-client.ts](../../src/lib/cms/webflow-client.ts) — `webflowFetch` (retries 429 up to 5×, honours `retry-after`, cap 60 s; also retries a dropped connection up to 5× with backoff, except on POSTs other than `/publish`), `listCollections`, `getCollection`, `listItems`, `patchItems`, `publishItems`, `buildHeaders`.
   - [extract.ts](../../src/lib/cms/extract.ts) — `extractImageFields`, `extractRichTextImages` (cheerio), `extractAllImages`, `isMissingAlt`, `BAD_ALTS`.
   - [patch.ts](../../src/lib/cms/patch.ts) — `buildFieldPatch`, `applyRichTextUpdates`, `groupUpdatesByItem`.
   - [library.ts](../../src/lib/cms/library.ts) — `listSiteAssets` (≤10,000), `listCollectionImages`, `buildCmsIndex` (fingerprint → every CMS entry using it). Worker-side.

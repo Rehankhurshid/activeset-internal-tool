@@ -47,14 +47,28 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export async function webflowFetch(path: string, token: string, init: RequestInit = {}): Promise<Response> {
   const url = path.startsWith('http') ? path : `${WEBFLOW_API_BASE}${path}`;
+  // A dropped connection ("fetch failed") is retried too, but only for calls
+  // that are safe to send twice. PeakXV's Companies run described 918 images
+  // and then wrote none of them, because one blip mid-write threw out of the
+  // whole step. Creating something (a POST) could land twice, so it is not
+  // retried — except a publish, which is the same either way.
+  const method = (init.method ?? 'GET').toUpperCase();
+  const safeToResend = method !== 'POST' || url.endsWith('/publish');
   for (let attempt = 0; ; attempt += 1) {
-    const res = await fetch(url, {
-      ...init,
-      headers: {
-        ...buildHeaders(token),
-        ...(init.headers as Record<string, string> | undefined),
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        ...init,
+        headers: {
+          ...buildHeaders(token),
+          ...(init.headers as Record<string, string> | undefined),
+        },
+      });
+    } catch (error) {
+      if (!safeToResend || attempt >= 5) throw error;
+      await sleep(2_000 * 2 ** attempt);
+      continue;
+    }
     if (res.status !== 429 || attempt >= 5) return res;
     const retryAfter = Number(res.headers.get('retry-after'));
     await sleep(Math.min(60_000, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 10_000 * (attempt + 1)));
