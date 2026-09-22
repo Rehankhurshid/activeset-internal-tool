@@ -101,7 +101,7 @@ export interface Encoded {
  */
 export async function encodeAtWidth(
   buffer: Buffer,
-  width: number,
+  width: number | null,
   format: string,
 ): Promise<Encoded | null> {
   // A vector has no business being rasterised to a fixed width, and sharp
@@ -116,8 +116,13 @@ export async function encodeAtWidth(
   const probe = await sharp(buffer, { failOn: 'none' }).metadata();
   if ((probe.pages ?? 1) > 1) return null;
 
-  const resized = () =>
-    sharp(buffer, { failOn: 'none' }).resize({ width, withoutEnlargement: true });
+  // A null width means "re-encode, do not resize" — the Webflow tab asks for
+  // images that have never been measured, and a made-up target width would be
+  // worse than leaving the dimensions alone.
+  const resized = () => {
+    const pipeline = sharp(buffer, { failOn: 'none' });
+    return width === null ? pipeline : pipeline.resize({ width, withoutEnlargement: true });
+  };
 
   // AVIF is already better than anything WebP would produce; re-encoding it
   // as WebP would be a downgrade dressed up as a saving.

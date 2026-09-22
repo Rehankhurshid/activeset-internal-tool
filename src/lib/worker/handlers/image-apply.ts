@@ -39,8 +39,18 @@ import { backupPath, bunnyConfig, putToBunny, BUNNY_NOT_CONFIGURED } from '@/lib
  */
 
 export interface ImageApplyPayload {
-  /** Which findings to act on. Required — this never applies everything by itself. */
-  fingerprints: string[];
+  /** Measured findings to act on, from the Weight tab. */
+  fingerprints?: string[];
+  /**
+   * Image URLs to act on, from the Webflow tab's library view.
+   *
+   * These usually have no measurement — the library knows what exists, not
+   * what any page displays it at — so they are re-encoded at their original
+   * dimensions unless a measurement happens to exist for one. That is what
+   * `--compress` always did; this adds the archive, the better encoder, and
+   * the resize when the width *is* known.
+   */
+  srcs?: string[];
   /** Publish the changed CMS items afterwards. Off by default. */
   publish?: boolean;
   by?: string;
@@ -50,6 +60,10 @@ export interface ImageApplyResult {
   requested: number;
   /** Images re-encoded and uploaded as new Webflow assets. */
   uploaded: number;
+  /** Of those, how many were narrowed to a measured display width. */
+  resized: number;
+  /** And how many were only re-encoded, because nothing had measured them. */
+  recompressedOnly: number;
   /** CMS fields repointed at the new file. */
   repointed: number;
   published: number;
@@ -110,7 +124,7 @@ async function buildCmsIndex(
   return index;
 }
 
-function fileNameFor(src: string, width: number, ext: string): string {
+function fileNameFor(src: string, width: number | null, ext: string): string {
   const tail = (() => {
     try {
       return new URL(src).pathname.split('/').filter(Boolean).pop() ?? 'image';
@@ -120,7 +134,10 @@ function fileNameFor(src: string, width: number, ext: string): string {
   })();
   // The output extension, not the input's: WebP bytes uploaded as `.jpg` is
   // the other half of the bug the published CLI had to fix.
-  return `${tail.replace(/\.[^.]+$/, '')}@${width}w.${ext}`;
+  const base = tail.replace(/\.[^.]+$/, '');
+  // No width suffix when nothing was resized — the name would be a claim
+  // about a measurement that does not exist.
+  return width === null ? `${base}.${ext}` : `${base}@${width}w.${ext}`;
 }
 
 export async function runImageApply(
@@ -128,9 +145,19 @@ export async function runImageApply(
   payload: ImageApplyPayload,
   onProgress: (message: string, fraction?: number) => Promise<void> | void,
 ): Promise<ImageApplyResult> {
+  const targets = [
+    ...(payload.fingerprints ?? []).map((fingerprint) => ({ fingerprint, src: undefined as string | undefined })),
+    ...(payload.srcs ?? []).map((src) => ({ fingerprint: imageFingerprint(src), src })),
+  ];
+  // The same image can arrive from both screens.
+  const seen = new Set<string>();
+  const requested = targets.filter((t) => (seen.has(t.fingerprint) ? false : (seen.add(t.fingerprint), true)));
+
   const result: ImageApplyResult = {
-    requested: payload.fingerprints?.length ?? 0,
+    requested: requested.length,
     uploaded: 0,
+    resized: 0,
+    recompressedOnly: 0,
     repointed: 0,
     published: 0,
     bytesSaved: 0,
@@ -152,47 +179,60 @@ export async function runImageApply(
   result.backedUpTo = bunny.cdnHost ? `https://${bunny.cdnHost}` : `${bunny.zone} (storage only — set BUNNY_CDN_HOST to read it back)`;
 
   await onProgress('Loading the measurements', 0.02);
-  const wanted = new Set(payload.fingerprints);
   const findingDocs = await adminDb
     .collection(COLLECTIONS.PROJECTS)
     .doc(projectId)
     .collection('image_budget')
     .get();
 
-  const findings = findingDocs.docs
-    .map((doc) => doc.data() as StoredWeightFinding)
-    .filter((finding) => wanted.has(finding.fingerprint));
+  // Every measurement, not only the requested ones: a URL that arrived from
+  // the library may well have been measured on some page, and if it has, the
+  // right thing is to resize rather than only re-encode.
+  const measurements = new Map<string, StoredWeightFinding>();
+  for (const doc of findingDocs.docs) {
+    const finding = doc.data() as StoredWeightFinding;
+    measurements.set(finding.fingerprint, finding);
+  }
 
   const cmsIndex = await buildCmsIndex(siteId, token, onProgress);
 
   const updates: CmsUpdatePayload[] = [];
   const applied = new Set<string>();
   const archives = new Map<string, string>();
+  const appliedUrls = new Map<string, { src: string; bytes: number; targetWidth: number | null }>();
   const now = new Date().toISOString();
 
-  for (const [i, finding] of findings.entries()) {
-    await onProgress(`Resizing ${i + 1}/${findings.length}`, 0.3 + (i / Math.max(1, findings.length)) * 0.4);
+  for (const [i, target] of requested.entries()) {
+    await onProgress(`Optimising ${i + 1}/${requested.length}`, 0.3 + (i / Math.max(1, requested.length)) * 0.4);
 
-    const entries = cmsIndex.get(finding.fingerprint);
+    const entries = cmsIndex.get(target.fingerprint);
     if (!entries?.length) {
       result.skipped.push({
-        fingerprint: finding.fingerprint,
+        fingerprint: target.fingerprint,
         reason: 'not a CMS image — a site asset cannot have its bytes replaced, and a Designer image cannot be repointed',
       });
       continue;
     }
 
-    if (finding.verdict !== 'oversized') {
-      // Undersized needs a better original, which is a design job, and a
-      // right-sized image needs nothing.
-      result.skipped.push({ fingerprint: finding.fingerprint, reason: `nothing to do — ${finding.verdict}` });
+    const finding = measurements.get(target.fingerprint);
+    const src = target.src ?? finding?.src ?? entries[0].imageUrl;
+
+    // Resize only to a width something actually measured. An image that no
+    // page has been measured at is re-encoded at its own dimensions, which is
+    // what the old --compress did for everything — inventing a target would
+    // be worse than leaving the dimensions alone.
+    const targetWidth = finding?.verdict === 'oversized' ? finding.targetWidth : null;
+
+    if (finding && finding.verdict === 'undersized') {
+      // No amount of re-encoding fixes soft; it needs a better original.
+      result.skipped.push({ fingerprint: target.fingerprint, reason: 'too small for retina — needs a better original' });
       continue;
     }
 
     try {
-      const res = await fetch(finding.src, { signal: AbortSignal.timeout(30_000) });
+      const res = await fetch(src, { signal: AbortSignal.timeout(30_000) });
       if (!res.ok) {
-        result.failed.push({ where: finding.src, error: `could not fetch the original (${res.status})` });
+        result.failed.push({ where: src, error: `could not fetch the original (${res.status})` });
         continue;
       }
       const original = Buffer.from(await res.arrayBuffer());
@@ -200,15 +240,15 @@ export async function runImageApply(
       // Archive first. If this fails the image is left exactly as it was.
       const archived = await putToBunny(
         bunny,
-        backupPath(projectId, finding.fingerprint, fileNameOf(finding.src), now),
+        backupPath(projectId, target.fingerprint, fileNameOf(src), now),
         original,
         res.headers.get('content-type') ?? 'application/octet-stream',
       );
 
-      const encoded = await encodeAtWidth(original, finding.targetWidth, finding.format);
+      const encoded = await encodeAtWidth(original, targetWidth, finding?.format ?? '');
       if (!encoded) {
         result.skipped.push({
-          fingerprint: finding.fingerprint,
+          fingerprint: target.fingerprint,
           reason: 'nothing smaller was possible without a visible change',
         });
         continue;
@@ -217,11 +257,13 @@ export async function runImageApply(
       const uploaded = await uploadAssetToWebflow(
         siteId,
         token,
-        fileNameFor(finding.src, finding.targetWidth, encoded.ext),
+        fileNameFor(src, targetWidth, encoded.ext),
         encoded.bytes,
         encoded.ext === 'avif' ? 'image/avif' : 'image/webp',
       );
       result.uploaded += 1;
+      if (targetWidth === null) result.recompressedOnly += 1;
+      else result.resized += 1;
       result.bytesSaved += Math.max(0, original.byteLength - encoded.bytes.byteLength);
 
       // Every item that referenced the old file, not just the first.
@@ -239,10 +281,11 @@ export async function runImageApply(
           rawFieldValue: entry.rawFieldValue,
         });
       }
-      applied.add(finding.fingerprint);
-      archives.set(finding.fingerprint, archived.url ?? archived.path);
+      applied.add(target.fingerprint);
+      archives.set(target.fingerprint, archived.url ?? archived.path);
+      appliedUrls.set(target.fingerprint, { src, bytes: original.byteLength, targetWidth });
     } catch (error) {
-      result.failed.push({ where: finding.src, error: error instanceof Error ? error.message : String(error) });
+      result.failed.push({ where: src, error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -288,7 +331,7 @@ export async function runImageApply(
     }
   }
 
-  await recordApplied(projectId, findings, applied, archives, payload.by ?? 'worker');
+  await recordApplied(projectId, appliedUrls, archives, now, payload.by ?? 'worker');
   return result;
 }
 
@@ -301,26 +344,25 @@ export async function runImageApply(
  */
 async function recordApplied(
   projectId: string,
-  findings: StoredWeightFinding[],
-  applied: Set<string>,
+  appliedUrls: Map<string, { src: string; bytes: number; targetWidth: number | null }>,
   archives: Map<string, string>,
+  now: string,
   by: string,
 ): Promise<void> {
   const collection = adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId).collection('audit_decisions');
-  const now = new Date().toISOString();
-  const writes = findings.filter((finding) => applied.has(finding.fingerprint));
+  const entries = [...appliedUrls.entries()];
 
-  for (let i = 0; i < writes.length; i += 400) {
+  for (let i = 0; i < entries.length; i += 400) {
     const batch = adminDb.batch();
-    for (const finding of writes.slice(i, i + 400)) {
-      batch.set(collection.doc(decisionId('weight', finding.fingerprint)), {
+    for (const [fingerprint, applied] of entries.slice(i, i + 400)) {
+      batch.set(collection.doc(decisionId('weight', fingerprint)), {
         kind: 'weight',
-        fingerprint: finding.fingerprint,
+        fingerprint,
         decision: 'fixed_unverified',
-        previousUrl: finding.src,
-        previousBytes: finding.bytes,
-        backupUrl: archives.get(finding.fingerprint),
-        targetWidth: finding.targetWidth,
+        previousUrl: applied.src,
+        previousBytes: applied.bytes,
+        targetWidth: applied.targetWidth ?? undefined,
+        backupUrl: archives.get(fingerprint),
         by,
         at: now,
         updatedAt: AdminTimestamp.now(),

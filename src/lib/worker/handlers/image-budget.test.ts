@@ -101,6 +101,20 @@ describe('encodeAtWidth', () => {
     assert.equal(await encodeAtWidth(svg, 400, 'svg'), null);
   });
 
+  test('a null width re-encodes at the original dimensions, for images nobody has measured', async () => {
+    // The Webflow tab works from the library, which knows what exists and not
+    // what any page displays it at. Inventing a target width there would be
+    // worse than leaving the dimensions alone.
+    const original = await photograph(900, 600);
+    const encoded = await encodeAtWidth(original, null, 'png');
+
+    assert.ok(encoded, 'a PNG photograph should still be worth re-encoding');
+    const out = await sharp(encoded.bytes).metadata();
+    assert.equal(out.width, 900);
+    assert.equal(out.height, 600);
+    assert.ok(encoded.bytes.length < original.length);
+  });
+
   test('keeps AVIF as AVIF, so a modern format is not downgraded to WebP', async () => {
     const original = await sharp(await photograph(900, 600)).avif({ quality: 50 }).toBuffer();
     const encoded = await encodeAtWidth(original, 450, 'avif');

@@ -157,7 +157,8 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
     const result = await runImageApply(job.projectId, job.payload as unknown as ImageApplyPayload, progress);
     log(
       green('  done'),
-      `${result.uploaded} resized, ${result.repointed} CMS fields repointed, ${result.published} published, ` +
+      `${result.resized} resized, ${result.recompressedOnly} re-encoded, ` +
+        `${result.repointed} CMS fields repointed, ${result.published} published, ` +
         `${formatBytes(result.bytesSaved)} saved` +
         (result.skipped.length ? `, ${result.skipped.length} skipped` : '') +
         (result.failed.length ? `, ${red(String(result.failed.length) + ' failed')}` : ''),

@@ -176,12 +176,19 @@ Two things deliberately **not** done, so nobody re-derives them:
 | `alt_text` | Reads the project's open alt-text findings, re-fetches those pages for context, classifies every image and drafts its alt. Results go to `alt_suggestions` and fill the boxes on the Alt text tab. See [alt-text.md](alt-text.md). |
 | `image_budget` | Opens each page in Chrome at 1440, 768 and 390 px, measures how wide every image is actually drawn, fetches each file, and works out what it should weigh. Results go to `image_budget` and drive the Weight tab. |
 | `webflow_alt` | Drafts alt text for a site's whole Webflow library — assets and CMS collections — rather than for scanned pages. Feeds the same `alt_suggestions` store, so a draft shows up on both the Webflow tab and the Audit tab. Skips PDFs, videos and anything else that is not an image. |
-| `image_apply` | Resizes chosen oversized images to their measured target width, archives the originals to Bunny, uploads the new file as a Webflow asset and repoints the CMS fields that used the old one. CMS fields only — see [What it will not do](#what-it-will-not-do). |
+| `image_apply` | Archives the originals to Bunny, re-encodes, uploads the new file as a Webflow asset and repoints every CMS field that used the old one. Queued from two places: the Weight tab, which has measured display widths and so resizes, and the Webflow tab's Optimise button, which works from the library and re-encodes at the original dimensions. CMS fields only — see [What it will not do](#what-it-will-not-do). |
 | `alt_apply` | Writes chosen drafts back to Webflow in bulk, and optionally publishes. Two destinations: a site asset takes its alt through the Assets API, a CMS image through its collection item's field. On Canopy eleven of eleven were CMS, so the asset path alone would have applied nothing. |
 
 They are queued from the Audit tab — the Alt text tab's "Draft on `<machine>`"
-button, the Weight tab's "Measure sizes" — and from the Webflow tab's Image
-Assets screen, which drafts the library. Or by hand:
+button, the Weight tab's "Measure sizes" and "Resize & repoint" — and from the
+Webflow tab, whose Image Assets screen drafts the library and whose CMS Images
+screen optimises a selection. Or by hand:
+
+Two screens, one pipeline, and the difference between them is knowledge rather
+than capability: the Weight tab knows the width a browser draws each image at
+and can therefore resize, while the library only knows what exists, so an
+unmeasured image is re-encoded at its own dimensions. An image the Weight tab
+*has* measured is resized whichever screen asked.
 
 ```bash
 npm run worker enqueue image_budget <projectId> --emit ./optimised-images

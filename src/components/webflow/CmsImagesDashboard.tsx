@@ -6,6 +6,7 @@ import {
   Search,
   RefreshCw,
   Loader2,
+  Wand2,
   ImageIcon,
   FileText,
   Check,
@@ -32,6 +33,7 @@ import {
 import { useCmsImages } from '@/hooks/useCmsImages';
 import type { WebflowConfig, CmsCollectionSummary, CmsImageEntry } from '@/types/webflow';
 import { fetchForProject } from '@/lib/api-client';
+import { useImageOptimising } from '@/modules/site-monitoring/ui/hooks/useImageOptimising';
 
 type StatusFilter = 'all' | 'missing' | 'has-alt';
 type FieldTypeFilter = 'all' | 'Image' | 'RichText';
@@ -39,6 +41,8 @@ type FieldTypeFilter = 'all' | 'Image' | 'RichText';
 interface CmsImagesDashboardProps {
   projectId: string;
   webflowConfig: WebflowConfig;
+  projectName?: string;
+  userEmail?: string;
 }
 
 const TOKEN_PLACEHOLDER = '__WEBFLOW_TOKEN__';
@@ -62,6 +66,11 @@ interface CliCommandArgs {
   maxCompress?: number;
 }
 
+/**
+ * What the generated CLI command still does. Compress and cleanup used to be
+ * here; compress moved to the Optimise button and cleanup was removed as
+ * unsafe, so the fields remain only so a stored preference does not break.
+ */
 interface CliActions {
   ai: boolean;
   compress: boolean;
@@ -80,7 +89,7 @@ function buildContextualCommand(args: CliCommandArgs, actions: CliActions, field
   }
   if (args.missingOnly) parts.push('--missing-only');
   if (actions.ai) parts.push('--ai');
-  if (actions.compress) parts.push('--compress');
+  // No `--compress`: the Optimise button runs it through the worker instead.
   if (actions.publish) parts.push('--publish');
   // `--cleanup` is never emitted. See the disabled toggle for why: it resolves
   // the originals to delete by parsing an asset id out of the CDN URL, and
@@ -311,15 +320,11 @@ function PlanPanel({
 }) {
   // Rough ETA heuristics — per-image seconds on a mid-range laptop w/ Gemma 3 4B
   const altSecPerImage = 8;
-  const compressSecPerImage = 2.5;
 
   const altSubtotal = actions.ai ? Math.round(plan.missingCount * altSecPerImage) : 0;
-  const compressSubtotal = actions.compress
-    ? Math.round(plan.imageCount * compressSecPerImage)
-    : 0;
   const publishOverhead = actions.publish ? 4 : 0;
   const importOverhead = 3;
-  const totalSec = altSubtotal + compressSubtotal + publishOverhead + importOverhead;
+  const totalSec = altSubtotal + publishOverhead + importOverhead;
 
   const steps: Array<{ key: string; on: boolean; label: string; detail: string; eta: string }> = [
     {
@@ -335,13 +340,6 @@ function PlanPanel({
       label: 'generate',
       detail: `${plan.missingCount} missing ALT · gemma3:4b`,
       eta: altSubtotal > 0 ? `~${fmtDuration(altSubtotal)}` : '—',
-    },
-    {
-      key: 'compress',
-      on: actions.compress,
-      label: 'compress',
-      detail: `${plan.imageCount} → lossless WebP`,
-      eta: compressSubtotal > 0 ? `~${fmtDuration(compressSubtotal)}` : '—',
     },
     {
       key: 'import',
@@ -543,13 +541,14 @@ function ContextualCliBar({
         >
           ALT (Gemma 3 4B)
         </button>
-        <button
-          type="button"
-          className={toggleClass(actions.compress)}
-          onClick={() => onActionsChange({ ...actions, compress: !actions.compress })}
-        >
-          Compress (WebP)
-        </button>
+        {/*
+          Compress moved out of the CLI and into the Optimise button below.
+          Two compress paths would be one too many, and this was the worse of
+          them: lossless WebP for every image, which is four to six times
+          larger than necessary on a photograph; no resize at all, so a 3494px
+          image displayed at 200px stayed 3494px; and no archive of the
+          original before the swap. The worker does all three properly.
+        */}
         <button
           type="button"
           className={toggleClass(actions.publish)}
@@ -621,9 +620,11 @@ function ContextualCliBar({
   );
 }
 
-const DEFAULT_ACTIONS: CliActions = { ai: true, compress: true, publish: false, cleanup: false };
+const DEFAULT_ACTIONS: CliActions = { ai: true, compress: false, publish: false, cleanup: false };
 
-export function CmsImagesDashboard({ projectId, webflowConfig }: CmsImagesDashboardProps) {
+export function CmsImagesDashboard({ projectId, webflowConfig, projectName, userEmail }: CmsImagesDashboardProps) {
+  const optimise = useImageOptimising(projectId, projectName, userEmail ?? 'team');
+
   const {
     collections,
     discoveryLoading,
@@ -653,6 +654,12 @@ export function CmsImagesDashboard({ projectId, webflowConfig }: CmsImagesDashbo
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
 
   // --- Derived state ---
+  /** Row id -> the image URL the worker needs. */
+  const srcById = useMemo(
+    () => new Map(images.map((image) => [image.id, image.imageUrl])),
+    [images],
+  );
+
   const filteredImages = useMemo(() => {
     let result = images;
 
@@ -1223,10 +1230,40 @@ export function CmsImagesDashboard({ projectId, webflowConfig }: CmsImagesDashbo
           )}
 
           <div className="flex-1" />
-          <p className="text-xs text-muted-foreground">
-            Run the CLI commands above to generate ALT text &amp; compress — web preview only.
-          </p>
+
+          {/*
+            This used to say "web preview only" and hand you a command to
+            paste into a terminal. Compress now queues the same `image_apply`
+            job the Weight tab uses, so both screens go through one pipeline:
+            archive the original to Bunny, re-encode perceptually losslessly,
+            upload, repoint every CMS field that used the old file. The one
+            difference is knowledge, not capability — the Weight tab has
+            measured display widths and can resize, and an image here that
+            nobody has measured is re-encoded at its own dimensions.
+          */}
+          <Button
+            size="sm"
+            onClick={() => optimise.run([...selectedIds].map((id) => srcById.get(id)).filter((src): src is string => !!src))}
+            disabled={selectedIds.size === 0 || optimise.busy || !!optimise.job}
+          >
+            {optimise.busy || optimise.job ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {optimise.job?.status === 'running'
+              ? optimise.job.progress ?? 'Optimising…'
+              : optimise.job
+                ? 'Queued'
+                : `Optimise ${selectedIds.size || ''}`.trim()}
+          </Button>
         </div>
+
+        {optimise.online.length === 0 && selectedIds.size > 0 && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+            No worker machine is online, so this will sit in the queue until one is.
+          </p>
+        )}
 
         {imagesLoading && (
           <div className="flex items-center justify-center py-8">

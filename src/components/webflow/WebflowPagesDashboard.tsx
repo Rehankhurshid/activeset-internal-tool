@@ -775,7 +775,12 @@ export function WebflowPagesDashboard({
             className="mt-0 data-[state=inactive]:hidden"
           >
             {webflowConfig && (
-              <CmsImagesDashboard projectId={projectId} webflowConfig={webflowConfig} />
+              <CmsImagesDashboard
+                projectId={projectId}
+                webflowConfig={webflowConfig}
+                projectName={projectName}
+                userEmail={userEmail}
+              />
             )}
           </TabsContent>
 
