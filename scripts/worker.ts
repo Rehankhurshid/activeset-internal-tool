@@ -33,6 +33,7 @@ import {
 import { describeResult, runImageBudget, type ImageBudgetPayload } from '@/lib/worker/handlers/image-budget';
 import { runAltTextForProject, type AltTextPayload } from '@/lib/worker/handlers/alt-text';
 import { runAltApply, type AltApplyPayload } from '@/lib/worker/handlers/alt-apply';
+import { runWebflowAlt, type WebflowAltPayload } from '@/lib/worker/handlers/webflow-alt';
 import { loadProjectDocAdmin } from '@/lib/project-admin';
 import {
   claimNextCommand,
@@ -123,6 +124,16 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
     log(
       green('  done'),
       `${result.described} described, ${result.decorative} decorative, ${result.needsReview} to review`,
+    );
+    return result as unknown as Record<string, unknown>;
+  }
+
+  if (job.kind === 'webflow_alt') {
+    const result = await runWebflowAlt(job.projectId, job.payload as unknown as WebflowAltPayload, progress);
+    log(
+      green('  done'),
+      `${result.drafted} described, ${result.decorative} decorative, ${result.needsReview} to review ` +
+        `(${result.assetsSeen} assets, ${result.cmsSeen} CMS images seen)`,
     );
     return result as unknown as Record<string, unknown>;
   }
@@ -280,7 +291,7 @@ async function loop(options: { once?: boolean; interval?: string; kinds?: string
         ...hardware,
         model: resolveOllama().model,
         paused,
-        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply'],
+        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt'],
       });
 
       // Control before work: a restart or a pause should not wait behind a
@@ -362,13 +373,14 @@ program
   .option('--pages <n>', 'page limit')
   .option('--emit <dir>', 'where image_budget writes resized files')
   .action(async (kind: string, projectId: string, options: { pages?: string; emit?: string }) => {
-    if (kind !== 'alt_text' && kind !== 'image_budget' && kind !== 'alt_apply') {
-      console.error(red(`Unknown kind "${kind}". Use alt_text, image_budget or alt_apply.`));
+    const KINDS: WorkerJobKind[] = ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt'];
+    if (!KINDS.includes(kind as WorkerJobKind)) {
+      console.error(red(`Unknown kind "${kind}". Use one of: ${KINDS.join(', ')}.`));
       process.exit(1);
     }
     const project = await loadProjectDocAdmin(projectId);
     const job = await enqueueJob({
-      kind,
+      kind: kind as WorkerJobKind,
       projectId,
       projectName: project?.name,
       payload: {

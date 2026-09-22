@@ -25,26 +25,39 @@ import {
 import { RefreshCw, Search, Wand2, Image as ImageIcon, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useWebflowAssets } from '@/hooks/useWebflowAssets';
-import { WebflowConfig, WebflowPage } from '@/types/webflow';
+import { useAltDrafting } from '@/modules/site-monitoring/ui/hooks/useAltDrafting';
+import { WebflowConfig } from '@/types/webflow';
 
 interface WebflowAssetsDashboardProps {
   projectId: string;
+  projectName?: string;
+  userEmail?: string;
   webflowConfig: WebflowConfig;
-  pages: WebflowPage[];
 }
 
 type AssetFilter = 'all' | 'missing-alt' | 'has-alt';
 
-export function WebflowAssetsDashboard({ projectId, webflowConfig, pages }: WebflowAssetsDashboardProps) {
-  const { assets, folders, loading, error, fetchAssets, bulkUpdateAssets, generateAltSuggestions } =
+export function WebflowAssetsDashboard({
+  projectId,
+  projectName,
+  userEmail,
+  webflowConfig,
+}: WebflowAssetsDashboardProps) {
+  const { assets, folders, loading, error, fetchAssets, bulkUpdateAssets } =
     useWebflowAssets(projectId, webflowConfig);
+
+  // Drafting is shared with the Audit tab — one classifier, one draft store —
+  // and it runs on a worker machine. What this replaced called Ollama on
+  // localhost from a Vercel function, so it never worked in production.
+  const drafting = useAltDrafting(projectId, projectName, userEmail ?? 'team');
+  const { draftFor } = drafting;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [folderId, setFolderId] = useState('all');
   const [filter, setFilter] = useState<AssetFilter>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [altDrafts, setAltDrafts] = useState<Record<string, string>>({});
-  const [isGenerating, setIsGenerating] = useState(false);
+
   const [isSaving, setIsSaving] = useState(false);
 
   const shouldIgnoreMissingAlt = (asset: { displayName: string; originalFileName: string }) => {
@@ -75,12 +88,14 @@ export function WebflowAssetsDashboard({ projectId, webflowConfig, pages }: Webf
       const next = { ...previous };
       for (const asset of assets) {
         if (next[asset.id] === undefined) {
-          next[asset.id] = asset.altText || '';
+          const drafted = draftFor(asset.hostedUrl);
+          const suggested = drafted?.kind === 'decorative' ? '' : drafted?.alt;
+          next[asset.id] = asset.altText || suggested || '';
         }
       }
       return next;
     });
-  }, [assets]);
+  }, [assets, drafting.drafts, draftFor]); // re-seed when a drafting run lands
 
   const folderByAssetId = useMemo(() => {
     const map = new Map<string, string>();
@@ -210,67 +225,17 @@ export function WebflowAssetsDashboard({ projectId, webflowConfig, pages }: Webf
     }
   };
 
-  const runAIForMissingAlt = async () => {
-    setIsGenerating(true);
-    try {
-      const missingTargets = assets.filter(
-        (asset) => !(asset.altText || '').trim() && !shouldIgnoreMissingAlt(asset)
-      );
-      const suggestions = await generateAltSuggestions(missingTargets, pages, 'missing_only');
-      if (!suggestions.length) {
-        toast.info('No missing ALT text found');
-        return;
-      }
-
-      const updates = suggestions
-        .filter((suggestion) => suggestion.altText !== undefined)
-        .map((suggestion) => ({
-          assetId: suggestion.id,
-          updates: { altText: suggestion.altText },
-        }));
-
-      const result = await bulkUpdateAssets(updates);
-      if (result.success > 0) {
-        toast.success(`Filled ALT text for ${result.success} assets`);
-      }
-      if (result.failed > 0) {
-        toast.error(`Failed on ${result.failed} assets`);
-      }
-    } catch (generationError) {
-      const message = generationError instanceof Error ? generationError.message : 'Failed to generate ALT text';
-      toast.error(message);
-    } finally {
-      setIsGenerating(false);
-    }
+  const draftMissingAlt = async () => {
+    await drafting.draft({ scope: 'missing', sources: ['assets'] });
   };
 
-  const runAIForSelected = async () => {
-    const selectedAssets = assets.filter((asset) => selectedIds.has(asset.id));
-
-    if (!selectedAssets.length) {
+  const draftSelected = async () => {
+    const srcs = assets.filter((asset) => selectedIds.has(asset.id)).map((asset) => asset.hostedUrl);
+    if (srcs.length === 0) {
       toast.info('Select at least one image first');
       return;
     }
-
-    setIsGenerating(true);
-    try {
-      const suggestions = await generateAltSuggestions(selectedAssets, pages, 'all');
-
-      setAltDrafts((previous) => {
-        const next = { ...previous };
-        for (const suggestion of suggestions) {
-          next[suggestion.id] = suggestion.altText;
-        }
-        return next;
-      });
-
-      toast.success(`Generated ALT suggestions for ${suggestions.length} selected assets`);
-    } catch (generationError) {
-      const message = generationError instanceof Error ? generationError.message : 'Failed to generate ALT text';
-      toast.error(message);
-    } finally {
-      setIsGenerating(false);
-    }
+    await drafting.draft({ srcs, sources: ['assets'] });
   };
 
   return (
@@ -378,19 +343,28 @@ export function WebflowAssetsDashboard({ projectId, webflowConfig, pages }: Webf
           <Button
             variant="default"
             size="sm"
-            onClick={runAIForMissingAlt}
-            disabled={isGenerating || loading || missingAltCount === 0}
+            onClick={draftMissingAlt}
+            disabled={drafting.busy || !!drafting.job || loading || missingAltCount === 0}
+            title={
+              drafting.online.length > 0
+                ? `Runs on ${drafting.online[0].workerId}`
+                : 'No worker machine is online — the job waits until one is'
+            }
           >
-            <Wand2 className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
-            One-Click Fill Missing ALT
+            <Wand2 className={`h-4 w-4 mr-2 ${drafting.job ? 'animate-spin' : ''}`} />
+            {drafting.job
+              ? drafting.job.progress || 'Drafting…'
+              : drafting.online.length > 0
+                ? `Draft ${missingAltCount} on ${drafting.online[0].workerId}`
+                : `Draft ${missingAltCount} missing`}
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            onClick={runAIForSelected}
-            disabled={isGenerating || loading || selectedIds.size === 0}
+            onClick={draftSelected}
+            disabled={drafting.busy || !!drafting.job || loading || selectedIds.size === 0}
           >
-            Generate for Selected
+            Draft for Selected
           </Button>
           <Button
             size="sm"

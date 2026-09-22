@@ -72,6 +72,8 @@ import { SEOVariableRenderer } from './SEOVariableRenderer';
 
 interface WebflowPagesDashboardProps {
   projectId: string;
+  projectName?: string;
+  userEmail?: string;
   webflowConfig?: WebflowConfig;
   onSaveConfig: (config: WebflowConfigInput) => Promise<void>;
   onRemoveConfig: () => Promise<void>;
@@ -89,6 +91,8 @@ import { Switch } from '@/components/ui/switch';
 
 export function WebflowPagesDashboard({
   projectId,
+  projectName,
+  userEmail,
   webflowConfig,
   onSaveConfig,
   onRemoveConfig,
@@ -758,8 +762,9 @@ export function WebflowPagesDashboard({
             {webflowConfig && (
               <WebflowAssetsDashboard
                 projectId={projectId}
+                projectName={projectName}
+                userEmail={userEmail}
                 webflowConfig={webflowConfig}
-                pages={pages}
               />
             )}
           </TabsContent>

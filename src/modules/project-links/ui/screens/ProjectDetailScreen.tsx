@@ -666,6 +666,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     <TabsContent value="webflow" className="mt-4 sm:mt-6">
                         <WebflowPagesDashboard
                             projectId={project.id}
+                            projectName={project.name}
+                            userEmail={user.email ?? undefined}
                             webflowConfig={project.webflowConfig}
                             onSaveConfig={handleSaveWebflowConfig}
                             onRemoveConfig={handleRemoveWebflowConfig}
