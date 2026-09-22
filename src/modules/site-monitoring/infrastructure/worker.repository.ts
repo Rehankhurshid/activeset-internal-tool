@@ -22,7 +22,7 @@ const WORKER_JOBS = 'worker_jobs';
 const WORKERS = 'workers';
 const IMAGE_BUDGET = 'image_budget';
 
-export type WorkerJobKind = 'alt_text' | 'image_budget';
+export type WorkerJobKind = 'alt_text' | 'image_budget' | 'alt_apply';
 export type WorkerJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface WorkerJobDoc {

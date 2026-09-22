@@ -37,6 +37,18 @@ export async function loadAllProjectDocsAdmin(): Promise<Project[]> {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Omit<Project, 'id'>) }) as Project);
 }
 
+/**
+ * The project's Webflow token. `services/projectSecrets` is `server-only`, so
+ * the worker cannot import it; the secret is read directly here instead. It
+ * never leaves the machine that reads it.
+ */
+export async function getWebflowTokenAdmin(projectId: string): Promise<string | null> {
+  if (!hasFirebaseAdminCredentials) throw new AdminCredentialsMissingError();
+  const snapshot = await adminDb.collection('project_secrets').doc(projectId).get();
+  if (!snapshot.exists) return null;
+  return (snapshot.data() as { webflowApiToken?: string } | undefined)?.webflowApiToken ?? null;
+}
+
 export function linkOf(project: Project, linkId: string): ProjectLink | undefined {
   return (project.links ?? []).find((link) => link.id === linkId);
 }

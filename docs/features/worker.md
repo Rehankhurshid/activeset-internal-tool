@@ -111,6 +111,7 @@ not the 32B one** — the 3070 Ti sits at about 7.0 GB of 8 GB with
 |---|---|
 | `alt_text` | Reads the project's open alt-text findings, re-fetches those pages for context, classifies every image and drafts its alt. Results go to `alt_suggestions` and fill the boxes on the Alt text tab. See [alt-text.md](alt-text.md). |
 | `image_budget` | Opens each page in Chrome at 1440, 768 and 390 px, measures how wide every image is actually drawn, fetches each file, and works out what it should weigh. Results go to `image_budget` and drive the Weight tab. |
+| `alt_apply` | Writes chosen drafts back to Webflow in bulk, and optionally publishes. Two destinations: a site asset takes its alt through the Assets API, a CMS image through its collection item's field. On Canopy eleven of eleven were CMS, so the asset path alone would have applied nothing. |
 
 Both are queued from the Audit tab — the Alt text tab's "Draft on `<machine>`"
 button and the Weight tab's "Measure sizes" — or by hand:

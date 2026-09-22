@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -61,6 +62,11 @@ export interface AltTextTabProps {
   onPublishSite?: () => Promise<void>;
   /** Drafts from the local classifier, by image fingerprint. Never applied on their own. */
   suggestions?: Map<string, AltSuggestionDoc>;
+  /** Write these drafts to Webflow in one go, optionally publishing after. */
+  onApplySelected?: (fingerprints: string[], publish: boolean) => Promise<void>;
+  /** An apply job already queued or running. */
+  applyState?: 'queued' | 'running';
+  applyProgress?: string;
   /** Needed only to print the command that generates the drafts. */
   projectId?: string;
   /** Name of an online worker machine, when there is one. */
@@ -311,12 +317,16 @@ function AltRow({
   onVerify,
   verifying,
   assetId,
+  selected,
+  onToggleSelected,
 }: {
   finding: AltFinding;
   suggestion?: AltSuggestionDoc;
   isReadOnly: boolean;
   canWriteWebflow: boolean;
   assetId?: string;
+  selected?: boolean;
+  onToggleSelected?: (fingerprint: string) => void;
   onSaveAlt: AltTextTabProps['onSaveAlt'];
   onMarkFixed: AltTextTabProps['onMarkFixed'];
   onMarkDecorative: AltTextTabProps['onMarkDecorative'];
@@ -352,6 +362,14 @@ function AltRow({
   return (
     <li className="px-3 py-3 sm:px-4">
       <div className="flex gap-3">
+        {onToggleSelected && open && (
+          <Checkbox
+            checked={!!selected}
+            onCheckedChange={() => onToggleSelected(finding.fingerprint)}
+            className="mt-1 shrink-0"
+            aria-label={`Select ${name}`}
+          />
+        )}
         <Thumb src={finding.src} alt={name} />
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
@@ -537,6 +555,10 @@ export function AltTextTab(props: AltTextTabProps) {
   const { findings, isReadOnly, scanAll, onPublishSite, suggestions, projectId } = props;
   const [query, setQuery] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [publishAfter, setPublishAfter] = useState(true);
+  const [applying, setApplying] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -559,6 +581,35 @@ export function AltTextTab(props: AltTextTabProps) {
 
   const pagesTouched = useMemo(() => new Set(groups.open.flatMap((f) => f.pages.map((p) => p.pageId))).size, [groups.open]);
 
+  // Only a row with a draft is worth selecting; there is nothing to apply otherwise.
+  const selectable = useMemo(
+    () =>
+      new Set(
+        groups.open
+          .filter((f) => {
+            const suggestion = suggestions?.get(f.fingerprint);
+            return !!suggestion && (!!suggestion.alt || suggestion.kind === 'decorative');
+          })
+          .map((f) => f.fingerprint),
+      ),
+    [groups.open, suggestions],
+  );
+
+  const toggleOne = (fingerprint: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(fingerprint)) next.delete(fingerprint);
+      else next.add(fingerprint);
+      return next;
+    });
+
+  const selectMany = (fingerprints: string[]) => setSelected(new Set(fingerprints));
+
+  const confident = useMemo(
+    () => [...selectable].filter((f) => !suggestions?.get(f)?.needsReview),
+    [selectable, suggestions],
+  );
+
   const rowProps = {
     isReadOnly,
     canWriteWebflow: props.canWriteWebflow,
@@ -574,6 +625,8 @@ export function AltTextTab(props: AltTextTabProps) {
       finding={f}
       assetId={props.assetIds?.[f.src]}
       suggestion={props.suggestions?.get(f.fingerprint)}
+      selected={selected.has(f.fingerprint)}
+      onToggleSelected={selectable.has(f.fingerprint) ? toggleOne : undefined}
       verifying={props.verifyingFingerprints.has(f.fingerprint)}
       {...rowProps}
     />
@@ -627,6 +680,86 @@ export function AltTextTab(props: AltTextTabProps) {
           </div>
         ) : (
           <>
+            {!isReadOnly && props.onApplySelected && selectable.size > 0 && (
+              <div className="mx-3 sm:mx-4 my-3 rounded-md border bg-muted/30 px-3 py-2.5 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">
+                    {selected.size > 0 ? `${selected.size} selected` : `${selectable.size} drafts ready to apply`}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 ml-auto">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => selectMany([...selectable])}>
+                      All ({selectable.size})
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      disabled={confident.length === 0}
+                      title="Everything the classifier was confident about, skipping the rows it flagged"
+                      onClick={() => selectMany(confident)}
+                    >
+                      Unflagged ({confident.length})
+                    </Button>
+                    {selected.size > 0 && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelected(new Set())}>
+                        None
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {selected.size > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Checkbox checked={publishAfter} onCheckedChange={(v) => setPublishAfter(!!v)} />
+                      Publish after writing
+                    </label>
+                    <Button
+                      size="sm"
+                      className="h-8 ml-auto"
+                      variant={confirming ? 'destructive' : 'default'}
+                      disabled={applying || props.applyState !== undefined}
+                      onClick={async () => {
+                        if (!confirming) {
+                          setConfirming(true);
+                          return;
+                        }
+                        setConfirming(false);
+                        setApplying(true);
+                        try {
+                          await props.onApplySelected?.([...selected], publishAfter);
+                          setSelected(new Set());
+                        } finally {
+                          setApplying(false);
+                        }
+                      }}
+                    >
+                      {applying || props.applyState ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Upload className="h-3.5 w-3.5 mr-1.5" />}
+                      {props.applyState === 'running'
+                        ? props.applyProgress || 'Applying…'
+                        : props.applyState === 'queued'
+                          ? 'Queued'
+                          : confirming
+                            ? `Write ${selected.size} to the live site?`
+                            : `Apply ${selected.size}`}
+                    </Button>
+                    {confirming && (
+                      <Button size="sm" variant="ghost" className="h-8" onClick={() => setConfirming(false)}>
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {confirming && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    This writes alt text to {selected.size} image{selected.size === 1 ? '' : 's'} on the client&apos;s
+                    site{publishAfter ? ' and publishes the changed items' : ', without publishing'}.
+                  </p>
+                )}
+              </div>
+            )}
+
             {!isReadOnly && groups.open.length > 0 && (
               <DraftPrompt
                 projectId={projectId}

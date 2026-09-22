@@ -1779,6 +1779,9 @@ export function WebsiteAuditDashboard({
   const altJob = worker.jobs.find(
     (job) => job.kind === 'alt_text' && (job.status === 'queued' || job.status === 'running'),
   )
+  const applyJob = worker.jobs.find(
+    (job) => job.kind === 'alt_apply' && (job.status === 'queued' || job.status === 'running'),
+  )
 
   return (
     <div className="space-y-3 text-foreground">
@@ -2485,6 +2488,14 @@ export function WebsiteAuditDashboard({
             onVerify={handleVerifyAlt}
             verifyingFingerprints={verifyingFingerprints}
             assetIds={assetIndex.resolved}
+            onApplySelected={
+              webflowConfig?.hasApiToken
+                ? (fingerprints, publish) =>
+                    worker.enqueue('alt_apply', { fingerprints, publish, by: userEmail }, userEmail)
+                : undefined
+            }
+            applyState={applyJob?.status === 'running' ? 'running' : applyJob ? 'queued' : undefined}
+            applyProgress={applyJob?.progress}
             suggestions={altSuggestions}
             projectId={projectId}
             workerName={worker.online[0]?.workerId}

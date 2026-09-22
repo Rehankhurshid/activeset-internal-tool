@@ -32,6 +32,7 @@ import {
 } from '@/lib/worker/queue';
 import { describeResult, runImageBudget, type ImageBudgetPayload } from '@/lib/worker/handlers/image-budget';
 import { runAltTextForProject, type AltTextPayload } from '@/lib/worker/handlers/alt-text';
+import { runAltApply, type AltApplyPayload } from '@/lib/worker/handlers/alt-apply';
 import { loadProjectDocAdmin } from '@/lib/project-admin';
 import {
   claimNextCommand,
@@ -122,6 +123,17 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
     log(
       green('  done'),
       `${result.described} described, ${result.decorative} decorative, ${result.needsReview} to review`,
+    );
+    return result as unknown as Record<string, unknown>;
+  }
+
+  if (job.kind === 'alt_apply') {
+    const result = await runAltApply(job.projectId, job.payload as unknown as AltApplyPayload, progress);
+    log(
+      green('  done'),
+      `${result.appliedToCms} CMS fields, ${result.appliedToAssets} assets, ${result.published} published` +
+        (result.skipped.length ? `, ${result.skipped.length} skipped` : '') +
+        (result.failed.length ? `, ${red(String(result.failed.length) + ' failed')}` : ''),
     );
     return result as unknown as Record<string, unknown>;
   }
@@ -268,7 +280,7 @@ async function loop(options: { once?: boolean; interval?: string; kinds?: string
         ...hardware,
         model: resolveOllama().model,
         paused,
-        kinds: kinds ?? ['alt_text', 'image_budget'],
+        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply'],
       });
 
       // Control before work: a restart or a pause should not wait behind a
@@ -350,8 +362,8 @@ program
   .option('--pages <n>', 'page limit')
   .option('--emit <dir>', 'where image_budget writes resized files')
   .action(async (kind: string, projectId: string, options: { pages?: string; emit?: string }) => {
-    if (kind !== 'alt_text' && kind !== 'image_budget') {
-      console.error(red(`Unknown kind "${kind}". Use alt_text or image_budget.`));
+    if (kind !== 'alt_text' && kind !== 'image_budget' && kind !== 'alt_apply') {
+      console.error(red(`Unknown kind "${kind}". Use alt_text, image_budget or alt_apply.`));
       process.exit(1);
     }
     const project = await loadProjectDocAdmin(projectId);
