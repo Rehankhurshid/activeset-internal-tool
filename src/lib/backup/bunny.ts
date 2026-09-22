@@ -101,3 +101,44 @@ export async function putToBunny(
     url: config.cdnHost ? `https://${config.cdnHost}/${path}` : undefined,
   };
 }
+
+/**
+ * Prove the credentials work, rather than that they are present.
+ *
+ * "Configured" and "working" are different claims, and the gap between them is
+ * where a backup silently is not one: a wrong key fails only at the moment you
+ * are relying on it, and a pull zone attached to the wrong storage zone writes
+ * the bytes perfectly well while recording a URL that 404s. Both are worth
+ * finding out about now rather than after a hundred images have been swapped.
+ *
+ * Writes one small file to a fixed path and overwrites it each time, so the
+ * probe never accumulates.
+ */
+export async function probeBunny(config: BunnyConfig): Promise<string> {
+  const path = '.activeset-probe';
+  const body = Buffer.from(`probe ${new Date().toISOString()}\n`);
+
+  try {
+    await putToBunny(config, path, body, 'text/plain');
+  } catch (error) {
+    return `write FAILED — ${error instanceof Error ? error.message : String(error)}`;
+  }
+
+  if (!config.cdnHost) return 'write ok (no BUNNY_CDN_HOST, so archives are write-only)';
+
+  try {
+    const res = await fetch(`https://${config.cdnHost}/${path}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      return `write ok, but read back ${res.status} from ${config.cdnHost} — check the pull zone points at ${config.zone}`;
+    }
+    const text = await res.text();
+    return text.startsWith('probe ')
+      ? 'write and read back ok'
+      : `write ok, but ${config.cdnHost} served something else — check the pull zone points at ${config.zone}`;
+  } catch (error) {
+    return `write ok, but could not read back from ${config.cdnHost} — ${error instanceof Error ? error.message : String(error)}`;
+  }
+}

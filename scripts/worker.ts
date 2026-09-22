@@ -21,7 +21,7 @@ import path from 'node:path';
 import { checkOllama, resolveOllama } from '@/lib/alt-text';
 import { findBrowserExecutable } from '@/lib/image-budget/browser';
 import { formatBytes } from '@/modules/site-monitoring/domain/image-budget';
-import { bunnyConfig } from '@/lib/backup/bunny';
+import { bunnyConfig, probeBunny } from '@/lib/backup/bunny';
 import {
   claimNextJob,
   completeJob,
@@ -207,10 +207,13 @@ program.name('worker').description('Runs alt text and image measurement on this 
  * so it belongs next to the other "can this machine do the job" checks rather
  * than being discovered when someone presses the button.
  */
-function bunnyLine(): string {
+async function bunnyLine(): Promise<string> {
   const config = bunnyConfig();
   if (!config) return 'Backups: not configured — image_apply will refuse to run';
-  return `Backups: ${config.zone} at ${config.host}${config.cdnHost ? ` (readable at ${config.cdnHost})` : ' — no BUNNY_CDN_HOST, so archives are write-only'}`;
+  // A round trip, not a presence check: a wrong key or a pull zone pointed at
+  // the wrong storage zone both look exactly like a working configuration.
+  const probe = await probeBunny(config);
+  return `Backups: ${config.zone} at ${config.host} — ${probe}`;
 }
 
 async function residentLine(): Promise<string> {
@@ -242,7 +245,7 @@ async function buildDoctorReport(): Promise<string> {
     `Model: ${model} (recommended ${recommendation.model} — ${recommendation.why})`,
     health.ok ? `Ollama ready at ${host}` : `Ollama: ${health.problem}`,
     health.models.length ? `Installed: ${health.models.join(', ')}` : '',
-    bunnyLine(),
+    await bunnyLine(),
     await residentLine(),
     `Keep-alive: ${resolveOllama().keepAlive} after the last image`,
     browser ? `Browser: ${browser}` : 'No Chrome or Edge found',
@@ -285,7 +288,14 @@ program
     console.log();
     console.log(bold('Backups'));
     const bunny = bunnyConfig();
-    console.log(bunny ? `  ${green(bunnyLine().replace('Backups: ', ''))}` : `  ${yellow('not configured')} ${dim('— image_apply will refuse to run without BUNNY_STORAGE_ZONE and BUNNY_STORAGE_KEY')}`);
+    if (!bunny) {
+      console.log(`  ${yellow('not configured')} ${dim('— image_apply will refuse to run without BUNNY_STORAGE_ZONE and BUNNY_STORAGE_KEY')}`);
+    } else {
+      const probe = await probeBunny(bunny);
+      const ok = probe.startsWith('write and read back ok') || probe.startsWith('write ok (');
+      console.log(`  ${bunny.zone} at ${bunny.host}`);
+      console.log(ok ? `  ${green(probe)}` : `  ${red(probe)}`);
+    }
 
     console.log();
     console.log(bold('Browser'));
