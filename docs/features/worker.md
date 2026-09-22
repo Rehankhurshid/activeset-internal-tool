@@ -84,7 +84,7 @@ account runs the service. The 5.6 GB pull took about three minutes.
 Note there is deliberately no `OLLAMA_KEEP_ALIVE` here. It would be ignored:
 this app sends `keep_alive` in every request body, and the API parameter beats
 the server's environment. Set it on the *worker* service instead — see
-[Sharing the machine](#sharing-the-machine).
+[Two ways to use the machine](#two-ways-to-use-the-machine).
 
 **The worker service**, with NSSM rather than Task Scheduler because the
 `restart` and `update` commands exit the process and depend on being brought
@@ -110,55 +110,71 @@ not the 32B one** — the 3070 Ti sits at about 7.0 GB of 8 GB with
 `qwen2.5vl:7b` loaded, which leaves enough for Chrome. Only reach for
 `qwen2.5vl:32b` on a card with 20 GB or more.
 
-## Sharing the machine
+## Two ways to use the machine
 
-Goliath is also a desktop. The thing that makes it unusable while the worker
-is around is **not CPU — it is VRAM**: the vision model holds about 7 GB of
-the 8 GB card, and since driver 536.40 an over-subscribed card silently spills
-into system RAM rather than erroring, so the symptom is stutter rather than a
-clean failure.
+Goliath is a resource most of the time and a desktop some of the time. Its
+**default state is "ready"**: nothing needs opening, unlocking or logging into.
+Both halves are Windows services set to start on boot, the worker polls
+Firestore every ten seconds whether or not anyone is signed in, and Chrome
+launches headless. Powered on and on the network is the whole requirement.
 
-Pausing the worker does **not** give the card back. Pause stops it claiming
-jobs; the model stays resident until `keep_alive` expires. Three levers, in
-the order worth reaching for them:
+The thing that makes it unusable *as a desktop* while the worker is around is
+**not CPU — it is VRAM**: the vision model holds about 7 GB of the 8 GB card,
+and since driver 536.40 an over-subscribed card silently spills into system
+RAM rather than erroring, so the symptom is stutter rather than a clean
+failure. Pausing the worker does **not** give the card back; pause stops it
+claiming jobs and the model stays resident until `keep_alive` expires.
 
-**1. "Free the GPU", in the worker panel.** Asks Ollama to unload whatever
-`/api/ps` reports as loaded, by requesting it with `keep_alive: 0`. Takes a
-second or two, needs no restart, and the next job reloads the model by itself.
-It works while the worker is paused, because commands are claimed before the
-paused check. `doctor` reports what is resident, so you can check from your
-phone before sitting down at the machine.
+So the two modes are handled by one button rather than by a setting that has
+to be right for both:
 
-**2. Shorten how long the model lingers.** The default is 15 minutes after the
-last image, which is right for a batch and wrong for a machine someone shares.
-`OLLAMA_KEEP_ALIVE` on the **worker** service — not `OllamaServe` — changes it:
+**Sitting down at it: press "Free the GPU" in the worker panel.** It asks
+Ollama to unload whatever `/api/ps` reports as loaded, by requesting it with
+`keep_alive: 0`. A second or two, no restart, and the next job reloads the
+model by itself. It works while the worker is paused, because commands are
+claimed before the paused check, and `doctor` reports what is resident so you
+can check from your phone first.
+
+**Leaving it as a resource: nothing.** Because the button exists, the model
+can stay warm for a long time without costing anything — a *short* keep-alive
+would only make the machine pay a reload between every pair of jobs more than
+a couple of minutes apart. It is set to an hour: warm through a working
+session, cold overnight.
 
 ```powershell
-nssm set ActiveSetWorker AppEnvironmentExtra +OLLAMA_KEEP_ALIVE=2m
+nssm set ActiveSetWorker AppEnvironmentExtra +OLLAMA_KEEP_ALIVE=1h
 nssm restart ActiveSetWorker
 ```
 
-The `+` prefix matters. `AppEnvironmentExtra` is a single `REG_MULTI_SZ`, so
-the unprefixed form **replaces the whole block** and would drop
-`WORKER_EMIT_DIR`. `+KEY=VALUE` upserts one pair and leaves the rest alone;
-`-KEY` removes one. Keep it to one prefixed pair per call.
+This goes on the **worker** service, not `OllamaServe`: the app sends
+`keep_alive` in every request body, and the API parameter beats the server's
+environment. The `+` prefix matters too — `AppEnvironmentExtra` is a single
+`REG_MULTI_SZ`, so the unprefixed form **replaces the whole block** and would
+drop `WORKER_EMIT_DIR`. `+KEY=VALUE` upserts one pair; `-KEY` removes one.
+Keep it to one prefixed pair per call.
 
-Do not set this below about a minute: reloading a 6 GB model per image is the
-slowest thing this pipeline can do.
+### Settings that suit both modes
 
-**3. Make the CPU work polite.** One setting, no code, and Windows propagates
-it to `npm` → `node` → the headless Chrome the measuring job spawns:
+**`AppPriority BELOW_NORMAL_PRIORITY_CLASS`** on the worker. Priority only
+matters under contention: with nothing else running, Windows gives the process
+all the CPU regardless, so this costs a dedicated box nothing — and when
+someone does sit down, `npm` → `node` → headless Chrome all inherit it and
+yield. It matters most for `image_budget`, the heaviest job on the box.
 
-```powershell
-nssm set ActiveSetWorker AppPriority BELOW_NORMAL_PRIORITY_CLASS
-nssm restart ActiveSetWorker
-```
+**High performance power plan.** Balanced parks cores and powers down PCIe
+links between bursts, which is exactly the wrong shape for a machine whose
+work arrives as sustained batches. `powercfg /setactive
+8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c`; on Windows 11 installs that hide the
+plan, `powercfg -duplicatescheme` with the same GUID brings it back.
 
-This matters most for `image_budget`, which is the heaviest job on the box —
-one Chrome, every page at three viewports, then six images fetched and decoded
-at a time.
+**Windows Update active hours 08:00–02:00.** Automatic restarts then land
+between two and eight in the morning. A restart mid-job is survivable — the
+job is reclaimed after five minutes without a heartbeat and both services
+auto-start — but there is no reason to pay for a re-run in the middle of a
+batch. Sleep and hibernate are already off (`powercfg /change
+standby-timeout-ac 0`).
 
-Two things deliberately **not** done, so nobody re-derives them:
+### Deliberately not done, so nobody re-derives them
 
 - **CPU affinity pinning to the E-cores.** The 12600KF's efficiency cores are
   conventionally logical CPUs 12–15, but that was never confirmed on this
@@ -168,6 +184,9 @@ Two things deliberately **not** done, so nobody re-derives them:
 - **`OLLAMA_MAX_LOADED_MODELS=1`.** Near a no-op on an 8 GB card: the
   scheduler already refuses to co-load a model that does not fit, and unloads
   idle ones to make room. Keep-alive is the knob that holds the card.
+- **A scheduled "quiet hours" mode.** With "Free the GPU" a press away, a
+  timer that guesses when someone is at the desk solves a problem the button
+  already solves, and gets it wrong on every irregular day.
 
 ## What it does
 
