@@ -72,6 +72,7 @@ Feature documentation is located in `/docs/features/`:
 | Audit Dashboard | [docs/features/audit-dashboard.md](../docs/features/audit-dashboard.md) |
 | Webflow Pages | [docs/features/webflow-pages.md](../docs/features/webflow-pages.md) |
 | Alt text (local Ollama) | [docs/features/alt-text.md](../docs/features/alt-text.md) |
+| Worker machine (alt text + image weight) | [docs/features/worker.md](../docs/features/worker.md) |
 | Proposals | [docs/features/proposal.md](../docs/features/proposal.md) |
 | Settings Module | [docs/features/settings.md](../docs/features/settings.md) |
 
@@ -93,7 +94,10 @@ API documentation is in `/docs/misc/`:
 | `projects/{id}/portal_views` | Server-only subcollection. One row per counted client portal open |
 | `projects/{id}/pages` | Website delivery. One document per page being built (see docs/features/website-delivery.md) |
 | `projects/{id}/audit_decisions` | Team decisions on audit findings (decorative / ignored / fixed / verified), keyed by finding fingerprint (see docs/plans/audit-redesign.md) |
-| `projects/{id}/alt_suggestions` | Alt text drafted locally by Ollama via `npm run alt project <id>`; read-only in the app (see docs/features/alt-text.md) |
+| `projects/{id}/alt_suggestions` | Alt text drafted by Ollama, locally or on the worker; read-only in the app (see docs/features/alt-text.md) |
+| `projects/{id}/image_budget` | What each image weighs against the width the page displays it at, measured in a real browser by the worker (see docs/features/worker.md) |
+| `worker_jobs` | Queue for the always-on worker machine. The app queues, the worker claims and completes |
+| `workers` | One doc per worker machine, heartbeated so the app can show who is online |
 
 ## Common Patterns
 

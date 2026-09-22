@@ -19,6 +19,8 @@ import {
 } from "../../domain/audit-findings"
 import { useAuditDecisions } from "../hooks/useAuditDecisions"
 import { useAltSuggestions } from "../hooks/useAltSuggestions"
+import { useWorker } from "../hooks/useWorker"
+import { WeightTab } from "../components/audit/WeightTab"
 import { AuditHeader, type FixTarget } from "../components/audit/AuditHeader"
 import { AltTextTab } from "../components/audit/AltTextTab"
 import { LinksTab } from "../components/audit/LinksTab"
@@ -58,6 +60,7 @@ import {
   SlidersHorizontal,
   Square,
   ArrowUpDown,
+  Gauge,
   ImageIcon,
   LinkIcon,
 } from "lucide-react"
@@ -124,7 +127,7 @@ interface CompactImageItem {
 }
 
 const ISSUE_STATUSES = new Set(['Blocked', 'Scan failed', 'Fix needed', 'Template fix pending', 'Content changed', 'Tech-only change']);
-type AuditTab = 'pages' | 'alt' | 'links'
+type AuditTab = 'pages' | 'alt' | 'links' | 'weight'
 
 const getImageFingerprint = (rawSrc: string): string => {
   const src = rawSrc.trim()
@@ -234,6 +237,7 @@ export function WebsiteAuditDashboard({
   const [verifyingFingerprints, setVerifyingFingerprints] = useState<Set<string>>(new Set())
   const { decisions, record: recordDecision, clear: clearDecision } = useAuditDecisions(projectId, !isReadOnly)
   const altSuggestions = useAltSuggestions(projectId, !isReadOnly)
+  const worker = useWorker(projectId, undefined, !isReadOnly)
   const [isScanningAllImages, setIsScanningAllImages] = useState(false)
   const [imageScanProgress, setImageScanProgress] = useState({
     current: 0,
@@ -1755,6 +1759,10 @@ export function WebsiteAuditDashboard({
 
   const openAltCount = findings.alt.filter((f) => f.state === 'open' || f.state === 'regressed').length
   const openLinkCount = findings.links.filter((f) => f.state === 'open').length
+  const oversizedCount = worker.weight.filter((f) => f.verdict === 'oversized' && f.worthDoing).length
+  const altJob = worker.jobs.find(
+    (job) => job.kind === 'alt_text' && (job.status === 'queued' || job.status === 'running'),
+  )
 
   return (
     <div className="space-y-3 text-foreground">
@@ -1812,7 +1820,7 @@ export function WebsiteAuditDashboard({
       <Tabs
         value={activeAuditTab}
         onValueChange={(value) => {
-          if (value === "pages" || value === "alt" || value === "links") {
+          if (value === "pages" || value === "alt" || value === "links" || value === "weight") {
             setActiveAuditTab(value)
             if (value !== "pages") {
               setSelectedPage(null)
@@ -1837,6 +1845,13 @@ export function WebsiteAuditDashboard({
               <LinkIcon className="h-4 w-4" />
               <span>Links</span>
               <span className="text-xs text-muted-foreground tabular-nums">{openLinkCount}</span>
+            </TabsTrigger>
+            <TabsTrigger value="weight" className="gap-2 flex-1 sm:flex-none">
+              <Gauge className="h-4 w-4" />
+              <span>Weight</span>
+              {oversizedCount > 0 && (
+                <span className="text-xs text-muted-foreground tabular-nums">{oversizedCount}</span>
+              )}
             </TabsTrigger>
           </TabsList>
           <p className="text-xs text-muted-foreground tabular-nums">
@@ -2455,6 +2470,14 @@ export function WebsiteAuditDashboard({
             verifyingFingerprints={verifyingFingerprints}
             suggestions={altSuggestions}
             projectId={projectId}
+            workerName={worker.online[0]?.workerId}
+            onQueueDrafts={
+              worker.online.length > 0 || worker.workers.length > 0
+                ? () => worker.enqueue('alt_text', { pageLimit: 40 }, userEmail)
+                : undefined
+            }
+            draftJobState={altJob?.status === 'running' ? 'running' : altJob ? 'queued' : undefined}
+            draftJobProgress={altJob?.progress}
             onPublishSite={canWriteWebflow ? handlePublishSite : undefined}
             scanAll={{
               running: isScanningAllImages,
@@ -2465,6 +2488,18 @@ export function WebsiteAuditDashboard({
               cancel: handleCancelBulkImageScan,
               disabled: links.length === 0,
             }}
+          />
+        </TabsContent>
+
+        <TabsContent value="weight" className="mt-0">
+          <WeightTab
+            findings={worker.weight}
+            isReadOnly={isReadOnly}
+            workers={worker.workers}
+            online={worker.online}
+            activeJob={worker.activeJob}
+            lastRun={worker.lastDone('image_budget')}
+            onMeasure={() => worker.enqueue('image_budget', { limit: 40 }, userEmail)}
           />
         </TabsContent>
 

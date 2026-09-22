@@ -56,6 +56,12 @@ export interface AltTextTabProps {
   suggestions?: Map<string, AltSuggestionDoc>;
   /** Needed only to print the command that generates the drafts. */
   projectId?: string;
+  /** Name of an online worker machine, when there is one. */
+  workerName?: string;
+  /** Hand the job to the worker instead of running it by hand. */
+  onQueueDrafts?: () => Promise<void>;
+  draftJobState?: 'queued' | 'running';
+  draftJobProgress?: string;
   scanAll: {
     running: boolean;
     current: number;
@@ -167,12 +173,31 @@ function SuggestionStrip({
  * the way they always did. It shows the exact command with the real project
  * id already in it, and gets out of the way once drafts start arriving.
  */
-function DraftPrompt({ projectId, drafted, total }: { projectId?: string; drafted: number; total: number }) {
+function DraftPrompt({
+  projectId,
+  drafted,
+  total,
+  workerName,
+  onQueue,
+  jobState,
+  jobProgress,
+}: {
+  projectId?: string;
+  drafted: number;
+  total: number;
+  workerName?: string;
+  onQueue?: () => Promise<void>;
+  jobState?: 'queued' | 'running';
+  jobProgress?: string;
+}) {
+  const [queueing, setQueueing] = useState(false);
+
   // Nothing to offer once every open finding already has a draft.
   if (drafted >= total) return null;
 
   const command = `npm run alt project ${projectId ?? '<projectId>'}`;
   const partial = drafted > 0;
+  const busy = queueing || jobState === 'queued' || jobState === 'running';
 
   return (
     <div className="mx-3 sm:mx-4 my-3 rounded-md border border-dashed px-3 py-2.5 space-y-2">
@@ -185,28 +210,64 @@ function DraftPrompt({ projectId, drafted, total }: { projectId?: string; drafte
           <p className="text-xs text-muted-foreground">
             {partial
               ? `${drafted} of ${total} already have a draft. Run it again to pick up the rest.`
-              : 'A vision model on your own Mac reads each image and writes a first draft into these boxes. Nothing is saved without you.'}
+              : onQueue
+                ? 'A vision model on the worker machine reads each image and writes a first draft into these boxes. Nothing is saved without you.'
+                : 'A vision model on your own Mac reads each image and writes a first draft into these boxes. Nothing is saved without you.'}
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <code className="flex-1 min-w-0 truncate rounded bg-muted px-2 py-1 font-mono text-[11px]">{command}</code>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 shrink-0"
-          onClick={async () => {
-            await navigator.clipboard.writeText(command);
-            toast.success('Command copied — run it in the project folder');
-          }}
-        >
-          <Copy className="h-3.5 w-3.5 mr-1.5" />
-          Copy
-        </Button>
-      </div>
-      <p className="text-[11px] text-muted-foreground">
-        Needs Ollama running locally. <code className="font-mono">npm run alt doctor</code> checks the setup.
-      </p>
+      {onQueue ? (
+        <div className="space-y-1.5">
+          <Button
+            size="sm"
+            className="h-8"
+            disabled={busy}
+            onClick={async () => {
+              setQueueing(true);
+              try {
+                await onQueue();
+              } finally {
+                setQueueing(false);
+              }
+            }}
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1.5" />}
+            {jobState === 'running'
+              ? jobProgress || 'Drafting…'
+              : jobState === 'queued'
+                ? 'Queued'
+                : workerName
+                  ? `Draft on ${workerName}`
+                  : 'Queue for the worker machine'}
+          </Button>
+          <p className="text-[11px] text-muted-foreground">
+            {workerName
+              ? `${workerName} is online and picks jobs up within a few seconds.`
+              : 'No worker machine is online — the job will wait until one is.'}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 min-w-0 truncate rounded bg-muted px-2 py-1 font-mono text-[11px]">{command}</code>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0"
+              onClick={async () => {
+                await navigator.clipboard.writeText(command);
+                toast.success('Command copied — run it in the project folder');
+              }}
+            >
+              <Copy className="h-3.5 w-3.5 mr-1.5" />
+              Copy
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Needs Ollama running locally. <code className="font-mono">npm run alt doctor</code> checks the setup.
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -558,6 +619,10 @@ export function AltTextTab(props: AltTextTabProps) {
                 projectId={projectId}
                 drafted={groups.open.filter((f) => suggestions?.has(f.fingerprint)).length}
                 total={groups.open.length}
+                workerName={props.workerName}
+                onQueue={props.onQueueDrafts}
+                jobState={props.draftJobState}
+                jobProgress={props.draftJobProgress}
               />
             )}
             <Section

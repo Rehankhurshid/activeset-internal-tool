@@ -5,6 +5,9 @@ import { COLLECTIONS } from '@/lib/constants';
 import { compactAuditResult } from '@/lib/scan-utils';
 import type { AuditResult, ImageInfo, ImageScanJob, Project, ProjectLink } from '@/types';
 
+// Shared with the worker and the CLI, which cannot import a `server-only` module.
+export { loadAllProjectDocsAdmin, loadProjectDocAdmin, linkOf } from '@/lib/project-admin';
+
 /**
  * Server-side writes for a single page's audit.
  *
@@ -41,20 +44,6 @@ function stripUndefined<T>(obj: T): T {
     ) as T;
   }
   return obj;
-}
-
-/** The project document alone — no audits. Enough to find a link and its URL. */
-export async function loadProjectDocAdmin(projectId: string): Promise<Project | null> {
-  const snap = await projectRef(projectId).get();
-  if (!snap.exists) return null;
-  return { id: snap.id, ...(snap.data() as Omit<Project, 'id'>) } as Project;
-}
-
-/** Every project document, no audits. For picking which projects to scan. */
-export async function loadAllProjectDocsAdmin(): Promise<Project[]> {
-  if (!hasFirebaseAdminCredentials) throw new AuditAdminUnavailableError();
-  const snap = await adminDb.collection(COLLECTIONS.PROJECTS).get();
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Project, 'id'>) }) as Project);
 }
 
 export async function loadLinkAuditAdmin(projectId: string, linkId: string): Promise<AuditResult | null> {
@@ -146,10 +135,6 @@ export async function setImageScanJobAdmin(projectId: string, job: ImageScanJob 
     { imageScanJob: job === null ? FieldValue.delete() : stripUndefined(job) },
     { merge: true },
   );
-}
-
-export function linkOf(project: Project, linkId: string): ProjectLink | undefined {
-  return (project.links ?? []).find((l) => l.id === linkId);
 }
 
 /**

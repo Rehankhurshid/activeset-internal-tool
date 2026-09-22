@@ -37,6 +37,21 @@ service cloud.firestore {
     // reject any webflowConfig payload that includes apiToken, so the migrated
     // secret can never be re-introduced on the client-readable doc.
     // ──────────────────────────────────────────────────────────────────────
+    // Work handed to the machine that runs Ollama and a real browser. The
+    // worker reads and writes these with the admin SDK; the team queues jobs
+    // and watches them from the app. Not public.
+    match /worker_jobs/{jobId} {
+      allow read: if isActiveSetUser();
+      allow create, update: if isActiveSetUser();
+      allow delete: if isAdmin();
+    }
+
+    // One document per worker machine, so the app can say when it last checked in.
+    match /workers/{workerId} {
+      allow read: if isActiveSetUser();
+      allow write: if false;
+    }
+
     match /projects/{projectId} {
       function isOwner() {
         return request.auth != null
@@ -91,6 +106,13 @@ service cloud.firestore {
       // SDK. The browser only ever reads them: a suggestion fills the field,
       // a person still decides. Team-only.
       match /alt_suggestions/{suggestionId} {
+        allow read, write: if canAccessProjectById();
+      }
+
+      // What each image weighs against what the page actually displays it at,
+      // measured by the worker in a real browser. Read in the app, written by
+      // the worker with the admin SDK.
+      match /image_budget/{imageId} {
         allow read, write: if canAccessProjectById();
       }
 
