@@ -110,7 +110,9 @@ export function useLibraryOptimise(
 
   const optimise = useCallback(
     async (groups: LibraryGroupRef[], publish: boolean, options: OptimiseOptions = {}) => {
-      const todo = groups.filter((group) => !active.has(libraryGroupKey(group)));
+      // A whole-group run is refused while one is already queued for that
+      // group; a run over picked images is not — it is a different, smaller job.
+      const todo = options.srcs ? groups : groups.filter((group) => !active.has(libraryGroupKey(group)));
       if (todo.length === 0) return void toast.message('Already queued');
       setBusy(true);
       try {
@@ -122,6 +124,8 @@ export function useLibraryOptimise(
             projectName,
             payload: { group, publish, by: userEmail, ...(options.srcs ? { srcs: options.srcs } : {}), ...(options.steps ? { steps: options.steps } : {}) },
             requestedBy: userEmail,
+            // Picked images are a small job someone is waiting on.
+            ...(options.srcs ? { priority: 5 } : {}),
           });
         }
         const what = options.srcs ? `${options.srcs.length} image${options.srcs.length === 1 ? '' : 's'}` : todo.length === 1 ? 'it' : `${todo.length} groups`;
@@ -148,6 +152,8 @@ export function useLibraryOptimise(
           projectName,
           payload: { fingerprints: [item.fingerprint], overrides: [item], by: userEmail },
           requestedBy: userEmail,
+          // A person pressed Save. It goes first.
+          priority: 10,
         });
         toast.success('Saving — it lands in Webflow in a few seconds');
       } catch (error) {

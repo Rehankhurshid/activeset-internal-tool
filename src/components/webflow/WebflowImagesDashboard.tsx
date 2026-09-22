@@ -24,6 +24,8 @@ import { useWebflowAssets } from '@/hooks/useWebflowAssets';
 import { formatBytes } from '@/modules/site-monitoring/domain/image-budget';
 import { imageFingerprint } from '@/modules/site-monitoring/domain/audit-findings';
 import { cmsSourceAssetIds } from '@/modules/site-monitoring/domain/webflow-assets';
+import { siteAltStatus, type SiteAltStatus } from '@/modules/site-monitoring/domain/alt-coverage';
+import { useAltCoverage, type AltCoverage } from '@/hooks/useAltCoverage';
 import {
   isConfidentDraft,
   useLibraryOptimise,
@@ -192,6 +194,9 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
   const assetsHook = useWebflowAssets(projectId, webflowConfig);
   const cms = useCmsImages(projectId, webflowConfig);
   const library = useLibraryOptimise(projectId, projectName, userEmail ?? 'team');
+  // The Audit tab's own answer to "what do visitors get with no ALT", so both
+  // screens give the same number.
+  const coverage = useAltCoverage(projectId);
   const [publish, setPublish] = useState(false);
 
   // ── what is there ──────────────────────────────────────────────────────────
@@ -316,14 +321,40 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, library]);
 
+  const statusOf = useCallback(
+    (row: ImageRow): SiteAltStatus | undefined =>
+      coverage.loaded
+        ? siteAltStatus({
+            libraryEmpty: row.missing,
+            coverage: coverage.coverageFor(row.src),
+            missingOnSite: coverage.isMissingOnSite(row.src),
+          })
+        : undefined,
+    [coverage],
+  );
+
   const totals = useMemo(() => {
     const known = groups.filter((group) => group.rows);
+    const rows = known.flatMap((group) => group.rows!);
+    const count = (status: SiteAltStatus) => rows.filter((row) => row.missing && statusOf(row) === status).length;
     return {
-      images: known.reduce((sum, group) => sum + group.rows!.length, 0),
-      missing: known.reduce((sum, group) => sum + group.rows!.filter((row) => row.missing).length, 0),
+      images: rows.length,
+      missing: rows.filter((row) => row.missing).length,
+      covered: count('covered-by-page'),
+      notOnSite: count('not-on-site'),
       stillCounting: known.length < groups.length,
     };
-  }, [groups]);
+  }, [groups, statusOf]);
+
+  /** Visitor-facing images this screen can fix: missing on the site, empty in Webflow. */
+  const fixable = useMemo(
+    () =>
+      groups
+        .map((group) => ({ group, rows: (group.rows ?? []).filter((row) => row.missing && statusOf(row) === 'missing-on-site') }))
+        .filter((entry) => entry.rows.length > 0),
+    [groups, statusOf],
+  );
+  const fixableCount = fixable.reduce((sum, entry) => sum + entry.rows.length, 0);
 
   const running = groups.filter((group) => library.activeFor(group.key));
   const loading = assetsHook.loading || cms.discoveryLoading;
@@ -347,10 +378,22 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
               <ImageIcon className="h-4 w-4" />
               Images
             </CardTitle>
-            <CardDescription>
-              {totals.images === 0 && loading
-                ? 'Reading the asset library and CMS collections…'
-                : `${totals.images} images · ${totals.missing} missing ALT${totals.stillCounting ? ' · still counting…' : ''}`}
+            <CardDescription className="space-y-0.5">
+              {coverage.loaded && (
+                <span className="block text-foreground">
+                  <span className={coverage.missingCount ? 'font-medium text-destructive' : 'font-medium'}>
+                    {coverage.missingCount} missing ALT on the live site
+                  </span>
+                  <span className="text-muted-foreground"> — what visitors get, same as the Audit tab</span>
+                </span>
+              )}
+              <span className="block">
+                {totals.images === 0 && loading
+                  ? 'Reading the asset library and CMS collections…'
+                  : `${totals.images} images · ${totals.missing} empty ALT fields in Webflow` +
+                    (coverage.loaded ? ` — ${totals.covered} covered by the page, ${totals.notOnSite} not on the site yet` : '') +
+                    (totals.stillCounting ? ' · still counting…' : '')}
+              </span>
             </CardDescription>
           </div>
           <Button
@@ -365,7 +408,27 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {fixableCount > 0 && (
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                // ALT only, just these images, ahead of any bulk run.
+                for (const entry of fixable) {
+                  await library.optimise([entry.group.ref], publish, {
+                    srcs: entry.rows.map((row) => row.src),
+                    steps: { alt: true, images: false },
+                  });
+                }
+              }}
+              disabled={library.busy}
+              title="Adds ALT to the images visitors currently get without it, ahead of anything else queued"
+            >
+              <Wand2 className="h-4 w-4 mr-2" />
+              Fix the {fixableCount} visitors see
+            </Button>
+          )}
           <Button
+            variant={fixableCount > 0 ? 'outline' : 'default'}
             onClick={() => library.optimise(groups.map((group) => group.ref), publish)}
             disabled={library.busy || groups.length === 0 || running.length === groups.length}
           >
@@ -381,7 +444,10 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
           Adds ALT text where it’s missing and optimises the images. ALT the model isn’t sure of is held for you to
           check. Originals are backed up to Bunny first.
           {totals.missing > 0 &&
-            ` Describing takes ${duration(totals.missing * SECONDS_PER_IMAGE)} for ${totals.missing} images — it runs in the background, so you can close this tab.`}
+            ` Filling every empty field takes ${duration(totals.missing * SECONDS_PER_IMAGE)} for ${totals.missing} images — most of which no visitor sees — and runs in the background.`}
+          {coverage.loaded &&
+            coverage.missingCount > fixableCount &&
+            ` ${coverage.missingCount - fixableCount} of the ${coverage.missingCount} on the live site already have ALT in Webflow or aren’t in the library: the page doesn’t use it, so the fix is in Designer — see the Audit tab.`}
           {library.online.length === 0 && ' No worker is online right now; it starts when one is.'}
         </p>
       </CardHeader>
@@ -394,6 +460,8 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
             library={library}
             publish={publish}
             published={group.isCms ? published[group.key] : undefined}
+            statusOf={statusOf}
+            coverage={coverage}
           />
         ))}
       </CardContent>
@@ -406,12 +474,16 @@ function GroupSection({
   library,
   publish,
   published,
+  statusOf,
+  coverage,
 }: {
   group: GroupRow;
   library: LibraryOptimise;
   publish: boolean;
   /** Undefined until read, or for general assets, which have no staged copy. */
   published?: Published;
+  statusOf: (row: ImageRow) => SiteAltStatus | undefined;
+  coverage: AltCoverage;
 }) {
   const [open, setOpen] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -465,6 +537,8 @@ function GroupSection({
   const reviewCount = rows ? rows.filter(needsLook).length : undefined;
   const visible = (rows ?? []).filter((row) => !reviewOnly || needsLook(row));
 
+  const onSiteMissing = rows ? rows.filter((row) => statusOf(row) === 'missing-on-site').length : 0;
+
   const optimisedCount = rows
     ? rows.filter((row) => {
         const state = library.indexFor(row.src)?.optimise?.state;
@@ -507,10 +581,15 @@ function GroupSection({
             </Badge>
           )}
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-            {images === undefined ? 'counting…' : `${images} images · ${missing} missing ALT`}
+            {images === undefined ? 'counting…' : `${images} images · ${missing} empty ALT fields`}
             {optimisedCount ? ` · ${optimisedCount} optimised` : ''}
             {reviewCount ? ` · ${reviewCount} to review` : ''}
           </span>
+          {onSiteMissing > 0 && (
+            <span className="shrink-0 text-xs font-medium text-destructive tabular-nums">
+              {onSiteMissing} missing on the site
+            </span>
+          )}
         </button>
         <Button
           size="sm"
@@ -634,6 +713,8 @@ function GroupSection({
                       picked={picked.has(row.fingerprint)}
                       onPick={(on) => togglePick(row.fingerprint, on)}
                       published={published}
+                      siteStatus={statusOf(row)}
+                      pages={coverage.coverageFor(row.src)?.pages}
                     />
                   ))}
                 </ul>
@@ -654,6 +735,37 @@ function GroupSection({
 }
 
 type Published = Record<string, { alt: string; url: string }>;
+
+/** What visitors get for this image — the Audit tab's view, on the same row. */
+function SiteBadge({ status, pages, libraryHasAlt }: { status: SiteAltStatus; pages?: number; libraryHasAlt: boolean }) {
+  if (status === 'missing-on-site') {
+    return (
+      <span
+        className="shrink-0 text-[10px] font-medium text-destructive"
+        title={
+          libraryHasAlt
+            ? 'This image has ALT in Webflow, but the page renders it without — the image element in Designer is not using it. Fix it in Designer.'
+            : 'Visitors get this image with no ALT.'
+        }
+      >
+        Missing on the site{pages ? ` · ${pages} page${pages === 1 ? '' : 's'}` : ''}
+        {libraryHasAlt ? ' — fix in Designer' : ''}
+      </span>
+    );
+  }
+  if (status === 'covered-by-page') {
+    return (
+      <span className="shrink-0 text-[10px] text-muted-foreground" title="Empty in Webflow, but every page that shows it supplies ALT — usually the template binds the item's name.">
+        Page supplies ALT
+      </span>
+    );
+  }
+  return (
+    <span className="shrink-0 text-[10px] text-muted-foreground" title="Empty in Webflow, but not on any scanned page — no visitor sees it today.">
+      Not on the site
+    </span>
+  );
+}
 
 /** Whether the staged ALT and image are what the published site shows. */
 function LiveBadge({ state, live }: { state: 'live' | 'pending' | 'never'; live?: { alt: string; url: string } }) {
@@ -731,6 +843,8 @@ function ImageLine({
   picked,
   onPick,
   published,
+  siteStatus,
+  pages,
 }: {
   row: ImageRow;
   library: LibraryOptimise;
@@ -740,6 +854,8 @@ function ImageLine({
   picked: boolean;
   onPick: (on: boolean) => void;
   published?: Published;
+  siteStatus?: SiteAltStatus;
+  pages?: number;
 }) {
   const draft = library.draftFor(row.src);
   const indexed = library.indexFor(row.src);
@@ -816,6 +932,7 @@ function ImageLine({
           {row.subtitle && <span className="truncate text-muted-foreground">{row.subtitle}</span>}
           {done && <DoneBadge done={done} />}
           {liveState && (staged || live?.alt) && <LiveBadge state={liveState} live={live} />}
+          {siteStatus && siteStatus !== 'ok' && <SiteBadge status={siteStatus} pages={pages} libraryHasAlt={!row.missing} />}
           {working ? (
             <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-primary">
               <Loader2 className="h-3 w-3 animate-spin" />

@@ -1,5 +1,7 @@
 # Project Links Widget - Agent Instructions
 
+> **Start here: [../docs/modules/README.md](../docs/modules/README.md).** It is the code-verified, module-by-module map of the app: which doc owns each URL, API route, Firestore collection and cron. It also links [env-vars.md](../docs/modules/env-vars.md) (every env var) and [known-issues.md](../docs/modules/known-issues.md) (known bugs and security gaps). Where this file and `docs/modules/` disagree, `docs/modules/` wins. When you change code, update the owning module doc in the same change.
+
 ## Project Overview
 
 This is a Next.js 16 application for managing project links, website auditing, and Webflow integration. It uses Firebase for authentication and data storage, and Tailwind CSS with shadcn/ui for the UI.
@@ -104,7 +106,7 @@ API documentation is in `/docs/misc/`:
 ### API Routes
 - Located in `/src/app/api/`
 - Use `NextRequest`/`NextResponse` from `next/server`
-- External API tokens passed via headers (e.g., `x-webflow-token`)
+- Webflow tokens are never sent from the browser: routes resolve them server-side from `project_secrets` using the `x-project-id` header (see docs/modules/webflow.md)
 
 ### Services
 - Located in `/src/services/`
@@ -146,4 +148,4 @@ NOTIFY_EMAIL
 - Authentication: Firebase Auth with Google Sign-In
 - Email restriction: Only `@activeset.co` emails allowed
 - Module access: Controlled via `access_control` collection
-- Admin: `rehan@activeset.co`
+- Admins: `rehan@activeset.co`, `salman@activeset.co`, or anyone with the `admin: true` custom claim (hard-coded in `AccessControlService.ts`, `api-auth.ts` and `firestore.rules`)

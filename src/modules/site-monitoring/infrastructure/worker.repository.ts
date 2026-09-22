@@ -90,6 +90,8 @@ export interface WorkerRepository {
     projectName?: string;
     payload?: Record<string, unknown>;
     requestedBy?: string;
+    /** Higher runs first. */
+    priority?: number;
   }) => Promise<string>;
   subscribeJobs: (projectId: string, onChange: (jobs: WorkerJobDoc[]) => void) => () => void;
   subscribeWorkers: (onChange: (workers: WorkerDoc[]) => void) => () => void;
@@ -176,6 +178,7 @@ export const workerRepository: WorkerRepository = {
       createdAt: new Date().toISOString(),
       attempts: 0,
       ...(input.requestedBy ? { requestedBy: input.requestedBy } : {}),
+      ...(input.priority ? { priority: input.priority } : {}),
     });
     return ref.id;
   },

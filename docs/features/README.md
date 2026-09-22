@@ -1,5 +1,7 @@
 # Feature Docs Index
 
+> For the authoritative, code-verified map of the app, start at [../modules/README.md](../modules/README.md). The docs in this folder go deeper on some topics but are partly stale. Each module doc's *Related docs* section says which parts can be trusted.
+
 This folder contains deep-dive documentation for major internal tool features.
 
 - [audit-dashboard.md](./audit-dashboard.md) — content quality auditing, change detection, and QA workflows.

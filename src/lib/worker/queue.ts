@@ -50,6 +50,8 @@ export interface WorkerJob<P = Record<string, unknown>> {
   requestedBy?: string;
   createdAt: string;
   attempts: number;
+  /** Higher runs first. Hand saves and small targeted fixes jump bulk runs. */
+  priority?: number;
 }
 
 export class WorkerQueueUnavailableError extends Error {
@@ -108,14 +110,19 @@ export async function claimNextJob(
 
   // Two cheap reads rather than one composite index: waiting work first, then
   // anything abandoned.
-  const queued = await base.where('status', '==', 'queued').limit(10).get();
+  // Fifty, not ten, and sorted here: with more than ten queued, a limit with
+  // no order returned an arbitrary ten, so "oldest first" was not true.
+  const queued = await base.where('status', '==', 'queued').limit(50).get();
   const running = await base.where('status', '==', 'running').limit(10).get();
 
   const candidates = [...queued.docs, ...running.docs]
     .map((doc) => ({ ...(doc.data() as Omit<WorkerJob, 'id'>), id: doc.id }))
     .filter((job) => (kinds ? kinds.includes(job.kind) : true))
     .filter((job) => job.status === 'queued' || (job.heartbeatAt ?? job.claimedAt ?? '') < staleBefore)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    // Priority first. A person pressing Save, or asking to fix the few images
+    // visitors actually see without ALT, should not wait behind a five-hour
+    // bulk run — Srividhya Ramaratnam's correction sat behind one.
+    .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.createdAt.localeCompare(b.createdAt));
 
   for (const candidate of candidates) {
     const ref = base.doc(candidate.id);

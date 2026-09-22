@@ -225,6 +225,24 @@ write "Numaan Ashraf, Headshot", because the field's name went in as the
 image's title attribute. A portrait naming anyone else, or no one, is still
 held.
 
+**One number for "missing ALT".** The Audit tab counts images a visitor gets
+with no ALT; the Webflow tab used to count empty ALT fields in the library.
+On PeakXV that was 9 against about 1,900, and it looked like a contradiction.
+Joined image by image, of 1,897 empty fields: 1,640 are on no page of the
+site, 258 are on pages whose template supplies ALT anyway, and 5 are rendered
+with none. Both screens now lead with **missing ALT on the live site**,
+computed by the Audit's own `collectFindings` (`/api/audit/alt-coverage`,
+`needsAltOnSite`), and the Webflow tab labels every empty field as *missing on
+the site*, *page supplies ALT* or *not on the site*. Files are matched by path
+(`imagePathKey`): the Assets API reports a site asset on `s3.amazonaws.com`
+and the page loads it from `cdn.prod.website-files.com`. "Fix the N visitors
+see" runs ALT-only on just those images.
+
+**Queue order.** Jobs carry a `priority`: a hand Save is 10, a run over
+picked images 5, bulk runs 0; then oldest first. A correction used to wait
+behind a five-hour bulk run. The worker also used to read an unordered ten of
+the queued jobs, so with more than ten queued "oldest first" was not true.
+
 **Staged versus published.** Everything this tool writes to the CMS is staged;
 nothing is live until someone publishes. Each CMS row reads the published
 value from Webflow's Content Delivery API (`/api/webflow/cms/live`, via

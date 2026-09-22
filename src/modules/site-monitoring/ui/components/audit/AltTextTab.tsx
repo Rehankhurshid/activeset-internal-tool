@@ -29,6 +29,7 @@ import {
   LIKELY_DECORATIVE_AT,
   type AltFinding,
 } from '../../../domain/audit-findings';
+import { needsAltOnSite } from '../../../domain/alt-coverage';
 import { FindingPages } from './FindingPages';
 import { relativeTime } from './relative-time';
 import type { AltSuggestionDoc } from '../../../infrastructure/alt-suggestions.repository';
@@ -569,7 +570,9 @@ export function AltTextTab(props: AltTextTabProps) {
   }, [findings, query]);
 
   const groups = useMemo(() => {
-    const open = filtered.filter((f) => (f.state === 'open' || f.state === 'regressed') && !isLikelyDecorative(f));
+    // The shared definition, so the Webflow tab's "missing on the live site"
+    // is this exact number.
+    const open = filtered.filter(needsAltOnSite);
     return {
       open,
       regressed: open.filter((f) => f.state === 'regressed').length,
@@ -641,7 +644,7 @@ export function AltTextTab(props: AltTextTabProps) {
             <CardDescription>
               {groups.open.length === 0
                 ? 'Every image is described or deliberately empty.'
-                : `${groups.open.length} image${groups.open.length === 1 ? '' : 's'} to describe · clears ${pagesTouched} page${pagesTouched === 1 ? '' : 's'}`}
+                : `${groups.open.length} missing ALT on the live site · clears ${pagesTouched} page${pagesTouched === 1 ? '' : 's'} · the Webflow tab’s empty-field count also includes images no visitor sees`}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
