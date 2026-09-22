@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  cmsSourceAssetIds,
   idPrefixOf,
   normaliseAssetName,
   resolveAssets,
@@ -99,5 +100,22 @@ describe('resolveAssets', () => {
     ];
     const result = resolveAssets(srcs, assets);
     assert.deepEqual(Object.keys(result), [srcs[0]]);
+  });
+});
+
+describe('cmsSourceAssetIds', () => {
+  it('finds the source asset id carried inside a CMS image URL', () => {
+    // A real PeakXV CMS image: delivery id, then the id of the uploaded asset.
+    const ids = cmsSourceAssetIds([
+      'https://cdn.prod.website-files.com/69187967ccd7c46fc1aaf24a/6aa846ba708885b4d1424b6d_6aa83cdd8bb6ee74a8c749ae_ringg-ai-logo-inline-opt-eb6805bedb92.webp',
+    ]);
+    assert.ok(ids.has('6aa83cdd8bb6ee74a8c749ae'));
+  });
+
+  it('does not mistake the site id in the path for an asset', () => {
+    const ids = cmsSourceAssetIds([
+      'https://cdn.prod.website-files.com/69187967ccd7c46fc1aaf24a/6aa846ba708885b4d1424b6d_logo.webp',
+    ]);
+    assert.ok(!ids.has('69187967ccd7c46fc1aaf24a'));
   });
 });

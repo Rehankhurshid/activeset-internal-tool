@@ -196,20 +196,41 @@ standby-timeout-ac 0`).
 | `image_budget` | Opens each page in Chrome at 1440, 768 and 390 px, measures how wide every image is actually drawn, fetches each file, and works out what it should weigh. Results go to `image_budget` and drive the Weight tab. |
 | `webflow_alt` | Drafts alt text for a site's whole Webflow library — assets and CMS collections — rather than for scanned pages. Feeds the same `alt_suggestions` store, so a draft shows up on both the Webflow tab and the Audit tab. Skips PDFs, videos and anything else that is not an image. |
 | `image_apply` | Archives the originals to Bunny, re-encodes, uploads the new file as a Webflow asset and repoints every CMS field that used the old one. Resizes where a measured display width exists, re-encodes at the original dimensions where none does. CMS fields only — see [What it will not do](#what-it-will-not-do). Carries any alt draft across to the image's new URL, since drafts are keyed by URL. |
-| `library_optimise` | The Webflow tab's one-shot: `webflow_alt` for the selection (missing alt only), then `image_apply` for the same selection. Alt is **drafted** for a person to read; bytes are **applied**, because a backed-up, perceptually lossless file is safe to swap unread and a sentence an AI wrote is not. The image half may fail without discarding the drafts. |
+| `library_group` | One click for one group of a site's images — general assets, or one CMS collection. Describes every image missing ALT (saved ten at a time, so a run that dies three hours in keeps three hours of work), **writes the ALT the classifier is confident about and holds the rest for review**, then optimises: CMS images swapped in place with a Bunny backup, general assets given an optimised copy for Designer where measured oversized. One job per group, so each section of the Images screen has its own progress and its own failure. |
 | `alt_apply` | Writes chosen drafts back to Webflow in bulk, and optionally publishes. Two destinations: a site asset takes its alt through the Assets API, a CMS image through its collection item's field. On Canopy eleven of eleven were CMS, so the asset path alone would have applied nothing. |
 
 They are queued from the Audit tab — the Alt text tab's "Draft on `<machine>`"
-button, the Weight tab's "Measure sizes" and "Resize & repoint" — and from the
-Webflow tab's single **Images** screen, which lists site assets and CMS images
-together and offers **Optimise** (one job: draft alt, optimise bytes) and
-**Apply ALT** (write the text a person approved or edited). Or by hand:
+button, the Weight tab's "Measure sizes" and optimise buttons — and from the
+Webflow tab's **Images** screen. That screen is one section per group —
+**General assets** first, then each CMS collection — each with its own
+**Optimise**, plus **Optimise everything** at the top. Or by hand:
 
-Two tabs, one pipeline. The difference between them is knowledge rather than
-capability: the Weight tab knows the width a browser draws each image at and
-can therefore resize, while the library only knows what exists, so an
-unmeasured image is re-encoded at its own dimensions. An image the Weight tab
-*has* measured is resized whichever tab asked.
+```bash
+npm run worker enqueue image_budget <projectId> --emit ./optimised-images
+```
+
+**ALT policy, Rehan's call on 2026-09-22:** one click adds ALT, but not ALT the
+model itself doubts. A draft is written if the classifier did not flag it for
+review and its certainty is not low; everything else waits in the section's
+"to review" list, where one Save writes it.
+
+**What counts as a general asset.** Many sites fill their CMS by uploading
+files as site assets, which Webflow then copies into the collection. The CMS
+image's URL carries the source asset's id as its *second* hash
+(`<delivery id>_<source asset id>_name`), and the source asset sits in the
+asset list with an empty alt forever — alt for a CMS image lives on the
+field. On PeakXV that was **1,236 of 1,993** image assets; counting them as
+general assets missing ALT would have spent about 3½ hours describing images
+whose alt is never shown. Both the screen and the job exclude them
+(`cmsSourceAssetIds`). On Canopy there were none, so this is measured per
+site, never assumed. The screen also used to fetch one page of 100 assets and
+stop, which is why PeakXV showed 92.
+
+**Rate limits.** Every Webflow call goes through `webflowFetch`, which waits
+out a 429 instead of failing — the first one-click run on PeakXV died on
+"Webflow refused the asset list (429)" before describing a single image.
+There is one reader for the library (`src/lib/cms/library.ts`); there used to
+be four copies of "list the assets", one of which quietly truncated on error.
 
 **Nothing writes to Webflow from the browser any more.** The Webflow tab used
 to have two screens with two "Save" buttons that PATCHed from the page, a CLI

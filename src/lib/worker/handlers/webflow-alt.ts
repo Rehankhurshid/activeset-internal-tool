@@ -1,9 +1,8 @@
-import { getCollection, listCollections, listItems } from '@/lib/cms/webflow-client';
-import { extractAllImages } from '@/lib/cms/extract';
+import { listCollections } from '@/lib/cms/webflow-client';
+import { listCollectionImages, listSiteAssets } from '@/lib/cms/library';
 import { generateAltTextBatch, type GenerateOptions, type ImageContext } from '@/lib/alt-text';
 import { saveAltSuggestions } from '@/lib/alt-suggestions-admin';
 import { getWebflowTokenAdmin, loadProjectDocAdmin } from '@/lib/project-admin';
-import type { WebflowAssetSummary } from '@/modules/site-monitoring/domain/webflow-assets';
 
 /**
  * Draft alt text for everything in a site's Webflow library.
@@ -20,7 +19,6 @@ import type { WebflowAssetSummary } from '@/modules/site-monitoring/domain/webfl
  * machine running the worker picks the job up, Goliath or a laptop.
  */
 
-const WEBFLOW_API_BASE = 'https://api.webflow.com/v2';
 
 export interface WebflowAltPayload extends GenerateOptions {
   /** Only images with no alt (the default), or everything. */
@@ -60,20 +58,6 @@ const hasAlt = (value: string | null | undefined) => !BLANK_ALTS.has((value ?? '
  */
 const isImage = (contentType: string | undefined) =>
   !!contentType && contentType.startsWith('image/');
-
-async function listSiteAssets(siteId: string, token: string): Promise<WebflowAssetSummary[]> {
-  const assets: WebflowAssetSummary[] = [];
-  for (let offset = 0; offset < 5000; offset += 100) {
-    const res = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/assets?limit=100&offset=${offset}`, {
-      headers: { Authorization: `Bearer ${token}`, accept: 'application/json' },
-    });
-    if (!res.ok) throw new Error(`Webflow refused the asset list (${res.status})`);
-    const page = (await res.json()) as { assets?: WebflowAssetSummary[]; pagination?: { total?: number } };
-    assets.push(...(page.assets ?? []));
-    if ((page.assets?.length ?? 0) < 100 || assets.length >= (page.pagination?.total ?? assets.length)) break;
-  }
-  return assets;
-}
 
 export async function runWebflowAlt(
   projectId: string,
@@ -131,36 +115,16 @@ export async function runWebflowAlt(
         `Reading ${collection.displayName ?? collection.slug}`,
         0.15 + (i / Math.max(1, collections.length)) * 0.2,
       );
-      const full = (await getCollection(collection.id, token)) as unknown as { fields?: unknown[] };
-      const fields = (full.fields ?? []) as never[];
-
-      let offset = 0;
-      for (;;) {
-        const { items, pagination } = await listItems(collection.id, token, offset, 100);
-        for (const item of items) {
-          for (const entry of extractAllImages(
-            item as never,
-            collection.id,
-            collection.displayName ?? collection.slug,
-            fields,
-          )) {
-            cmsSeen += 1;
-            if (!wantAll && !entry.isMissingAlt) continue;
-            contexts.push({
-              src: entry.imageUrl,
-              siteName: project.name,
-              // Richer than most page context: the collection says what kind
-              // of thing it is and the item says which one. "Teams / Reyn
-              // Eichenlaub / person's portrait" is how a name and a role end
-              // up in the alt text.
-              heading: entry.itemName,
-              title: entry.fieldDisplayName,
-              nearbyText: `${entry.collectionName}: ${entry.itemName} — the "${entry.fieldDisplayName}" field.`,
-            });
-          }
-        }
-        offset += items.length;
-        if (items.length === 0 || offset >= (pagination.total ?? offset)) break;
+      for (const entry of await listCollectionImages(collection.id, token)) {
+        cmsSeen += 1;
+        if (!wantAll && !entry.isMissingAlt) continue;
+        contexts.push({
+          src: entry.imageUrl,
+          siteName: project.name,
+          heading: entry.itemName,
+          title: entry.fieldDisplayName,
+          nearbyText: `${entry.collectionName}: ${entry.itemName} — the "${entry.fieldDisplayName}" field.`,
+        });
       }
     }
   }

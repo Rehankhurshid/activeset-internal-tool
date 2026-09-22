@@ -36,7 +36,7 @@ import { describeResult, runImageBudget, type ImageBudgetPayload } from '@/lib/w
 import { runAltTextForProject, type AltTextPayload } from '@/lib/worker/handlers/alt-text';
 import { runAltApply, type AltApplyPayload } from '@/lib/worker/handlers/alt-apply';
 import { runImageApply, type ImageApplyPayload } from '@/lib/worker/handlers/image-apply';
-import { runLibraryOptimise, type LibraryOptimisePayload } from '@/lib/worker/handlers/library-optimise';
+import { runLibraryGroup, type LibraryGroupPayload } from '@/lib/worker/handlers/library-group';
 import { runWebflowAlt, type WebflowAltPayload } from '@/lib/worker/handlers/webflow-alt';
 import { loadProjectDocAdmin } from '@/lib/project-admin';
 import {
@@ -166,18 +166,14 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
     return result as unknown as Record<string, unknown>;
   }
 
-  if (job.kind === 'library_optimise') {
-    const result = await runLibraryOptimise(job.projectId, job.payload as unknown as LibraryOptimisePayload, progress);
-    const images = result.images;
+  if (job.kind === 'library_group') {
+    const result = await runLibraryGroup(job.projectId, job.payload as unknown as LibraryGroupPayload, progress);
+    const o = result.optimise;
     log(
       green('  done'),
-      `ALT: ${result.alt.drafted} drafted` +
-        (result.alt.needsReview ? ` (${result.alt.needsReview} to review)` : '') +
-        (images
-          ? ` · images: ${images.resized} resized, ${images.recompressedOnly} re-encoded, ${images.repointed} fields repointed, ${formatBytes(images.bytesSaved)} saved` +
-            (images.skipped.length ? `, ${images.skipped.length} skipped` : '') +
-            (images.failed.length ? `, ${red(String(images.failed.length) + ' failed')}` : '')
-          : ` · images: ${red(result.imagesError ?? 'not run')}`),
+      `${result.group}: ALT ${result.alt.added} added, ${result.alt.held} held for review` +
+        (o ? ` · images ${o.optimised} optimised (${o.resized} resized), ${o.designerCopies} Designer copies, ${formatBytes(o.bytesSaved)} saved` : '') +
+        (result.errors.length ? ` · ${red(result.errors.join('; '))}` : ''),
     );
     return result as unknown as Record<string, unknown>;
   }
@@ -396,7 +392,7 @@ async function loop(options: { once?: boolean; interval?: string; kinds?: string
         ...hardware,
         model: resolveOllama().model,
         paused,
-        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt', 'image_apply', 'library_optimise'],
+        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt', 'image_apply', 'library_group'],
         busyWith: null,
       });
 

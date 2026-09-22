@@ -33,16 +33,35 @@ export function buildHeaders(apiToken: string): Record<string, string> {
   };
 }
 
-async function wfFetch(path: string, token: string, init: RequestInit = {}): Promise<Response> {
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Every Webflow call, with its rate limit waited out rather than reported.
+ *
+ * Webflow limits each token per minute, and optimising a whole library is
+ * hundreds of calls back to back. Before this, the first 429 anywhere in a
+ * run failed the entire job — PeakXV's first one-click run died on "Webflow
+ * refused the asset list (429)" before describing a single image. A 429 is
+ * Webflow saying "not yet", not "no", so it is retried after the wait it asks
+ * for. The body is a string everywhere here, so resending it is safe.
+ */
+export async function webflowFetch(path: string, token: string, init: RequestInit = {}): Promise<Response> {
   const url = path.startsWith('http') ? path : `${WEBFLOW_API_BASE}${path}`;
-  return fetch(url, {
-    ...init,
-    headers: {
-      ...buildHeaders(token),
-      ...(init.headers as Record<string, string> | undefined),
-    },
-  });
+  for (let attempt = 0; ; attempt += 1) {
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        ...buildHeaders(token),
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    });
+    if (res.status !== 429 || attempt >= 5) return res;
+    const retryAfter = Number(res.headers.get('retry-after'));
+    await sleep(Math.min(60_000, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 10_000 * (attempt + 1)));
+  }
 }
+
+const wfFetch = webflowFetch;
 
 export async function listCollections(siteId: string, token: string): Promise<WebflowCollection[]> {
   const res = await wfFetch(`/sites/${siteId}/collections`, token);

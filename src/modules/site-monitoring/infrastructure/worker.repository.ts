@@ -28,7 +28,7 @@ export type WorkerJobKind =
   | 'alt_apply'
   | 'webflow_alt'
   | 'image_apply'
-  | 'library_optimise';
+  | 'library_group';
 export type WorkerJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface WorkerJobDoc {
@@ -46,6 +46,7 @@ export interface WorkerJobDoc {
   result?: Record<string, unknown>;
   error?: string;
   requestedBy?: string;
+  payload?: Record<string, unknown>;
 }
 
 export interface WorkerDoc {

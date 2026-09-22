@@ -105,3 +105,30 @@ export function resolveAssets(
 /** What to tell someone about an image the Assets API cannot reach. */
 export const NOT_AN_ASSET_HINT =
   'Not a site asset — it belongs to a CMS item or was uploaded another way. Set the alt text where the image lives.';
+
+/**
+ * Site assets that are only the upload behind a CMS image.
+ *
+ * A CMS image URL often carries two ids — `<delivery id>_<source asset id>_name`
+ * — and the second is the id of a site asset: the file someone uploaded,
+ * which Webflow then copied into the collection's own storage. That source
+ * asset sits in the site's asset list with an empty alt forever, because alt
+ * for a CMS image lives on the item's field, not on the asset.
+ *
+ * Measured on PeakXV: 1,236 of 1,993 image assets were exactly this. Treating
+ * them as "general assets missing ALT" would have spent about three and a half
+ * hours of GPU describing images whose alt text is never shown anywhere. On
+ * Canopy, zero — so this is a property of how a site's CMS was filled, and has
+ * to be measured per site rather than assumed.
+ *
+ * Note the *first* id is not an asset id; that is the mistake documented at
+ * the top of this file. Any later id in the name can be.
+ */
+export function cmsSourceAssetIds(cmsImageUrls: Iterable<string>): Set<string> {
+  const ids = new Set<string>();
+  for (const url of cmsImageUrls) {
+    const tail = fileNameFromUrl(url);
+    for (const id of tail.match(/[0-9a-f]{24}/gi) ?? []) ids.add(id.toLowerCase());
+  }
+  return ids;
+}

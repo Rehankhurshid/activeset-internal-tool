@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { webflowFetch } from '@/lib/cms/webflow-client';
 import { resolveWebflowToken } from '@/lib/webflow-token-resolver';
 
 const WEBFLOW_API_BASE = 'https://api.webflow.com/v2';
-
-function buildWebflowHeaders(apiToken: string): HeadersInit {
-  return {
-    Authorization: `Bearer ${apiToken}`,
-    accept: 'application/json',
-  };
-}
 
 async function parseWebflowError(response: Response, fallback: string): Promise<string> {
   const errorText = await response.text();
@@ -45,8 +39,8 @@ export async function GET(request: NextRequest) {
     const foldersUrl = new URL(`${WEBFLOW_API_BASE}/sites/${siteId}/asset_folders`);
 
     const [assetsResponse, foldersResponse] = await Promise.all([
-      fetch(assetsUrl.toString(), { headers: buildWebflowHeaders(apiToken) }),
-      fetch(foldersUrl.toString(), { headers: buildWebflowHeaders(apiToken) }),
+      webflowFetch(assetsUrl.toString(), apiToken),
+      webflowFetch(foldersUrl.toString(), apiToken),
     ]);
 
     if (!assetsResponse.ok) {

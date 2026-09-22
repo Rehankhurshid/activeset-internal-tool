@@ -1,40 +1,53 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Database, ImageIcon, Layers, Loader2, RefreshCw, Search, Send, Wand2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Database,
+  ImageIcon,
+  Loader2,
+  RefreshCw,
+  Wand2,
+  XCircle,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Progress } from '@/components/ui/progress';
 import { useCmsImages } from '@/hooks/useCmsImages';
 import { useWebflowAssets } from '@/hooks/useWebflowAssets';
+import { formatBytes } from '@/modules/site-monitoring/domain/image-budget';
 import { imageFingerprint } from '@/modules/site-monitoring/domain/audit-findings';
-import { useLibraryOptimise } from '@/modules/site-monitoring/ui/hooks/useLibraryOptimise';
-import type { AltSuggestionDoc } from '@/modules/site-monitoring/infrastructure/alt-suggestions.repository';
-import type { WebflowConfig } from '@/types/webflow';
+import { cmsSourceAssetIds } from '@/modules/site-monitoring/domain/webflow-assets';
+import {
+  isConfidentDraft,
+  useLibraryOptimise,
+  type LibraryGroupRef,
+  type LibraryOptimise,
+} from '@/modules/site-monitoring/ui/hooks/useLibraryOptimise';
+import type { WorkerJobDoc } from '@/modules/site-monitoring/infrastructure/worker.repository';
+import type { CmsImageEntry, WebflowConfig } from '@/types/webflow';
 
 /**
- * Every image in a site's Webflow library, in one list, with one button.
+ * A site's Webflow images, one section per group, one button per section.
  *
- * This replaced two screens. "Image Assets" listed site assets, drafted alt on
- * the worker, and saved it from the browser. "CMS Images" listed collection
- * fields under a fake terminal that built a command for a CLI running Gemma
- * on a laptop — its own footer said "web preview only". The good alt path
- * existed for assets but not CMS; the good bytes path for CMS but not assets;
- * the two saves went through different doors.
+ * General assets first, then each CMS collection. Every section says how many
+ * images it has and how many are missing ALT, and its Optimise button does
+ * everything for that group in one go: describes what is missing, writes the
+ * ALT it is sure of, holds the rest for a person, and optimises the images —
+ * swapped in place for CMS, a ready-made copy for Designer where Webflow does
+ * not allow a swap. "Optimise everything" runs every section.
  *
- * Now: one list with a source badge, one selection, and **Optimise**, which
- * queues one job doing everything safe — drafts alt for anything missing it,
- * and for CMS images resizes, archives, uploads and repoints. Drafts land in
- * the row for a person to read; **Apply ALT** pushes the ones they approve.
- * Bytes are applied unread because a backed-up, perceptually lossless file is
- * safe; a sentence an AI wrote about a client's photograph is not.
- *
- * Site assets get alt only. Webflow's API cannot replace an asset's bytes,
- * and the row says so rather than hiding it.
+ * It replaced a flat list of every image on the site with checkboxes, two
+ * action buttons and a filter menu — 1,653 rows on PeakXV — which Rehan
+ * called complicated, and which was: the question is per group, so the
+ * screen is too. Rows are there when you open a section, for the few drafts
+ * that need a look.
  */
 
 interface WebflowImagesDashboardProps {
@@ -44,241 +57,234 @@ interface WebflowImagesDashboardProps {
   webflowConfig: WebflowConfig;
 }
 
-type Source = 'asset' | 'cms';
-type View = 'all' | 'missing' | 'drafted' | 'cms' | 'assets';
+interface GroupRow {
+  ref: LibraryGroupRef;
+  key: string;
+  name: string;
+  isCms: boolean;
+  /** Undefined while still loading. */
+  rows?: ImageRow[];
+}
 
-interface LibraryImage {
+interface ImageRow {
   id: string;
   src: string;
   fingerprint: string;
-  source: Source;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   currentAlt: string;
-  hasAlt: boolean;
-  /** A CMS image that is also in the asset library. Repointable, so it is filed as CMS. */
-  alsoAsset?: boolean;
+  missing: boolean;
 }
 
 /** Webflow marks an inherited-but-unset alt with this sentinel. */
 const BLANK_ALTS = new Set(['', '__wf_reserved_inherit']);
-const hasAlt = (value: string | null | undefined) => !BLANK_ALTS.has((value ?? '').trim());
+const isBlank = (value: string | null | undefined) => BLANK_ALTS.has((value ?? '').trim());
 
-const KIND_LABEL: Record<string, string> = {
-  decorative: 'Decorative',
-  informative: 'Informative',
-  functional: 'Functional',
-  text_image: 'Text in image',
-  complex: 'Complex',
-  logo: 'Logo',
-  screenshot: 'Screenshot',
-  portrait: 'Portrait',
-  product: 'Product',
-  icon: 'Icon',
-};
+/** Measured on Goliath: roughly ten seconds to describe one image. */
+const SECONDS_PER_IMAGE = 10;
+const PAGE = 100;
 
-/** What the alt box shows before anyone touches it. */
-function seedFor(row: LibraryImage, draft: AltSuggestionDoc | undefined): string {
-  if (row.hasAlt) return row.currentAlt;
-  if (!draft || draft.kind === 'decorative') return '';
-  return draft.alt;
+/** One row per distinct image — the same image in five fields is one image. */
+function toRows(entries: CmsImageEntry[]): ImageRow[] {
+  const byFingerprint = new Map<string, ImageRow>();
+  for (const entry of entries) {
+    const fingerprint = imageFingerprint(entry.imageUrl);
+    const existing = byFingerprint.get(fingerprint);
+    if (existing) {
+      if (entry.isMissingAlt) existing.missing = true;
+      continue;
+    }
+    byFingerprint.set(fingerprint, {
+      id: entry.id,
+      src: entry.imageUrl,
+      fingerprint,
+      title: entry.itemName,
+      subtitle: entry.fieldDisplayName,
+      currentAlt: entry.currentAlt ?? '',
+      missing: entry.isMissingAlt,
+    });
+  }
+  return [...byFingerprint.values()];
+}
+
+function duration(seconds: number): string {
+  if (seconds < 90) return 'about a minute';
+  if (seconds < 3600) return `about ${Math.round(seconds / 60)} min`;
+  const hours = seconds / 3600;
+  return `about ${hours < 10 ? hours.toFixed(1).replace(/\.0$/, '') : Math.round(hours)} h`;
+}
+
+function ago(iso?: string): string {
+  if (!iso) return '';
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)} h ago`;
+  return `${Math.round(minutes / (60 * 24))} d ago`;
+}
+
+/** One line on what the last run of a group did. */
+function resultLine(job: WorkerJobDoc): { ok: boolean; text: string } {
+  if (job.status === 'failed') return { ok: false, text: `Failed ${ago(job.finishedAt)}: ${job.error ?? 'no reason recorded'}` };
+  const r = job.result as
+    | {
+        alt?: { added?: number; held?: number; decorative?: number; failed?: number };
+        optimise?: { optimised?: number; resized?: number; designerCopies?: number; bytesSaved?: number };
+        errors?: string[];
+      }
+    | undefined;
+  if (!r) return { ok: true, text: `Done ${ago(job.finishedAt)}` };
+  const parts = [
+    `${r.alt?.added ?? 0} ALT added`,
+    r.alt?.decorative ? `${r.alt.decorative} marked decorative` : '',
+    r.alt?.held ? `${r.alt.held} to review` : '',
+    r.optimise
+      ? r.optimise.optimised || r.optimise.designerCopies
+        ? [
+            r.optimise.optimised ? `${r.optimise.optimised} images optimised` : '',
+            r.optimise.designerCopies ? `${r.optimise.designerCopies} copies ready for Designer` : '',
+            r.optimise.bytesSaved ? `${formatBytes(r.optimise.bytesSaved)} saved` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : 'images already optimal'
+      : '',
+  ].filter(Boolean);
+  const errors = r.errors?.length ? ` — ${r.errors.join('; ')}` : '';
+  return { ok: !r.errors?.length, text: `Done ${ago(job.finishedAt)} · ${parts.join(' · ')}${errors}` };
 }
 
 export function WebflowImagesDashboard({ projectId, projectName, userEmail, webflowConfig }: WebflowImagesDashboardProps) {
   const assetsHook = useWebflowAssets(projectId, webflowConfig);
   const cms = useCmsImages(projectId, webflowConfig);
   const library = useLibraryOptimise(projectId, projectName, userEmail ?? 'team');
-
-  const [cmsRequested, setCmsRequested] = useState(false);
-  const [query, setQuery] = useState('');
-  const [view, setView] = useState<View>('all');
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  /** Only what a person typed. The display value falls back to the seed. */
-  const [boxes, setBoxes] = useState<Record<string, string>>({});
   const [publish, setPublish] = useState(false);
 
-  // ── load both halves of the library ────────────────────────────────────────
-  useEffect(() => {
-    if (!webflowConfig.hasApiToken) return;
-    assetsHook.fetchAssets('all').catch(() => toast.error('Could not load the asset library'));
-    cms.discoverCollections().catch(() => toast.error('Could not list the CMS collections'));
-    // Intentionally once per project: these hooks re-create their functions.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, webflowConfig.hasApiToken]);
+  // ── what is there ──────────────────────────────────────────────────────────
+  // Each collection's images, keyed by collection, filled in as they arrive so
+  // the counts appear section by section rather than all at the end.
+  const [cmsRows, setCmsRows] = useState<Record<string, ImageRow[]>>({});
 
-  useEffect(() => {
-    if (cmsRequested || cms.collections.length === 0) return;
-    setCmsRequested(true);
-    cms.fetchAllImages(cms.collections.map((collection) => collection.id)).catch(() =>
-      toast.error('Could not load the CMS images'),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cms.collections, cmsRequested]);
-
-  const refresh = () => {
-    setCmsRequested(false);
-    assetsHook.fetchAssets('all').catch(() => undefined);
-    cms.discoverCollections().catch(() => undefined);
-  };
-
-  // ── one list ───────────────────────────────────────────────────────────────
-  const { rows, notImages } = useMemo(() => {
-    const byFingerprint = new Map<string, LibraryImage>();
-    let skipped = 0;
-
-    // CMS first: an image in a collection field is the repointable one.
-    for (const entry of cms.images) {
-      const fingerprint = imageFingerprint(entry.imageUrl);
-      if (!fingerprint || byFingerprint.has(fingerprint)) continue;
-      byFingerprint.set(fingerprint, {
-        id: entry.id,
-        src: entry.imageUrl,
-        fingerprint,
-        source: 'cms',
-        title: `${entry.collectionName} · ${entry.fieldDisplayName}`,
-        subtitle: entry.itemName,
-        currentAlt: entry.currentAlt ?? '',
-        hasAlt: !entry.isMissingAlt,
-      });
-    }
-
-    for (const asset of assetsHook.assets) {
-      // A library holds PDFs, videos and fonts too. They have no alt and are
-      // not pictures — the vision model failed on every one of them on Canopy.
-      if (!asset.contentType?.startsWith('image/')) {
-        skipped += 1;
-        continue;
+  const loadCollection = useCallback(
+    async (collectionId: string) => {
+      try {
+        const rows = toRows(await cms.loadCollectionImages(collectionId));
+        setCmsRows((previous) => ({ ...previous, [collectionId]: rows }));
+      } catch {
+        toast.error('Could not load one of the CMS collections');
       }
-      const fingerprint = imageFingerprint(asset.hostedUrl);
-      if (!fingerprint) continue;
-      const existing = byFingerprint.get(fingerprint);
-      if (existing) {
-        existing.alsoAsset = true;
-        continue;
-      }
-      byFingerprint.set(fingerprint, {
-        id: `asset:${asset.id}`,
-        src: asset.hostedUrl,
-        fingerprint,
-        source: 'asset',
-        title: asset.displayName || asset.originalFileName,
-        subtitle: 'Site asset',
-        currentAlt: asset.altText ?? '',
-        hasAlt: hasAlt(asset.altText),
-      });
-    }
-
-    return { rows: [...byFingerprint.values()], notImages: skipped };
-  }, [cms.images, assetsHook.assets]);
-
-  const displayValue = useCallback(
-    (row: LibraryImage) => boxes[row.id] ?? seedFor(row, library.draftFor(row.src)),
-    [boxes, library],
-  );
-
-  const statusOf = useCallback(
-    (row: LibraryImage): 'edited' | 'has-alt' | 'drafted' | 'missing' => {
-      const draft = library.draftFor(row.src);
-      if (boxes[row.id] !== undefined && boxes[row.id] !== seedFor(row, draft)) return 'edited';
-      if (row.hasAlt) return 'has-alt';
-      if (draft) return 'drafted';
-      return 'missing';
     },
-    [boxes, library],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectId],
   );
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (view === 'missing' && row.hasAlt) return false;
-      if (view === 'drafted' && statusOf(row) !== 'drafted') return false;
-      if (view === 'cms' && row.source !== 'cms') return false;
-      if (view === 'assets' && row.source !== 'asset') return false;
-      if (q && !`${row.title} ${row.subtitle} ${row.src}`.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [rows, view, query, statusOf]);
+  const load = useCallback(async () => {
+    setCmsRows({});
+    await Promise.all([
+      assetsHook.fetchAssets('all').catch(() => toast.error('Could not load the asset library')),
+      cms.discoverCollections().catch(() => toast.error('Could not list the CMS collections')),
+    ]);
+    // These hooks re-create their functions each render; load once per project.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
-  const counts = useMemo(
-    () => ({
-      missing: rows.filter((row) => !row.hasAlt).length,
-      cms: rows.filter((row) => row.source === 'cms').length,
-      assets: rows.filter((row) => row.source === 'asset').length,
-    }),
-    [rows],
+  useEffect(() => {
+    if (webflowConfig.hasApiToken) void load();
+  }, [load, webflowConfig.hasApiToken]);
+
+  // One collection at a time: sequential is kinder to Webflow's rate limit
+  // than twelve at once, and the first sections fill in within seconds.
+  const collectionIds = cms.collections.map((collection) => collection.id).join(',');
+  useEffect(() => {
+    if (!collectionIds) return;
+    let cancelled = false;
+    (async () => {
+      for (const id of collectionIds.split(',')) {
+        if (cancelled) return;
+        await loadCollection(id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionIds, loadCollection]);
+
+  const allCmsLoaded = cms.collections.length > 0 && cms.collections.every((collection) => cmsRows[collection.id]);
+
+  // Site assets that are only the upload behind a CMS image — their alt is on
+  // the CMS field, so they are not "general" and not missing anything.
+  const sourceIds = useMemo(
+    () => cmsSourceAssetIds(Object.values(cmsRows).flatMap((rows) => rows.map((row) => row.src))),
+    [cmsRows],
   );
 
-  // ── selection ──────────────────────────────────────────────────────────────
-  const selectedRows = useMemo(() => rows.filter((row) => selected.has(row.id)), [rows, selected]);
-  const selection = useMemo(
-    () => ({
-      missing: selectedRows.filter((row) => !row.hasAlt).length,
-      cms: selectedRows.filter((row) => row.source === 'cms').length,
-      assets: selectedRows.filter((row) => row.source === 'asset').length,
-    }),
-    [selectedRows],
-  );
-
-  const toggle = (id: string, on: boolean) =>
-    setSelected((previous) => {
-      const next = new Set(previous);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-
-  const allVisibleSelected = visible.length > 0 && visible.every((row) => selected.has(row.id));
-
-  // ── actions ────────────────────────────────────────────────────────────────
-  const jobRunning = !!library.job;
-
-  const optimise = () =>
-    library.optimise(
-      selectedRows.map((row) => row.src),
-      { altScope: 'missing', publish },
-    );
-
-  /** Rows whose box differs from what Webflow has now — drafts approved as-is, or edited. */
-  const approvable = useMemo(
+  const assetRows = useMemo<ImageRow[]>(
     () =>
-      selectedRows
-        .map((row) => ({ row, alt: displayValue(row) }))
-        .filter(({ row, alt }) => alt.trim() !== (row.currentAlt ?? '').trim()),
-    [selectedRows, displayValue],
+      assetsHook.assets
+        // A library holds PDFs, videos and fonts too; they are not pictures.
+        .filter((asset) => asset.hostedUrl && asset.contentType?.startsWith('image/'))
+        .filter((asset) => !sourceIds.has(asset.id.toLowerCase()))
+        .map((asset) => ({
+          id: asset.id,
+          src: asset.hostedUrl,
+          fingerprint: imageFingerprint(asset.hostedUrl),
+          title: asset.displayName || asset.originalFileName,
+          currentAlt: asset.altText ?? '',
+          missing: isBlank(asset.altText),
+        })),
+    [assetsHook.assets, sourceIds],
   );
 
-  const applyAlt = () =>
-    library.applyAlt(
-      approvable.map(({ row, alt }) => ({ fingerprint: row.fingerprint, src: row.src, alt })),
-      publish,
-    );
+  // General assets can only be counted once every collection is in, because
+  // until then some of them may yet turn out to be CMS uploads.
+  const generalReady = !assetsHook.loading && (allCmsLoaded || (cms.collections.length === 0 && !cms.discoveryLoading));
 
-  // ── last run summary ───────────────────────────────────────────────────────
-  const summary = useMemo(() => {
-    const result = library.lastRun?.result as
-      | {
-          alt?: { drafted?: number; needsReview?: number; failed?: number };
-          images?: { resized?: number; recompressedOnly?: number; repointed?: number; skipped?: unknown[]; failed?: unknown[] };
-          imagesError?: string;
-        }
-      | undefined;
-    if (!library.lastRun) return null;
-    if (library.lastRun.status === 'failed') return `Last run failed: ${library.lastRun.error ?? 'no reason recorded'}`;
-    if (!result) return null;
-    const alt = result.alt ?? {};
-    const images = result.images;
-    const parts = [
-      `ALT: ${alt.drafted ?? 0} drafted${alt.needsReview ? ` (${alt.needsReview} to review)` : ''}`,
-      images
-        ? `Images: ${images.resized ?? 0} resized, ${images.recompressedOnly ?? 0} re-encoded, ${images.repointed ?? 0} fields repointed` +
-          (images.skipped?.length ? `, ${images.skipped.length} left alone` : '') +
-          (images.failed?.length ? `, ${images.failed.length} failed` : '')
-        : `Images: ${result.imagesError ?? 'not run'}`,
-    ];
-    return parts.join(' · ');
-  }, [library.lastRun]);
+  const groups = useMemo<GroupRow[]>(
+    () => [
+      {
+        ref: { kind: 'assets' },
+        key: 'assets',
+        name: 'General assets',
+        isCms: false,
+        rows: generalReady ? assetRows : undefined,
+      },
+      ...cms.collections.map((collection) => ({
+        ref: { kind: 'collection' as const, collectionId: collection.id, name: collection.displayName },
+        key: collection.id,
+        name: collection.displayName,
+        isCms: true,
+        rows: cmsRows[collection.id],
+      })),
+    ],
+    [assetRows, generalReady, cms.collections, cmsRows],
+  );
 
-  const loading = assetsHook.loading || cms.discoveryLoading || cms.imagesLoading;
+  // When a group's run finishes, re-read that group so its counts are current.
+  const seenFinished = useRef(new Set<string>());
+  useEffect(() => {
+    for (const group of groups) {
+      const last = library.lastFor(group.key);
+      if (!last || seenFinished.current.has(last.id)) continue;
+      seenFinished.current.add(last.id);
+      const fresh = last.finishedAt && Date.now() - new Date(last.finishedAt).getTime() < 5 * 60_000;
+      if (!fresh) continue;
+      if (group.isCms) void loadCollection(group.key);
+      else void assetsHook.fetchAssets('all').catch(() => undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, library]);
+
+  const totals = useMemo(() => {
+    const known = groups.filter((group) => group.rows);
+    return {
+      images: known.reduce((sum, group) => sum + group.rows!.length, 0),
+      missing: known.reduce((sum, group) => sum + group.rows!.filter((row) => row.missing).length, 0),
+      stillCounting: known.length < groups.length,
+    };
+  }, [groups]);
+
+  const running = groups.filter((group) => library.activeFor(group.key));
+  const loading = assetsHook.loading || cms.discoveryLoading;
 
   if (!webflowConfig.hasApiToken) {
     return (
@@ -292,197 +298,247 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-3 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Layers className="h-4 w-4" />
+              <ImageIcon className="h-4 w-4" />
               Images
             </CardTitle>
             <CardDescription>
-              {loading && rows.length === 0
-                ? 'Reading the asset library and every CMS collection…'
-                : `${rows.length} images · ${counts.missing} missing ALT · ${counts.cms} in CMS fields · ${counts.assets} site assets` +
-                  (notImages ? ` · ${notImages} files that are not pictures` : '')}
+              {totals.images === 0 && loading
+                ? 'Reading the asset library and CMS collections…'
+                : `${totals.images} images · ${totals.missing} missing ALT${totals.stillCounting ? ' · still counting…' : ''}`}
             </CardDescription>
           </div>
-          <Button variant="ghost" size="sm" onClick={refresh} disabled={loading} title="Reload from Webflow">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void load()}
+            disabled={loading}
+            title="Reload from Webflow"
+          >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            onClick={() => library.optimise(groups.map((group) => group.ref), publish)}
+            disabled={library.busy || groups.length === 0 || running.length === groups.length}
+          >
+            {library.busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
+            Optimise everything
+          </Button>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Checkbox checked={publish} onCheckedChange={(value) => setPublish(value === true)} />
+            Publish when done
+          </label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Adds ALT text where it’s missing and optimises the images. ALT the model isn’t sure of is held for you to
+          check. Originals are backed up to Bunny first.
+          {totals.missing > 0 &&
+            ` Describing takes ${duration(totals.missing * SECONDS_PER_IMAGE)} for ${totals.missing} images — it runs in the background, so you can close this tab.`}
+          {library.online.length === 0 && ' No worker is online right now; it starts when one is.'}
+        </p>
       </CardHeader>
 
-      <CardContent className="space-y-3">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by name, item or URL"
-              className="h-9 pl-8"
-            />
-          </div>
-          <Select value={view} onValueChange={(value) => setView(value as View)}>
-            <SelectTrigger className="h-9 w-[170px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All images</SelectItem>
-              <SelectItem value="missing">Missing ALT</SelectItem>
-              <SelectItem value="drafted">Drafted, to review</SelectItem>
-              <SelectItem value="cms">CMS fields</SelectItem>
-              <SelectItem value="assets">Site assets</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setSelected((previous) => {
-                const next = new Set(previous);
-                for (const row of visible) {
-                  if (allVisibleSelected) next.delete(row.id);
-                  else next.add(row.id);
-                }
-                return next;
-              })
-            }
-            disabled={visible.length === 0}
-          >
-            {allVisibleSelected ? 'Deselect all' : `Select all (${visible.length})`}
-          </Button>
-          {counts.missing > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSelected(new Set(rows.filter((row) => !row.hasAlt).map((row) => row.id)))}
-            >
-              Select missing ({counts.missing})
-            </Button>
-          )}
-          {selected.size > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-              Clear ({selected.size})
-            </Button>
-          )}
-        </div>
-
-        {/* The one action, and the one that follows it */}
-        <div className="rounded-md border bg-muted/30 px-3 py-2.5 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={optimise} disabled={selected.size === 0 || jobRunning || library.busy}>
-              {jobRunning || library.busy ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5 mr-1.5" />}
-              {library.job?.status === 'running'
-                ? library.job.progress ?? 'Working…'
-                : library.job
-                  ? 'Queued'
-                  : `Optimise ${selected.size || ''}`.trim()}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={applyAlt}
-              disabled={approvable.length === 0 || jobRunning || library.busy}
-              title="Write the ALT text in the boxes for the selected rows"
-            >
-              <Send className="h-3.5 w-3.5 mr-1.5" />
-              Apply ALT {approvable.length > 0 ? `(${approvable.length})` : ''}
-            </Button>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground ml-1">
-              <Checkbox checked={publish} onCheckedChange={(value) => setPublish(value === true)} />
-              Publish CMS items afterwards
-            </label>
-            <div className="flex-1" />
-            <span className="text-[11px] text-muted-foreground">
-              {library.online.length > 0 ? `Runs on ${library.online[0].workerId}` : 'No worker online — will wait in the queue'}
-            </span>
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            {selected.size === 0
-              ? 'Select images, then Optimise: drafts ALT for any missing it, and resizes, backs up and repoints CMS images. Drafts appear in the rows for you to approve.'
-              : `Will draft ALT for ${selection.missing} missing it` +
-                (selection.cms ? ` · optimise ${selection.cms} CMS image${selection.cms === 1 ? '' : 's'}` : '') +
-                (selection.assets ? ` · ${selection.assets} site asset${selection.assets === 1 ? '' : 's'} get ALT only (Webflow cannot replace an asset’s file)` : '')}
-          </p>
-          {summary && <p className="text-[11px] text-muted-foreground border-t pt-2">{summary}</p>}
-        </div>
-
-        {/* Rows */}
-        {(assetsHook.error || cms.error) && (
-          <p className="text-xs text-destructive">{assetsHook.error ?? cms.error}</p>
-        )}
-        {rows.length === 0 && loading ? (
-          <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin mr-2" />
-            Loading…
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">Nothing matches that filter.</div>
-        ) : (
-          <ul className="divide-y rounded-md border">
-            {visible.map((row) => {
-              const draft = library.draftFor(row.src);
-              const status = statusOf(row);
-              return (
-                <li key={row.id} className="flex items-start gap-3 px-3 py-2.5">
-                  <Checkbox
-                    className="mt-3"
-                    checked={selected.has(row.id)}
-                    onCheckedChange={(value) => toggle(row.id, value === true)}
-                  />
-                  <a
-                    href={row.src}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="h-12 w-12 shrink-0 rounded border bg-muted/30 overflow-hidden flex items-center justify-center"
-                    title={row.src}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={row.src} alt="" className="h-full w-full object-cover" loading="lazy" />
-                  </a>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-sm font-medium truncate">{row.title}</span>
-                      <span className="text-xs text-muted-foreground truncate">{row.subtitle}</span>
-                      <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1">
-                        {row.source === 'cms' ? <Database className="h-2.5 w-2.5" /> : <ImageIcon className="h-2.5 w-2.5" />}
-                        {row.source === 'cms' ? 'CMS' : 'Asset'}
-                      </Badge>
-                      {row.alsoAsset && <Badge variant="outline" className="text-[10px] h-4 px-1.5">also in assets</Badge>}
-                      {draft && (
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                          {KIND_LABEL[draft.kind] ?? draft.kind}
-                        </Badge>
-                      )}
-                      {draft?.needsReview && (
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-500/40 text-amber-700 dark:text-amber-400">
-                          needs a look
-                        </Badge>
-                      )}
-                      <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {status === 'edited' ? 'edited' : status === 'has-alt' ? 'has ALT' : status === 'drafted' ? 'drafted' : 'missing ALT'}
-                      </span>
-                    </div>
-                    <Input
-                      value={displayValue(row)}
-                      onChange={(event) => setBoxes((previous) => ({ ...previous, [row.id]: event.target.value }))}
-                      placeholder={draft?.kind === 'decorative' ? 'Reads as decorative — leave empty' : 'No ALT text yet'}
-                      className="h-8 text-sm"
-                    />
-                    {draft?.kind === 'decorative' && !row.hasAlt && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Reads as decorative — an empty alt is probably right. Apply writes it as empty.
-                      </p>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+      <CardContent className="p-0">
+        {groups.map((group) => (
+          <GroupSection key={group.key} group={group} library={library} publish={publish} />
+        ))}
       </CardContent>
     </Card>
+  );
+}
+
+function GroupSection({
+  group,
+  library,
+  publish,
+}: {
+  group: GroupRow;
+  library: LibraryOptimise;
+  publish: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reviewOnly, setReviewOnly] = useState(false);
+  const [shown, setShown] = useState(PAGE);
+
+  const rows = group.rows;
+  const loadingRows = rows === undefined;
+  const images = rows?.length;
+  const missing = rows?.filter((row) => row.missing).length;
+  const active = library.activeFor(group.key);
+  const last = library.lastFor(group.key);
+  const outcome = last ? resultLine(last) : null;
+
+  const needsLook = useCallback(
+    (row: ImageRow) => {
+      if (!row.missing) return false;
+      const draft = library.draftFor(row.src);
+      return !!draft && !isConfidentDraft(draft);
+    },
+    [library],
+  );
+
+  const reviewCount = rows ? rows.filter(needsLook).length : undefined;
+  const visible = (rows ?? []).filter((row) => !reviewOnly || needsLook(row));
+
+  return (
+    <section className="border-t">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          {group.isCms ? (
+            <Database className="h-4 w-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ImageIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="truncate font-medium">{group.name}</span>
+          {group.isCms && (
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+              CMS
+            </Badge>
+          )}
+          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+            {images === undefined ? 'counting…' : `${images} images · ${missing} missing ALT`}
+            {reviewCount ? ` · ${reviewCount} to review` : ''}
+          </span>
+        </button>
+        <Button
+          size="sm"
+          variant={active ? 'secondary' : 'outline'}
+          disabled={!!active || library.busy || images === 0}
+          onClick={() => library.optimise([group.ref], publish)}
+        >
+          {active ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5 mr-1.5" />}
+          {active ? (active.status === 'running' ? 'Working…' : 'Queued') : 'Optimise'}
+        </Button>
+
+        {active?.status === 'running' && (
+          <div className="w-full space-y-1 pl-6">
+            <Progress value={Math.round((active.fraction ?? 0) * 100)} className="h-1.5" />
+            <p className="text-xs text-muted-foreground truncate">{active.progress ?? 'Starting'}</p>
+          </div>
+        )}
+        {!active && outcome && (
+          <p className={`w-full pl-6 text-xs flex items-start gap-1.5 ${outcome.ok ? 'text-muted-foreground' : 'text-destructive'}`}>
+            {outcome.ok ? (
+              <CheckCircle2 className="h-3.5 w-3.5 mt-px shrink-0 text-green-600 dark:text-green-400" />
+            ) : (
+              <XCircle className="h-3.5 w-3.5 mt-px shrink-0" />
+            )}
+            {outcome.text}
+          </p>
+        )}
+        {!group.isCms && images ? (
+          <p className="w-full pl-6 text-[11px] text-muted-foreground">
+            Webflow can’t swap a site asset’s file, so oversized ones get an optimised copy in the “ActiveSet ·
+            optimised” folder — in Designer, select the image, Replace, and pick it.
+          </p>
+        ) : null}
+      </div>
+
+      {open && (
+        <div className="border-t bg-muted/20">
+          {loadingRows ? (
+            <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Loading {group.name}…
+            </div>
+          ) : (
+            <>
+              {!!reviewCount && (
+                <div className="flex items-center gap-2 px-4 py-2 text-xs">
+                  <Checkbox checked={reviewOnly} onCheckedChange={(value) => setReviewOnly(value === true)} />
+                  Only the {reviewCount} the model wasn’t sure about
+                </div>
+              )}
+              {visible.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-muted-foreground">No images here.</p>
+              ) : (
+                <ul className="divide-y">
+                  {visible.slice(0, shown).map((row) => (
+                    <ImageLine key={row.id} row={row} library={library} needsLook={needsLook(row)} />
+                  ))}
+                </ul>
+              )}
+              {visible.length > shown && (
+                <div className="px-4 py-2 text-center">
+                  <Button variant="ghost" size="sm" onClick={() => setShown((value) => value + PAGE)}>
+                    Show {Math.min(PAGE, visible.length - shown)} more of {visible.length - shown}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ImageLine({ row, library, needsLook }: { row: ImageRow; library: LibraryOptimise; needsLook: boolean }) {
+  const draft = library.draftFor(row.src);
+  const seed = row.missing ? (draft && draft.kind !== 'decorative' ? draft.alt : '') : row.currentAlt;
+  const [value, setValue] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const text = value ?? seed;
+  const changed = text.trim() !== row.currentAlt.trim() && (value !== null || needsLook);
+
+  return (
+    <li className="flex items-center gap-3 px-4 py-2">
+      <a
+        href={row.src}
+        target="_blank"
+        rel="noreferrer"
+        className="h-10 w-10 shrink-0 overflow-hidden rounded border bg-background"
+        title={row.src}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={row.src} alt="" loading="lazy" className="h-full w-full object-cover" />
+      </a>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="truncate font-medium">{row.title}</span>
+          {row.subtitle && <span className="truncate text-muted-foreground">{row.subtitle}</span>}
+          <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+            {!row.missing ? 'has ALT' : needsLook ? 'to review' : draft ? 'drafted' : 'missing'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            value={text}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder={draft?.kind === 'decorative' ? 'Reads as decorative — leave empty' : 'No ALT text yet'}
+            className={`h-8 text-sm ${needsLook ? 'border-amber-500/50' : ''}`}
+          />
+          {changed && (
+            <Button
+              size="sm"
+              className="h-8 shrink-0"
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  await library.saveAlt({ fingerprint: row.fingerprint, src: row.src, alt: text });
+                  setValue(null);
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+            </Button>
+          )}
+        </div>
+      </div>
+    </li>
   );
 }

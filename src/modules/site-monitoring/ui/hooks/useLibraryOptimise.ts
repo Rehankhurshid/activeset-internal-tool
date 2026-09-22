@@ -15,28 +15,41 @@ import {
 } from '../../infrastructure/alt-suggestions.repository';
 
 /**
- * The Webflow tab's one hook for its one Images screen.
+ * The Images screen's one hook: optimise a group, see how each group is doing.
  *
- * It replaced two: one that drafted alt for site assets and saved it from the
- * browser, one that built a CLI command for CMS images and printed "web
- * preview only". Both screens now share this, which queues one job that does
- * everything safe for a selection and one job that applies alt text a person
- * has read. Nothing here writes to Webflow from the browser; the worker is the
- * single door.
+ * A group is the site's general assets or one CMS collection, and each gets
+ * its own worker job — so each section of the screen has its own progress,
+ * its own result and its own failure, and "Optimise everything" is just every
+ * group queued in order. Nothing here writes to Webflow from the browser; a
+ * hand-edited ALT goes through the worker like everything else.
  */
 
-const LIBRARY_KINDS = new Set(['library_optimise', 'alt_apply', 'webflow_alt', 'image_apply']);
+export type LibraryGroupRef = { kind: 'assets' } | { kind: 'collection'; collectionId: string; name?: string };
+
+/** Mirrors `groupKey` in the worker's library-group handler. */
+export const libraryGroupKey = (group: LibraryGroupRef) =>
+  group.kind === 'assets' ? 'assets' : group.collectionId;
+
+const keyOf = (job: WorkerJobDoc) => {
+  const group = job.payload?.group as LibraryGroupRef | undefined;
+  return group ? libraryGroupKey(group) : undefined;
+};
+
+/** A draft the classifier stands behind. Mirrors `isConfident` in the worker. */
+export const isConfidentDraft = (draft: Pick<AltSuggestionDoc, 'needsReview' | 'certainty'>) =>
+  !draft.needsReview && draft.certainty !== 'low';
 
 export interface LibraryOptimise {
   drafts: Map<string, AltSuggestionDoc>;
   draftFor: (src: string) => AltSuggestionDoc | undefined;
-  /** Any library job queued or running for this project. */
-  job?: WorkerJobDoc;
-  /** The most recent finished one-shot, for the summary line. */
-  lastRun?: WorkerJobDoc;
   online: WorkerDoc[];
-  optimise: (srcs: string[], options?: { altScope?: 'missing' | 'all'; publish?: boolean }) => Promise<void>;
-  applyAlt: (items: { fingerprint: string; src: string; alt: string }[], publish?: boolean) => Promise<void>;
+  /** The queued or running job for a group. */
+  activeFor: (key: string) => WorkerJobDoc | undefined;
+  /** The last finished job for a group, for its result line. */
+  lastFor: (key: string) => WorkerJobDoc | undefined;
+  optimise: (groups: LibraryGroupRef[], publish: boolean) => Promise<void>;
+  /** Write one hand-checked or hand-edited ALT, through the worker. */
+  saveAlt: (item: { fingerprint: string; src: string; alt: string }) => Promise<void>;
   busy: boolean;
 }
 
@@ -63,74 +76,81 @@ export function useLibraryOptimise(
 
   const online = useMemo(() => workers.filter((worker) => isWorkerOnline(worker)), [workers]);
 
-  const job = useMemo(
-    () => jobs.find((entry) => LIBRARY_KINDS.has(entry.kind) && (entry.status === 'queued' || entry.status === 'running')),
-    [jobs],
-  );
-
-  const lastRun = useMemo(
-    () =>
-      jobs
-        .filter((entry) => entry.kind === 'library_optimise' && (entry.status === 'done' || entry.status === 'failed'))
-        .sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''))[0],
-    [jobs],
-  );
+  const { active, last } = useMemo(() => {
+    const active = new Map<string, WorkerJobDoc>();
+    const last = new Map<string, WorkerJobDoc>();
+    // Newest first, so the first job seen for a group is its latest.
+    for (const job of jobs) {
+      if (job.kind !== 'library_group') continue;
+      const key = keyOf(job);
+      if (!key) continue;
+      if (job.status === 'queued' || job.status === 'running') {
+        if (!active.has(key)) active.set(key, job);
+      } else if (!last.has(key)) {
+        last.set(key, job);
+      }
+    }
+    return { active, last };
+  }, [jobs]);
 
   const draftFor = useCallback((src: string) => drafts.get(imageFingerprint(src)), [drafts]);
 
-  const queued = useCallback(
-    (count: number) =>
-      toast.success(
-        online.length > 0
-          ? `Queued ${count} — ${online[0].workerId} picks it up within a few seconds`
-          : `Queued ${count}. It runs when a worker machine is next online.`,
-      ),
-    [online],
-  );
-
   const optimise = useCallback(
-    async (srcs: string[], options: { altScope?: 'missing' | 'all'; publish?: boolean } = {}) => {
-      if (srcs.length === 0) return void toast.error('Nothing selected');
+    async (groups: LibraryGroupRef[], publish: boolean) => {
+      const todo = groups.filter((group) => !active.has(libraryGroupKey(group)));
+      if (todo.length === 0) return void toast.message('Already queued');
       setBusy(true);
       try {
-        await workerRepository.enqueue({
-          kind: 'library_optimise',
-          projectId,
-          projectName,
-          payload: { srcs, altScope: options.altScope ?? 'missing', publish: options.publish ?? false, by: userEmail },
-          requestedBy: userEmail,
-        });
-        queued(srcs.length);
+        // In order: general assets first, then collections as listed.
+        for (const group of todo) {
+          await workerRepository.enqueue({
+            kind: 'library_group',
+            projectId,
+            projectName,
+            payload: { group, publish, by: userEmail },
+            requestedBy: userEmail,
+          });
+        }
+        toast.success(
+          online.length > 0
+            ? `Queued ${todo.length === 1 ? 'it' : `${todo.length} groups`} — ${online[0].workerId} is on it`
+            : 'Queued. It starts when a worker machine is next online.',
+        );
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Could not queue that');
       } finally {
         setBusy(false);
       }
     },
-    [projectId, projectName, userEmail, queued],
+    [active, projectId, projectName, userEmail, online],
   );
 
-  const applyAlt = useCallback(
-    async (items: { fingerprint: string; src: string; alt: string }[], publish = false) => {
-      if (items.length === 0) return void toast.error('Nothing to apply');
-      setBusy(true);
+  const saveAlt = useCallback(
+    async (item: { fingerprint: string; src: string; alt: string }) => {
       try {
         await workerRepository.enqueue({
           kind: 'alt_apply',
           projectId,
           projectName,
-          payload: { fingerprints: items.map((item) => item.fingerprint), overrides: items, publish, by: userEmail },
+          payload: { fingerprints: [item.fingerprint], overrides: [item], by: userEmail },
           requestedBy: userEmail,
         });
-        queued(items.length);
+        toast.success('Saving — it lands in Webflow in a few seconds');
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Could not queue that');
-      } finally {
-        setBusy(false);
+        toast.error(error instanceof Error ? error.message : 'Could not save that');
       }
     },
-    [projectId, projectName, userEmail, queued],
+    [projectId, projectName, userEmail],
   );
 
-  return { drafts, draftFor, job, lastRun, online, optimise, applyAlt, busy };
+  return {
+    drafts,
+    draftFor,
+    online,
+    activeFor: (key) => active.get(key),
+    lastFor: (key) => last.get(key),
+    optimise,
+    saveAlt,
+    busy,
+  };
 }

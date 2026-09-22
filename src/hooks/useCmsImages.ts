@@ -27,6 +27,12 @@ export interface UseCmsImagesReturn {
   hasMore: boolean;
   fetchImages: (collectionId: string, offset?: number) => Promise<void>;
   fetchAllImages: (collectionIds: string[]) => Promise<void>;
+  /**
+   * One collection's images, returned rather than stored — so a screen can
+   * load sections as they are opened without one section's load replacing
+   * another's, and without reading every collection on the site up front.
+   */
+  loadCollectionImages: (collectionId: string) => Promise<CmsImageEntry[]>;
 
   // Reading only. Drafting, compressing and saving used to live here too, each
   // calling a route that wrote from the browser (one of them to Ollama on
@@ -206,6 +212,28 @@ export function useCmsImages(
   }, [canCall, projectId]);
 
   // --- Fetch images from multiple collections ---
+  const loadCollectionImages = useCallback(
+    async (collectionId: string): Promise<CmsImageEntry[]> => {
+      if (!canCall || !projectId) return [];
+      const images: CmsImageEntry[] = [];
+      let offset = 0;
+      for (;;) {
+        const url = new URL('/api/webflow/cms/items', window.location.origin);
+        url.searchParams.set('collectionId', collectionId);
+        url.searchParams.set('offset', String(offset));
+        url.searchParams.set('limit', '100');
+        const res = await fetchForProject(projectId, url.toString());
+        const result = await res.json();
+        if (!res.ok || !result.success) throw new Error(result.error || 'Failed to fetch items');
+        images.push(...(result.data.images || []));
+        if (!result.data.hasMore) break;
+        offset = result.data.nextOffset;
+      }
+      return images;
+    },
+    [canCall, projectId],
+  );
+
   const fetchAllImages = useCallback(async (collectionIds: string[]) => {
     if (!canCall || !projectId) return;
 
@@ -277,6 +305,7 @@ export function useCmsImages(
     hasMore,
     fetchImages,
     fetchAllImages,
+    loadCollectionImages,
     error,
     clearError,
     reset,

@@ -1,13 +1,13 @@
 import { Timestamp as AdminTimestamp } from 'firebase-admin/firestore';
 import { db as adminDb } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
-import { getCollection, listCollections, listItems, patchItems, publishItems } from '@/lib/cms/webflow-client';
-import { extractAllImages } from '@/lib/cms/extract';
+import { patchItems, publishItems, webflowFetch } from '@/lib/cms/webflow-client';
+import { buildCmsIndex, listSiteAssets } from '@/lib/cms/library';
 import { groupUpdatesByItem } from '@/lib/cms/patch';
-import { decisionId, imageFingerprint } from '@/modules/site-monitoring/domain/audit-findings';
-import { resolveAssets, type WebflowAssetSummary } from '@/modules/site-monitoring/domain/webflow-assets';
+import { decisionId } from '@/modules/site-monitoring/domain/audit-findings';
+import { resolveAssets } from '@/modules/site-monitoring/domain/webflow-assets';
 import { getWebflowTokenAdmin, loadProjectDocAdmin } from '@/lib/project-admin';
-import type { CmsImageEntry, CmsUpdatePayload } from '@/types/webflow';
+import type { CmsUpdatePayload } from '@/types/webflow';
 
 /**
  * Write drafted alt text back to Webflow, in bulk.
@@ -26,7 +26,6 @@ import type { CmsImageEntry, CmsUpdatePayload } from '@/types/webflow';
  * the person reviewing stays the one choosing.
  */
 
-const WEBFLOW_API_BASE = 'https://api.webflow.com/v2';
 
 export interface AltApplyPayload {
   /** Which suggestions to write. Required — this never applies everything by itself. */
@@ -41,6 +40,14 @@ export interface AltApplyPayload {
    * save path that writes from the browser.
    */
   overrides?: { fingerprint: string; src: string; alt: string }[];
+  /**
+   * Which CMS collections to look in. Undefined means all; an empty list means
+   * none, for a run that only concerns site assets. A per-collection run that
+   * re-read every collection on the site was most of what hit the rate limit.
+   */
+  collectionIds?: string[];
+  /** Whether to look for site assets at all. On by default. */
+  includeAssets?: boolean;
 }
 
 export interface AltApplyResult {
@@ -57,57 +64,6 @@ interface StoredSuggestion {
   src: string;
   alt: string;
   kind: string;
-}
-
-/** Every CMS image on the site, keyed by image fingerprint. */
-async function buildCmsIndex(
-  siteId: string,
-  token: string,
-  onProgress: (message: string, fraction?: number) => Promise<void> | void,
-): Promise<Map<string, CmsImageEntry>> {
-  const index = new Map<string, CmsImageEntry>();
-  const collections = await listCollections(siteId, token);
-
-  for (const [i, collection] of collections.entries()) {
-    await onProgress(`Reading collection ${collection.displayName ?? collection.slug}`, 0.1 + (i / collections.length) * 0.4);
-    const full = (await getCollection(collection.id, token)) as unknown as { fields?: unknown[] };
-    const fields = (full.fields ?? []) as never[];
-
-    let offset = 0;
-    for (;;) {
-      const { items, pagination } = await listItems(collection.id, token, offset, 100);
-      for (const item of items) {
-        for (const entry of extractAllImages(
-          item as never,
-          collection.id,
-          collection.displayName ?? collection.slug,
-          fields,
-        )) {
-          const key = imageFingerprint(entry.imageUrl);
-          // First one wins; the same asset reused across items is written once.
-          if (key && !index.has(key)) index.set(key, entry);
-        }
-      }
-      offset += items.length;
-      if (items.length === 0 || offset >= (pagination.total ?? offset)) break;
-    }
-  }
-
-  return index;
-}
-
-async function listSiteAssets(siteId: string, token: string): Promise<WebflowAssetSummary[]> {
-  const assets: WebflowAssetSummary[] = [];
-  for (let offset = 0; offset < 2000; offset += 100) {
-    const res = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/assets?limit=100&offset=${offset}`, {
-      headers: { Authorization: `Bearer ${token}`, accept: 'application/json' },
-    });
-    if (!res.ok) break;
-    const page = (await res.json()) as { assets?: WebflowAssetSummary[]; pagination?: { total?: number } };
-    assets.push(...(page.assets ?? []));
-    if ((page.assets?.length ?? 0) < 100 || assets.length >= (page.pagination?.total ?? assets.length)) break;
-  }
-  return assets;
 }
 
 export async function runAltApply(
@@ -160,13 +116,20 @@ export async function runAltApply(
   }
   const suggestions = [...byFingerprint.values()];
 
-  const cmsIndex = await buildCmsIndex(siteId, token, onProgress);
-  await onProgress('Reading site assets', 0.55);
-  const assets = await listSiteAssets(siteId, token);
-  const assetBySrc = resolveAssets(suggestions.map((s) => s.src), assets);
+  const cmsIndex = await buildCmsIndex(siteId, token, {
+    collectionIds: payload.collectionIds,
+    onProgress: (message, fraction) => onProgress(message, 0.1 + (fraction ?? 0) * 0.4),
+  });
+  const assetBySrc =
+    payload.includeAssets === false
+      ? {}
+      : (await onProgress('Reading site assets', 0.55),
+        resolveAssets(suggestions.map((s) => s.src), await listSiteAssets(siteId, token)));
 
   // ── CMS: group by item so one PATCH carries every field on it ────────────
   const updates: CmsUpdatePayload[] = [];
+  /** Parallel to `updates`, so a decision lands on the image it was written for. */
+  const updateFingerprints: string[] = [];
   const assetWrites: { fingerprint: string; assetId: string; alt: string }[] = [];
 
   for (const suggestion of suggestions) {
@@ -177,17 +140,23 @@ export async function runAltApply(
       continue;
     }
 
-    const entry = cmsIndex.get(suggestion.fingerprint);
-    if (entry) {
-      updates.push({
-        collectionId: entry.collectionId,
-        itemId: entry.itemId,
-        fieldSlug: entry.fieldSlug,
-        fieldType: entry.fieldType,
-        imageIndex: entry.imageIndex,
-        newAlt: suggestion.alt,
-        rawFieldValue: entry.rawFieldValue,
-      });
+    // Every field that uses this image. An image reused across five items is
+    // missing alt in five places; writing only the first left the other four
+    // counting as "missing" on the next pass, forever.
+    const entries = cmsIndex.get(suggestion.fingerprint);
+    if (entries?.length) {
+      for (const entry of entries) {
+        updates.push({
+          collectionId: entry.collectionId,
+          itemId: entry.itemId,
+          fieldSlug: entry.fieldSlug,
+          fieldType: entry.fieldType,
+          imageIndex: entry.imageIndex,
+          newAlt: suggestion.alt,
+          rawFieldValue: entry.rawFieldValue,
+        });
+        updateFingerprints.push(suggestion.fingerprint);
+      }
       continue;
     }
 
@@ -231,7 +200,7 @@ export async function runAltApply(
       }
     }
 
-    for (const update of updates) applied.add(imageFingerprintOfUpdate(update, cmsIndex));
+    for (const fingerprint of updateFingerprints) applied.add(fingerprint);
 
     if (payload.publish) {
       for (const [collectionId, itemIds] of publishable) {
@@ -245,9 +214,8 @@ export async function runAltApply(
 
   for (const [i, write] of assetWrites.entries()) {
     await onProgress(`Writing asset ${i + 1}/${assetWrites.length}`, 0.85);
-    const res = await fetch(`${WEBFLOW_API_BASE}/assets/${write.assetId}`, {
+    const res = await webflowFetch(`/assets/${write.assetId}`, token, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, accept: 'application/json', 'content-type': 'application/json' },
       body: JSON.stringify({ altText: write.alt }),
     });
     if (res.ok) {
@@ -260,21 +228,6 @@ export async function runAltApply(
 
   await recordApplied(projectId, suggestions, applied, payload.by ?? 'worker');
   return result;
-}
-
-/** The fingerprint an update came from, so the decision lands on the right row. */
-function imageFingerprintOfUpdate(update: CmsUpdatePayload, index: Map<string, CmsImageEntry>): string {
-  for (const [fingerprint, entry] of index) {
-    if (
-      entry.collectionId === update.collectionId &&
-      entry.itemId === update.itemId &&
-      entry.fieldSlug === update.fieldSlug &&
-      entry.imageIndex === update.imageIndex
-    ) {
-      return fingerprint;
-    }
-  }
-  return '';
 }
 
 /**

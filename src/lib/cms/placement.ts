@@ -1,7 +1,8 @@
 import { getCollection, listCollections, listItems } from './webflow-client';
 import { extractAllImages } from './extract';
 import { imageFingerprint } from '@/modules/site-monitoring/domain/audit-findings';
-import { resolveAssets, type WebflowAssetSummary } from '@/modules/site-monitoring/domain/webflow-assets';
+import { resolveAssets } from '@/modules/site-monitoring/domain/webflow-assets';
+import { listSiteAssets } from './library';
 
 /**
  * Where an image on a page actually lives in Webflow.
@@ -20,20 +21,6 @@ import { resolveAssets, type WebflowAssetSummary } from '@/modules/site-monitori
 export type ImagePlacement = 'cms' | 'asset' | 'unknown';
 
 const WEBFLOW_API_BASE = 'https://api.webflow.com/v2';
-
-export async function listSiteAssets(siteId: string, token: string): Promise<WebflowAssetSummary[]> {
-  const assets: WebflowAssetSummary[] = [];
-  for (let offset = 0; offset < 2000; offset += 100) {
-    const res = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/assets?limit=100&offset=${offset}`, {
-      headers: { Authorization: `Bearer ${token}`, accept: 'application/json' },
-    });
-    if (!res.ok) break;
-    const page = (await res.json()) as { assets?: WebflowAssetSummary[]; pagination?: { total?: number } };
-    assets.push(...(page.assets ?? []));
-    if ((page.assets?.length ?? 0) < 100 || assets.length >= (page.pagination?.total ?? assets.length)) break;
-  }
-  return assets;
-}
 
 /**
  * Label each of `srcs` by where it lives.

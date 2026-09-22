@@ -1,16 +1,16 @@
 import { Timestamp as AdminTimestamp } from 'firebase-admin/firestore';
 import { db as adminDb } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
-import { getCollection, listCollections, listItems, patchItems, publishItems } from '@/lib/cms/webflow-client';
-import { extractAllImages } from '@/lib/cms/extract';
+import { patchItems, publishItems } from '@/lib/cms/webflow-client';
+import { buildCmsIndex, listSiteAssets } from '@/lib/cms/library';
 import { groupUpdatesByItem } from '@/lib/cms/patch';
 import { uploadAssetToWebflow } from '@/lib/cms/assets';
 import { decisionId, fileNameOf, imageFingerprint } from '@/modules/site-monitoring/domain/audit-findings';
 import { getWebflowTokenAdmin, loadProjectDocAdmin } from '@/lib/project-admin';
-import type { CmsImageEntry, CmsUpdatePayload } from '@/types/webflow';
+import type { CmsUpdatePayload } from '@/types/webflow';
 import { encodeAtWidth, type StoredWeightFinding } from './image-budget';
 import { backupPath, bunnyConfig, putToBunny, BUNNY_NOT_CONFIGURED } from '@/lib/backup/bunny';
-import { ensureOptimisedFolder, listSiteAssets } from '@/lib/cms/placement';
+import { ensureOptimisedFolder } from '@/lib/cms/placement';
 import { sanitizeAssetFileName } from '@/lib/cms/assets';
 import crypto from 'node:crypto';
 
@@ -64,6 +64,8 @@ export interface ImageApplyPayload {
    * becomes a pick from the library rather than a download and a drag.
    */
   designerCopies?: boolean;
+  /** Which CMS collections to look in. Undefined means all; an empty list means none. */
+  collectionIds?: string[];
 }
 
 export interface ImageApplyResult {
@@ -86,56 +88,6 @@ export interface ImageApplyResult {
   backedUpTo?: string;
   skipped: { fingerprint: string; reason: string }[];
   failed: { where: string; error: string }[];
-}
-
-/**
- * Every CMS image on the site, keyed by fingerprint — **all** matches, not the
- * first.
- *
- * `alt_apply` keeps only the first entry per fingerprint, which is harmless
- * for alt text: writing the same sentence onto one of five items that share a
- * photo still leaves the other four correct next time. It is not harmless for
- * a URL swap. Repointing one item and leaving four pointing at the oversized
- * original would report as fixed while four fifths of the problem stayed on
- * the site.
- */
-async function buildCmsIndex(
-  siteId: string,
-  token: string,
-  onProgress: (message: string, fraction?: number) => Promise<void> | void,
-): Promise<Map<string, CmsImageEntry[]>> {
-  const index = new Map<string, CmsImageEntry[]>();
-  const collections = await listCollections(siteId, token);
-
-  for (const [i, collection] of collections.entries()) {
-    await onProgress(
-      `Reading ${collection.displayName ?? collection.slug}`,
-      0.05 + (i / Math.max(1, collections.length)) * 0.25,
-    );
-    const full = (await getCollection(collection.id, token)) as unknown as { fields?: unknown[] };
-    const fields = (full.fields ?? []) as never[];
-
-    let offset = 0;
-    for (;;) {
-      const { items, pagination } = await listItems(collection.id, token, offset, 100);
-      for (const item of items) {
-        for (const entry of extractAllImages(
-          item as never,
-          collection.id,
-          collection.displayName ?? collection.slug,
-          fields,
-        )) {
-          const key = imageFingerprint(entry.imageUrl);
-          if (!key) continue;
-          index.set(key, [...(index.get(key) ?? []), entry]);
-        }
-      }
-      offset += items.length;
-      if (items.length === 0 || offset >= (pagination.total ?? offset)) break;
-    }
-  }
-
-  return index;
 }
 
 function fileNameFor(src: string, width: number | null, ext: string): string {
@@ -212,7 +164,10 @@ export async function runImageApply(
     findingRefs.set(finding.fingerprint, doc.ref);
   }
 
-  const cmsIndex = await buildCmsIndex(siteId, token, onProgress);
+  const cmsIndex = await buildCmsIndex(siteId, token, {
+    collectionIds: payload.collectionIds,
+    onProgress: (message, fraction) => onProgress(message, 0.05 + (fraction ?? 0) * 0.25),
+  });
 
   // Say where each image lives, on the finding itself. Findings measured
   // before classification existed read as "unknown" in the Weight tab, and the
@@ -337,14 +292,6 @@ export async function runImageApply(
       }
       const original = Buffer.from(await res.arrayBuffer());
 
-      // Archive first. If this fails the image is left exactly as it was.
-      const archived = await putToBunny(
-        bunny,
-        backupPath(projectId, target.fingerprint, fileNameOf(src), now),
-        original,
-        res.headers.get('content-type') ?? 'application/octet-stream',
-      );
-
       const encoded = await encodeAtWidth(original, targetWidth, finding?.format ?? '');
       if (!encoded) {
         result.skipped.push({
@@ -353,6 +300,27 @@ export async function runImageApply(
         });
         continue;
       }
+
+      // Re-encoding at the same size can win a handful of bytes, and a
+      // handful of bytes is not worth a new asset in the client's library, a
+      // CMS write and a publish. A resize to a measured width is always worth
+      // it — the measurement already decided that.
+      const saved = original.byteLength - encoded.bytes.byteLength;
+      if (targetWidth === null && (saved < 8 * 1024 || saved / original.byteLength < 0.15)) {
+        result.skipped.push({ fingerprint: target.fingerprint, reason: 'already about as small as it gets' });
+        continue;
+      }
+
+      // Archive before anything is written. Encoding is not a write, so it
+      // goes first — backing up every image on a site only to find most of
+      // them are already small was over a thousand pointless uploads on
+      // PeakXV. If this fails, the image is left exactly as it was.
+      const archived = await putToBunny(
+        bunny,
+        backupPath(projectId, target.fingerprint, fileNameOf(src), now),
+        original,
+        res.headers.get('content-type') ?? 'application/octet-stream',
+      );
 
       const uploaded = await uploadAssetToWebflow(
         siteId,
