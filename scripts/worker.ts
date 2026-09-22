@@ -33,6 +33,13 @@ import {
 import { describeResult, runImageBudget, type ImageBudgetPayload } from '@/lib/worker/handlers/image-budget';
 import { runAltTextForProject, type AltTextPayload } from '@/lib/worker/handlers/alt-text';
 import { loadProjectDocAdmin } from '@/lib/project-admin';
+import {
+  claimNextCommand,
+  finishCommand,
+  performCommand,
+  readDesiredState,
+} from '@/lib/worker/control-admin';
+import { ACTION_LABEL } from '@/modules/site-monitoring/domain/worker-control';
 
 
 const useColour = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -140,6 +147,34 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
 const program = new Command();
 program.name('worker').description('Runs alt text and image measurement on this machine').version('1.0.0');
 
+/**
+ * The checks, as plain text. The CLI prints a coloured version of the same
+ * thing, and the `doctor` command sends this back to the app — so what the
+ * team sees on a phone is what someone at the machine would see.
+ */
+async function buildDoctorReport(): Promise<string> {
+  const hardware = readHardware();
+  const { host, model } = resolveOllama();
+  const health = await checkOllama();
+  const browser = findBrowserExecutable();
+  const { hasFirebaseAdminCredentials } = await import('@/lib/firebase-admin');
+  const recommendation = recommendModel(hardware);
+
+  return [
+    `${hardware.platform}`,
+    `${hardware.cpu} · ${hardware.cores} cores · ${hardware.ramGb} GB RAM`,
+    hardware.gpu ? `${hardware.gpu}${hardware.vramGb ? ` · ${hardware.vramGb} GB VRAM` : ''}` : 'No CUDA GPU detected',
+    '',
+    `Model: ${model} (recommended ${recommendation.model} — ${recommendation.why})`,
+    health.ok ? `Ollama ready at ${host}` : `Ollama: ${health.problem}`,
+    health.models.length ? `Installed: ${health.models.join(', ')}` : '',
+    browser ? `Browser: ${browser}` : 'No Chrome or Edge found',
+    hasFirebaseAdminCredentials ? 'Firebase admin ready' : 'No Firebase admin credentials',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 program
   .command('doctor')
   .description('What this machine can do, and what it is missing')
@@ -198,30 +233,73 @@ async function loop(options: { once?: boolean; interval?: string; kinds?: string
   if (kinds) log(dim(`  only: ${kinds.join(', ')}`));
 
   let stopping = false;
+  let exitReason: string | undefined;
+  const requestExit = (reason: string) => {
+    exitReason = reason;
+    stopping = true;
+  };
+
   process.on('SIGINT', () => {
     if (stopping) process.exit(1);
     stopping = true;
     log(yellow('stopping after this job — press ctrl-c again to force'));
   });
 
+  // Whatever the team last chose in the app. Read every cycle so a pause or a
+  // model change takes effect on the next poll without a restart.
+  let paused = false;
+
   for (;;) {
     if (stopping) break;
 
     let job: WorkerJob | null = null;
     try {
+      const desired = await readDesiredState(workerId);
+      if (desired.model && desired.model !== process.env.OLLAMA_ALT_MODEL) {
+        process.env.OLLAMA_ALT_MODEL = desired.model;
+        log(bold('model'), `now ${desired.model}`);
+      }
+      if (!!desired.paused !== paused) {
+        paused = !!desired.paused;
+        log(paused ? yellow('paused from the app') : green('resumed from the app'));
+      }
+
       await reportWorkerAlive(workerId, {
         ...hardware,
         model: resolveOllama().model,
+        paused,
         kinds: kinds ?? ['alt_text', 'image_budget'],
       });
-      job = await claimNextJob(workerId, kinds);
+
+      // Control before work: a restart or a pause should not wait behind a
+      // twenty-minute scan.
+      const command = await claimNextCommand(workerId);
+      if (command) {
+        log(bold(ACTION_LABEL[command.action].label), dim(`requested by ${command.requestedBy}`));
+        try {
+          const outcome = await performCommand(command, {
+            cwd: process.cwd(),
+            doctorReport: buildDoctorReport,
+            requestExit,
+          });
+          await finishCommand(workerId, command.id, outcome);
+          log(outcome.ok ? green('  done') : red('  failed'), dim(outcome.output.split('\n')[0] ?? ''));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          log(red('  failed'), message);
+          await finishCommand(workerId, command.id, { ok: false, output: message }).catch(() => undefined);
+        }
+        continue;
+      }
+
+      if (!paused) job = await claimNextJob(workerId, kinds);
     } catch (error) {
       log(red('queue unreachable'), dim(error instanceof Error ? error.message : String(error)));
     }
 
     if (!job) {
       if (options.once) {
-        log(dim('nothing queued'));
+        log(dim(paused ? 'paused' : 'nothing queued'));
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -240,6 +318,12 @@ async function loop(options: { once?: boolean; interval?: string; kinds?: string
     }
 
     if (options.once) return;
+  }
+
+  if (exitReason) {
+    log(bold('exiting'), dim(`${exitReason} — the service manager restarts it`));
+    // A non-zero code is what NSSM and Task Scheduler treat as "restart me".
+    process.exit(75);
   }
 }
 

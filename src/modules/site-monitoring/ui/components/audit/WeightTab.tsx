@@ -20,6 +20,8 @@ import { toast } from 'sonner';
 import { formatBytes } from '../../../domain/image-budget';
 import { fileNameOf } from '../../../domain/audit-findings';
 import type { WeightFindingDoc, WorkerDoc, WorkerJobDoc } from '../../../infrastructure/worker.repository';
+import { isWorkerOnline } from '../../../infrastructure/worker.repository';
+import { WorkerPanel } from './WorkerPanel';
 import { relativeTime } from './relative-time';
 
 /**
@@ -40,6 +42,7 @@ export interface WeightTabProps {
   activeJob?: WorkerJobDoc;
   lastRun?: WorkerJobDoc;
   onMeasure: () => Promise<void>;
+  userEmail: string;
 }
 
 function Thumb({ src }: { src: string }) {
@@ -160,7 +163,16 @@ function Section({
   );
 }
 
-export function WeightTab({ findings, isReadOnly, online, activeJob, lastRun, onMeasure }: WeightTabProps) {
+export function WeightTab({
+  findings,
+  isReadOnly,
+  workers,
+  online,
+  activeJob,
+  lastRun,
+  onMeasure,
+  userEmail,
+}: WeightTabProps) {
   const [query, setQuery] = useState('');
   const [queueing, setQueueing] = useState(false);
 
@@ -200,6 +212,22 @@ export function WeightTab({ findings, isReadOnly, online, activeJob, lastRun, on
   };
 
   return (
+    <div className="space-y-3">
+      {workers.length > 0 && (
+        <div className="space-y-2">
+          {workers.map((worker) => (
+            <WorkerPanel
+              key={worker.workerId}
+              worker={worker}
+              online={isWorkerOnline(worker)}
+              activeJob={activeJob?.claimedBy === worker.workerId ? activeJob : undefined}
+              userEmail={userEmail}
+              isReadOnly={isReadOnly}
+            />
+          ))}
+        </div>
+      )}
+
     <Card className="overflow-hidden">
       <CardHeader className="py-3 px-3 sm:px-4 border-b">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -334,5 +362,6 @@ export function WeightTab({ findings, isReadOnly, online, activeJob, lastRun, on
         </div>
       )}
     </Card>
+    </div>
   );
 }

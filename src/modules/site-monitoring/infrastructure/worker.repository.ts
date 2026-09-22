@@ -1,7 +1,13 @@
-import { addDoc, collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { addDoc, collection, doc as docRef, limit, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLLECTIONS } from '@/lib/constants';
 import type { WeightAssessment } from '../domain/image-budget';
+import {
+  validateDesired,
+  type WorkerAction,
+  type WorkerCommand,
+  type WorkerDesiredState,
+} from '../domain/worker-control';
 
 /**
  * The app's side of the worker.
@@ -38,6 +44,7 @@ export interface WorkerJobDoc {
 
 export interface WorkerDoc {
   workerId: string;
+  paused?: boolean;
   platform?: string;
   cpu?: string;
   ramGb?: number;
@@ -71,7 +78,76 @@ export interface WorkerRepository {
   subscribeJobs: (projectId: string, onChange: (jobs: WorkerJobDoc[]) => void) => () => void;
   subscribeWorkers: (onChange: (workers: WorkerDoc[]) => void) => () => void;
   subscribeWeight: (projectId: string, onChange: (findings: WeightFindingDoc[]) => void) => () => void;
+  subscribeControl: (
+    workerId: string,
+    onChange: (state: { desired: WorkerDesiredState; commands: WorkerCommand[] }) => void,
+  ) => () => void;
+  setDesired: (workerId: string, desired: Partial<WorkerDesiredState>, by: string) => Promise<void>;
+  sendCommand: (workerId: string, action: WorkerAction, by: string) => Promise<string>;
 }
+
+/**
+ * Control lives in a subcollection, never on the worker document.
+ *
+ * The worker document is the machine's own report — hardware, model, what it
+ * is doing — and the team must not be able to rewrite it, or the app would be
+ * showing them their own wishes back as fact. So the heartbeat stays
+ * admin-only and everything the team can change sits underneath it.
+ */
+const controlRepository: Pick<WorkerRepository, 'subscribeControl' | 'setDesired' | 'sendCommand'> = {
+  subscribeControl(workerId, onChange) {
+    let desired: WorkerDesiredState = {};
+    let commands: WorkerCommand[] = [];
+    const emit = () => onChange({ desired, commands });
+
+    const stopDesired = onSnapshot(
+      docRef(db, WORKERS, workerId, 'control', 'desired'),
+      (snap) => {
+        desired = (snap.data() as WorkerDesiredState) ?? {};
+        emit();
+      },
+      () => emit(),
+    );
+
+    const stopCommands = onSnapshot(
+      query(collection(db, WORKERS, workerId, 'commands'), limit(20)),
+      (snap) => {
+        commands = snap.docs
+          .map((entry) => ({ ...(entry.data() as Omit<WorkerCommand, 'id'>), id: entry.id }))
+          .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+        emit();
+      },
+      () => emit(),
+    );
+
+    return () => {
+      stopDesired();
+      stopCommands();
+    };
+  },
+
+  async setDesired(workerId, desired, by) {
+    // Checked here so a refusal can be explained, and again on the worker
+    // because the app is not the only thing that can write to Firestore.
+    const { ok, reason, value } = validateDesired(desired);
+    if (!ok) throw new Error(reason);
+    await setDoc(
+      docRef(db, WORKERS, workerId, 'control', 'desired'),
+      { ...value, by, at: new Date().toISOString() },
+      { merge: true },
+    );
+  },
+
+  async sendCommand(workerId, action, by) {
+    const created = await addDoc(collection(db, WORKERS, workerId, 'commands'), {
+      action,
+      status: 'pending',
+      requestedBy: by,
+      createdAt: new Date().toISOString(),
+    });
+    return created.id;
+  },
+};
 
 export const workerRepository: WorkerRepository = {
   async enqueue(input) {
@@ -131,6 +207,8 @@ export const workerRepository: WorkerRepository = {
       },
     );
   },
+
+  ...controlRepository,
 };
 
 /** A worker that has not checked in for this long is treated as offline. */

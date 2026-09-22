@@ -98,6 +98,47 @@ npm run worker enqueue image_budget <projectId> --emit ./optimised-images
 The app shows which workers are online, live progress while a job runs, and
 the error if one fails.
 
+## Controlling it from the app
+
+Nobody needs a key, a VPN, or shell on the machine. The Audit tab's Weight
+panel lists every worker with its hardware, its model and what it is doing,
+and offers:
+
+| Control | Shape | Effect |
+|---|---|---|
+| Pause / Resume | setting | Stops claiming new work; a running job finishes. Applies on the next poll. |
+| Model | setting | Switches the vision model for alt text, from a fixed list. |
+| Restart | action | Exits cleanly so the service manager starts it again. |
+| Update | action | `git pull --ff-only`, `npm install`, restart. Refuses a dirty checkout. |
+| Run checks | action | Re-runs `doctor` and posts the report back into the panel. |
+| Clear cache | action | Forgets every cached alt-text judgement. |
+
+Settings and actions are deliberately different shapes. Pausing is a **state
+the machine converges on**, so pressing it twice is the same as pressing it
+once and there is no queue to drain. Restarting is an **event**, so it is a
+command with a result you can read afterwards. Control is handled before work
+on each cycle, so a pause does not wait behind a twenty-minute scan.
+
+### Why it is not remote access
+
+The machine holds `FIREBASE_SERVICE_ACCOUNT_JSON` — full admin on every
+client project. Shell on it is database admin, so "the team can control the
+worker" must not quietly become "the team can run things on the worker".
+
+So there is no command string anywhere in this path. Firestore carries an
+**action from a closed union**, the worker dispatches it through a `switch`,
+and an action it does not recognise is rejected and recorded rather than
+attempted. The model is likewise a fixed list, because that value reaches
+Ollama and free text there would mean "fetch and run any weights you like".
+Both lists live in
+[`worker-control.ts`](../../src/modules/site-monitoring/domain/worker-control.ts),
+validated in the app so a refusal can be explained and again on the worker
+because the app is not the only thing that can write to Firestore.
+
+The worker's own document is admin-only. Everything the team can change sits
+in subcollections beneath it, so the panel always shows the machine's report
+rather than somebody's wishes reflected back.
+
 ## The 2× rule
 
 An image should be **twice the width it is ever displayed at**. Twice, so it
@@ -154,6 +195,8 @@ app shows before a file has been encoded.
 |---|---|---|
 | `worker_jobs` | the app queues, the worker claims and completes | both |
 | `workers` | the worker, every poll | the app, to show who is online |
+| `workers/{id}/control/desired` | the team, from the app | the worker, every poll |
+| `workers/{id}/commands` | the team creates; the worker reports the result | both |
 | `projects/{id}/image_budget` | the worker | the Weight tab |
 | `projects/{id}/alt_suggestions` | the worker | the Alt text tab |
 
@@ -169,6 +212,10 @@ mid-run is reclaimed after five minutes, so a reboot loses nothing.
    It names the machine doing the work.
 4. Check one number by hand: open the page, inspect an image the report calls
    oversized, and confirm its rendered width in DevTools matches.
+5. `npm run test:site-monitoring` covers the closed lists — that no command
+   string, unknown action or arbitrary model gets through.
+6. Pause it from the panel and watch the log say `paused from the app`, then
+   press Run checks and watch the report appear in the panel.
 
 ## Moving more work here later
 

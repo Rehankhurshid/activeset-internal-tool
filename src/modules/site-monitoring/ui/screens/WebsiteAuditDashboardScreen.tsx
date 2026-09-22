@@ -2500,6 +2500,7 @@ export function WebsiteAuditDashboard({
             activeJob={worker.activeJob}
             lastRun={worker.lastDone('image_budget')}
             onMeasure={() => worker.enqueue('image_budget', { limit: 40 }, userEmail)}
+            userEmail={userEmail ?? 'team'}
           />
         </TabsContent>
 

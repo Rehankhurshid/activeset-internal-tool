@@ -46,10 +46,26 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // One document per worker machine, so the app can say when it last checked in.
+    // One document per worker machine, so the app can say when it last checked
+    // in. The document is the machine's own report and the team cannot rewrite
+    // it, or the app would show wishes back as fact.
     match /workers/{workerId} {
       allow read: if isActiveSetUser();
       allow write: if false;
+
+      // What the team wants the machine to do: settings it converges on, and a
+      // short queue of named actions. The worker validates both again before
+      // acting — there is no command string here, only an action from a closed
+      // list it recognises.
+      match /control/{settingId} {
+        allow read, write: if isActiveSetUser();
+      }
+
+      match /commands/{commandId} {
+        allow read, create: if isActiveSetUser();
+        // Only the worker reports what happened, through the admin SDK.
+        allow update, delete: if false;
+      }
     }
 
     match /projects/{projectId} {
