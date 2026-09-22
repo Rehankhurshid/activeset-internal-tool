@@ -2247,15 +2247,22 @@ export function WebsiteAuditDashboard({
             {filteredPages.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">No pages match your filter.</div>
             ) : (
-              <Table className="table-fixed">
+              /*
+                Fixed layout with percentage columns squeezed every column to
+                40-60px on a phone, and the content spilled across its
+                neighbours. On a phone the table is automatic (empty columns
+                collapse) and shows two: the page, with its status and last
+                scan underneath, and the score. From md up it is unchanged.
+              */
+              <Table className="md:table-fixed">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[40%]">Page Title / URL</TableHead>
-                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[16%]">Status</TableHead>
-                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[12%]">Last Scan</TableHead>
-                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[15%]">Score</TableHead>
-                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-[11%]">Findings</TableHead>
-                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground text-right w-[6%]">Actions</TableHead>
+                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground md:w-[40%]">Page Title / URL</TableHead>
+                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground hidden md:table-cell md:w-[16%]">Status</TableHead>
+                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground hidden md:table-cell md:w-[12%]">Last Scan</TableHead>
+                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground w-14 pr-4 text-right md:w-[15%] md:pr-2 md:text-left">Score</TableHead>
+                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground hidden md:table-cell md:w-[11%]">Findings</TableHead>
+                    <TableHead className="h-10 text-[11px] uppercase tracking-wide text-muted-foreground hidden text-right md:table-cell md:w-[6%]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2306,7 +2313,7 @@ export function WebsiteAuditDashboard({
                                 className="bg-muted/70 hover:bg-muted/60 cursor-pointer"
                                 onClick={() => toggleSection(typeId)}
                               >
-                                <TableCell colSpan={6} className={`py-2 ${showLocaleHeader ? 'pl-8' : ''}`}>
+                                <TableCell colSpan={6} className={`py-2 ${showLocaleHeader ? 'pl-4 md:pl-8' : ''}`}>
                                   <div className="flex items-center gap-2 font-semibold">
                                     {isTypeCollapsed ? (
                                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -2339,7 +2346,7 @@ export function WebsiteAuditDashboard({
                                       className={`bg-muted/30 hover:bg-muted/40 cursor-pointer ${isPending ? 'ring-2 ring-blue-500/50' : ''}`}
                                       onClick={() => toggleSection(folderId)}
                                     >
-                                      <TableCell colSpan={6} className={`py-1.5 ${showLocaleHeader ? 'pl-14' : 'pl-8'}`}>
+                                      <TableCell colSpan={6} className={`py-1.5 ${showLocaleHeader ? 'pl-8 md:pl-14' : 'pl-5 md:pl-8'}`}>
                                         <div className="flex items-center gap-2 text-sm">
                                           {isFolderCollapsed ? (
                                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -2402,26 +2409,35 @@ export function WebsiteAuditDashboard({
                                         )}
                                         onClick={() => setSelectedPage(page)}
                                       >
-                                        <TableCell className={`font-medium max-w-[300px] ${showLocaleHeader ? 'pl-20' : 'pl-14'}`}>
+                                        {/* w-full + max-w-0 on a phone: take the free width, truncate inside it. */}
+                                        <TableCell className={`font-medium w-full max-w-0 md:w-auto md:max-w-[300px] ${showLocaleHeader ? 'pl-10 md:pl-20' : 'pl-8 md:pl-14'}`}>
                                           <div className="flex items-center gap-2 min-w-0">
                                             <div className="font-semibold block truncate flex-1 leading-5" title={page.title}>{page.title || 'Untitled'}</div>
                                           </div>
                                           <span className="text-xs text-muted-foreground/90 block truncate font-mono" title={page.path}>
                                             {getCompactUrl(page.path)}
                                           </span>
+                                          {/* The Status and Last Scan columns, folded in on a phone. */}
+                                          <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground md:hidden">
+                                            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", getStatusDotColor(page.status))} />
+                                            <span className="truncate">
+                                              <span className="text-foreground">{page.status}</span>
+                                              {page.lastScanRelative ? ` · ${page.lastScanRelative}` : ''}
+                                            </span>
+                                          </span>
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="hidden md:table-cell">
                                           <Badge variant="outline" className={cn("h-6 px-2.5 gap-1.5", getStatusColor(page.status))}>
                                             <span className={cn("h-1.5 w-1.5 rounded-full", getStatusDotColor(page.status))} />
                                             {page.status}
                                           </Badge>
                                         </TableCell>
-                                        <TableCell className="text-sm text-muted-foreground tabular-nums" title={page.lastScan}>
+                                        <TableCell className="hidden text-sm text-muted-foreground tabular-nums md:table-cell" title={page.lastScan}>
                                           {page.lastScanRelative}
                                         </TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-2.5">
-                                            <div className={cn("relative h-2.5 w-20 rounded-full overflow-hidden", getScoreTone(page.score).track)}>
+                                        <TableCell className="pr-4 text-right md:pr-2 md:text-left">
+                                          <div className="flex items-center justify-end gap-2.5 md:justify-start">
+                                            <div className={cn("relative hidden h-2.5 w-20 rounded-full overflow-hidden md:block", getScoreTone(page.score).track)}>
                                               <div
                                                 className={cn("absolute left-0 top-0 h-full rounded-full transition-all", getScoreTone(page.score).bar)}
                                                 style={{ width: `${Math.max(0, Math.min(100, page.score))}%` }}
@@ -2430,7 +2446,7 @@ export function WebsiteAuditDashboard({
                                             <span className={cn("text-sm font-semibold tabular-nums", getScoreTone(page.score).text)}>{page.score}</span>
                                           </div>
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="hidden md:table-cell">
                                           <div className="flex flex-wrap gap-1.5 items-center">
                                             {page.findings.length === 0 && <span className="text-xs text-muted-foreground">None</span>}
                                             {page.findings.slice(0, 2).map((finding, idx) => (
@@ -2445,7 +2461,8 @@ export function WebsiteAuditDashboard({
                                             )}
                                           </div>
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        {/* Tapping the row opens the page, so the button is desktop-only. */}
+                                        <TableCell className="hidden text-right md:table-cell">
                                           <div className="flex justify-end gap-2">
                                             <Button
                                               variant="outline"
