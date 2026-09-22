@@ -1782,6 +1782,9 @@ export function WebsiteAuditDashboard({
   const applyJob = worker.jobs.find(
     (job) => job.kind === 'alt_apply' && (job.status === 'queued' || job.status === 'running'),
   )
+  const imageApplyJob = worker.jobs.find(
+    (job) => job.kind === 'image_apply' && (job.status === 'queued' || job.status === 'running'),
+  )
 
   return (
     <div className="space-y-3 text-foreground">
@@ -2528,6 +2531,19 @@ export function WebsiteAuditDashboard({
             activeJob={worker.activeJob}
             lastRun={worker.lastDone('image_budget')}
             onMeasure={() => worker.enqueue('image_budget', { limit: 40 }, userEmail)}
+            onApply={
+              webflowConfig?.hasApiToken
+                ? (fingerprints, publish) =>
+                    worker.enqueue('image_apply', { fingerprints, publish, by: userEmail }, userEmail)
+                : undefined
+            }
+            applyState={
+              imageApplyJob?.status === 'running'
+                ? 'running'
+                : imageApplyJob
+                  ? 'queued'
+                  : undefined
+            }
             userEmail={userEmail ?? 'team'}
           />
         </TabsContent>

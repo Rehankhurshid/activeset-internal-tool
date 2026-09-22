@@ -112,7 +112,13 @@ export function webflowAssetIdFrom(src: string): string | null {
 
 // ── Decisions ──────────────────────────────────────────────────────────────
 
-export type FindingKind = 'alt' | 'link';
+/**
+ * What a decision is about. `weight` joined later, when image sizes gained an
+ * apply path — a resize needs the same fixed/verified/regressed lifecycle that
+ * alt text has, and sharing `decisionId` keeps one decision store rather than
+ * a parallel one per finding type.
+ */
+export type FindingKind = 'alt' | 'link' | 'weight';
 
 export type DecisionKind =
   /** Image carries no meaning; an empty alt is correct. */

@@ -22,7 +22,12 @@ const WORKER_JOBS = 'worker_jobs';
 const WORKERS = 'workers';
 const IMAGE_BUDGET = 'image_budget';
 
-export type WorkerJobKind = 'alt_text' | 'image_budget' | 'alt_apply' | 'webflow_alt';
+export type WorkerJobKind =
+  | 'alt_text'
+  | 'image_budget'
+  | 'alt_apply'
+  | 'webflow_alt'
+  | 'image_apply';
 export type WorkerJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface WorkerJobDoc {
@@ -65,6 +70,8 @@ export interface WeightFindingDoc extends WeightAssessment {
   optimisedPath?: string;
   /** Which encoding won — or why the image was left untouched. */
   optimisedHow?: string;
+  /** cms = repointable from the app; asset/unknown = a swap in Designer. */
+  placement?: 'cms' | 'asset' | 'unknown';
   format: string;
   measuredAt: string;
 }

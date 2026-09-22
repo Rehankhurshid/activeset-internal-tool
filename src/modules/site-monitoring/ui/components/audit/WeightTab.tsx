@@ -10,6 +10,7 @@ import {
   Loader2,
   Search,
   ShieldQuestion,
+  Wand2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,9 @@ export interface WeightTabProps {
   activeJob?: WorkerJobDoc;
   lastRun?: WorkerJobDoc;
   onMeasure: () => Promise<void>;
+  /** Resize the named images and repoint their CMS fields. Absent without a Webflow token. */
+  onApply?: (fingerprints: string[], publish: boolean) => Promise<void>;
+  applyState?: 'queued' | 'running';
   userEmail: string;
 }
 
@@ -172,10 +176,13 @@ export function WeightTab({
   activeJob,
   lastRun,
   onMeasure,
+  onApply,
+  applyState,
   userEmail,
 }: WeightTabProps) {
   const [query, setQuery] = useState('');
   const [queueing, setQueueing] = useState(false);
+  const [applying, setApplying] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -193,6 +200,18 @@ export function WeightTab({
       right: filtered.filter((f) => f.verdict === 'right'),
     }),
     [filtered],
+  );
+
+  // Only a CMS image can be repointed through the API. A site asset's bytes
+  // cannot be replaced and a Designer-placed image cannot be reached at all,
+  // so the split is the difference between a button and a to-do list.
+  const fixable = useMemo(
+    () => groups.oversized.filter((f) => f.placement === 'cms'),
+    [groups.oversized],
+  );
+  const byHand = useMemo(
+    () => groups.oversized.filter((f) => f.placement !== 'cms'),
+    [groups.oversized],
   );
 
   const totalSaving = groups.oversized.reduce(
@@ -305,12 +324,20 @@ export function WeightTab({
         ) : (
           <>
             <Section
-              title="Oversized"
-              count={groups.oversized.length}
-              hint="Biggest saving first"
+              title="Oversized — we can fix these"
+              count={fixable.length}
+              hint="In a CMS field, so the URL can be repointed"
               defaultOpen
             >
-              {groups.oversized.map((f) => <Row key={f.id} finding={f} />)}
+              {fixable.map((f) => <Row key={f.id} finding={f} />)}
+            </Section>
+            <Section
+              title="Oversized — needs Designer"
+              count={byHand.length}
+              hint="A site asset or a Designer-placed image; Webflow's API cannot replace either"
+              defaultOpen
+            >
+              {byHand.map((f) => <Row key={f.id} finding={f} />)}
             </Section>
             <Section
               title="Too small for retina"
@@ -339,9 +366,40 @@ export function WeightTab({
         <div className="border-t px-3 sm:px-4 py-2.5 flex flex-wrap items-center gap-2">
           <ShieldQuestion className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <p className="text-xs text-muted-foreground flex-1 min-w-0">
-            Webflow&apos;s API cannot replace an existing asset&apos;s file, so these are resized on the worker
-            and left for you to drop into Designer.
+            {fixable.length > 0 && byHand.length > 0
+              ? `${fixable.length} live in CMS fields and can be repointed from here. The other ${byHand.length} are site assets or placed in Designer — Webflow's API cannot replace either, so those are a swap by hand.`
+              : fixable.length > 0
+                ? `All ${fixable.length} live in CMS fields, so they can be resized and repointed from here.`
+                : "None of these are CMS images. Webflow's API cannot replace an asset's file or repoint a Designer-placed image, so these are resized on the worker and swapped by hand."}
           </p>
+          {onApply && fixable.length > 0 && (
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              disabled={isReadOnly || applyState !== undefined || applying}
+              onClick={async () => {
+                setApplying(true);
+                try {
+                  // Publishing is a separate, louder decision; this stages the
+                  // change and leaves pushing it live to the Publish control.
+                  await onApply(fixable.map((f) => f.fingerprint), false);
+                } finally {
+                  setApplying(false);
+                }
+              }}
+            >
+              {applyState || applying ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {applyState === 'running'
+                ? 'Resizing…'
+                : applyState === 'queued'
+                  ? 'Queued'
+                  : `Resize & repoint ${fixable.length}`}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"

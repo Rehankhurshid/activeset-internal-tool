@@ -21,7 +21,12 @@ const WORKER_JOBS = 'worker_jobs';
 /** A claim older than this is assumed dead and may be taken by another worker. */
 export const CLAIM_TIMEOUT_MS = 5 * 60 * 1000;
 
-export type WorkerJobKind = 'alt_text' | 'image_budget' | 'alt_apply' | 'webflow_alt';
+export type WorkerJobKind =
+  | 'alt_text'
+  | 'image_budget'
+  | 'alt_apply'
+  | 'webflow_alt'
+  | 'image_apply';
 export type WorkerJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface WorkerJob<P = Record<string, unknown>> {

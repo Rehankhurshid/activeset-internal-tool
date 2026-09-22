@@ -26,6 +26,37 @@ function md5(buf: Buffer): string {
   return crypto.createHash('md5').update(buf).digest('hex');
 }
 
+/**
+ * Webflow rejects long file names — "Bad Request: File name is too long" —
+ * and CMS Rich Text images arrive with names like
+ * `69dd43cdad9df4261182b519_69c0c8278f2b94e…`, two stacked hashes that sail
+ * past the limit. Empirically about 100 characters works; 80 stays clear.
+ *
+ * This was found and fixed once already, in the published `@activeset/cms-alt`
+ * package, and never made it back into this copy — so anything built on this
+ * uploader would have hit the same 400 on its first real run.
+ */
+const MAX_FILENAME_LEN = 80;
+
+export function sanitizeAssetFileName(raw: string, bufferHash: string): string {
+  let name = (raw.split('/').pop() || 'image').split('?')[0];
+  name = name.replace(/[^A-Za-z0-9._-]/g, '-');
+  if (!name) name = 'image';
+
+  const dot = name.lastIndexOf('.');
+  const hasExt = dot > 0 && dot > name.length - 8;
+  const ext = hasExt ? name.slice(dot) : '';
+  const base = hasExt ? name.slice(0, dot) : name;
+
+  if (base.length + ext.length <= MAX_FILENAME_LEN) return base + ext;
+
+  // Keep the front of the original name so the asset is still recognisable in
+  // the Webflow dashboard, and append a hash so two truncations cannot collide.
+  const shortHash = bufferHash.slice(0, 8);
+  const keep = Math.max(1, MAX_FILENAME_LEN - ext.length - shortHash.length - 1);
+  return `${base.slice(0, keep)}-${shortHash}${ext}`;
+}
+
 export async function uploadAssetToWebflow(
   siteId: string,
   token: string,
@@ -34,12 +65,14 @@ export async function uploadAssetToWebflow(
   contentType: string
 ): Promise<WebflowAssetUploadResult> {
   const fileHash = md5(buffer);
+  // Every caller gets this, not just the careful ones.
+  const safeName = sanitizeAssetFileName(fileName, fileHash);
 
   // Step 1: get a presigned upload URL from Webflow
   const createRes = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/assets`, {
     method: 'POST',
     headers: buildHeaders(token),
-    body: JSON.stringify({ fileName, fileHash }),
+    body: JSON.stringify({ fileName: safeName, fileHash }),
   });
 
   if (!createRes.ok) {
@@ -57,7 +90,7 @@ export async function uploadAssetToWebflow(
     form.append(key, String(value));
   }
   const blob = new Blob([new Uint8Array(buffer)], { type: contentType });
-  form.append('file', blob, fileName);
+  form.append('file', blob, safeName);
 
   const uploadRes = await fetch(uploadUrl, {
     method: 'POST',

@@ -13,6 +13,8 @@ import {
   type WeightAssessment,
 } from '@/modules/site-monitoring/domain/image-budget';
 import { imageFingerprint } from '@/modules/site-monitoring/domain/audit-findings';
+import { placementsFor, type ImagePlacement } from '@/lib/cms/placement';
+import { getWebflowTokenAdmin } from '@/lib/project-admin';
 import type { Project } from '@/types';
 
 /**
@@ -53,6 +55,8 @@ export interface StoredWeightFinding extends WeightAssessment {
   optimisedPath?: string;
   /** Which encoding won, or why the image was left alone. */
   optimisedHow?: string;
+  /** Where the image lives in Webflow, which decides whether it is fixable. */
+  placement?: ImagePlacement;
   format: string;
   measuredAt: string;
 }
@@ -226,6 +230,19 @@ export async function runImageBudget(
       format: measurement.format,
       measuredAt,
     });
+  }
+
+  // Ask Webflow where each one lives. Without this a finding is just a URL,
+  // and the tab cannot tell an image it can repoint from one that will always
+  // be a drag into Designer — which is the first thing anyone wants to know.
+  const siteId = project.webflowConfig?.siteId;
+  if (siteId) {
+    await onProgress('Working out which images are fixable', 0.68);
+    const token = await getWebflowTokenAdmin(project.id);
+    if (token) {
+      const placements = await placementsFor(siteId, token, findings.map((finding) => finding.src));
+      for (const finding of findings) finding.placement = placements.get(finding.fingerprint) ?? 'unknown';
+    }
   }
 
   // Actually produce the files, so the saving reported is measured rather

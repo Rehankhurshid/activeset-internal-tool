@@ -176,6 +176,7 @@ Two things deliberately **not** done, so nobody re-derives them:
 | `alt_text` | Reads the project's open alt-text findings, re-fetches those pages for context, classifies every image and drafts its alt. Results go to `alt_suggestions` and fill the boxes on the Alt text tab. See [alt-text.md](alt-text.md). |
 | `image_budget` | Opens each page in Chrome at 1440, 768 and 390 px, measures how wide every image is actually drawn, fetches each file, and works out what it should weigh. Results go to `image_budget` and drive the Weight tab. |
 | `webflow_alt` | Drafts alt text for a site's whole Webflow library — assets and CMS collections — rather than for scanned pages. Feeds the same `alt_suggestions` store, so a draft shows up on both the Webflow tab and the Audit tab. Skips PDFs, videos and anything else that is not an image. |
+| `image_apply` | Resizes chosen oversized images to their measured target width, archives the originals to Bunny, uploads the new file as a Webflow asset and repoints the CMS fields that used the old one. CMS fields only — see [What it will not do](#what-it-will-not-do). |
 | `alt_apply` | Writes chosen drafts back to Webflow in bulk, and optionally publishes. Two destinations: a site asset takes its alt through the Assets API, a CMS image through its collection item's field. On Canopy eleven of eleven were CMS, so the asset path alone would have applied nothing. |
 
 They are queued from the Audit tab — the Alt text tab's "Draft on `<machine>`"
@@ -267,15 +268,52 @@ tab says which.
 
 ## What it will not do
 
-**It does not change anything on a client's live site.** Webflow's Assets API
-can create an asset and edit its metadata, but it cannot replace the bytes of
-an existing one, and an image placed in Designer cannot be repointed through
-the API at all. Anyone claiming otherwise has not tried it.
+**Nothing reaches a client's live site without someone pressing a button.**
+Measuring is automatic; applying never is.
 
-So the worker resizes the files and writes them to `WORKER_EMIT_DIR`, named
-`<original>@<width>w.webp`, next to a report saying exactly which is which.
-Replacing them is a drag into Designer. The report's "Copy list" button gives
-you the whole job as text.
+Beyond that, there is a hard line that is worth knowing exactly, because half
+of it is a limit and half is a capability:
+
+- **A CMS image can be fixed.** Its URL lives in a collection field, so the
+  worker can resize it, upload the new file, and repoint the field. On Canopy
+  every image needing work was CMS.
+- **A site asset cannot.** Webflow's Assets API creates an asset or edits its
+  metadata; there is no endpoint that replaces an existing asset's bytes.
+- **A Designer-placed image cannot.** Nothing in the Data API addresses static
+  page markup.
+
+The Weight tab splits the findings on exactly this, so "we can fix these" and
+"needs Designer" are separate lists rather than one list with a caveat. For
+the second two the worker still writes the resized file to `WORKER_EMIT_DIR`
+as `<original>@<width>w.webp`, and "Copy list" gives you the job as text.
+
+### Backups
+
+`image_apply` archives every original to Bunny storage **before** it writes
+anything, and an image whose backup fails is left untouched. Without
+`BUNNY_STORAGE_ZONE` and `BUNNY_STORAGE_KEY` the job refuses to run at all.
+
+That is deliberate rather than cautious. Repointing a CMS field is the first
+thing this tool does that overwrites something live. The old Webflow asset is
+not deleted, so in principle the bytes survive — but Webflow reports no
+back-references, nothing stops someone tidying the asset library later, and
+`image_budget` wipes and rewrites its findings on every run, so within a day
+there is no record of what the image used to be. An archive off Webflow is
+the only version of this that is genuinely reversible.
+
+```powershell
+nssm set ActiveSetWorker AppEnvironmentExtra +BUNNY_STORAGE_ZONE=<zone>
+nssm set ActiveSetWorker AppEnvironmentExtra +BUNNY_STORAGE_KEY=<password>
+nssm set ActiveSetWorker AppEnvironmentExtra +BUNNY_CDN_HOST=<zone>.b-cdn.net
+nssm restart ActiveSetWorker
+```
+
+`BUNNY_STORAGE_HOST` defaults to `storage.bunnycdn.com`; set it if the zone is
+in a specific region. `BUNNY_CDN_HOST` is the pull zone, and is optional —
+without it the archive is written but not readable back, which `doctor` says
+plainly. Originals land at
+`originals/<projectId>/<YYYY-MM-DD>/<fingerprint>-<filename>`, so a second
+pass months later archives alongside the first rather than over it.
 
 ### The encoding: perceptually lossless, then smallest
 
@@ -325,6 +363,7 @@ before a file has been encoded, and each row says which candidate won.
 | `workers/{id}/commands` | the team creates; the worker reports the result | both |
 | `projects/{id}/image_budget` | the worker | the Weight tab |
 | `projects/{id}/alt_suggestions` | the worker | the Alt text tab |
+| `projects/{id}/audit_decisions` | the worker, on apply | the Alt text and Weight tabs |
 
 A worker silent for 90 seconds shows as offline. A job whose worker dies
 mid-run is reclaimed after five minutes, so a reboot loses nothing.

@@ -20,6 +20,8 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { checkOllama, resolveOllama } from '@/lib/alt-text';
 import { findBrowserExecutable } from '@/lib/image-budget/browser';
+import { formatBytes } from '@/modules/site-monitoring/domain/image-budget';
+import { bunnyConfig } from '@/lib/backup/bunny';
 import {
   claimNextJob,
   completeJob,
@@ -33,6 +35,7 @@ import {
 import { describeResult, runImageBudget, type ImageBudgetPayload } from '@/lib/worker/handlers/image-budget';
 import { runAltTextForProject, type AltTextPayload } from '@/lib/worker/handlers/alt-text';
 import { runAltApply, type AltApplyPayload } from '@/lib/worker/handlers/alt-apply';
+import { runImageApply, type ImageApplyPayload } from '@/lib/worker/handlers/image-apply';
 import { runWebflowAlt, type WebflowAltPayload } from '@/lib/worker/handlers/webflow-alt';
 import { loadProjectDocAdmin } from '@/lib/project-admin';
 import {
@@ -150,13 +153,28 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
     return result as unknown as Record<string, unknown>;
   }
 
+  if (job.kind === 'image_apply') {
+    const result = await runImageApply(job.projectId, job.payload as unknown as ImageApplyPayload, progress);
+    log(
+      green('  done'),
+      `${result.uploaded} resized, ${result.repointed} CMS fields repointed, ${result.published} published, ` +
+        `${formatBytes(result.bytesSaved)} saved` +
+        (result.skipped.length ? `, ${result.skipped.length} skipped` : '') +
+        (result.failed.length ? `, ${red(String(result.failed.length) + ' failed')}` : ''),
+    );
+    return result as unknown as Record<string, unknown>;
+  }
+
   if (job.kind === 'image_budget') {
     const project = await loadProjectDocAdmin(job.projectId);
     if (!project) throw new Error(`Project ${job.projectId} not found`);
     const payload = job.payload as ImageBudgetPayload;
     const result = await runImageBudget(
       project,
-      { emitDir: payload.emitDir ?? process.env.WORKER_EMIT_DIR, ...payload },
+      // The default goes AFTER the spread. With it before, a hand-written job
+      // payload could redirect where this machine writes files, and any
+      // @activeset user can create a job.
+      { ...payload, emitDir: process.env.WORKER_EMIT_DIR ?? payload.emitDir },
       progress,
     );
     log(green('  done'), describeResult(result));
@@ -183,6 +201,17 @@ program.name('worker').description('Runs alt text and image measurement on this 
  * model stays resident for `keep_alive` after the last image — and this is the
  * one someone asks before sitting down at the machine.
  */
+/**
+ * Whether originals can be archived. Without it `image_apply` refuses to run,
+ * so it belongs next to the other "can this machine do the job" checks rather
+ * than being discovered when someone presses the button.
+ */
+function bunnyLine(): string {
+  const config = bunnyConfig();
+  if (!config) return 'Backups: not configured — image_apply will refuse to run';
+  return `Backups: ${config.zone} at ${config.host}${config.cdnHost ? ` (readable at ${config.cdnHost})` : ' — no BUNNY_CDN_HOST, so archives are write-only'}`;
+}
+
 async function residentLine(): Promise<string> {
   try {
     const { listLoadedModels } = await import('@/lib/alt-text/ollama');
@@ -212,6 +241,7 @@ async function buildDoctorReport(): Promise<string> {
     `Model: ${model} (recommended ${recommendation.model} — ${recommendation.why})`,
     health.ok ? `Ollama ready at ${host}` : `Ollama: ${health.problem}`,
     health.models.length ? `Installed: ${health.models.join(', ')}` : '',
+    bunnyLine(),
     await residentLine(),
     `Keep-alive: ${resolveOllama().keepAlive} after the last image`,
     browser ? `Browser: ${browser}` : 'No Chrome or Edge found',
@@ -250,6 +280,11 @@ program
     const resident = await residentLine();
     if (resident) console.log(`  ${resident.startsWith('GPU free') ? green(resident) : yellow(resident)}`);
     console.log(dim(`  keep-alive: ${resolveOllama().keepAlive} after the last image`));
+
+    console.log();
+    console.log(bold('Backups'));
+    const bunny = bunnyConfig();
+    console.log(bunny ? `  ${green(bunnyLine().replace('Backups: ', ''))}` : `  ${yellow('not configured')} ${dim('— image_apply will refuse to run without BUNNY_STORAGE_ZONE and BUNNY_STORAGE_KEY')}`);
 
     console.log();
     console.log(bold('Browser'));
