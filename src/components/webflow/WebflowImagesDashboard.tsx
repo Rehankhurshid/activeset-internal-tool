@@ -32,6 +32,7 @@ import {
 } from '@/modules/site-monitoring/ui/hooks/useLibraryOptimise';
 import type { WorkerJobDoc } from '@/modules/site-monitoring/infrastructure/worker.repository';
 import type { CmsImageEntry, WebflowConfig } from '@/types/webflow';
+import type { ImageIndexEntry } from '@/modules/site-monitoring/domain/image-index';
 
 /**
  * A site's Webflow images, one section per group, one button per section.
@@ -158,7 +159,7 @@ function resultLine(job: WorkerJobDoc): { ok: boolean; text: string } {
   const r = job.result as
     | {
         alt?: { added?: number; held?: number; decorative?: number; failed?: number };
-        optimise?: { optimised?: number; resized?: number; designerCopies?: number; bytesSaved?: number };
+        optimise?: { optimised?: number; resized?: number; designerCopies?: number; bytesSaved?: number; alreadyDone?: number };
         errors?: string[];
       }
     | undefined;
@@ -178,6 +179,7 @@ function resultLine(job: WorkerJobDoc): { ok: boolean; text: string } {
             .join(' · ')
         : 'images already optimal'
       : '',
+    r.optimise?.alreadyDone ? `${r.optimise.alreadyDone} already done, skipped` : '',
   ].filter(Boolean);
   const errors = r.errors?.length ? ` — ${r.errors.join('; ')}` : '';
   return { ok: !r.errors?.length, text: `Done ${ago(job.finishedAt)} · ${parts.join(' · ')}${errors}` };
@@ -393,6 +395,8 @@ function GroupSection({
 }) {
   const [open, setOpen] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
+  /** Picked rows, by fingerprint. */
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState(PAGE);
 
   const rows = group.rows;
@@ -441,6 +445,27 @@ function GroupSection({
   const reviewCount = rows ? rows.filter(needsLook).length : undefined;
   const visible = (rows ?? []).filter((row) => !reviewOnly || needsLook(row));
 
+  const optimisedCount = rows
+    ? rows.filter((row) => {
+        const state = library.indexFor(row.src)?.optimise?.state;
+        return state === 'optimised' || state === 'designer-copy';
+      }).length
+    : 0;
+
+  const pickedRows = (rows ?? []).filter((row) => picked.has(row.fingerprint));
+  const allVisiblePicked = visible.length > 0 && visible.every((row) => picked.has(row.fingerprint));
+  const togglePick = (fingerprint: string, on: boolean) =>
+    setPicked((previous) => {
+      const next = new Set(previous);
+      if (on) next.add(fingerprint);
+      else next.delete(fingerprint);
+      return next;
+    });
+  const runPicked = async (steps: { alt: boolean; images: boolean }) => {
+    await library.optimise([group.ref], publish, { srcs: pickedRows.map((row) => row.src), steps });
+    setPicked(new Set());
+  };
+
   return (
     <section className="border-t">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
@@ -463,6 +488,7 @@ function GroupSection({
           )}
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
             {images === undefined ? 'counting…' : `${images} images · ${missing} missing ALT`}
+            {optimisedCount ? ` · ${optimisedCount} optimised` : ''}
             {reviewCount ? ` · ${reviewCount} to review` : ''}
           </span>
         </button>
@@ -528,10 +554,50 @@ function GroupSection({
             </div>
           ) : (
             <>
-              {!!reviewCount && (
-                <div className="flex items-center gap-2 px-4 py-2 text-xs">
-                  <Checkbox checked={reviewOnly} onCheckedChange={(value) => setReviewOnly(value === true)} />
-                  Only the {reviewCount} the model wasn’t sure about
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 text-xs">
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    checked={allVisiblePicked}
+                    onCheckedChange={(value) =>
+                      setPicked((previous) => {
+                        const next = new Set(previous);
+                        for (const row of visible) {
+                          if (value === true) next.add(row.fingerprint);
+                          else next.delete(row.fingerprint);
+                        }
+                        return next;
+                      })
+                    }
+                  />
+                  Select all{visible.length ? ` ${visible.length}` : ''}
+                </label>
+                {!!reviewCount && (
+                  <label className="flex items-center gap-2">
+                    <Checkbox checked={reviewOnly} onCheckedChange={(value) => setReviewOnly(value === true)} />
+                    Only the {reviewCount} the model wasn’t sure about
+                  </label>
+                )}
+              </div>
+
+              {pickedRows.length > 0 && (
+                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-y bg-background/95 px-4 py-2 backdrop-blur">
+                  <span className="text-xs font-medium">{pickedRows.length} selected</span>
+                  <Button size="sm" className="h-7 text-xs" disabled={!!active || library.busy} onClick={() => runPicked({ alt: true, images: true })}>
+                    <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+                    ALT + images
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!active || library.busy} onClick={() => runPicked({ alt: true, images: false })}>
+                    ALT only
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!active || library.busy} onClick={() => runPicked({ alt: false, images: true })}>
+                    Images only
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setPicked(new Set())}>
+                    Clear
+                  </Button>
+                  <span className="text-[11px] text-muted-foreground">
+                    Anything already done is skipped.
+                  </span>
                 </div>
               )}
               {visible.length === 0 ? (
@@ -545,6 +611,8 @@ function GroupSection({
                       library={library}
                       needsLook={needsLook(row)}
                       working={current?.fingerprint === row.fingerprint ? current.phase : undefined}
+                      picked={picked.has(row.fingerprint)}
+                      onPick={(on) => togglePick(row.fingerprint, on)}
                     />
                   ))}
                 </ul>
@@ -564,19 +632,64 @@ function GroupSection({
   );
 }
 
+/** What the image index says was done to an image's bytes. */
+function DoneBadge({ done }: { done: NonNullable<ImageIndexEntry['optimise']> }) {
+  const saved =
+    done.bytesBefore && done.bytesAfter && done.bytesBefore > done.bytesAfter
+      ? ` · −${formatBytes(done.bytesBefore - done.bytesAfter)}`
+      : '';
+  if (done.state === 'optimised') {
+    return (
+      <span className="shrink-0 text-[10px] font-medium text-green-600 dark:text-green-400" title={`Optimised ${ago(done.at)}`}>
+        Optimised{saved}
+      </span>
+    );
+  }
+  if (done.state === 'already-optimal') {
+    return (
+      <span className="shrink-0 text-[10px] text-muted-foreground" title={`Checked ${ago(done.at)} — nothing smaller without a visible change`}>
+        Already optimal
+      </span>
+    );
+  }
+  if (done.state === 'designer-copy') {
+    return (
+      <a
+        href={done.designerCopyUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="shrink-0 text-[10px] font-medium text-green-600 underline-offset-2 hover:underline dark:text-green-400"
+        title="In the “ActiveSet · optimised” folder — in Designer, select the image, Replace, and pick it"
+      >
+        Copy ready for Designer{saved}
+      </a>
+    );
+  }
+  return (
+    <span className="shrink-0 text-[10px] font-medium text-destructive" title={done.error}>
+      Failed — retried next run
+    </span>
+  );
+}
+
 function ImageLine({
   row,
   library,
   needsLook,
   working,
+  picked,
+  onPick,
 }: {
   row: ImageRow;
   library: LibraryOptimise;
   needsLook: boolean;
   /** Set while the worker is on this image. */
   working?: Phase;
+  picked: boolean;
+  onPick: (on: boolean) => void;
 }) {
   const draft = library.draftFor(row.src);
+  const done = library.indexFor(row.src)?.optimise;
   const seed = row.missing ? (draft && draft.kind !== 'decorative' ? draft.alt : '') : row.currentAlt;
   const [value, setValue] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -590,6 +703,7 @@ function ImageLine({
         working ? 'bg-primary/5 ring-1 ring-inset ring-primary/40' : ''
       }`}
     >
+      <Checkbox checked={picked} onCheckedChange={(value) => onPick(value === true)} aria-label={`Select ${row.title}`} />
       {working ? (
         <WorkingThumb src={row.src} phase={working} size="md" />
       ) : (
@@ -608,6 +722,7 @@ function ImageLine({
         <div className="flex items-center gap-2 text-xs">
           <span className="truncate font-medium">{row.title}</span>
           {row.subtitle && <span className="truncate text-muted-foreground">{row.subtitle}</span>}
+          {done && <DoneBadge done={done} />}
           {working ? (
             <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-primary">
               <Loader2 className="h-3 w-3 animate-spin" />

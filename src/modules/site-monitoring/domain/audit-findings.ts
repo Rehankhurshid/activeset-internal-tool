@@ -82,6 +82,11 @@ export function decisionId(kind: FindingKind, fingerprint: string): string {
   return `${kind}_${fnv1a(fingerprint, 0x811c9dc5)}${fnv1a(fingerprint, 0x01000193)}`;
 }
 
+/** The image index's document id for an image. Fingerprints contain slashes. */
+export function imageIndexId(fingerprint: string): string {
+  return `img_${fnv1a(fingerprint, 0x811c9dc5)}${fnv1a(fingerprint, 0x01000193)}`;
+}
+
 function fnv1a(input: string, seed: number): string {
   let hash = seed >>> 0;
   for (let i = 0; i < input.length; i++) {

@@ -9,6 +9,7 @@ import { cmsSourceAssetIds } from '@/modules/site-monitoring/domain/webflow-asse
 import { runAltApply } from './alt-apply';
 import { runImageApply } from './image-apply';
 import type { CurrentImage } from '@/lib/worker/queue';
+import { recordInIndex, type IndexUpdate } from '@/lib/image-index-admin';
 
 /**
  * One click for one group of a site's images: ALT text and optimisation.
@@ -37,6 +38,15 @@ export type LibraryGroup =
 
 export interface LibraryGroupPayload {
   group: LibraryGroup;
+  /**
+   * Just these images, by URL, rather than the whole group — for when someone
+   * has picked rows. Anything not in the group is ignored.
+   */
+  srcs?: string[];
+  /** Which halves to run. Both by default. */
+  steps?: { alt?: boolean; images?: boolean };
+  /** Redo images the index says are already optimised. Off by default. */
+  force?: boolean;
   /** Publish changed CMS items when done. Off by default. */
   publish?: boolean;
   by?: string;
@@ -54,6 +64,8 @@ export interface LibraryGroupResult {
     failed: number;
   };
   optimise?: {
+    /** Skipped without downloading — the image index says they are done. */
+    alreadyDone: number;
     optimised: number;
     resized: number;
     designerCopies: number;
@@ -163,10 +175,18 @@ export async function runLibraryGroup(
       });
     }
   }
+  // A selection narrows the group to the rows someone picked.
+  if (payload.srcs?.length) {
+    const picked = new Set(payload.srcs.map((src) => imageFingerprint(src)));
+    for (let i = images.length - 1; i >= 0; i -= 1) if (!picked.has(images[i].fingerprint)) images.splice(i, 1);
+  }
   result.images = images.length;
+  const runAlt = payload.steps?.alt !== false;
+  const runImages = payload.steps?.images !== false;
+  const key = groupKey(group);
 
   // ── ALT: describe, then write what the classifier is sure of ──────────────
-  try {
+  if (runAlt) try {
     const project$ = adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId);
     const drafts = new Map<string, StoredDraft>();
     for (const doc of (await project$.collection('alt_suggestions').get()).docs) {
@@ -233,6 +253,33 @@ export async function runLibraryGroup(
       result.alt.added = Math.max(0, confident.length - applied.skipped.length - result.alt.decorative);
       if (applied.failed.length) result.errors.push(`ALT: ${applied.failed.map((f) => f.error).join('; ')}`);
     }
+
+    // The index records where each image's ALT stands, so the screen can say
+    // so per row. Webflow stays the source of truth for whether ALT exists —
+    // this is what happened, not what is.
+    const at = new Date().toISOString();
+    const confidentSet = new Set(confident.map((image) => image.fingerprint));
+    const updates: IndexUpdate[] = images.map((image) => {
+      const draft = drafts.get(image.fingerprint) as (StoredDraft & { alt?: string }) | undefined;
+      const state = !image.missingAlt
+        ? 'present'
+        : settled.has(image.fingerprint)
+          ? 'decorative'
+          : confidentSet.has(image.fingerprint)
+            ? draft?.kind === 'decorative'
+              ? 'decorative'
+              : 'added'
+            : draft
+              ? 'held'
+              : undefined;
+      return {
+        fingerprint: image.fingerprint,
+        src: image.src,
+        group: key,
+        ...(state ? { alt: { state, text: state === 'added' ? draft?.alt : undefined, at } } : {}),
+      };
+    });
+    await recordInIndex(projectId, updates);
   } catch (error) {
     result.errors.push(`ALT: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -240,7 +287,7 @@ export async function runLibraryGroup(
   // ── images: optimise in place where Webflow allows it ─────────────────────
   // After ALT, not before: the apply step reads each field fresh, so the swap
   // carries the alt text that was just written rather than blanking it.
-  try {
+  if (runImages) try {
     const applied = await runImageApply(
       projectId,
       {
@@ -249,11 +296,14 @@ export async function runLibraryGroup(
         designerCopies: group.kind === 'assets',
         publish: payload.publish,
         by: payload.by,
+        group: key,
+        force: payload.force,
       },
       (message, fraction, current) => onProgress(`Images · ${message}`, 0.7 + (fraction ?? 0) * 0.3, current),
     );
     const unchanged = applied.skipped.filter((skip) => /small|smaller|not a CMS image/.test(skip.reason)).length;
     result.optimise = {
+      alreadyDone: applied.alreadyDone,
       optimised: applied.uploaded,
       resized: applied.resized,
       designerCopies: applied.preparedForDesigner + applied.alreadyPrepared,

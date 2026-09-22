@@ -529,4 +529,41 @@ describe('firestore.rules', { timeout: 30_000 }, () => {
       );
     });
   });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // projects/{id}/image_index — the team reads it; only the worker writes it
+  // ────────────────────────────────────────────────────────────────────────
+  describe('image_index', () => {
+    const INDEX = 'projects/p1/image_index';
+    const entry = {
+      fingerprint: 'cdn.test/site/a.webp',
+      src: 'https://cdn.test/site/a.webp',
+      optimise: { state: 'optimised', at: '2026-09-23T00:00:00Z', width: null },
+    };
+
+    beforeEach(async () => {
+      await seed('projects', 'p1', { name: 'Acme', userId: 'owner-uid' });
+      await seed(INDEX, 'img_1', entry);
+    });
+
+    it('lets the team read what has been done to each image', async () => {
+      await assertSucceeds(docRef(team(), INDEX, 'img_1').get());
+    });
+
+    it('refuses a write from the browser, even from the team', async () => {
+      // A row saying "optimised" that the worker never wrote would make runs
+      // skip real work, so only the admin SDK writes here.
+      await assertFails(docRef(team(), INDEX, 'img_2').set(entry));
+      await assertFails(docRef(team(), INDEX, 'img_1').update({ 'optimise.state': 'failed' }));
+    });
+
+    it('refuses the admin writing from the browser too', async () => {
+      await assertFails(docRef(admin(), INDEX, 'img_2').set(entry));
+    });
+
+    it('denies anyone outside the team reading it', async () => {
+      await assertFails(docRef(outsider(), INDEX, 'img_1').get());
+      await assertFails(docRef(signedOut(), INDEX, 'img_1').get());
+    });
+  });
 });

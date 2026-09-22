@@ -13,6 +13,8 @@ import {
   altSuggestionsRepository,
   type AltSuggestionDoc,
 } from '../../infrastructure/alt-suggestions.repository';
+import { imageIndexRepository } from '../../infrastructure/image-index.repository';
+import type { ImageIndexEntry } from '../../domain/image-index';
 
 /**
  * The Images screen's one hook: optimise a group, see how each group is doing.
@@ -39,15 +41,23 @@ const keyOf = (job: WorkerJobDoc) => {
 export const isConfidentDraft = (draft: Pick<AltSuggestionDoc, 'needsReview' | 'certainty'>) =>
   !draft.needsReview && draft.certainty !== 'low';
 
+/** Narrow a run: just some images, and/or just one half. */
+export interface OptimiseOptions {
+  srcs?: string[];
+  steps?: { alt: boolean; images: boolean };
+}
+
 export interface LibraryOptimise {
   drafts: Map<string, AltSuggestionDoc>;
   draftFor: (src: string) => AltSuggestionDoc | undefined;
+  /** What has already been done to an image, from the worker's index. */
+  indexFor: (src: string) => ImageIndexEntry | undefined;
   online: WorkerDoc[];
   /** The queued or running job for a group. */
   activeFor: (key: string) => WorkerJobDoc | undefined;
   /** The last finished job for a group, for its result line. */
   lastFor: (key: string) => WorkerJobDoc | undefined;
-  optimise: (groups: LibraryGroupRef[], publish: boolean) => Promise<void>;
+  optimise: (groups: LibraryGroupRef[], publish: boolean, options?: OptimiseOptions) => Promise<void>;
   /** Write one hand-checked or hand-edited ALT, through the worker. */
   saveAlt: (item: { fingerprint: string; src: string; alt: string }) => Promise<void>;
   busy: boolean;
@@ -60,6 +70,7 @@ export function useLibraryOptimise(
   enabled = true,
 ): LibraryOptimise {
   const [drafts, setDrafts] = useState<Map<string, AltSuggestionDoc>>(new Map());
+  const [index, setIndex] = useState<Map<string, ImageIndexEntry>>(new Map());
   const [jobs, setJobs] = useState<WorkerJobDoc[]>([]);
   const [workers, setWorkers] = useState<WorkerDoc[]>([]);
   const [busy, setBusy] = useState(false);
@@ -68,6 +79,7 @@ export function useLibraryOptimise(
     if (!enabled || !projectId) return;
     const stop = [
       altSuggestionsRepository.subscribe(projectId, setDrafts),
+      imageIndexRepository.subscribe(projectId, setIndex),
       workerRepository.subscribeJobs(projectId, setJobs),
       workerRepository.subscribeWorkers(setWorkers),
     ];
@@ -94,9 +106,10 @@ export function useLibraryOptimise(
   }, [jobs]);
 
   const draftFor = useCallback((src: string) => drafts.get(imageFingerprint(src)), [drafts]);
+  const indexFor = useCallback((src: string) => index.get(imageFingerprint(src)), [index]);
 
   const optimise = useCallback(
-    async (groups: LibraryGroupRef[], publish: boolean) => {
+    async (groups: LibraryGroupRef[], publish: boolean, options: OptimiseOptions = {}) => {
       const todo = groups.filter((group) => !active.has(libraryGroupKey(group)));
       if (todo.length === 0) return void toast.message('Already queued');
       setBusy(true);
@@ -107,13 +120,14 @@ export function useLibraryOptimise(
             kind: 'library_group',
             projectId,
             projectName,
-            payload: { group, publish, by: userEmail },
+            payload: { group, publish, by: userEmail, ...(options.srcs ? { srcs: options.srcs } : {}), ...(options.steps ? { steps: options.steps } : {}) },
             requestedBy: userEmail,
           });
         }
+        const what = options.srcs ? `${options.srcs.length} image${options.srcs.length === 1 ? '' : 's'}` : todo.length === 1 ? 'it' : `${todo.length} groups`;
         toast.success(
           online.length > 0
-            ? `Queued ${todo.length === 1 ? 'it' : `${todo.length} groups`} — ${online[0].workerId} is on it`
+            ? `Queued ${what} — ${online[0].workerId} is on it`
             : 'Queued. It starts when a worker machine is next online.',
         );
       } catch (error) {
@@ -146,6 +160,7 @@ export function useLibraryOptimise(
   return {
     drafts,
     draftFor,
+    indexFor,
     online,
     activeFor: (key) => active.get(key),
     lastFor: (key) => last.get(key),

@@ -132,6 +132,16 @@ service cloud.firestore {
         allow read, write: if canAccessProjectById();
       }
 
+      // What has been done to each image — optimised, already optimal, ALT
+      // added or held — so a run never does the same work twice. Written only
+      // by the worker with the admin SDK. No writes from the browser: a row
+      // saying "optimised" that the worker never wrote would make runs skip
+      // real work.
+      match /image_index/{imageId} {
+        allow read: if canAccessProjectById();
+        allow write: if false;
+      }
+
       // ────────────────────────────────────────────────────────────────────
       // Updates the team posts to the client's portal. Team-only. Rules do NOT
       // cascade into subcollections, so anything not matched here (portal_views)

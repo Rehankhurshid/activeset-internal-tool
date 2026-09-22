@@ -14,6 +14,8 @@ import { ensureOptimisedFolder } from '@/lib/cms/placement';
 import { sanitizeAssetFileName } from '@/lib/cms/assets';
 import crypto from 'node:crypto';
 import type { CurrentImage } from '@/lib/worker/queue';
+import { readImageIndex, recordInIndex, type IndexUpdate } from '@/lib/image-index-admin';
+import { optimiseSettled } from '@/modules/site-monitoring/domain/image-index';
 
 /**
  * Resize an image to the width its page actually displays it at, and point
@@ -67,6 +69,10 @@ export interface ImageApplyPayload {
   designerCopies?: boolean;
   /** Which CMS collections to look in. Undefined means all; an empty list means none. */
   collectionIds?: string[];
+  /** The Images-screen group these belong to, recorded in the image index. */
+  group?: string;
+  /** Redo images the index says are already done. Off by default. */
+  force?: boolean;
 }
 
 export interface ImageApplyResult {
@@ -83,6 +89,8 @@ export interface ImageApplyResult {
   preparedForDesigner: number;
   /** Designer copies that already existed from an earlier run. */
   alreadyPrepared: number;
+  /** Skipped without downloading, because the image index says they are done. */
+  alreadyDone: number;
   published: number;
   bytesSaved: number;
   /** Where the originals were archived, so a revert has somewhere to read from. */
@@ -128,6 +136,7 @@ export async function runImageApply(
     repointed: 0,
     preparedForDesigner: 0,
     alreadyPrepared: 0,
+    alreadyDone: 0,
     published: 0,
     bytesSaved: 0,
     skipped: [],
@@ -197,10 +206,29 @@ export async function runImageApply(
   const updates: CmsUpdatePayload[] = [];
   const applied = new Set<string>();
   const archives = new Map<string, string>();
-  const appliedUrls = new Map<string, { src: string; bytes: number; targetWidth: number | null; newUrl: string }>();
+  const appliedUrls = new Map<
+    string,
+    { src: string; bytes: number; bytesAfter: number; targetWidth: number | null; newUrl: string }
+  >();
   /** The CMS fields each swapped image was written into, by `CmsImageEntry.id`. */
   const repointedFields = new Map<string, string[]>();
   const now = new Date().toISOString();
+
+  // What has already been done, so it is not done again — and not downloaded
+  // and re-encoded just to find that out. Outcomes are written as they happen,
+  // in small batches, so a run that dies still leaves an accurate record.
+  const imageIndex = await readImageIndex(projectId);
+  let pending: IndexUpdate[] = [];
+  const note = async (update: IndexUpdate) => {
+    pending.push({ group: payload.group, ...update });
+    if (pending.length >= 20) {
+      const batch = pending;
+      pending = [];
+      await recordInIndex(projectId, batch);
+    }
+  };
+  const settled = (fingerprint: string, width: number | null) =>
+    !payload.force && optimiseSettled(imageIndex.get(fingerprint), width).settled;
 
   for (const [i, target] of requested.entries()) {
     const currentSrc = target.src ?? measurements.get(target.fingerprint)?.src;
@@ -213,20 +241,46 @@ export async function runImageApply(
     const entries = cmsIndex.get(target.fingerprint);
     const measured = measurements.get(target.fingerprint);
     if (!entries?.length && payload.designerCopies && measured?.verdict === 'oversized') {
+      if (settled(target.fingerprint, measured.targetWidth)) {
+        result.alreadyDone += 1;
+        continue;
+      }
       try {
         if (measured.replacement) {
           result.alreadyPrepared += 1;
+          await note({
+            fingerprint: target.fingerprint,
+            src: measured.src,
+            optimise: {
+              state: 'designer-copy',
+              at: now,
+              width: measured.targetWidth,
+              bytesBefore: measured.bytes,
+              bytesAfter: measured.replacement.bytes,
+              designerCopyUrl: measured.replacement.url,
+            },
+          });
           continue;
         }
         const res = await fetch(measured.src, { signal: AbortSignal.timeout(30_000) });
         if (!res.ok) {
           result.failed.push({ where: measured.src, error: `could not fetch the original (${res.status})` });
+          await note({
+            fingerprint: target.fingerprint,
+            src: measured.src,
+            optimise: { state: 'failed', at: now, width: measured.targetWidth, error: `fetch ${res.status}` },
+          });
           continue;
         }
         const original = Buffer.from(await res.arrayBuffer());
         const encoded = await encodeAtWidth(original, measured.targetWidth, measured.format);
         if (!encoded) {
           result.skipped.push({ fingerprint: target.fingerprint, reason: 'nothing smaller was possible without a visible change' });
+          await note({
+            fingerprint: target.fingerprint,
+            src: measured.src,
+            optimise: { state: 'already-optimal', at: now, width: measured.targetWidth, bytesBefore: original.byteLength },
+          });
           continue;
         }
 
@@ -264,8 +318,26 @@ export async function runImageApply(
           width: measured.targetWidth,
         };
         await findingRefs.get(target.fingerprint)?.update({ replacement });
+        await note({
+          fingerprint: target.fingerprint,
+          src: measured.src,
+          optimise: {
+            state: 'designer-copy',
+            at: now,
+            width: measured.targetWidth,
+            bytesBefore: original.byteLength,
+            bytesAfter: encoded.bytes.byteLength,
+            designerCopyUrl: uploaded.hostedUrl,
+          },
+        });
       } catch (error) {
-        result.failed.push({ where: measured.src, error: error instanceof Error ? error.message : String(error) });
+        const message = error instanceof Error ? error.message : String(error);
+        result.failed.push({ where: measured.src, error: message });
+        await note({
+          fingerprint: target.fingerprint,
+          src: measured.src,
+          optimise: { state: 'failed', at: now, width: measured.targetWidth, error: message },
+        });
       }
       continue;
     }
@@ -292,10 +364,16 @@ export async function runImageApply(
       continue;
     }
 
+    if (settled(target.fingerprint, targetWidth)) {
+      result.alreadyDone += 1;
+      continue;
+    }
+
     try {
       const res = await fetch(src, { signal: AbortSignal.timeout(30_000) });
       if (!res.ok) {
         result.failed.push({ where: src, error: `could not fetch the original (${res.status})` });
+        await note({ fingerprint: target.fingerprint, src, optimise: { state: 'failed', at: now, width: targetWidth, error: `fetch ${res.status}` } });
         continue;
       }
       const original = Buffer.from(await res.arrayBuffer());
@@ -305,6 +383,11 @@ export async function runImageApply(
         result.skipped.push({
           fingerprint: target.fingerprint,
           reason: 'nothing smaller was possible without a visible change',
+        });
+        await note({
+          fingerprint: target.fingerprint,
+          src,
+          optimise: { state: 'already-optimal', at: now, width: targetWidth, bytesBefore: original.byteLength },
         });
         continue;
       }
@@ -316,6 +399,11 @@ export async function runImageApply(
       const saved = original.byteLength - encoded.bytes.byteLength;
       if (targetWidth === null && (saved < 8 * 1024 || saved / original.byteLength < 0.15)) {
         result.skipped.push({ fingerprint: target.fingerprint, reason: 'already about as small as it gets' });
+        await note({
+          fingerprint: target.fingerprint,
+          src,
+          optimise: { state: 'already-optimal', at: now, width: targetWidth, bytesBefore: original.byteLength },
+        });
         continue;
       }
 
@@ -359,10 +447,18 @@ export async function runImageApply(
       }
       applied.add(target.fingerprint);
       archives.set(target.fingerprint, archived.url ?? archived.path);
-      appliedUrls.set(target.fingerprint, { src, bytes: original.byteLength, targetWidth, newUrl: uploaded.hostedUrl });
+      appliedUrls.set(target.fingerprint, {
+        src,
+        bytes: original.byteLength,
+        bytesAfter: encoded.bytes.byteLength,
+        targetWidth,
+        newUrl: uploaded.hostedUrl,
+      });
       repointedFields.set(target.fingerprint, entries.map((entry) => entry.id));
     } catch (error) {
-      result.failed.push({ where: src, error: error instanceof Error ? error.message : String(error) });
+      const message = error instanceof Error ? error.message : String(error);
+      result.failed.push({ where: src, error: message });
+      await note({ fingerprint: target.fingerprint, src, optimise: { state: 'failed', at: now, width: targetWidth, error: message } });
     }
   }
 
@@ -428,10 +524,30 @@ export async function runImageApply(
       }
     }
     for (const [fingerprint, fieldIds] of repointedFields) {
-      const served = fieldIds.map((id) => nowServed.get(id)).find(Boolean);
-      await carryAltAcross(projectId, fingerprint, served ?? appliedUrls.get(fingerprint)!.newUrl);
+      const applied = appliedUrls.get(fingerprint)!;
+      const served = fieldIds.map((id) => nowServed.get(id)).find(Boolean) ?? applied.newUrl;
+      const servedFingerprint = imageFingerprint(served);
+      await carryAltAcross(projectId, fingerprint, served);
+
+      // Recorded from what the field now says, not from what we sent: if the
+      // field still shows the original, the write did not take, and the
+      // index must not claim otherwise.
+      if (servedFingerprint === fingerprint) {
+        await note({
+          fingerprint,
+          src: applied.src,
+          optimise: { state: 'failed', at: now, width: applied.targetWidth, error: 'the CMS field did not take the new file' },
+        });
+        continue;
+      }
+      const facts = { at: now, width: applied.targetWidth, bytesBefore: applied.bytes, bytesAfter: applied.bytesAfter };
+      await note({ fingerprint, src: applied.src, optimise: { state: 'optimised', ...facts, replacedBy: servedFingerprint } });
+      // The replacement is marked done too, which is what stops a later run
+      // compressing an already-compressed file a second time.
+      await note({ fingerprint: servedFingerprint, src: served, optimise: { state: 'optimised', ...facts, replaces: fingerprint } });
     }
   }
+  if (pending.length > 0) await recordInIndex(projectId, pending);
 
   await recordApplied(projectId, appliedUrls, archives, now, payload.by ?? 'worker');
   return result;
