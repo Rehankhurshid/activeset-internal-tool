@@ -225,6 +225,17 @@ write "Numaan Ashraf, Headshot", because the field's name went in as the
 image's title attribute. A portrait naming anyone else, or no one, is still
 held.
 
+**Activity in the navigation bar.** `WorkerActivityIndicator`, beside Scans in
+`AppNavigation`, shows what the worker is doing on every page and survives a
+refresh — it reads the job queue live from Firestore, nothing held in the
+page. It names the project, the group (General assets or the CMS collection),
+the item and field being worked on (`currentLabel`, e.g. "Ringg AI · Logo
+Inline — Dark"), whether it is being read or shrunk, and progress; "Open"
+goes to `?tab=webflow&section=images`. Queued jobs can be cancelled singly or
+all at once; the cancel is a transaction that only succeeds on a job still
+queued, so it cannot mark one the worker has just claimed. A running job is
+left to finish rather than stopped mid-write.
+
 **One number for "missing ALT".** The Audit tab counts images a visitor gets
 with no ALT; the Webflow tab used to count empty ALT fields in the library.
 On PeakXV that was 9 against about 1,900, and it looked like a contradiction.

@@ -26,6 +26,7 @@ import { imageFingerprint } from '@/modules/site-monitoring/domain/audit-finding
 import { cmsSourceAssetIds } from '@/modules/site-monitoring/domain/webflow-assets';
 import { siteAltStatus, type SiteAltStatus } from '@/modules/site-monitoring/domain/alt-coverage';
 import { useAltCoverage, type AltCoverage } from '@/hooks/useAltCoverage';
+import { WorkingThumb, type Phase } from '@/components/webflow/WorkingThumb';
 import {
   isConfidentDraft,
   useLibraryOptimise,
@@ -89,34 +90,7 @@ const isBlank = (value: string | null | undefined) => BLANK_ALTS.has((value ?? '
 const SECONDS_PER_IMAGE = 10;
 const PAGE = 100;
 
-type Phase = 'describing' | 'optimising';
 const PHASE_LABEL: Record<Phase, string> = { describing: 'Reading', optimising: 'Shrinking' };
-
-/**
- * The image the worker is on, animated by what is happening to it: a scan
- * line while it is being described, a squeeze while it is being shrunk. A
- * progress bar says how far through a run is; this says which image, which is
- * what someone watching actually wants to know.
- */
-function WorkingThumb({ src, phase, size }: { src: string; phase: Phase; size: 'sm' | 'md' }) {
-  return (
-    <span
-      className={`relative shrink-0 overflow-hidden rounded border border-primary/60 bg-background ${
-        size === 'sm' ? 'h-7 w-7' : 'h-10 w-10'
-      }`}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt=""
-        className={`h-full w-full object-cover ${phase === 'optimising' ? 'animate-image-squeeze' : ''}`}
-      />
-      {phase === 'describing' && (
-        <span className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-transparent via-primary/70 to-transparent animate-image-scan" />
-      )}
-    </span>
-  );
-}
 
 /** One row per distinct image — the same image in five fields is one image. */
 function toRows(entries: CmsImageEntry[]): ImageRow[] {

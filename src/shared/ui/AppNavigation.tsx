@@ -12,6 +12,7 @@ import { useAuth } from '@/modules/auth-access';
 import { Kbd, KeyCombo, isTypingTarget, useShortcut } from '@/shared/keyboard';
 import { isNavItemActive, useNavItems } from '@/components/shell/nav-items';
 import { ScanActivityIndicator } from '@/components/navigation/ScanActivityIndicator';
+import { WorkerActivityIndicator } from '@/components/navigation/WorkerActivityIndicator';
 import { AlertIndicator } from '@/components/navigation/AlertIndicator';
 import { cn } from '@/lib/utils';
 
@@ -100,6 +101,7 @@ export function AppNavigation({
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
           {children}
+          <WorkerActivityIndicator />
           <ScanActivityIndicator />
           <AlertIndicator />
           <Button

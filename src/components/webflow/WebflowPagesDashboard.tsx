@@ -1,5 +1,7 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
+
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -92,6 +94,10 @@ export function WebflowPagesDashboard({
   onSaveConfig,
   onRemoveConfig,
 }: WebflowPagesDashboardProps) {
+  // `?tab=webflow&section=images` opens straight onto a section — the
+  // navigation bar's worker activity links here while a run is going.
+  const sectionParam = useSearchParams()?.get('section');
+  const initialSection = ['pages', 'images', 'schema', 'sitemap'].includes(sectionParam ?? '') ? sectionParam! : 'pages';
   const {
     pages,
     loading,
@@ -410,7 +416,7 @@ export function WebflowPagesDashboard({
 
       {/* Section Tabs (Pages / Images / Schema / Sitemap Sync) */}
       <Tabs
-        defaultValue="pages"
+        defaultValue={initialSection}
         orientation="vertical"
         className="flex flex-row gap-6 items-start"
       >

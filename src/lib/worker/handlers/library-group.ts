@@ -85,6 +85,8 @@ interface GroupImage {
   fingerprint: string;
   missingAlt: boolean;
   context: ImageContext;
+  /** "Ringg AI · Logo Inline — Dark" — what the navigation bar shows. */
+  label: string;
 }
 
 interface StoredDraft {
@@ -138,6 +140,7 @@ export async function runLibraryGroup(
         src: asset.hostedUrl,
         fingerprint: imageFingerprint(asset.hostedUrl),
         missingAlt: BLANK_ALTS.has((asset.altText ?? '').trim()),
+        label: asset.displayName ?? asset.originalFileName ?? 'Site asset',
         context: {
           src: asset.hostedUrl,
           siteName: project.name,
@@ -161,6 +164,7 @@ export async function runLibraryGroup(
         src: entry.imageUrl,
         fingerprint,
         missingAlt: entry.isMissingAlt,
+        label: `${entry.itemName} · ${entry.fieldDisplayName}`,
         context: {
           src: entry.imageUrl,
           siteName: project.name,
@@ -181,6 +185,7 @@ export async function runLibraryGroup(
     for (let i = images.length - 1; i >= 0; i -= 1) if (!picked.has(images[i].fingerprint)) images.splice(i, 1);
   }
   result.images = images.length;
+  const labelBySrc = new Map(images.map((image) => [image.src, image.label]));
   const runAlt = payload.steps?.alt !== false;
   const runImages = payload.steps?.images !== false;
   const key = groupKey(group);
@@ -219,7 +224,7 @@ export async function runLibraryGroup(
       await onProgress(
         `Describing ${i + 1}/${toDraft.length}`,
         0.02 + (i / Math.max(1, toDraft.length)) * 0.6,
-        { src: image.src, phase: 'describing' },
+        { src: image.src, phase: 'describing', label: image.label },
       );
       const { suggestions, failures } = await generateAltTextBatch([image.context]);
       await saveAltSuggestions(projectId, suggestions);
@@ -299,7 +304,12 @@ export async function runLibraryGroup(
         group: key,
         force: payload.force,
       },
-      (message, fraction, current) => onProgress(`Images · ${message}`, 0.7 + (fraction ?? 0) * 0.3, current),
+      (message, fraction, current) =>
+        onProgress(
+          `Images · ${message}`,
+          0.7 + (fraction ?? 0) * 0.3,
+          current ? { ...current, label: labelBySrc.get(current.src) } : current,
+        ),
     );
     const unchanged = applied.skipped.filter((skip) => /small|smaller|not a CMS image/.test(skip.reason)).length;
     result.optimise = {

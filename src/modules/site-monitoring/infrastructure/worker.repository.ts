@@ -1,4 +1,4 @@
-import { addDoc, collection, doc as docRef, limit, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc as docRef, limit, onSnapshot, orderBy, query, runTransaction, setDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLLECTIONS } from '@/lib/constants';
 import type { WeightAssessment } from '../domain/image-budget';
@@ -42,6 +42,10 @@ export interface WorkerJobDoc {
   /** The image the job is on right now, while it is on one. */
   currentSrc?: string | null;
   currentPhase?: 'describing' | 'optimising' | null;
+  /** "Ringg AI · Logo Inline — Dark": which item, in words. */
+  currentLabel?: string | null;
+  /** Higher runs first. */
+  priority?: number;
   claimedBy?: string;
   heartbeatAt?: string;
   finishedAt?: string;
@@ -95,6 +99,17 @@ export interface WorkerRepository {
   }) => Promise<string>;
   subscribeJobs: (projectId: string, onChange: (jobs: WorkerJobDoc[]) => void) => () => void;
   subscribeWorkers: (onChange: (workers: WorkerDoc[]) => void) => () => void;
+  /**
+   * Every queued or running job, across every project — for the navigation
+   * bar, which has to say what the worker is doing whichever page you are on.
+   */
+  subscribeActiveJobs: (onChange: (jobs: WorkerJobDoc[]) => void) => () => void;
+  /**
+   * Cancel a job only if it is still waiting. In a transaction, because the
+   * worker claims jobs in one too: without it, a cancel could land on a job
+   * the worker had just started, and mark a running job cancelled.
+   */
+  cancelQueued: (jobId: string, by: string) => Promise<boolean>;
   subscribeWeight: (projectId: string, onChange: (findings: WeightFindingDoc[]) => void) => () => void;
   subscribeControl: (
     workerId: string,
@@ -198,6 +213,42 @@ export const workerRepository: WorkerRepository = {
         onChange([]);
       },
     );
+  },
+
+  subscribeActiveJobs(onChange) {
+    return onSnapshot(
+      query(collection(db, WORKER_JOBS), where('status', 'in', ['queued', 'running']), limit(100)),
+      (snap) => {
+        const jobs = snap.docs
+          .map((doc) => ({ ...(doc.data() as Omit<WorkerJobDoc, 'id'>), id: doc.id }))
+          // Running first, then the order the worker will take them in.
+          .sort(
+            (a, b) =>
+              (a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1) ||
+              (b.priority ?? 0) - (a.priority ?? 0) ||
+              (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
+          );
+        onChange(jobs);
+      },
+      (error) => {
+        console.error('[worker] active job subscription failed:', error);
+        onChange([]);
+      },
+    );
+  },
+
+  async cancelQueued(jobId, by) {
+    const ref = docRef(db, WORKER_JOBS, jobId);
+    return runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists() || snap.data().status !== 'queued') return false;
+      transaction.update(ref, {
+        status: 'cancelled',
+        finishedAt: new Date().toISOString(),
+        error: `Cancelled by ${by}`,
+      });
+      return true;
+    });
   },
 
   subscribeWorkers(onChange) {

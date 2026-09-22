@@ -158,6 +158,12 @@ export async function claimNextJob(
 export interface CurrentImage {
   src: string;
   phase: 'describing' | 'optimising';
+  /**
+   * Which item it is, in words: "Ringg AI · Logo Inline — Dark". Shown in the
+   * app's navigation bar, where a thumbnail alone does not say which of 920
+   * Companies logos is being read.
+   */
+  label?: string;
 }
 
 export async function heartbeat(
@@ -176,7 +182,13 @@ export async function heartbeat(
           fraction,
           // Cleared between images and in steps that are about no one image —
           // "Repointing 40 CMS fields" should not leave the last thumbnail lit.
-          ...(current === undefined ? {} : { currentSrc: current?.src ?? null, currentPhase: current?.phase ?? null }),
+          ...(current === undefined
+            ? {}
+            : {
+                currentSrc: current?.src ?? null,
+                currentPhase: current?.phase ?? null,
+                currentLabel: current?.label ?? null,
+              }),
         }).filter(([, v]) => v !== undefined),
       ),
     );
