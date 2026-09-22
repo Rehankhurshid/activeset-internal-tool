@@ -125,7 +125,13 @@ export async function generateAltText(
 
   if (!options.noCache) {
     const hit = await readCache(key);
-    if (hit) return { ...hit, cached: true, durationMs: Date.now() - startedAt };
+    // The cache is keyed by the image's bytes and its context, not by where it
+    // lives — so one upload used in two CMS fields ("Thumbnail — Regular" and
+    // "Thumbnail — Main Image") is one cache entry. The answer can be shared;
+    // its identity cannot. Returning the hit as stored filed the second
+    // field's draft under the first field's address, and the second field
+    // never got ALT.
+    if (hit) return { ...hit, fingerprint, src: context.src, cached: true, durationMs: Date.now() - startedAt };
   }
 
   const finish = async (suggestion: AltSuggestion): Promise<AltSuggestion> => {
