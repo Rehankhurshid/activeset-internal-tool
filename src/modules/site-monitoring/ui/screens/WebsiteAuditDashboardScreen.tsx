@@ -19,6 +19,7 @@ import {
 } from "../../domain/audit-findings"
 import { useAuditDecisions } from "../hooks/useAuditDecisions"
 import { useAltSuggestions } from "../hooks/useAltSuggestions"
+import { useWebflowAssetIndex } from "../hooks/useWebflowAssetIndex"
 import { useWorker } from "../hooks/useWorker"
 import { WeightTab } from "../components/audit/WeightTab"
 import { AuditHeader, type FixTarget } from "../components/audit/AuditHeader"
@@ -640,6 +641,17 @@ export function WebsiteAuditDashboard({
   // someone would fix; the tabs and the per-page readiness all read from it.
   const findings = useMemo(() => collectFindings(links, decisions), [links, decisions])
   const rollup = useMemo(() => fixesRollup(findings), [findings])
+
+  const openAltSrcs = useMemo(
+    () => findings.alt.filter((f) => f.state === 'open' || f.state === 'regressed').map((f) => f.src),
+    [findings.alt],
+  )
+  const assetIndex = useWebflowAssetIndex(
+    projectId,
+    webflowConfig?.siteId,
+    openAltSrcs,
+    !isReadOnly && !!webflowConfig?.hasApiToken,
+  )
 
   // 1. Process Links into Page Data
   const pagesData = useMemo<AuditPageRow[]>(() => {
@@ -1571,8 +1583,12 @@ export function WebsiteAuditDashboard({
   const canWriteWebflow = !isReadOnly && !!webflowConfig?.siteId && !!webflowConfig?.hasApiToken
 
   const handleSaveAlt = useCallback(async (finding: AltFinding, altText: string) => {
-    if (!finding.webflowAssetId) return
-    const response = await fetchForProject(projectId, `/api/webflow/assets/${finding.webflowAssetId}`, {
+    const assetId = assetIndex.resolved[finding.src]
+    if (!assetId) {
+      toast.error('Webflow has no asset for this image — set the alt text where the image lives')
+      return
+    }
+    const response = await fetchForProject(projectId, `/api/webflow/assets/${assetId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ altText }),
@@ -1585,7 +1601,7 @@ export function WebsiteAuditDashboard({
     }
     await recordDecision({ kind: 'alt', fingerprint: finding.fingerprint, decision: 'fixed_unverified', altText, by })
     toast.success('Saved to Webflow — publish the site, then verify')
-  }, [projectId, recordDecision, by])
+  }, [projectId, recordDecision, by, assetIndex.resolved])
 
   const handleMarkFixed = useCallback(async (finding: AltFinding) => {
     await recordDecision({ kind: 'alt', fingerprint: finding.fingerprint, decision: 'fixed_unverified', by })
@@ -2468,6 +2484,7 @@ export function WebsiteAuditDashboard({
             onUndo={handleUndoAlt}
             onVerify={handleVerifyAlt}
             verifyingFingerprints={verifyingFingerprints}
+            assetIds={assetIndex.resolved}
             suggestions={altSuggestions}
             projectId={projectId}
             workerName={worker.online[0]?.workerId}

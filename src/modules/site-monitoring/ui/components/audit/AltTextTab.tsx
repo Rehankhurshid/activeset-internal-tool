@@ -31,6 +31,7 @@ import {
 import { FindingPages } from './FindingPages';
 import { relativeTime } from './relative-time';
 import type { AltSuggestionDoc } from '../../../infrastructure/alt-suggestions.repository';
+import { NOT_AN_ASSET_HINT } from '../../../domain/webflow-assets';
 
 /**
  * Alt text, by image. The unit Webflow edits in is the asset, so that is the
@@ -42,8 +43,14 @@ import type { AltSuggestionDoc } from '../../../infrastructure/alt-suggestions.r
 export interface AltTextTabProps {
   findings: AltFinding[];
   isReadOnly: boolean;
-  /** The project has a Webflow token and the image is a Webflow asset. */
+  /** The project has a Webflow token configured. */
   canWriteWebflow: boolean;
+  /**
+   * Image URL to Webflow asset id, for images the Assets API can actually
+   * write. Absent from the map means it is a CMS image or otherwise not a
+   * site asset — most of them, on a typical site.
+   */
+  assetIds?: Record<string, string>;
   onSaveAlt: (finding: AltFinding, altText: string) => Promise<void>;
   onMarkFixed: (finding: AltFinding) => Promise<void>;
   onMarkDecorative: (finding: AltFinding) => Promise<void>;
@@ -303,11 +310,13 @@ function AltRow({
   onUndo,
   onVerify,
   verifying,
+  assetId,
 }: {
   finding: AltFinding;
   suggestion?: AltSuggestionDoc;
   isReadOnly: boolean;
   canWriteWebflow: boolean;
+  assetId?: string;
   onSaveAlt: AltTextTabProps['onSaveAlt'];
   onMarkFixed: AltTextTabProps['onMarkFixed'];
   onMarkDecorative: AltTextTabProps['onMarkDecorative'];
@@ -320,7 +329,9 @@ function AltRow({
   const [busy, setBusy] = useState<'save' | 'decorative' | 'fixed' | 'undo' | null>(null);
   const name = fileNameOf(finding.src);
   const jev = jevLine(finding);
-  const writable = canWriteWebflow && !!finding.webflowAssetId;
+  // Only when Webflow itself confirmed this URL is a site asset. The id in
+  // the URL is not one, however much it looks like it.
+  const writable = canWriteWebflow && !!assetId;
   const open = finding.state === 'open' || finding.state === 'regressed';
 
   const run = async (kind: NonNullable<typeof busy>, fn: () => Promise<void>) => {
@@ -347,7 +358,7 @@ function AltRow({
             <span className="font-mono text-xs truncate max-w-[60vw] sm:max-w-sm" title={finding.src}>
               {name}
             </span>
-            {finding.webflowAssetId ? (
+            {writable ? (
               <Badge variant="outline" className="text-[10px] h-4 px-1.5">Webflow asset</Badge>
             ) : null}
             {finding.state === 'regressed' && (
@@ -412,6 +423,7 @@ function AltRow({
                       size="sm"
                       variant="outline"
                       className="h-8"
+                      title={canWriteWebflow ? NOT_AN_ASSET_HINT : undefined}
                       onClick={async () => {
                         await navigator.clipboard.writeText(draft.trim() ? `${name}\n${draft.trim()}` : name);
                         toast.success('Copied');
@@ -560,6 +572,7 @@ export function AltTextTab(props: AltTextTabProps) {
     <AltRow
       key={f.fingerprint}
       finding={f}
+      assetId={props.assetIds?.[f.src]}
       suggestion={props.suggestions?.get(f.fingerprint)}
       verifying={props.verifyingFingerprints.has(f.fingerprint)}
       {...rowProps}

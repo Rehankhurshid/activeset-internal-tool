@@ -389,6 +389,16 @@ published, so Save records `fixed_unverified`; Verify rescans a page and either
 marks `verified` or, if a newer scan still shows no alt, flags the row as
 regressed with the publish hint.
 
+**Most images cannot be written through the Assets API at all**, and the Save
+button only appears for those that can. The 24-hex prefix in a Webflow CDN URL
+looks exactly like an asset id and is not one: Webflow re-encodes images for
+delivery under fresh ids, and a CMS item's image never appears in the site
+asset list. Measured on Canopy, of eleven images needing alt text the parsed id
+matched a real asset for **none**, and every Save returned
+`Requested resource not found: Asset not found`. So the tab now asks Webflow
+which URLs are assets (`/api/webflow/assets/resolve`) and offers Save only for
+those; the rest get Copy, with a note that the alt belongs on the CMS item.
+
 Image-only scans (`/api/scan-images`, `/api/image-scan/*`) run on firebase-admin
 via `src/lib/audit-admin.ts` and write one audit document. They no longer touch
 `lastRun`; `categories.seo.imageScanCheckedAt` carries the date.
