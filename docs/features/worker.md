@@ -21,65 +21,89 @@ If the machine is off, jobs sit in the queue until it comes back.
 
 ## Setting it up on Windows
 
-Once, on the PC:
+Done once on GOLIATH (i5-12600KF, 32 GB, RTX 3070 Ti) on 2026-09-22. Four
+things bit, and they are all recorded here because none is obvious.
+
+**1. Remote access.** Enable OpenSSH and trust a key:
 
 ```powershell
-winget install OpenJS.NodeJS.LTS
-winget install Git.Git
-winget install Ollama.Ollama
-git clone https://github.com/Rehankhurshid/activeset-internal-tool.git
-cd activeset-internal-tool
-npm install
-npx vercel env pull .env.local      # Firebase admin credentials
-npm run worker doctor
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
 ```
 
-`doctor` reports the hardware, finds Ollama and Chrome, checks the
-credentials, and recommends a model for the GPU it finds:
+Two traps. For an **administrator account** Windows OpenSSH ignores
+`~/.ssh/authorized_keys` entirely and reads
+`C:\ProgramData\ssh\administrators_authorized_keys`, which must be owned by
+Administrators and SYSTEM with inheritance removed. And **never append with
+`Add-Content` alone** — if the file does not end in a newline the new key
+lands on the end of the previous one and silently breaks both. That happened
+here and cost a diagnosis.
 
-```
-Worker machine
-  Windows_NT 10.0.26100
-  AMD Ryzen 9 7900X · 24 cores · 64 GB RAM
-  NVIDIA GeForce RTX 4090 · 24 GB VRAM
-
-Vision model
-  configured  qwen2.5vl:7b
-  recommended qwen2.5vl:32b — 24 GB of VRAM fits the 32B model, which is
-                              markedly better at reading text in images
-```
-
-Pull whatever it recommends, then point the worker at it:
+**2. The firewall.** `Add-WindowsCapability` creates an inbound rule for the
+**Private** profile only. An office ethernet classified **Public** leaves
+`sshd` listening on `0.0.0.0:22` with every packet dropped, which looks
+exactly like a broken key:
 
 ```powershell
-ollama pull qwen2.5vl:32b
-setx OLLAMA_ALT_MODEL qwen2.5vl:32b
-setx WORKER_EMIT_DIR C:\activeset\optimised-images
-npm run worker run
+Set-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -Enabled True -Profile Any
 ```
 
-On a 24 GB card the 32B model answers in **two to four seconds an image**
-against twelve to nineteen on an M1 Pro's CPU, and it is materially better at
-the thing that matters most on marketing sites — reading text inside an image.
-
-### Keeping it running
-
-`npm run worker run` in a terminal is fine to start with. To survive a reboot,
-either works:
-
-**Task Scheduler**, "at system startup", running `npm run worker run` in the
-repo folder. Simplest, no extra software.
-
-**NSSM**, if you want a real Windows service with automatic restarts:
+**3. Tools.** `winget install` works fine over SSH:
 
 ```powershell
-winget install NSSM.NSSM
+winget install --id OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements
+winget install --id Git.Git -e --silent --accept-package-agreements --accept-source-agreements
+winget install --id Ollama.Ollama -e --silent --accept-package-agreements --accept-source-agreements
+winget install --id NSSM.NSSM -e --silent --accept-package-agreements --accept-source-agreements
+git clone https://github.com/Rehankhurshid/activeset-internal-tool.git C:\activeset\activeset-internal-tool
+```
+
+Copy `.env.vercel-production` across with `scp` rather than running
+`vercel env pull` there — it needs a browser login the machine cannot do.
+
+**4. Ollama must be a service, and the CLI cannot pull.** Anything started
+over SSH dies when the session closes, so `ollama serve` will not stay up.
+Worse, the Windows `ollama` CLI tries to launch the *desktop app*, which
+cannot initialise a UI without a logged-in session and fails with "Unable to
+init instance". So run the server as a service and pull through its API:
+
+```powershell
+nssm install OllamaServe "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" serve
+nssm set OllamaServe AppEnvironmentExtra "OLLAMA_MODELS=C:\activeset\ollama-models" "OLLAMA_KEEP_ALIVE=15m"
+nssm set OllamaServe Start SERVICE_AUTO_START
+nssm start OllamaServe
+
+Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/pull' -Method Post -TimeoutSec 3600 `
+  -ContentType 'application/json' -Body (@{ model = 'qwen2.5vl:7b'; stream = $false } | ConvertTo-Json)
+```
+
+`OLLAMA_MODELS` points outside the user profile so it does not matter which
+account runs the service. The 5.6 GB pull took about three minutes.
+
+**The worker service**, with NSSM rather than Task Scheduler because the
+`restart` and `update` commands exit the process and depend on being brought
+straight back:
+
+```powershell
 nssm install ActiveSetWorker "C:\Program Files\nodejs\npm.cmd" "run worker run"
 nssm set ActiveSetWorker AppDirectory C:\activeset\activeset-internal-tool
+nssm set ActiveSetWorker AppEnvironmentExtra "WORKER_EMIT_DIR=C:\activeset\optimised-images" "NO_COLOR=1"
+nssm set ActiveSetWorker AppExit Default Restart
+nssm set ActiveSetWorker DependOnService OllamaServe
+nssm set ActiveSetWorker Start SERVICE_AUTO_START
 nssm start ActiveSetWorker
 ```
 
-Either way the machine must not sleep: `powercfg /change standby-timeout-ac 0`.
+Then `npm run worker doctor` should end in "Ready.", and
+`powercfg /change standby-timeout-ac 0` keeps the machine awake.
+
+### On model size
+
+`doctor` picks the model from the VRAM it finds. **8 GB fits the 7B model and
+not the 32B one** — the 3070 Ti sits at about 7.0 GB of 8 GB with
+`qwen2.5vl:7b` loaded, which leaves enough for Chrome. Only reach for
+`qwen2.5vl:32b` on a card with 20 GB or more.
 
 ## What it does
 
