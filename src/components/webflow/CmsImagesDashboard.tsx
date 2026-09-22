@@ -82,8 +82,9 @@ function buildContextualCommand(args: CliCommandArgs, actions: CliActions, field
   if (actions.ai) parts.push('--ai');
   if (actions.compress) parts.push('--compress');
   if (actions.publish) parts.push('--publish');
-  // Cleanup only makes sense alongside compress + publish.
-  if (actions.cleanup && actions.compress && actions.publish) parts.push('--cleanup');
+  // `--cleanup` is never emitted. See the disabled toggle for why: it resolves
+  // the originals to delete by parsing an asset id out of the CDN URL, and
+  // that parse does not identify the asset.
   if (args.siteName) parts.push(`--site-name "${escapeCliArg(args.siteName)}"`);
   return parts.join(' ');
 }
@@ -356,15 +357,8 @@ function PlanPanel({
       detail: 'push live',
       eta: actions.publish ? '~4s' : '—',
     },
-    {
-      key: 'cleanup',
-      on: actions.cleanup && actions.compress && actions.publish,
-      label: 'cleanup',
-      detail: 'delete originals',
-      eta: actions.cleanup && actions.compress && actions.publish
-        ? `~${Math.max(5, Math.round(plan.imageCount * 0.3))}s`
-        : '—',
-    },
+    // No cleanup step: deleting the originals is disabled, so showing it as a
+    // permanently-off stage only invites someone to look for the switch.
   ];
 
   return (
@@ -564,22 +558,23 @@ function ContextualCliBar({
           Publish
         </button>
         {/*
-          Cleanup is only meaningful after compress + publish — the originals
-          being deleted are the ones replaced by compressed uploads, and
-          deleting before publish would 404 the live site.
+          Deliberately dead. `--cleanup` decides what to delete by reading the
+          24-hex prefix out of a Webflow CDN URL and treating it as the asset
+          id. It is not the asset id — measured on Canopy, that parse matched a
+          real asset for none of eleven images, which is the whole reason
+          `webflow-assets.ts` exists. So every delete either 404s, or removes
+          an asset nobody identified. Webflow reports no back-references, so
+          there is no way to tell which from the outside.
+
+          Re-enable it only once originals are resolved through
+          `/api/webflow/assets/resolve`, the way alt text now is, and only
+          behind a dry run.
         */}
         <button
           type="button"
-          className={toggleClass(actions.cleanup && actions.compress && actions.publish)}
-          onClick={() => onActionsChange({ ...actions, cleanup: !actions.cleanup })}
-          disabled={!actions.compress || !actions.publish}
-          title={
-            !actions.compress
-              ? 'Enable Compress first — cleanup deletes originals replaced by compressed versions'
-              : !actions.publish
-                ? 'Enable Publish first — deleting before publish would 404 the live site'
-                : 'Delete original Webflow assets that were replaced by compressed versions'
-          }
+          className={`${toggleClass(false)} cursor-not-allowed opacity-50`}
+          disabled
+          title="Disabled: cleanup identifies originals by parsing the CDN URL, which is not the asset id. It would delete assets nobody has confirmed."
         >
           Delete originals
         </button>
