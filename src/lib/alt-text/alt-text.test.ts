@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { extractImageContexts } from './context';
 import { precheck } from './prepare';
 import { MAX_ALT_CHARS, fileNameOf, judgmentSchema, systemPrompt, userPrompt } from './taxonomy';
-import { echoesFileName, stripRedundantOpener, truncateAlt, validateJudgment } from './validate';
+import { echoesFileName, stripRedundantOpener, truncateAlt, validateJudgment, altForRecordPortrait } from './validate';
 import { ALT_KINDS, type ImageContext, type ImageFacts, type RawJudgment } from './types';
 
 /**
@@ -278,5 +278,36 @@ describe('page context', () => {
     const logo = images.find((i) => i.src.endsWith('/logo.svg'));
     assert.equal(logo?.region, 'nav');
     assert.equal(logo?.linkHref, 'https://www.activeset.co/');
+  });
+});
+
+describe('altForRecordPortrait', () => {
+  it('keeps a portrait that is exactly the name on its CMS record', () => {
+    assert.deepEqual(altForRecordPortrait('Rajan Anandan', 'Rajan Anandan'), { alt: 'Rajan Anandan', trimmed: false });
+  });
+
+  it('trims a job title the model invented', () => {
+    // Real: a plain headshot, no text in it, and no role anywhere in the CMS.
+    assert.deepEqual(altForRecordPortrait('Jevyn Ong, Head of Design', 'Jevyn Ong'), { alt: 'Jevyn Ong', trimmed: true });
+  });
+
+  it('trims the CMS field name leaking in as a description', () => {
+    // Real: the field's name went in as the title attribute.
+    assert.deepEqual(altForRecordPortrait('Numaan Ashraf, Headshot', 'Numaan Ashraf'), { alt: 'Numaan Ashraf', trimmed: true });
+  });
+
+  it('keeps words that can actually be read in the image', () => {
+    assert.deepEqual(
+      altForRecordPortrait('Priya Rao speaking at Surge Summit', 'Priya Rao', 'SURGE SUMMIT 2025 speaking'),
+      { alt: 'Priya Rao speaking at Surge Summit', trimmed: false },
+    );
+  });
+
+  it('holds a portrait that names someone other than the record', () => {
+    assert.equal(altForRecordPortrait('Rajan Anandan', 'Shailesh Lakhani'), null);
+  });
+
+  it('holds a portrait that names no one', () => {
+    assert.equal(altForRecordPortrait('A man in a blue shirt smiling', 'Numaan Ashraf'), null);
   });
 });

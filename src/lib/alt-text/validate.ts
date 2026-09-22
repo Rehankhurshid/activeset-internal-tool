@@ -218,3 +218,34 @@ export function validateJudgment(
 
   return { alt, kind, needsReview, notes };
 }
+
+/**
+ * A portrait named from its CMS record: the name, and only what the image
+ * itself says besides.
+ *
+ * The record supplies who someone is, so a portrait whose alt uses that name
+ * is safe to publish unread — the name came from the client's own CMS, not
+ * the model. Nothing else in the alt has that guarantee. Given "Jevyn Ong" and
+ * a plain headshot with no text in it, the model wrote "Jevyn Ong, Head of
+ * Design": a job title from nowhere. So extra words survive only if they can
+ * be read in the image; otherwise the alt is the name, which is also how the
+ * client's own team writes it.
+ *
+ * Returns null when the alt does not use the record's name at all — that
+ * portrait stays held for a person.
+ */
+export function altForRecordPortrait(
+  alt: string,
+  subject: string,
+  visibleText?: string,
+): { alt: string; trimmed: boolean } | null {
+  const name = subject.trim();
+  if (!name || !alt.toLowerCase().includes(name.toLowerCase())) return null;
+  const seen = (visibleText ?? '').toLowerCase();
+  const extra = alt
+    .toLowerCase()
+    .replace(name.toLowerCase(), ' ')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length > 2);
+  return extra.some((word) => !seen.includes(word)) ? { alt: name, trimmed: true } : { alt, trimmed: false };
+}

@@ -134,6 +134,10 @@ export function userPrompt(context: ImageContext, facts?: { width: number; heigh
   };
 
   add('Site', context.siteName);
+  add(
+    'This image belongs to the CMS record for (reliable — if it shows a person, this is who)',
+    context.subject,
+  );
   add('Page title', context.pageTitle);
   add('Page URL', context.pageUrl);
   add('Nearest heading above the image', context.heading);

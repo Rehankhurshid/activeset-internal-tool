@@ -9,7 +9,7 @@ import {
   systemPrompt,
   userPrompt,
 } from './taxonomy';
-import { validateJudgment } from './validate';
+import { validateJudgment, altForRecordPortrait } from './validate';
 import { ALT_KINDS, type AltKind, type AltSuggestion, type ImageContext, type RawJudgment } from './types';
 
 /**
@@ -53,6 +53,9 @@ function contextDigest(context: ImageContext): string {
     pageTitle: context.pageTitle,
     siteName: context.siteName,
     presentational: context.markedPresentational,
+    // In the key so that the old CMS drafts, made when the item's name only
+    // arrived as a loose hint, are not simply replayed from cache.
+    subject: context.subject,
   });
 }
 
@@ -185,7 +188,23 @@ export async function generateAltText(
     );
   }
 
-  if (ALWAYS_REVIEW_KINDS.has(validated.kind)) {
+  // A portrait is held because a model naming a stranger is the worst thing
+  // this can write. That risk is gone when a record says who it is and the alt
+  // uses exactly that name: the name came from the client's own CMS, not from
+  // the model. Named any other way — or not named — it is still held.
+  // A record-named portrait needs no hold: the name came from the client's
+  // CMS. Anything the model added beyond it has to be readable in the image.
+  const record =
+    validated.kind === 'portrait' && context.subject
+      ? altForRecordPortrait(validated.alt, context.subject, winner.visible_text)
+      : null;
+  const namedFromRecord = !!record;
+  if (record?.trimmed) {
+    notes.push(`Trimmed "${validated.alt}" to the name on the record — the rest was not in the image`);
+    validated.alt = record.alt;
+  }
+
+  if (ALWAYS_REVIEW_KINDS.has(validated.kind) && !namedFromRecord) {
     needsReview = true;
     notes.push(
       validated.kind === 'portrait'

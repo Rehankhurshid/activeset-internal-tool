@@ -84,6 +84,12 @@ export interface ImageContext {
   siteName?: string;
   /** How many pages carry this same asset. A high number means a template image. */
   pageCount?: number;
+  /**
+   * Who or what the image is of, when a record says so for certain — the name
+   * of the CMS item the image belongs to. A page's nearest heading is a guess
+   * about that; a Teams item called "Numaan Ashraf" holding a headshot is not.
+   */
+  subject?: string;
 }
 
 /** What `sharp` and a few cheap rules can tell us without a model call. */

@@ -154,9 +154,11 @@ export async function runLibraryGroup(
           siteName: project.name,
           // The collection says what kind of thing it is and the item says
           // which one — how a name and a role end up in the alt text.
-          heading: entry.itemName,
-          title: entry.fieldDisplayName,
-          nearbyText: `${entry.collectionName}: ${entry.itemName} — the "${entry.fieldDisplayName}" field.`,
+          // The item's name is who or what this is. The field's name
+          // ("Headshot") used to go in as the image's title attribute, and the
+          // model duly wrote "Numaan Ashraf, Headshot".
+          subject: entry.itemName,
+          nearbyText: `An image in the ${entry.collectionName} CMS collection, on the item "${entry.itemName}".`,
         },
       });
     }
@@ -180,7 +182,14 @@ export async function runLibraryGroup(
 
     const missing = images.filter((image) => image.missingAlt && !settled.has(image.fingerprint));
     result.alt.missing = missing.length;
-    const toDraft = missing.filter((image) => !drafts.has(image.fingerprint));
+    // Held drafts are described again. When nothing has changed that is a
+    // cache hit and free; when the context or the rules have — as when a CMS
+    // item's name started counting as fact — the image gets a fresh answer
+    // instead of staying stuck behind the old one.
+    const toDraft = missing.filter((image) => {
+      const draft = drafts.get(image.fingerprint);
+      return !draft || !isConfident(draft);
+    });
 
     // One image at a time, named before it starts and saved as soon as it is
     // done: the screen lights up the row being read, and its ALT box fills in

@@ -2,7 +2,7 @@ import { Timestamp as AdminTimestamp } from 'firebase-admin/firestore';
 import { db as adminDb } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
 import { patchItems, publishItems } from '@/lib/cms/webflow-client';
-import { buildCmsIndex, listSiteAssets } from '@/lib/cms/library';
+import { buildCmsIndex, listCollectionImages, listSiteAssets } from '@/lib/cms/library';
 import { groupUpdatesByItem } from '@/lib/cms/patch';
 import { uploadAssetToWebflow } from '@/lib/cms/assets';
 import { decisionId, fileNameOf, imageFingerprint } from '@/modules/site-monitoring/domain/audit-findings';
@@ -198,6 +198,8 @@ export async function runImageApply(
   const applied = new Set<string>();
   const archives = new Map<string, string>();
   const appliedUrls = new Map<string, { src: string; bytes: number; targetWidth: number | null; newUrl: string }>();
+  /** The CMS fields each swapped image was written into, by `CmsImageEntry.id`. */
+  const repointedFields = new Map<string, string[]>();
   const now = new Date().toISOString();
 
   for (const [i, target] of requested.entries()) {
@@ -358,6 +360,7 @@ export async function runImageApply(
       applied.add(target.fingerprint);
       archives.set(target.fingerprint, archived.url ?? archived.path);
       appliedUrls.set(target.fingerprint, { src, bytes: original.byteLength, targetWidth, newUrl: uploaded.hostedUrl });
+      repointedFields.set(target.fingerprint, entries.map((entry) => entry.id));
     } catch (error) {
       result.failed.push({ where: src, error: error instanceof Error ? error.message : String(error) });
     }
@@ -406,10 +409,28 @@ export async function runImageApply(
   }
 
   // The image now lives at a new URL, and everything about it — drafts,
-  // decisions — is keyed by the old one. Carry them across, or the alt text
-  // drafted a minute ago in the same job is orphaned the moment this lands.
-  for (const [fingerprint, applied] of appliedUrls) {
-    await carryAltAcross(projectId, fingerprint, applied.newUrl);
+  // decisions — is keyed by the old one, so they have to follow it.
+  //
+  // Not to the URL we uploaded, though. Pointing a CMS field at a new asset
+  // makes Webflow copy it into the collection's own storage and serve it from
+  // there, under yet another id: we upload `…/6ab2c0fa…_Jevyn.webp` and the
+  // field reads back `…/6ab2c175…_6ab2c0fa…_Jevyn.webp`. Carrying to the
+  // uploaded URL orphaned the drafts for eight of PeakXV's Teams portraits.
+  // So re-read the fields that were written, and carry to what they now say.
+  if (repointedFields.size > 0) {
+    const nowServed = new Map<string, string>();
+    const collectionsTouched = new Set([...repointedFields.values()].flat().map((id) => id.split('::')[0]));
+    for (const collectionId of collectionsTouched) {
+      try {
+        for (const entry of await listCollectionImages(collectionId, token)) nowServed.set(entry.id, entry.imageUrl);
+      } catch {
+        // Falls back to the uploaded URL below; a stale carry beats none.
+      }
+    }
+    for (const [fingerprint, fieldIds] of repointedFields) {
+      const served = fieldIds.map((id) => nowServed.get(id)).find(Boolean);
+      await carryAltAcross(projectId, fingerprint, served ?? appliedUrls.get(fingerprint)!.newUrl);
+    }
   }
 
   await recordApplied(projectId, appliedUrls, archives, now, payload.by ?? 'worker');

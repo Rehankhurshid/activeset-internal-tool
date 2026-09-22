@@ -214,6 +214,24 @@ model itself doubts. A draft is written if the classifier did not flag it for
 review and its certainty is not low; everything else waits in the section's
 "to review" list, where one Save writes it.
 
+**Portraits in CMS collections.** Every portrait used to be held, because a
+model naming a stranger is the worst thing this can write. But in a Teams
+collection the item *is* the person, so the item's name is passed as a trusted
+`subject`, and a portrait whose ALT uses that name goes straight in. It says
+**the name and nothing else** unless the extra words can be read in the image
+(`altForRecordPortrait`): given "Jevyn Ong" and a plain headshot, the model
+wrote "Jevyn Ong, Head of Design" — a job title from nowhere. It also used to
+write "Numaan Ashraf, Headshot", because the field's name went in as the
+image's title attribute. A portrait naming anyone else, or no one, is still
+held.
+
+**Drafts follow the image across a swap — to the URL Webflow serves.**
+Pointing a CMS field at an uploaded asset makes Webflow copy it into the
+collection's storage under another id: upload `…/6ab2c0fa…_Jevyn.webp`, and the
+field reads back `…/6ab2c175…_6ab2c0fa…_Jevyn.webp`. Carrying drafts to the
+uploaded URL orphaned eight of PeakXV's. The job now re-reads the fields it
+wrote and carries to what they say.
+
 **What counts as a general asset.** Many sites fill their CMS by uploading
 files as site assets, which Webflow then copies into the collection. The CMS
 image's URL carries the source asset's id as its *second* hash

@@ -121,9 +121,11 @@ export async function runWebflowAlt(
         contexts.push({
           src: entry.imageUrl,
           siteName: project.name,
-          heading: entry.itemName,
-          title: entry.fieldDisplayName,
-          nearbyText: `${entry.collectionName}: ${entry.itemName} — the "${entry.fieldDisplayName}" field.`,
+          // The item's name is who or what this is. The field's name
+          // ("Headshot") used to go in as the image's title attribute, and the
+          // model duly wrote "Numaan Ashraf, Headshot".
+          subject: entry.itemName,
+          nearbyText: `An image in the ${entry.collectionName} CMS collection, on the item "${entry.itemName}".`,
         });
       }
     }
