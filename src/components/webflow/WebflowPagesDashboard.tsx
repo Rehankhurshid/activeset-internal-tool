@@ -418,35 +418,38 @@ export function WebflowPagesDashboard({
       <Tabs
         defaultValue={initialSection}
         orientation="vertical"
-        className="flex flex-row gap-6 items-start"
+        // A 208px sidebar beside the content left a phone's content a sliver,
+        // and pushed the page wider than the screen. On a phone the sections
+        // are a scrollable row above the content; from md, a sidebar again.
+        className="flex flex-col gap-4 md:flex-row md:items-start md:gap-6"
       >
         <TabsList
-          className="sticky top-4 flex flex-col h-auto w-52 shrink-0 items-stretch bg-muted p-1.5 gap-1"
+          className="flex h-auto w-full shrink-0 flex-row gap-1 overflow-x-auto bg-muted p-1.5 md:sticky md:top-4 md:w-52 md:flex-col md:items-stretch"
         >
           <TabsTrigger
             value="pages"
-            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
+            className="h-auto flex-none justify-start gap-2 px-3 py-2 md:w-full"
           >
             <FileText className="h-4 w-4" />
             Pages
           </TabsTrigger>
           <TabsTrigger
             value="images"
-            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
+            className="h-auto flex-none justify-start gap-2 px-3 py-2 md:w-full"
           >
             <ImageIcon className="h-4 w-4" />
             Images
           </TabsTrigger>
           <TabsTrigger
             value="schema"
-            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
+            className="h-auto flex-none justify-start gap-2 px-3 py-2 md:w-full"
           >
             <Sparkles className="h-4 w-4" />
             Schema
           </TabsTrigger>
           <TabsTrigger
             value="sitemap"
-            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
+            className="h-auto flex-none justify-start gap-2 px-3 py-2 md:w-full"
           >
             <GitCompareArrows className="h-4 w-4" />
             Sitemap Sync

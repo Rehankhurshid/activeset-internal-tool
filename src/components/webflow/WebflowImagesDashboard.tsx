@@ -540,7 +540,9 @@ function GroupSection({
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          // Full width and wrapping on a phone, so the counts drop under the name
+          // and the Optimise button sits below instead of squeezing it.
+          className="flex min-w-0 grow basis-full flex-wrap items-center gap-x-2 gap-y-0.5 text-left sm:basis-0 sm:flex-nowrap"
         >
           {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
           {group.isCms ? (
@@ -548,13 +550,13 @@ function GroupSection({
           ) : (
             <ImageIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}
-          <span className="truncate font-medium">{group.name}</span>
+          <span className="min-w-0 flex-1 basis-0 truncate font-medium sm:flex-initial sm:basis-auto">{group.name}</span>
           {group.isCms && (
             <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
               CMS
             </Badge>
           )}
-          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+          <span className="basis-full pl-6 text-xs text-muted-foreground tabular-nums sm:basis-auto sm:shrink-0 sm:pl-0">
             {images === undefined ? 'counting…' : `${images} images · ${missing} empty ALT fields`}
             {optimisedCount ? ` · ${optimisedCount} optimised` : ''}
             {reviewCount ? ` · ${reviewCount} to review` : ''}
@@ -901,8 +903,9 @@ function ImageLine({
         </a>
       )}
       <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="truncate font-medium">{row.title}</span>
+        {/* Wraps on a phone: a row can carry four badges, and none of them shrink. */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:flex-nowrap">
+          <span className="min-w-0 max-w-full truncate font-medium">{row.title}</span>
           {row.subtitle && <span className="truncate text-muted-foreground">{row.subtitle}</span>}
           {done && <DoneBadge done={done} />}
           {liveState && (staged || live?.alt) && <LiveBadge state={liveState} live={live} />}
