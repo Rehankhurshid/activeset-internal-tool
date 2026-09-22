@@ -117,10 +117,22 @@ function recommendModel(hardware: Hardware): { model: string; why: string } {
 
 // ─── job handling ───────────────────────────────────────────────────────────
 
+/** Set by `run`, so a job in progress can keep the machine's own heartbeat fresh. */
+let activeWorkerId: string | undefined;
+let lastAliveAt = 0;
+
 async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
   const progress = async (message: string, fraction?: number) => {
     log(dim(`  ${message}`));
     await heartbeat(job.id, message, fraction).catch(() => undefined);
+    // The loop reports the machine alive between jobs, but a forty-page
+    // measurement is one long job, and the app was showing a busy worker as
+    // "Offline · last seen 1m ago" — which reads as broken exactly when it is
+    // working hardest.
+    if (activeWorkerId && Date.now() - lastAliveAt > 20_000) {
+      lastAliveAt = Date.now();
+      await reportWorkerAlive(activeWorkerId, { busyWith: message }).catch(() => undefined);
+    }
   };
 
   if (job.kind === 'alt_text') {
@@ -175,6 +187,9 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
     log(
       green('  done'),
       `${result.resized} resized, ${result.recompressedOnly} re-encoded, ` +
+        (result.preparedForDesigner || result.alreadyPrepared
+          ? `${result.preparedForDesigner} Designer copies (${result.alreadyPrepared} already there), `
+          : '') +
         `${result.repointed} CMS fields repointed, ${result.published} published, ` +
         `${formatBytes(result.bytesSaved)} saved` +
         (result.skipped.length ? `, ${result.skipped.length} skipped` : '') +
@@ -337,6 +352,7 @@ program
 
 async function loop(options: { once?: boolean; interval?: string; kinds?: string; id?: string }) {
   const workerId = options.id || process.env.WORKER_ID || os.hostname();
+  activeWorkerId = workerId;
   const intervalMs = Math.max(2000, Number.parseInt(options.interval || '10', 10) * 1000);
   const kinds = options.kinds ? (options.kinds.split(',') as WorkerJobKind[]) : undefined;
   const hardware = readHardware();
@@ -380,7 +396,8 @@ async function loop(options: { once?: boolean; interval?: string; kinds?: string
         ...hardware,
         model: resolveOllama().model,
         paused,
-        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt'],
+        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt', 'image_apply', 'library_optimise'],
+        busyWith: null,
       });
 
       // Control before work: a restart or a pause should not wait behind a

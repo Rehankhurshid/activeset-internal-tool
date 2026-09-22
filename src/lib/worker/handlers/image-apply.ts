@@ -10,6 +10,9 @@ import { getWebflowTokenAdmin, loadProjectDocAdmin } from '@/lib/project-admin';
 import type { CmsImageEntry, CmsUpdatePayload } from '@/types/webflow';
 import { encodeAtWidth, type StoredWeightFinding } from './image-budget';
 import { backupPath, bunnyConfig, putToBunny, BUNNY_NOT_CONFIGURED } from '@/lib/backup/bunny';
+import { ensureOptimisedFolder, listSiteAssets } from '@/lib/cms/placement';
+import { sanitizeAssetFileName } from '@/lib/cms/assets';
+import crypto from 'node:crypto';
 
 /**
  * Resize an image to the width its page actually displays it at, and point
@@ -54,6 +57,13 @@ export interface ImageApplyPayload {
   /** Publish the changed CMS items afterwards. Off by default. */
   publish?: boolean;
   by?: string;
+  /**
+   * For images the API cannot swap — site assets and Designer-placed images —
+   * upload an optimised copy into the "ActiveSet · optimised" folder instead
+   * of skipping them. Nothing on the site changes; the swap in Designer
+   * becomes a pick from the library rather than a download and a drag.
+   */
+  designerCopies?: boolean;
 }
 
 export interface ImageApplyResult {
@@ -66,6 +76,10 @@ export interface ImageApplyResult {
   recompressedOnly: number;
   /** CMS fields repointed at the new file. */
   repointed: number;
+  /** Optimised copies uploaded for Designer, where the API cannot swap. */
+  preparedForDesigner: number;
+  /** Designer copies that already existed from an earlier run. */
+  alreadyPrepared: number;
   published: number;
   bytesSaved: number;
   /** Where the originals were archived, so a revert has somewhere to read from. */
@@ -159,6 +173,8 @@ export async function runImageApply(
     resized: 0,
     recompressedOnly: 0,
     repointed: 0,
+    preparedForDesigner: 0,
+    alreadyPrepared: 0,
     published: 0,
     bytesSaved: 0,
     skipped: [],
@@ -189,12 +205,38 @@ export async function runImageApply(
   // the library may well have been measured on some page, and if it has, the
   // right thing is to resize rather than only re-encode.
   const measurements = new Map<string, StoredWeightFinding>();
+  const findingRefs = new Map<string, FirebaseFirestore.DocumentReference>();
   for (const doc of findingDocs.docs) {
     const finding = doc.data() as StoredWeightFinding;
     measurements.set(finding.fingerprint, finding);
+    findingRefs.set(finding.fingerprint, doc.ref);
   }
 
   const cmsIndex = await buildCmsIndex(siteId, token, onProgress);
+
+  // Say where each image lives, on the finding itself. Findings measured
+  // before classification existed read as "unknown" in the Weight tab, and the
+  // CMS index this job just built is the answer — so the rows re-sort live
+  // rather than waiting for a re-measure.
+  {
+    const batch = adminDb.batch();
+    let writes = 0;
+    for (const target of requested) {
+      const ref = findingRefs.get(target.fingerprint);
+      const current = measurements.get(target.fingerprint);
+      if (!ref || !current) continue;
+      const placement = cmsIndex.has(target.fingerprint) ? 'cms' : current.placement === 'asset' ? 'asset' : 'unknown';
+      if (current.placement === placement) continue;
+      batch.update(ref, { placement });
+      current.placement = placement;
+      writes += 1;
+    }
+    if (writes > 0) await batch.commit();
+  }
+
+  // Resolved lazily: a run with no Designer images never touches the folder.
+  let designerFolder: string | undefined;
+  let existingNames: Map<string, { id: string; hostedUrl?: string }> | undefined;
 
   const updates: CmsUpdatePayload[] = [];
   const applied = new Set<string>();
@@ -206,6 +248,64 @@ export async function runImageApply(
     await onProgress(`Optimising ${i + 1}/${requested.length}`, 0.3 + (i / Math.max(1, requested.length)) * 0.4);
 
     const entries = cmsIndex.get(target.fingerprint);
+    const measured = measurements.get(target.fingerprint);
+    if (!entries?.length && payload.designerCopies && measured?.verdict === 'oversized') {
+      try {
+        if (measured.replacement) {
+          result.alreadyPrepared += 1;
+          continue;
+        }
+        const res = await fetch(measured.src, { signal: AbortSignal.timeout(30_000) });
+        if (!res.ok) {
+          result.failed.push({ where: measured.src, error: `could not fetch the original (${res.status})` });
+          continue;
+        }
+        const original = Buffer.from(await res.arrayBuffer());
+        const encoded = await encodeAtWidth(original, measured.targetWidth, measured.format);
+        if (!encoded) {
+          result.skipped.push({ fingerprint: target.fingerprint, reason: 'nothing smaller was possible without a visible change' });
+          continue;
+        }
+
+        designerFolder ??= await ensureOptimisedFolder(siteId, token);
+        if (!existingNames) {
+          existingNames = new Map();
+          for (const asset of await listSiteAssets(siteId, token)) {
+            for (const name of [asset.originalFileName, asset.displayName]) {
+              if (name) existingNames.set(name, { id: asset.id, hostedUrl: asset.hostedUrl });
+            }
+          }
+        }
+
+        const name = fileNameFor(measured.src, measured.targetWidth, encoded.ext);
+        const safeName = sanitizeAssetFileName(name, crypto.createHash('md5').update(encoded.bytes).digest('hex'));
+        const prior = existingNames.get(safeName);
+        const uploaded = prior?.hostedUrl
+          ? { assetId: prior.id, hostedUrl: prior.hostedUrl }
+          : await uploadAssetToWebflow(
+              siteId,
+              token,
+              name,
+              encoded.bytes,
+              encoded.ext === 'avif' ? 'image/avif' : 'image/webp',
+              { parentFolder: designerFolder },
+            );
+        if (prior) result.alreadyPrepared += 1;
+        else result.preparedForDesigner += 1;
+
+        const replacement = {
+          url: uploaded.hostedUrl,
+          assetId: uploaded.assetId,
+          name: safeName,
+          bytes: encoded.bytes.byteLength,
+          width: measured.targetWidth,
+        };
+        await findingRefs.get(target.fingerprint)?.update({ replacement });
+      } catch (error) {
+        result.failed.push({ where: measured.src, error: error instanceof Error ? error.message : String(error) });
+      }
+      continue;
+    }
     if (!entries?.length) {
       result.skipped.push({
         fingerprint: target.fingerprint,

@@ -317,10 +317,23 @@ of it is a limit and half is a capability:
 - **A Designer-placed image cannot.** Nothing in the Data API addresses static
   page markup.
 
-The Weight tab splits the findings on exactly this, so "we can fix these" and
-"needs Designer" are separate lists rather than one list with a caveat. For
-the second two the worker still writes the resized file to `WORKER_EMIT_DIR`
-as `<original>@<width>w.webp`, and "Copy list" gives you the job as text.
+The Weight tab splits oversized images on exactly this, with a bulk action per
+group and **Optimise all** for every group at once:
+
+| Group | What Optimise does |
+|---|---|
+| **CMS — fixed for you** | Resize to the measured width, archive the original to Bunny, upload, repoint every field that used it. |
+| **Site asset or Designer — ready to swap** | Upload an optimised copy into an **ActiveSet · optimised** folder in the client's Webflow library. The row names the file; in Designer it is select → Replace → pick it. Nothing on the site changes, so nothing needs backing up. Idempotent by file name, and carried across re-measures. |
+| **Not classified yet** | Findings measured before classification existed. Optimise works out which is which as it goes and writes the answer back onto each finding, so the rows re-sort live. |
+
+A finding with no classification is *unknown*, never "not CMS". The first
+version treated it as the latter, and filed all 45 of PeakXV's CMS images under
+"needs Designer" with a footer saying none of them were CMS — because they had
+been measured an hour before the classifier shipped.
+
+The worker still writes resized files to `WORKER_EMIT_DIR`, but a path on
+Goliath's disk is useless to anyone looking at the app, so the rows no longer
+show it.
 
 ### Backups
 

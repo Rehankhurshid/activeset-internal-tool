@@ -21,7 +21,7 @@ export type ImagePlacement = 'cms' | 'asset' | 'unknown';
 
 const WEBFLOW_API_BASE = 'https://api.webflow.com/v2';
 
-async function listSiteAssets(siteId: string, token: string): Promise<WebflowAssetSummary[]> {
+export async function listSiteAssets(siteId: string, token: string): Promise<WebflowAssetSummary[]> {
   const assets: WebflowAssetSummary[] = [];
   for (let offset = 0; offset < 2000; offset += 100) {
     const res = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/assets?limit=100&offset=${offset}`, {
@@ -101,3 +101,30 @@ export const PLACEMENT_HINT: Record<ImagePlacement, string> = {
   asset: 'A site asset. Webflow cannot replace an asset’s file, so this one is a swap in Designer.',
   unknown: 'Not matched to a CMS field or a named asset — most likely placed in Designer. Swap it there.',
 };
+
+/**
+ * The folder optimised copies for Designer go into, created on first use.
+ *
+ * A near-duplicate of every oversized image scattered through a client's asset
+ * library would make it worse to use, which is the opposite of the point. One
+ * clearly named folder keeps the copies findable in Designer's asset panel and
+ * easy to clear out once the swaps are done.
+ */
+export const OPTIMISED_FOLDER_NAME = 'ActiveSet · optimised';
+
+export async function ensureOptimisedFolder(siteId: string, token: string): Promise<string> {
+  const headers = { Authorization: `Bearer ${token}`, accept: 'application/json' };
+  const list = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/asset_folders`, { headers });
+  if (!list.ok) throw new Error(`Webflow refused the asset folder list (${list.status})`);
+  const { assetFolders = [] } = (await list.json()) as { assetFolders?: { id: string; displayName?: string }[] };
+  const existing = assetFolders.find((folder) => folder.displayName === OPTIMISED_FOLDER_NAME);
+  if (existing) return existing.id;
+
+  const created = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/asset_folders`, {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ displayName: OPTIMISED_FOLDER_NAME }),
+  });
+  if (!created.ok) throw new Error(`Webflow refused to create the "${OPTIMISED_FOLDER_NAME}" folder (${created.status})`);
+  return ((await created.json()) as { id: string }).id;
+}

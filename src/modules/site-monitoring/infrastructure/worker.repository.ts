@@ -73,6 +73,8 @@ export interface WeightFindingDoc extends WeightAssessment {
   optimisedHow?: string;
   /** cms = repointable from the app; asset/unknown = a swap in Designer. */
   placement?: 'cms' | 'asset' | 'unknown';
+  /** An optimised copy already in the client's Webflow library, for a swap in Designer. */
+  replacement?: { url: string; assetId: string; name: string; bytes: number; width: number | null };
   format: string;
   measuredAt: string;
 }

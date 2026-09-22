@@ -62,18 +62,34 @@ export async function uploadAssetToWebflow(
   token: string,
   fileName: string,
   buffer: Buffer,
-  contentType: string
+  contentType: string,
+  options: { parentFolder?: string } = {}
 ): Promise<WebflowAssetUploadResult> {
   const fileHash = md5(buffer);
   // Every caller gets this, not just the careful ones.
   const safeName = sanitizeAssetFileName(fileName, fileHash);
 
   // Step 1: get a presigned upload URL from Webflow
-  const createRes = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/assets`, {
-    method: 'POST',
-    headers: buildHeaders(token),
-    body: JSON.stringify({ fileName: safeName, fileHash }),
-  });
+  // Bulk runs upload dozens of files back to back, which is exactly when
+  // Webflow's per-token rate limit bites. A 429 is waited out, not recorded as
+  // a failure against an image that was fine.
+  let createRes: Response;
+  for (let attempt = 0; ; attempt += 1) {
+    createRes = await fetch(`${WEBFLOW_API_BASE}/sites/${siteId}/assets`, {
+      method: 'POST',
+      headers: buildHeaders(token),
+      body: JSON.stringify({
+        fileName: safeName,
+        fileHash,
+        ...(options.parentFolder ? { parentFolder: options.parentFolder } : {}),
+      }),
+    });
+    if (createRes.status !== 429 || attempt >= 4) break;
+    const retryAfter = Number(createRes.headers.get('retry-after'));
+    await new Promise((resolve) =>
+      setTimeout(resolve, (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 15 * (attempt + 1)) * 1000),
+    );
+  }
 
   if (!createRes.ok) {
     const text = await createRes.text();

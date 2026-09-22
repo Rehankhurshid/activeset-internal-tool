@@ -2533,8 +2533,8 @@ export function WebsiteAuditDashboard({
             onMeasure={() => worker.enqueue('image_budget', { limit: 40 }, userEmail)}
             onApply={
               webflowConfig?.hasApiToken
-                ? (fingerprints, publish) =>
-                    worker.enqueue('image_apply', { fingerprints, publish, by: userEmail }, userEmail)
+                ? (fingerprints, { designerCopies }) =>
+                    worker.enqueue('image_apply', { fingerprints, designerCopies, publish: false, by: userEmail }, userEmail)
                 : undefined
             }
             applyState={

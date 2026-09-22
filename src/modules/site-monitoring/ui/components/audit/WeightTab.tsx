@@ -44,7 +44,12 @@ export interface WeightTabProps {
   lastRun?: WorkerJobDoc;
   onMeasure: () => Promise<void>;
   /** Resize the named images and repoint their CMS fields. Absent without a Webflow token. */
-  onApply?: (fingerprints: string[], publish: boolean) => Promise<void>;
+  /**
+   * Optimise the named images. CMS images are resized and repointed; with
+   * `designerCopies`, the rest get an optimised copy in the client's Webflow
+   * library for a swap in Designer. Absent without a Webflow token.
+   */
+  onApply?: (fingerprints: string[], options: { designerCopies: boolean }) => Promise<void>;
   applyState?: 'queued' | 'running';
   userEmail: string;
 }
@@ -128,8 +133,20 @@ function Row({ finding }: { finding: WeightFindingDoc }) {
             {finding.pages.length === 1 ? 'on 1 page' : `on ${finding.pages.length} pages`}
             {finding.bytes > 0 ? ` · ${formatBytes(finding.bytes)}` : ''}
             {finding.optimisedHow ? ` · ${finding.optimisedHow}` : ''}
-            {finding.optimisedPath ? ` · resized file: ${finding.optimisedPath}` : ''}
           </p>
+
+          {finding.replacement && (
+            <p className="text-[11px]">
+              <span className="text-green-600 dark:text-green-400">Optimised copy is in Webflow</span>
+              <span className="text-muted-foreground">
+                {' '}— in Designer, select the image, Replace, and pick{' '}
+              </span>
+              <a href={finding.replacement.url} target="_blank" rel="noreferrer" className="font-mono underline underline-offset-2">
+                {finding.replacement.name}
+              </a>
+              <span className="text-muted-foreground"> from the “ActiveSet · optimised” folder ({formatBytes(finding.replacement.bytes)}).</span>
+            </p>
+          )}
         </div>
       </div>
     </li>
@@ -142,27 +159,33 @@ function Section({
   hint,
   defaultOpen,
   children,
+  action,
 }: {
   title: string;
   count: number;
   hint?: string;
   defaultOpen: boolean;
   children: React.ReactNode;
+  /** A bulk action for just this group, shown on the header. */
+  action?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   if (count === 0) return null;
   return (
     <section className="border-t first:border-t-0">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 sm:px-4 py-2 bg-muted/30 text-left"
-      >
-        {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
-        <span className="text-sm font-medium">{title}</span>
-        <Badge variant="secondary" className="h-5 px-1.5 text-[11px] tabular-nums">{count}</Badge>
-        {hint && <span className="text-xs text-muted-foreground hidden sm:inline truncate">{hint}</span>}
-      </button>
+      <div className="flex items-center gap-2 bg-muted/30 pr-2 sm:pr-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex-1 min-w-0 flex items-center gap-2 px-3 sm:px-4 py-2 text-left"
+        >
+          {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          <span className="text-sm font-medium">{title}</span>
+          <Badge variant="secondary" className="h-5 px-1.5 text-[11px] tabular-nums">{count}</Badge>
+          {hint && <span className="text-xs text-muted-foreground hidden sm:inline truncate">{hint}</span>}
+        </button>
+        {action}
+      </div>
       {open && <ul className="divide-y">{children}</ul>}
     </section>
   );
@@ -205,14 +228,32 @@ export function WeightTab({
   // Only a CMS image can be repointed through the API. A site asset's bytes
   // cannot be replaced and a Designer-placed image cannot be reached at all,
   // so the split is the difference between a button and a to-do list.
-  const fixable = useMemo(
-    () => groups.oversized.filter((f) => f.placement === 'cms'),
-    [groups.oversized],
-  );
+  // Only a CMS image can be repointed through the API. A site asset's bytes
+  // cannot be replaced and a Designer-placed image cannot be reached at all,
+  // so the split is the difference between a swap done for you and a swap you
+  // pick from the library. A finding with no placement was measured before
+  // classification existed — it is *unknown*, and saying "not CMS" about it
+  // is how PeakXV's 45 CMS images were all filed under "needs Designer".
+  const fixable = useMemo(() => groups.oversized.filter((f) => f.placement === 'cms'), [groups.oversized]);
   const byHand = useMemo(
-    () => groups.oversized.filter((f) => f.placement !== 'cms'),
+    () => groups.oversized.filter((f) => f.placement === 'asset' || f.placement === 'unknown'),
     [groups.oversized],
   );
+  const unclassified = useMemo(() => groups.oversized.filter((f) => !f.placement), [groups.oversized]);
+  const designerLeft = byHand.filter((f) => !f.replacement).length;
+
+  const apply = async (items: WeightFindingDoc[], designerCopies: boolean) => {
+    if (!onApply || items.length === 0) return;
+    setApplying(true);
+    try {
+      await onApply(items.map((f) => f.fingerprint), { designerCopies });
+    } finally {
+      setApplying(false);
+    }
+  };
+  const applyBusy = isReadOnly || applyState !== undefined || applying;
+  const applyLabel = (idle: string) =>
+    applyState === 'running' ? 'Optimising…' : applyState === 'queued' ? 'Queued' : idle;
 
   const totalSaving = groups.oversized.reduce(
     (sum, f) => sum + (f.optimisedBytes !== undefined ? f.bytes - f.optimisedBytes : f.estimatedSaving),
@@ -274,6 +315,22 @@ export function WeightTab({
                 />
               </div>
             )}
+            {onApply && !isReadOnly && groups.oversized.length > 0 && (
+              <Button
+                size="sm"
+                className="h-8"
+                onClick={() => apply(groups.oversized, true)}
+                disabled={applyBusy || running}
+                title="CMS images are resized and swapped for you; the rest get an optimised copy in Webflow to pick in Designer. Originals are backed up to Bunny first."
+              >
+                {applyState || applying ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                {applyLabel(`Optimise all ${groups.oversized.length}`)}
+              </Button>
+            )}
             {!isReadOnly && (
               <Button size="sm" variant="outline" className="h-8" onClick={measure} disabled={queueing || running || queued}>
                 {queueing || running || queued ? (
@@ -324,20 +381,42 @@ export function WeightTab({
         ) : (
           <>
             <Section
-              title="Oversized — we can fix these"
+              title="Oversized · CMS — fixed for you"
               count={fixable.length}
-              hint="In a CMS field, so the URL can be repointed"
+              hint="Resized, backed up to Bunny, and the CMS field repointed"
               defaultOpen
+              action={
+                onApply && !isReadOnly ? (
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={applyBusy} onClick={() => apply(fixable, false)}>
+                    {applyLabel(`Resize & repoint ${fixable.length}`)}
+                  </Button>
+                ) : undefined
+              }
             >
               {fixable.map((f) => <Row key={f.id} finding={f} />)}
             </Section>
             <Section
-              title="Oversized — needs Designer"
+              title="Oversized · site asset or Designer — ready to swap"
               count={byHand.length}
-              hint="A site asset or a Designer-placed image; Webflow's API cannot replace either"
+              hint="Webflow's API cannot replace these, so an optimised copy goes into your library to pick in Designer"
               defaultOpen
+              action={
+                onApply && !isReadOnly && designerLeft > 0 ? (
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={applyBusy} onClick={() => apply(byHand, true)}>
+                    {applyLabel(`Prepare ${designerLeft} for Designer`)}
+                  </Button>
+                ) : undefined
+              }
             >
               {byHand.map((f) => <Row key={f.id} finding={f} />)}
+            </Section>
+            <Section
+              title="Oversized · not classified yet"
+              count={unclassified.length}
+              hint="Measured before CMS/asset sorting existed — Optimise sorts them as it goes, or measure again"
+              defaultOpen
+            >
+              {unclassified.map((f) => <Row key={f.id} finding={f} />)}
             </Section>
             <Section
               title="Too small for retina"
@@ -366,40 +445,15 @@ export function WeightTab({
         <div className="border-t px-3 sm:px-4 py-2.5 flex flex-wrap items-center gap-2">
           <ShieldQuestion className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <p className="text-xs text-muted-foreground flex-1 min-w-0">
-            {fixable.length > 0 && byHand.length > 0
-              ? `${fixable.length} live in CMS fields and can be repointed from here. The other ${byHand.length} are site assets or placed in Designer — Webflow's API cannot replace either, so those are a swap by hand.`
-              : fixable.length > 0
-                ? `All ${fixable.length} live in CMS fields, so they can be resized and repointed from here.`
-                : "None of these are CMS images. Webflow's API cannot replace an asset's file or repoint a Designer-placed image, so these are resized on the worker and swapped by hand."}
+            {[
+              fixable.length ? `${fixable.length} in CMS fields — resized and swapped for you` : '',
+              byHand.length ? `${byHand.length} site assets or Designer images — Webflow can't swap these, so they get an optimised copy to pick in Designer` : '',
+              unclassified.length ? `${unclassified.length} not classified yet — Optimise works out which is which` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+            . Originals are backed up to Bunny before any swap; nothing publishes until you do.
           </p>
-          {onApply && fixable.length > 0 && (
-            <Button
-              size="sm"
-              className="h-7 text-xs"
-              disabled={isReadOnly || applyState !== undefined || applying}
-              onClick={async () => {
-                setApplying(true);
-                try {
-                  // Publishing is a separate, louder decision; this stages the
-                  // change and leaves pushing it live to the Publish control.
-                  await onApply(fixable.map((f) => f.fingerprint), false);
-                } finally {
-                  setApplying(false);
-                }
-              }}
-            >
-              {applyState || applying ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <Wand2 className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              {applyState === 'running'
-                ? 'Resizing…'
-                : applyState === 'queued'
-                  ? 'Queued'
-                  : `Resize & repoint ${fixable.length}`}
-            </Button>
-          )}
           <Button
             size="sm"
             variant="ghost"

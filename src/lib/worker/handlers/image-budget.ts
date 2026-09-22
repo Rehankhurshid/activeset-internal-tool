@@ -57,6 +57,12 @@ export interface StoredWeightFinding extends WeightAssessment {
   optimisedHow?: string;
   /** Where the image lives in Webflow, which decides whether it is fixable. */
   placement?: ImagePlacement;
+  /**
+   * An optimised copy already in the client's Webflow library, for an image
+   * the API cannot swap. Carried across re-measures so a second run does not
+   * upload it again and the link stays on the row until the swap is done.
+   */
+  replacement?: { url: string; assetId: string; name: string; bytes: number; width: number | null };
   format: string;
   measuredAt: string;
 }
@@ -312,6 +318,16 @@ async function writeFindings(projectId: string, findings: StoredWeightFinding[])
   // A measurement that no longer applies is worse than no measurement, so the
   // previous run is cleared rather than merged into.
   const existing = await collection.get();
+  const replacements = new Map<string, StoredWeightFinding['replacement']>();
+  for (const doc of existing.docs) {
+    const data = doc.data() as StoredWeightFinding;
+    if (data.replacement) replacements.set(data.fingerprint, data.replacement);
+  }
+  for (const finding of findings) {
+    if (!finding.replacement && replacements.has(finding.fingerprint)) {
+      finding.replacement = replacements.get(finding.fingerprint);
+    }
+  }
   for (let i = 0; i < existing.docs.length; i += 400) {
     const batch = adminDb.batch();
     for (const doc of existing.docs.slice(i, i + 400)) batch.delete(doc.ref);
