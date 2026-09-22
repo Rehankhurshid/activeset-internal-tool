@@ -225,6 +225,25 @@ write "Numaan Ashraf, Headshot", because the field's name went in as the
 image's title attribute. A portrait naming anyone else, or no one, is still
 held.
 
+**The image index — nothing is done twice.** `projects/{id}/image_index`
+records, per image, what happened to its bytes (optimised, already optimal,
+copy ready for Designer, failed — at what width, what replaced it, what it
+replaced) and to its ALT (present, added, held, decorative). A run checks it
+before downloading anything (`optimiseSettled`). Before it existed, every run
+re-downloaded and re-encoded every image in a group to learn there was
+nothing to gain, and a file this tool had already compressed could be
+compressed again — simulated on PeakXV's Teams, Jevyn Ong's portrait would
+have gone 2,564 KB → 2,066 KB as a second lossy generation. Our own output is
+marked done, which is what prevents that. A narrower measured width is new
+work; a failure is retried. Measured on Teams, images only: first run 17
+skipped and 60 checked once, second run all 77 skipped without a download.
+
+The index is written only by the worker — the rules refuse browser writes,
+even the team's, since a false "optimised" makes runs skip real work. Swaps
+made before it existed were backfilled from their `weight` decisions (the
+replacement's URL still contains the original's filename). Rows can be
+selected and run as ALT + images, ALT only, or images only.
+
 **Drafts follow the image across a swap — to the URL Webflow serves.**
 Pointing a CMS field at an uploaded asset makes Webflow copy it into the
 collection's storage under another id: upload `…/6ab2c0fa…_Jevyn.webp`, and the
