@@ -71,6 +71,18 @@ describe('assessing one image', () => {
     assert.match(result.reason, /not worth a re-upload/);
   });
 
+  it('refuses to judge an image whose file it could not read', () => {
+    // Regression from the first real run: a fetch failure left bytes at 0 and
+    // the width fell back to the browser's naturalWidth — which, with a
+    // srcset, is the variant the browser picked rather than the asset. That
+    // produced a confident "too small" about a file nobody had seen.
+    const result = assessImageWeight(
+      measurement({ renderedWidth: 448, intrinsicWidth: 768, bytes: 0, format: '' }),
+    );
+    assert.equal(result.verdict, 'not_applicable');
+    assert.match(result.reason, /could not be fetched/);
+  });
+
   it('never judges a vector', () => {
     const result = assessImageWeight(measurement({ format: 'svg', intrinsicWidth: 32, renderedWidth: 400 }));
     assert.equal(result.verdict, 'not_applicable');

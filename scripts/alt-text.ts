@@ -13,10 +13,11 @@
  * model, no image upload.
  */
 
+// Must be first: firebase-admin reads the environment while it loads.
+import '@/lib/load-env';
 import { Command } from 'commander';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import * as dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
 import { imageFingerprint } from '@/modules/site-monitoring/domain/audit-findings';
 import {
@@ -33,13 +34,6 @@ import {
   type ImageContext,
 } from '@/lib/alt-text';
 
-// `.env.local` wins: Vercel stores some keys as Secrets and hands them
-// back as the literal "[SECRET]", so a pulled file must never clobber a
-// working local value. `.env.vercel-production` carries what only exists in
-// production, such as the Firebase service account.
-for (const file of ['.env.local', '.env.vercel-production', '.env']) {
-  dotenv.config({ path: file, quiet: true });
-}
 
 // ─── terminal dressing ──────────────────────────────────────────────────────
 

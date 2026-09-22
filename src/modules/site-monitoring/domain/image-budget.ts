@@ -151,6 +151,20 @@ export function assessImageWeight(measurement: ImageMeasurement): WeightAssessme
     return { ...base, verdict: 'not_applicable', reason: 'The asset’s own dimensions could not be read' };
   }
 
+  // No bytes and no format means the file itself could not be fetched, so the
+  // only width available came from the browser's `naturalWidth` — and for an
+  // image with a srcset that is whichever variant the browser chose, not the
+  // asset. Judging "too small" from a deliberately small variant would invent
+  // a fault. Canopy's MMI_July.webp landed here.
+  if (bytes <= 0 && !format) {
+    return {
+      ...base,
+      targetWidth: retinaTarget(renderedWidth),
+      verdict: 'not_applicable',
+      reason: 'The file could not be fetched, so its real size is unknown',
+    };
+  }
+
   const targetWidth = retinaTarget(renderedWidth);
 
   if (intrinsicWidth < targetWidth * UNDERSIZE_AT) {

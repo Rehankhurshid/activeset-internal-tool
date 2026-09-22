@@ -12,11 +12,12 @@
  * anywhere. If the machine is off, jobs wait.
  */
 
+// Must be first: firebase-admin reads the environment while it loads.
+import '@/lib/load-env';
 import { Command } from 'commander';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import * as dotenv from 'dotenv';
 import { checkOllama, resolveOllama } from '@/lib/alt-text';
 import { findBrowserExecutable } from '@/lib/image-budget/browser';
 import {
@@ -33,13 +34,6 @@ import { describeResult, runImageBudget, type ImageBudgetPayload } from '@/lib/w
 import { runAltTextForProject, type AltTextPayload } from '@/lib/worker/handlers/alt-text';
 import { loadProjectDocAdmin } from '@/lib/project-admin';
 
-// `.env.local` wins: Vercel stores some keys as Secrets and hands them
-// back as the literal "[SECRET]", so a pulled file must never clobber a
-// working local value. `.env.vercel-production` carries what only exists in
-// production, such as the Firebase service account.
-for (const file of ['.env.local', '.env.vercel-production', '.env']) {
-  dotenv.config({ path: file, quiet: true });
-}
 
 const useColour = process.stdout.isTTY && !process.env.NO_COLOR;
 const paint = (code: string) => (v: string) => (useColour ? `[${code}m${v}[0m` : v);
@@ -184,7 +178,7 @@ program
     console.log(
       hasFirebaseAdminCredentials
         ? `  ${green('Firebase admin ready')}`
-        : `  ${red('No Firebase admin credentials')} ${dim('— npx vercel env pull .env.local')}`,
+        : `  ${red('No Firebase admin credentials')} ${dim('— npx vercel env pull .env.vercel-production --environment=production')}`,
     );
     console.log(dim(`  emit dir: ${process.env.WORKER_EMIT_DIR ?? path.resolve('optimised-images')}`));
 

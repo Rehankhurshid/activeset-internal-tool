@@ -119,6 +119,7 @@ function Row({ finding }: { finding: WeightFindingDoc }) {
 
           <p className="text-[11px] text-muted-foreground">
             {finding.pages.length === 1 ? 'on 1 page' : `on ${finding.pages.length} pages`}
+            {finding.bytes > 0 ? ` · ${formatBytes(finding.bytes)}` : ''}
             {finding.optimisedPath ? ` · resized file: ${finding.optimisedPath}` : ''}
           </p>
         </div>
