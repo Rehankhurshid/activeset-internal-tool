@@ -33,7 +33,11 @@ import {
   type ImageContext,
 } from '@/lib/alt-text';
 
-for (const file of ['.env.local', '.env']) {
+// `.env.local` wins: Vercel stores some keys as Secrets and hands them
+// back as the literal "[SECRET]", so a pulled file must never clobber a
+// working local value. `.env.vercel-production` carries what only exists in
+// production, such as the Firebase service account.
+for (const file of ['.env.local', '.env.vercel-production', '.env']) {
   dotenv.config({ path: file, quiet: true });
 }
 
