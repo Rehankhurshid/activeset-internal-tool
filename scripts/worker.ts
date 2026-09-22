@@ -36,6 +36,7 @@ import { describeResult, runImageBudget, type ImageBudgetPayload } from '@/lib/w
 import { runAltTextForProject, type AltTextPayload } from '@/lib/worker/handlers/alt-text';
 import { runAltApply, type AltApplyPayload } from '@/lib/worker/handlers/alt-apply';
 import { runImageApply, type ImageApplyPayload } from '@/lib/worker/handlers/image-apply';
+import { runLibraryOptimise, type LibraryOptimisePayload } from '@/lib/worker/handlers/library-optimise';
 import { runWebflowAlt, type WebflowAltPayload } from '@/lib/worker/handlers/webflow-alt';
 import { loadProjectDocAdmin } from '@/lib/project-admin';
 import {
@@ -149,6 +150,22 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
       `${result.appliedToCms} CMS fields, ${result.appliedToAssets} assets, ${result.published} published` +
         (result.skipped.length ? `, ${result.skipped.length} skipped` : '') +
         (result.failed.length ? `, ${red(String(result.failed.length) + ' failed')}` : ''),
+    );
+    return result as unknown as Record<string, unknown>;
+  }
+
+  if (job.kind === 'library_optimise') {
+    const result = await runLibraryOptimise(job.projectId, job.payload as unknown as LibraryOptimisePayload, progress);
+    const images = result.images;
+    log(
+      green('  done'),
+      `ALT: ${result.alt.drafted} drafted` +
+        (result.alt.needsReview ? ` (${result.alt.needsReview} to review)` : '') +
+        (images
+          ? ` · images: ${images.resized} resized, ${images.recompressedOnly} re-encoded, ${images.repointed} fields repointed, ${formatBytes(images.bytesSaved)} saved` +
+            (images.skipped.length ? `, ${images.skipped.length} skipped` : '') +
+            (images.failed.length ? `, ${red(String(images.failed.length) + ' failed')}` : '')
+          : ` · images: ${red(result.imagesError ?? 'not run')}`),
     );
     return result as unknown as Record<string, unknown>;
   }

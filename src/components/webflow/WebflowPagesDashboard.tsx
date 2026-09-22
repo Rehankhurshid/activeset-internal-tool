@@ -33,7 +33,6 @@ import {
   Settings,
   ListChecks,
   ExternalLink,
-  ArrowUpDown,
   Folder,
   Code,
   Database,
@@ -56,18 +55,14 @@ import { toast } from 'sonner';
 import { WebflowConfig, WebflowConfigInput, WebflowPageWithQC, UpdateWebflowPageSEO } from '@/types/webflow';
 import { useWebflowPages } from '@/hooks/useWebflowPages';
 import { fetchForProject } from '@/lib/api-client';
-import { WebflowSEOHealthBadge } from './WebflowSEOHealthBadge';
 import { WebflowSEOEditor } from './WebflowSEOEditor';
 import { WebflowBulkSEOEditor } from './WebflowBulkSEOEditor';
 import { WebflowCredentialsDialog } from './WebflowCredentialsDialog';
-import { WebflowAssetsDashboard } from './WebflowAssetsDashboard';
-import { CmsImagesDashboard } from './CmsImagesDashboard';
+import { WebflowImagesDashboard } from './WebflowImagesDashboard';
 import { WebflowSchemaDashboard } from './WebflowSchemaDashboard';
 import { WebflowSitemapSync } from './WebflowSitemapSync';
 import { webflowService } from '@/services/WebflowService';
 import { formatDistanceToNow } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { formatForDisplay } from '@/lib/webflow-utils';
 import { SEOVariableRenderer } from './SEOVariableRenderer';
 
 interface WebflowPagesDashboardProps {
@@ -204,7 +199,6 @@ export function WebflowPagesDashboard({
   }, [filteredPages, filter, searchQuery, sort]);
 
   const showGroups = filter === 'all' && !searchQuery && sort === 'health-asc';
-  const displayedPages = showGroups ? [] : filteredPages; // used for fallback list
 
   const handleEditPage = (page: WebflowPageWithQC) => {
     setSelectedPage(page);
@@ -414,7 +408,7 @@ export function WebflowPagesDashboard({
         </Alert>
       )}
 
-      {/* Section Tabs (Pages / Image Assets / CMS Images) */}
+      {/* Section Tabs (Pages / Images / Schema / Sitemap Sync) */}
       <Tabs
         defaultValue="pages"
         orientation="vertical"
@@ -431,18 +425,11 @@ export function WebflowPagesDashboard({
             Pages
           </TabsTrigger>
           <TabsTrigger
-            value="assets"
+            value="images"
             className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
           >
             <ImageIcon className="h-4 w-4" />
-            Image Assets
-          </TabsTrigger>
-          <TabsTrigger
-            value="cms"
-            className="justify-start h-auto flex-none gap-2 px-3 py-2 w-full"
-          >
-            <Database className="h-4 w-4" />
-            CMS Images
+            Images
           </TabsTrigger>
           <TabsTrigger
             value="schema"
@@ -754,32 +741,18 @@ export function WebflowPagesDashboard({
 
           </TabsContent>
 
+          {/* One list for site assets and CMS images alike; two screens used to do this. */}
           <TabsContent
-            value="assets"
+            value="images"
             forceMount
             className="mt-0 data-[state=inactive]:hidden"
           >
             {webflowConfig && (
-              <WebflowAssetsDashboard
+              <WebflowImagesDashboard
                 projectId={projectId}
                 projectName={projectName}
                 userEmail={userEmail}
                 webflowConfig={webflowConfig}
-              />
-            )}
-          </TabsContent>
-
-          <TabsContent
-            value="cms"
-            forceMount
-            className="mt-0 data-[state=inactive]:hidden"
-          >
-            {webflowConfig && (
-              <CmsImagesDashboard
-                projectId={projectId}
-                webflowConfig={webflowConfig}
-                projectName={projectName}
-                userEmail={userEmail}
               />
             )}
           </TabsContent>

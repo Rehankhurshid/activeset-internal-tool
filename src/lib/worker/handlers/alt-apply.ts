@@ -34,6 +34,13 @@ export interface AltApplyPayload {
   /** Publish the changed CMS items afterwards. Off by default. */
   publish?: boolean;
   by?: string;
+  /**
+   * Text a reviewer typed over a draft, or wrote for an image that was never
+   * drafted. Wins over the store. This is how an edit made in the app reaches
+   * Webflow through the same door as everything else, instead of a second
+   * save path that writes from the browser.
+   */
+  overrides?: { fingerprint: string; src: string; alt: string }[];
 }
 
 export interface AltApplyResult {
@@ -132,9 +139,26 @@ export async function runAltApply(
     .collection('alt_suggestions')
     .get();
 
-  const suggestions = suggestionDocs.docs
-    .map((doc) => doc.data() as StoredSuggestion)
-    .filter((s) => wanted.has(s.fingerprint));
+  const byFingerprint = new Map<string, StoredSuggestion>();
+  for (const doc of suggestionDocs.docs) {
+    const stored = doc.data() as StoredSuggestion;
+    if (wanted.has(stored.fingerprint)) byFingerprint.set(stored.fingerprint, stored);
+  }
+  // What a reviewer typed wins over what the model drafted, and an image that
+  // was never drafted can still be given alt text by hand. An empty override
+  // is a deliberate "decorative", not a missing value.
+  for (const override of payload.overrides ?? []) {
+    if (!wanted.has(override.fingerprint)) continue;
+    const existing = byFingerprint.get(override.fingerprint);
+    const alt = override.alt.trim();
+    byFingerprint.set(override.fingerprint, {
+      fingerprint: override.fingerprint,
+      src: existing?.src ?? override.src,
+      alt,
+      kind: alt ? (existing && existing.kind !== 'decorative' ? existing.kind : 'informative') : 'decorative',
+    });
+  }
+  const suggestions = [...byFingerprint.values()];
 
   const cmsIndex = await buildCmsIndex(siteId, token, onProgress);
   await onProgress('Reading site assets', 0.55);

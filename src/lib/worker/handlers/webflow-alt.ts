@@ -88,10 +88,14 @@ export async function runWebflowAlt(
 
   const sources = payload.sources ?? ['assets', 'cms'];
   let notImages = 0;
-  // A named selection is already the answer to "which ones"; the missing/all
-  // filter would only take rows back out of it.
+  // A named selection is the answer to "which ones". The missing/all filter
+  // applies within it only when the caller asked for one — a selection with
+  // no scope means "these, whatever their state", which is what the Draft
+  // Selected button has always meant. The one-shot Optimise passes 'missing'
+  // so it does not spend ten seconds of GPU re-describing an image that
+  // already has good alt text.
   const chosen = payload.srcs?.length ? new Set(payload.srcs) : null;
-  const wantAll = payload.scope === 'all' || !!chosen;
+  const wantAll = payload.scope === 'all' || (!!chosen && payload.scope === undefined);
   const contexts: ImageContext[] = [];
   let assetsSeen = 0;
   let cmsSeen = 0;

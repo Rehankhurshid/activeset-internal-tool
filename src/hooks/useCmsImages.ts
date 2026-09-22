@@ -6,9 +6,6 @@ import type {
   CmsCollectionSummary,
   CmsAltScanCollectionResult,
   CmsImageEntry,
-  CmsUpdatePayload,
-  CmsCompressResult,
-  CmsAltSuggestion,
 } from '@/types/webflow';
 import { fetchForProject } from '@/lib/api-client';
 
@@ -31,24 +28,10 @@ export interface UseCmsImagesReturn {
   fetchImages: (collectionId: string, offset?: number) => Promise<void>;
   fetchAllImages: (collectionIds: string[]) => Promise<void>;
 
-  // Drafts
-  altDrafts: Record<string, string>;
-  setDraft: (entryId: string, value: string) => void;
-  applyCSVImport: (text: string) => number;
-
-  // AI
-  generateAlt: (entries: CmsImageEntry[]) => Promise<CmsAltSuggestion[]>;
-  isGenerating: boolean;
-
-  // Compression
-  compressImage: (entry: CmsImageEntry) => Promise<CmsCompressResult | null>;
-  compressedUrls: Record<string, string>;
-  isCompressing: Set<string>;
-
-  // Save / Publish
-  saveChanges: (entries: CmsImageEntry[]) => Promise<{ updated: number; failed: number }>;
-  publishItems: (collectionId: string, itemIds: string[]) => Promise<boolean>;
-  isSaving: boolean;
+  // Reading only. Drafting, compressing and saving used to live here too, each
+  // calling a route that wrote from the browser (one of them to Ollama on
+  // localhost, from Vercel). All of that now goes through the worker — see
+  // useLibraryOptimise — so this hook lists what Webflow has and nothing more.
 
   // General
   error: string | null;
@@ -73,19 +56,12 @@ export function useCmsImages(
   const [imagesLoading, setImagesLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
 
-  const [altDrafts, setAltDrafts] = useState<Record<string, string>>({});
-  const [compressedUrls, setCompressedUrls] = useState<Record<string, string>>({});
-  const [isCompressing, setIsCompressing] = useState<Set<string>>(new Set());
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
   const reset = useCallback(() => {
     setImages([]);
-    setAltDrafts({});
-    setCompressedUrls({});
     setHasMore(false);
     setError(null);
   }, []);
@@ -222,16 +198,6 @@ export function useCmsImages(
       }
       setHasMore(result.data.hasMore);
 
-      // Initialize drafts for new images
-      setAltDrafts(prev => {
-        const next = { ...prev };
-        for (const img of newImages) {
-          if (!(img.id in next)) {
-            next[img.id] = img.currentAlt;
-          }
-        }
-        return next;
-      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch images');
     } finally {
@@ -246,7 +212,6 @@ export function useCmsImages(
     setImagesLoading(true);
     setError(null);
     setImages([]);
-    setAltDrafts({});
 
     try {
       const allImages: CmsImageEntry[] = [];
@@ -276,12 +241,6 @@ export function useCmsImages(
 
       setImages(allImages);
       setHasMore(false);
-
-      const drafts: Record<string, string> = {};
-      for (const img of allImages) {
-        drafts[img.id] = img.currentAlt;
-      }
-      setAltDrafts(drafts);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch images');
     } finally {
@@ -289,235 +248,8 @@ export function useCmsImages(
     }
   }, [canCall, projectId]);
 
-  // --- Draft management ---
-  const setDraft = useCallback((entryId: string, value: string) => {
-    setAltDrafts(prev => ({ ...prev, [entryId]: value }));
-  }, []);
 
-  // --- CSV import ---
-  const applyCSVImport = useCallback((text: string): number => {
-    const lines = text.trim().split('\n');
-    if (lines.length < 2) return 0;
-
-    const headerLine = lines[0].toLowerCase();
-    const headers = headerLine.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-
-    const urlCol = headers.findIndex(h => h === 'image_url' || h === 'url' || h === 'src');
-    const altCol = headers.findIndex(h => h === 'alt_text' || h === 'alt' || h === 'alttext');
-    const itemIdCol = headers.findIndex(h => h === 'item_id' || h === 'itemid');
-    const fieldCol = headers.findIndex(h => h === 'field_name' || h === 'field' || h === 'fieldname');
-
-    if (altCol === -1) return 0;
-
-    // Build lookup maps
-    const imagesByUrl = new Map<string, CmsImageEntry[]>();
-    const imagesByItemField = new Map<string, CmsImageEntry>();
-
-    for (const img of images) {
-      // URL lookup
-      const existing = imagesByUrl.get(img.imageUrl) || [];
-      existing.push(img);
-      imagesByUrl.set(img.imageUrl, existing);
-      // Item+field lookup
-      imagesByItemField.set(`${img.itemId}::${img.fieldSlug}`, img);
-    }
-
-    let matched = 0;
-    const newDrafts: Record<string, string> = {};
-
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-      const altText = values[altCol];
-      if (!altText) continue;
-
-      // Try item_id + field_name match first
-      if (itemIdCol !== -1 && fieldCol !== -1) {
-        const key = `${values[itemIdCol]}::${values[fieldCol]}`;
-        const entry = imagesByItemField.get(key);
-        if (entry) {
-          newDrafts[entry.id] = altText;
-          matched++;
-          continue;
-        }
-      }
-
-      // Try URL match
-      if (urlCol !== -1 && values[urlCol]) {
-        const entries = imagesByUrl.get(values[urlCol]);
-        if (entries) {
-          for (const entry of entries) {
-            newDrafts[entry.id] = altText;
-            matched++;
-          }
-        }
-      }
-    }
-
-    if (matched > 0) {
-      setAltDrafts(prev => ({ ...prev, ...newDrafts }));
-    }
-
-    return matched;
-  }, [images]);
-
-  // --- AI generation ---
-  const generateAlt = useCallback(async (entries: CmsImageEntry[]): Promise<CmsAltSuggestion[]> => {
-    setIsGenerating(true);
-    try {
-      const res = await fetch('/api/webflow/cms/generate-alt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          images: entries,
-          siteName: webflowConfig?.siteName,
-        }),
-      });
-      const result = await res.json();
-
-      if (!res.ok || !result.success) {
-        throw new Error(result.error || 'Failed to generate alt text');
-      }
-
-      const suggestions: CmsAltSuggestion[] = result.data.suggestions || [];
-
-      // Apply suggestions to drafts
-      setAltDrafts(prev => {
-        const next = { ...prev };
-        for (const s of suggestions) {
-          if (s.altText) next[s.entryId] = s.altText;
-        }
-        return next;
-      });
-
-      return suggestions;
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [webflowConfig?.siteName]);
-
-  // --- Compression ---
-  const compressImage = useCallback(async (
-    entry: CmsImageEntry
-  ): Promise<CmsCompressResult | null> => {
-    if (!canCall || !projectId) return null;
-
-    setIsCompressing(prev => new Set(prev).add(entry.id));
-
-    try {
-      const res = await fetchForProject(projectId, '/api/webflow/cms/compress', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageUrl: entry.imageUrl,
-          projectId,
-          collectionId: entry.collectionId,
-          itemId: entry.itemId,
-          fieldSlug: entry.fieldSlug,
-        }),
-      });
-
-      const result = await res.json();
-      if (!res.ok || !result.success) {
-        throw new Error(result.error || 'Compression failed');
-      }
-
-      const data: CmsCompressResult = result.data;
-      if (data.compressedUrl !== data.originalUrl) {
-        setCompressedUrls(prev => ({ ...prev, [entry.id]: data.compressedUrl }));
-      }
-
-      return data;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Compression failed');
-      return null;
-    } finally {
-      setIsCompressing(prev => {
-        const next = new Set(prev);
-        next.delete(entry.id);
-        return next;
-      });
-    }
-  }, [canCall, projectId]);
-
-  // --- Save changes ---
-  const saveChanges = useCallback(async (
-    entries: CmsImageEntry[]
-  ): Promise<{ updated: number; failed: number }> => {
-    if (!canCall || !projectId) return { updated: 0, failed: 0 };
-
-    setIsSaving(true);
-
-    try {
-      const updates: CmsUpdatePayload[] = entries
-        .filter(entry => {
-          const draft = altDrafts[entry.id];
-          return draft !== undefined && draft !== entry.currentAlt;
-        })
-        .map(entry => ({
-          collectionId: entry.collectionId,
-          itemId: entry.itemId,
-          fieldSlug: entry.fieldSlug,
-          fieldType: entry.fieldType,
-          newAlt: altDrafts[entry.id],
-          newUrl: compressedUrls[entry.id],
-          imageIndex: entry.imageIndex,
-          rawFieldValue: entry.rawFieldValue,
-        }));
-
-      if (updates.length === 0) return { updated: 0, failed: 0 };
-
-      const res = await fetchForProject(projectId, '/api/webflow/cms/update', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates }),
-      });
-
-      const result = await res.json();
-      if (!res.ok || !result.success) {
-        throw new Error(result.error || 'Failed to save');
-      }
-
-      // Update local state to reflect saved changes
-      if (result.data.updated > 0) {
-        setImages(prev =>
-          prev.map(img => {
-            const draft = altDrafts[img.id];
-            if (draft !== undefined && draft !== img.currentAlt) {
-              return { ...img, currentAlt: draft, isMissingAlt: !draft.trim() };
-            }
-            return img;
-          })
-        );
-      }
-
-      return { updated: result.data.updated, failed: result.data.failed };
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed');
-      return { updated: 0, failed: 0 };
-    } finally {
-      setIsSaving(false);
-    }
-  }, [canCall, projectId, altDrafts, compressedUrls]);
-
-  // --- Publish ---
-  const publishItems = useCallback(async (collectionId: string, itemIds: string[]): Promise<boolean> => {
-    if (!canCall || !projectId) return false;
-
-    try {
-      const res = await fetchForProject(projectId, '/api/webflow/cms/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ collectionId, itemIds }),
-      });
-
-      const result = await res.json();
-      return res.ok && result.success;
-    } catch {
-      return false;
-    }
-  }, [canCall, projectId]);
-
-  // Aggregate counts across collections that have been scanned.
+  // Totals across whatever collections have been scanned so far.
   let aggTotalImages = 0;
   let aggMissingAlt = 0;
   let scannedCollections = 0;
@@ -528,7 +260,6 @@ export function useCmsImages(
       scannedCollections += 1;
     }
   }
-
   return {
     collections,
     discoveryLoading,
@@ -546,17 +277,6 @@ export function useCmsImages(
     hasMore,
     fetchImages,
     fetchAllImages,
-    altDrafts,
-    setDraft,
-    applyCSVImport,
-    generateAlt,
-    isGenerating,
-    compressImage,
-    compressedUrls,
-    isCompressing,
-    saveChanges,
-    publishItems,
-    isSaving,
     error,
     clearError,
     reset,

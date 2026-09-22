@@ -195,19 +195,28 @@ standby-timeout-ac 0`).
 | `alt_text` | Reads the project's open alt-text findings, re-fetches those pages for context, classifies every image and drafts its alt. Results go to `alt_suggestions` and fill the boxes on the Alt text tab. See [alt-text.md](alt-text.md). |
 | `image_budget` | Opens each page in Chrome at 1440, 768 and 390 px, measures how wide every image is actually drawn, fetches each file, and works out what it should weigh. Results go to `image_budget` and drive the Weight tab. |
 | `webflow_alt` | Drafts alt text for a site's whole Webflow library — assets and CMS collections — rather than for scanned pages. Feeds the same `alt_suggestions` store, so a draft shows up on both the Webflow tab and the Audit tab. Skips PDFs, videos and anything else that is not an image. |
-| `image_apply` | Archives the originals to Bunny, re-encodes, uploads the new file as a Webflow asset and repoints every CMS field that used the old one. Queued from two places: the Weight tab, which has measured display widths and so resizes, and the Webflow tab's Optimise button, which works from the library and re-encodes at the original dimensions. CMS fields only — see [What it will not do](#what-it-will-not-do). |
+| `image_apply` | Archives the originals to Bunny, re-encodes, uploads the new file as a Webflow asset and repoints every CMS field that used the old one. Resizes where a measured display width exists, re-encodes at the original dimensions where none does. CMS fields only — see [What it will not do](#what-it-will-not-do). Carries any alt draft across to the image's new URL, since drafts are keyed by URL. |
+| `library_optimise` | The Webflow tab's one-shot: `webflow_alt` for the selection (missing alt only), then `image_apply` for the same selection. Alt is **drafted** for a person to read; bytes are **applied**, because a backed-up, perceptually lossless file is safe to swap unread and a sentence an AI wrote is not. The image half may fail without discarding the drafts. |
 | `alt_apply` | Writes chosen drafts back to Webflow in bulk, and optionally publishes. Two destinations: a site asset takes its alt through the Assets API, a CMS image through its collection item's field. On Canopy eleven of eleven were CMS, so the asset path alone would have applied nothing. |
 
 They are queued from the Audit tab — the Alt text tab's "Draft on `<machine>`"
 button, the Weight tab's "Measure sizes" and "Resize & repoint" — and from the
-Webflow tab, whose Image Assets screen drafts the library and whose CMS Images
-screen optimises a selection. Or by hand:
+Webflow tab's single **Images** screen, which lists site assets and CMS images
+together and offers **Optimise** (one job: draft alt, optimise bytes) and
+**Apply ALT** (write the text a person approved or edited). Or by hand:
 
-Two screens, one pipeline, and the difference between them is knowledge rather
-than capability: the Weight tab knows the width a browser draws each image at
-and can therefore resize, while the library only knows what exists, so an
+Two tabs, one pipeline. The difference between them is knowledge rather than
+capability: the Weight tab knows the width a browser draws each image at and
+can therefore resize, while the library only knows what exists, so an
 unmeasured image is re-encoded at its own dimensions. An image the Weight tab
-*has* measured is resized whichever screen asked.
+*has* measured is resized whichever tab asked.
+
+**Nothing writes to Webflow from the browser any more.** The Webflow tab used
+to have two screens with two "Save" buttons that PATCHed from the page, a CLI
+command builder under a fake terminal, and a generate route that called Ollama
+on `localhost` from a Vercel function. All of it went. Every write is a worker
+job, so there is one place to log, back up and audit. An edit made in a row
+reaches Webflow as an `overrides` entry on `alt_apply`, not as a second path.
 
 ```bash
 npm run worker enqueue image_budget <projectId> --emit ./optimised-images

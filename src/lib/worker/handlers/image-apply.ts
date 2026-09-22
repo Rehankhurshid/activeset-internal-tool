@@ -199,7 +199,7 @@ export async function runImageApply(
   const updates: CmsUpdatePayload[] = [];
   const applied = new Set<string>();
   const archives = new Map<string, string>();
-  const appliedUrls = new Map<string, { src: string; bytes: number; targetWidth: number | null }>();
+  const appliedUrls = new Map<string, { src: string; bytes: number; targetWidth: number | null; newUrl: string }>();
   const now = new Date().toISOString();
 
   for (const [i, target] of requested.entries()) {
@@ -283,7 +283,7 @@ export async function runImageApply(
       }
       applied.add(target.fingerprint);
       archives.set(target.fingerprint, archived.url ?? archived.path);
-      appliedUrls.set(target.fingerprint, { src, bytes: original.byteLength, targetWidth });
+      appliedUrls.set(target.fingerprint, { src, bytes: original.byteLength, targetWidth, newUrl: uploaded.hostedUrl });
     } catch (error) {
       result.failed.push({ where: src, error: error instanceof Error ? error.message : String(error) });
     }
@@ -331,6 +331,13 @@ export async function runImageApply(
     }
   }
 
+  // The image now lives at a new URL, and everything about it — drafts,
+  // decisions — is keyed by the old one. Carry them across, or the alt text
+  // drafted a minute ago in the same job is orphaned the moment this lands.
+  for (const [fingerprint, applied] of appliedUrls) {
+    await carryAltAcross(projectId, fingerprint, applied.newUrl);
+  }
+
   await recordApplied(projectId, appliedUrls, archives, now, payload.by ?? 'worker');
   return result;
 }
@@ -342,9 +349,34 @@ export async function runImageApply(
  * and rewritten on every run, so without it there would be no record of what
  * the image used to be.
  */
+/**
+ * Drafts and decisions are keyed by image fingerprint, and the fingerprint is
+ * the URL. Repointing a CMS field changes the URL, so without this the draft
+ * made for the image stays attached to a file nothing references any more.
+ * Copied rather than moved: the old record is the audit trail for what was
+ * replaced.
+ */
+async function carryAltAcross(projectId: string, oldFingerprint: string, newSrc: string): Promise<void> {
+  const newFingerprint = imageFingerprint(newSrc);
+  if (!newFingerprint || newFingerprint === oldFingerprint) return;
+  const project = adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId);
+
+  for (const collection of ['alt_suggestions', 'audit_decisions'] as const) {
+    const from = await project.collection(collection).doc(decisionId('alt', oldFingerprint)).get();
+    if (!from.exists) continue;
+    await project.collection(collection).doc(decisionId('alt', newFingerprint)).set({
+      ...from.data(),
+      fingerprint: newFingerprint,
+      ...(collection === 'alt_suggestions' ? { src: newSrc } : {}),
+      carriedFrom: oldFingerprint,
+      updatedAt: AdminTimestamp.now(),
+    });
+  }
+}
+
 async function recordApplied(
   projectId: string,
-  appliedUrls: Map<string, { src: string; bytes: number; targetWidth: number | null }>,
+  appliedUrls: Map<string, { src: string; bytes: number; targetWidth: number | null; newUrl: string }>,
   archives: Map<string, string>,
   now: string,
   by: string,
