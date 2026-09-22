@@ -197,6 +197,7 @@ One document = one client project. Type `Project` ([types/index.ts](../../src/ty
 | `publicAuditShareToken`, `publicAuditShareEnabled`, `publicAuditShareUpdatedAt` | string, boolean, ISO | header "…" menu |
 | `sitemapUrl`, `folderPageTypes`, `detectedLocales`, `pathToLocaleMap`, `imageScanJob` | audit data | [site-audit.md](./site-audit.md) |
 | `webflowConfig` (`siteId, siteName?, customDomain?, lastSyncedAt?, hasApiToken?`), `sitemapIgnorePaths`, `webflowSitemapDiff` | Webflow | [webflow.md](./webflow.md) (token lives in `project_secrets`) |
+| `autoOptimiseImages` (`enabled, updatedBy?, updatedAt?`) | Images screen switch; read by the hourly auto-optimise cron | [worker-alt-text-images.md](./worker-alt-text-images.md) |
 | `clickupListId`, `clickupListName` | ClickUp list binding | [clickup-tasks.md](./clickup-tasks.md) |
 | `clientPortal`, `clientFacing` | portal settings/status/counters | [client-portal.md](./client-portal.md) |
 | `delivery` (`ProjectDeliveryState`) | stack, approvals, tracker sheet… | [delivery.md](./delivery.md) |

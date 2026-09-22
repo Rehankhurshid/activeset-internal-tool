@@ -9,7 +9,7 @@ import { cmsSourceAssetIds } from '@/modules/site-monitoring/domain/webflow-asse
 import { runAltApply } from './alt-apply';
 import { runImageApply } from './image-apply';
 import type { CurrentImage } from '@/lib/worker/queue';
-import { recordInIndex, type IndexUpdate } from '@/lib/image-index-admin';
+import { readImageIndex, recordInIndex, type IndexUpdate } from '@/lib/image-index-admin';
 
 /**
  * One click for one group of a site's images: ALT text and optimisation.
@@ -50,6 +50,13 @@ export interface LibraryGroupPayload {
   /** Publish changed CMS items when done. Off by default. */
   publish?: boolean;
   by?: string;
+  /**
+   * Only images this project has never seen: no ALT draft, nothing in the
+   * image index. The hourly look for new images sets it — a person's click
+   * also retries held drafts and failed optimisations; an hourly check doing
+   * that would re-read the same 250 unsure images 24 times a day.
+   */
+  newOnly?: boolean;
 }
 
 export interface LibraryGroupResult {
@@ -213,7 +220,7 @@ export async function runLibraryGroup(
     // instead of staying stuck behind the old one.
     const toDraft = missing.filter((image) => {
       const draft = drafts.get(image.fingerprint);
-      return !draft || !isConfident(draft);
+      return !draft || (!payload.newOnly && !isConfident(draft));
     });
 
     // One image at a time, named before it starts and saved as soon as it is
@@ -293,10 +300,18 @@ export async function runLibraryGroup(
   // After ALT, not before: the apply step reads each field fresh, so the swap
   // carries the alt text that was just written rather than blanking it.
   if (runImages) try {
-    const applied = await runImageApply(
+    let srcs = images.map((image) => image.src);
+    let alreadyDone = 0;
+    if (payload.newOnly) {
+      const index = await readImageIndex(projectId);
+      srcs = images.filter((image) => !index.get(image.fingerprint)?.optimise).map((image) => image.src);
+      alreadyDone = images.length - srcs.length;
+    }
+    // Nothing new in this group: no need to read its fields again.
+    const applied = srcs.length === 0 ? null : await runImageApply(
       projectId,
       {
-        srcs: images.map((image) => image.src),
+        srcs,
         collectionIds: group.kind === 'collection' ? [group.collectionId] : [],
         designerCopies: group.kind === 'assets',
         publish: payload.publish,
@@ -311,17 +326,17 @@ export async function runLibraryGroup(
           current ? { ...current, label: labelBySrc.get(current.src) } : current,
         ),
     );
-    const unchanged = applied.skipped.filter((skip) => /small|smaller|not a CMS image/.test(skip.reason)).length;
+    const unchanged = applied?.skipped.filter((skip) => /small|smaller|not a CMS image/.test(skip.reason)).length ?? 0;
     result.optimise = {
-      alreadyDone: applied.alreadyDone,
-      optimised: applied.uploaded,
-      resized: applied.resized,
-      designerCopies: applied.preparedForDesigner + applied.alreadyPrepared,
-      bytesSaved: applied.bytesSaved,
+      alreadyDone: alreadyDone + (applied?.alreadyDone ?? 0),
+      optimised: applied?.uploaded ?? 0,
+      resized: applied?.resized ?? 0,
+      designerCopies: applied ? applied.preparedForDesigner + applied.alreadyPrepared : 0,
+      bytesSaved: applied?.bytesSaved ?? 0,
       unchanged,
-      failed: applied.failed.length,
+      failed: applied?.failed.length ?? 0,
     };
-    if (applied.failed.length) {
+    if (applied?.failed.length) {
       result.errors.push(`Images: ${applied.failed.slice(0, 3).map((f) => f.error).join('; ')}`);
     }
   } catch (error) {

@@ -38,6 +38,7 @@ import { runAltTextForProject, type AltTextPayload } from '@/lib/worker/handlers
 import { runAltApply, type AltApplyPayload } from '@/lib/worker/handlers/alt-apply';
 import { runImageApply, type ImageApplyPayload } from '@/lib/worker/handlers/image-apply';
 import { runLibraryGroup, type LibraryGroupPayload } from '@/lib/worker/handlers/library-group';
+import { runLibrarySweep, type LibrarySweepPayload } from '@/lib/worker/handlers/library-sweep';
 import { runWebflowAlt, type WebflowAltPayload } from '@/lib/worker/handlers/webflow-alt';
 import { loadProjectDocAdmin } from '@/lib/project-admin';
 import {
@@ -175,6 +176,21 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
       `${result.group}: ALT ${result.alt.added} added, ${result.alt.held} held for review` +
         (o ? ` · images ${o.optimised} optimised (${o.resized} resized), ${o.designerCopies} Designer copies, ${formatBytes(o.bytesSaved)} saved` : '') +
         (result.errors.length ? ` · ${red(result.errors.join('; '))}` : ''),
+    );
+    return result as unknown as Record<string, unknown>;
+  }
+
+  if (job.kind === 'library_sweep') {
+    const result = await runLibrarySweep(job.projectId, job.payload as unknown as LibrarySweepPayload, progress);
+    const busy = result.groups.filter((group) => group.altAdded || group.optimised || group.errors.length);
+    log(
+      green('  done'),
+      result.changed === 0 && busy.length === 0
+        ? 'nothing new'
+        : busy
+            .map((group) => `${group.name}: ALT ${group.altAdded} added, ${group.optimised} optimised` +
+              (group.errors.length ? ` · ${red(group.errors.join('; '))}` : ''))
+            .join(' · '),
     );
     return result as unknown as Record<string, unknown>;
   }
@@ -393,7 +409,7 @@ async function loop(options: { once?: boolean; interval?: string; kinds?: string
         ...hardware,
         model: resolveOllama().model,
         paused,
-        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt', 'image_apply', 'library_group'],
+        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt', 'image_apply', 'library_group', 'library_sweep'],
         busyWith: null,
       });
 

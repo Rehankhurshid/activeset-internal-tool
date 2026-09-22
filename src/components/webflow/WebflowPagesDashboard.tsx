@@ -61,6 +61,7 @@ import { WebflowSEOEditor } from './WebflowSEOEditor';
 import { WebflowBulkSEOEditor } from './WebflowBulkSEOEditor';
 import { WebflowCredentialsDialog } from './WebflowCredentialsDialog';
 import { WebflowImagesDashboard } from './WebflowImagesDashboard';
+import type { AutoOptimiseImages } from '@/types';
 import { WebflowSchemaDashboard } from './WebflowSchemaDashboard';
 import { WebflowSitemapSync } from './WebflowSitemapSync';
 import { webflowService } from '@/services/WebflowService';
@@ -72,6 +73,7 @@ interface WebflowPagesDashboardProps {
   projectName?: string;
   userEmail?: string;
   webflowConfig?: WebflowConfig;
+  autoOptimiseImages?: AutoOptimiseImages;
   onSaveConfig: (config: WebflowConfigInput) => Promise<void>;
   onRemoveConfig: () => Promise<void>;
 }
@@ -91,6 +93,7 @@ export function WebflowPagesDashboard({
   projectName,
   userEmail,
   webflowConfig,
+  autoOptimiseImages,
   onSaveConfig,
   onRemoveConfig,
 }: WebflowPagesDashboardProps) {
@@ -762,6 +765,7 @@ export function WebflowPagesDashboard({
                 projectName={projectName}
                 userEmail={userEmail}
                 webflowConfig={webflowConfig}
+                autoOptimise={autoOptimiseImages}
               />
             )}
           </TabsContent>

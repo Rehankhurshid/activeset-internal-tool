@@ -83,6 +83,7 @@ All crons are defined in [vercel.json](../../vercel.json) (times in UTC) and aut
 | `0 1 * * *` | `/api/cron/webflow-sitemap-diff` | webflow |
 | `35 3 * * *` | `/api/cron/delivery-nudge` | delivery |
 | `0 4 * * *` | `/api/cron/health-report` | site-monitoring |
+| `20 * * * *` | `/api/cron/auto-optimise` | worker-alt-text-images (queues `library_sweep` per project with `autoOptimiseImages.enabled`) |
 | `*/5 * * * *` | `/api/cron/scan-jobs` | site-audit (also drains the notification queue → site-monitoring) |
 | `0 9 * * *` | `/api/cron/refrens-sync` | tools-and-extensions |
 | `*/15 * * * *` | `/api/cron/clickup-refresh` | clickup-tasks |

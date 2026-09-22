@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/delivery-nudge",
       "schedule": "35 3 * * *"
+    },
+    {
+      "path": "/api/cron/auto-optimise",
+      "schedule": "20 * * * *"
     }
   ]
 }

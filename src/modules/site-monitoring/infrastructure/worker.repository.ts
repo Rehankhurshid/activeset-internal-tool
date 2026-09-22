@@ -28,7 +28,8 @@ export type WorkerJobKind =
   | 'alt_apply'
   | 'webflow_alt'
   | 'image_apply'
-  | 'library_group';
+  | 'library_group'
+  | 'library_sweep';
 export type WorkerJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface WorkerJobDoc {
@@ -98,6 +99,8 @@ export interface WorkerRepository {
     priority?: number;
   }) => Promise<string>;
   subscribeJobs: (projectId: string, onChange: (jobs: WorkerJobDoc[]) => void) => () => void;
+  /** One job by id, or null while it does not exist. */
+  subscribeJob: (jobId: string, onChange: (job: WorkerJobDoc | null) => void) => () => void;
   subscribeWorkers: (onChange: (workers: WorkerDoc[]) => void) => () => void;
   /**
    * Every queued or running job, across every project — for the navigation
@@ -196,6 +199,17 @@ export const workerRepository: WorkerRepository = {
       ...(input.priority ? { priority: input.priority } : {}),
     });
     return ref.id;
+  },
+
+  subscribeJob(jobId, onChange) {
+    return onSnapshot(
+      docRef(db, WORKER_JOBS, jobId),
+      (snap) => onChange(snap.exists() ? { ...(snap.data() as Omit<WorkerJobDoc, 'id'>), id: snap.id } : null),
+      (error) => {
+        console.error('[worker] job subscription failed:', error);
+        onChange(null);
+      },
+    );
   },
 
   subscribeJobs(projectId, onChange) {

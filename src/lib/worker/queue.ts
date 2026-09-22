@@ -27,7 +27,8 @@ export type WorkerJobKind =
   | 'alt_apply'
   | 'webflow_alt'
   | 'image_apply'
-  | 'library_group';
+  | 'library_group'
+  | 'library_sweep';
 export type WorkerJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface WorkerJob<P = Record<string, unknown>> {
@@ -93,6 +94,46 @@ export async function enqueueJob(input: {
     Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)),
   );
   return job;
+}
+
+/**
+ * Queue a job under a fixed id, unless that job is still waiting or running.
+ *
+ * For work that recurs — the hourly look for new images — where one row per
+ * project is the right amount: the check never piles up behind a worker that
+ * is off, and the queue does not grow by 24 rows a day. A finished run is
+ * replaced by the next one. Returns false when the last one is not done yet.
+ */
+export async function ensureJob(
+  id: string,
+  input: {
+    kind: WorkerJobKind;
+    projectId: string;
+    projectName?: string;
+    payload?: Record<string, unknown>;
+    requestedBy?: string;
+    priority?: number;
+  },
+): Promise<boolean> {
+  const ref = collection().doc(id);
+  return adminDb.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const status = snapshot.exists ? (snapshot.data() as WorkerJob).status : undefined;
+    if (status === 'queued' || status === 'running') return false;
+    const job: Omit<WorkerJob, 'id'> = {
+      kind: input.kind,
+      projectId: input.projectId,
+      projectName: input.projectName,
+      payload: input.payload ?? {},
+      status: 'queued',
+      createdAt: nowIso(),
+      attempts: 0,
+      requestedBy: input.requestedBy,
+      priority: input.priority,
+    };
+    transaction.set(ref, Object.fromEntries(Object.entries(job).filter(([, v]) => v !== undefined)));
+    return true;
+  });
 }
 
 /**

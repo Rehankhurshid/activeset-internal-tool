@@ -669,6 +669,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             projectName={project.name}
                             userEmail={user.email ?? undefined}
                             webflowConfig={project.webflowConfig}
+                            autoOptimiseImages={project.autoOptimiseImages}
                             onSaveConfig={handleSaveWebflowConfig}
                             onRemoveConfig={handleRemoveWebflowConfig}
                         />

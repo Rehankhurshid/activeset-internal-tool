@@ -49,6 +49,7 @@ const KIND_LABEL: Record<string, string> = {
   image_budget: 'Measure image sizes',
   alt_text: 'Draft ALT for pages',
   webflow_alt: 'Draft ALT for the library',
+  library_sweep: 'New images (hourly)',
 };
 
 const PHASE_WORD: Record<Phase, string> = { describing: 'Reading', optimising: 'Shrinking' };
@@ -77,7 +78,7 @@ function fileLabel(src: string): string {
 
 function openLink(job: WorkerJobDoc): string {
   const base = `/modules/project-links/${job.projectId}`;
-  return job.kind === 'library_group' || job.kind === 'alt_apply' || job.kind === 'webflow_alt'
+  return job.kind === 'library_group' || job.kind === 'library_sweep' || job.kind === 'alt_apply' || job.kind === 'webflow_alt'
     ? `${base}?tab=webflow&section=images`
     : `${base}?tab=audit`;
 }

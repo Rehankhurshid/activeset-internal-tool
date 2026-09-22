@@ -665,6 +665,19 @@ export const projectsService = {
     });
   },
 
+  // Switch the hourly "Auto-optimise new images" check on or off
+  async setAutoOptimiseImages(projectId: string, enabled: boolean, by: string): Promise<void> {
+    const autoOptimiseImages = { enabled, updatedBy: by, updatedAt: new Date().toISOString() };
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({ ...project, autoOptimiseImages }));
+      return;
+    }
+    await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), {
+      autoOptimiseImages,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
   // Set or clear the project's custom logo (URL or compressed data URL)
   async updateProjectLogo(projectId: string, logoUrl: string | null): Promise<void> {
     if (isLocalProjectBypassEnabled()) {

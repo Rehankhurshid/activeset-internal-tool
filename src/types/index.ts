@@ -398,6 +398,13 @@ export interface WebflowSitemapDiff {
   error?: string;                // set when the check could not run (e.g. sitemap fetch failed)
 }
 
+/** The per-project "Auto-optimise new images" switch. */
+export interface AutoOptimiseImages {
+  enabled: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -434,6 +441,9 @@ export interface Project {
    *  Invoices tab. Set via the project header's proposal picker. */
   proposalId?: string;
   webflowConfig?: WebflowConfig;
+  /** Hourly: ALT and optimisation for images the project has never seen.
+   *  Switched per project on the Webflow tab's Images screen. */
+  autoOptimiseImages?: AutoOptimiseImages;
   sitemapUrl?: string; // For daily scheduled scans
   folderPageTypes?: FolderPageTypes; // Simple folder → CMS/Static mapping
   /** Normalized paths (e.g. "/style-guide") the user has chosen to exclude from

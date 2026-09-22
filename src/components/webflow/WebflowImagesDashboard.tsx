@@ -19,6 +19,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Switch } from '@/components/ui/switch';
+import { formatDistanceToNow } from 'date-fns';
+import { projectsService } from '@/services/database';
+import { autoOptimiseJobId } from '@/modules/site-monitoring/domain/auto-optimise';
+import type { AutoOptimiseImages } from '@/types';
 import { useCmsImages } from '@/hooks/useCmsImages';
 import { useWebflowAssets } from '@/hooks/useWebflowAssets';
 import { formatBytes } from '@/modules/site-monitoring/domain/image-budget';
@@ -33,7 +38,7 @@ import {
   type LibraryGroupRef,
   type LibraryOptimise,
 } from '@/modules/site-monitoring/ui/hooks/useLibraryOptimise';
-import type { WorkerJobDoc } from '@/modules/site-monitoring/infrastructure/worker.repository';
+import { workerRepository, type WorkerJobDoc } from '@/modules/site-monitoring/infrastructure/worker.repository';
 import type { CmsImageEntry, WebflowConfig } from '@/types/webflow';
 import type { ImageIndexEntry } from '@/modules/site-monitoring/domain/image-index';
 
@@ -59,6 +64,7 @@ interface WebflowImagesDashboardProps {
   projectName?: string;
   userEmail?: string;
   webflowConfig: WebflowConfig;
+  autoOptimise?: AutoOptimiseImages;
 }
 
 interface GroupRow {
@@ -164,7 +170,13 @@ function resultLine(job: WorkerJobDoc): { ok: boolean; text: string } {
   return { ok: !r.errors?.length, text: `Done ${ago(job.finishedAt)} · ${parts.join(' · ')}${errors}` };
 }
 
-export function WebflowImagesDashboard({ projectId, projectName, userEmail, webflowConfig }: WebflowImagesDashboardProps) {
+export function WebflowImagesDashboard({
+  projectId,
+  projectName,
+  userEmail,
+  webflowConfig,
+  autoOptimise,
+}: WebflowImagesDashboardProps) {
   const assetsHook = useWebflowAssets(projectId, webflowConfig);
   const cms = useCmsImages(projectId, webflowConfig);
   const library = useLibraryOptimise(projectId, projectName, userEmail ?? 'team');
@@ -424,6 +436,7 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
             ` ${coverage.missingCount - fixableCount} of the ${coverage.missingCount} on the live site already have ALT in Webflow or aren’t in the library: the page doesn’t use it, so the fix is in Designer — see the Audit tab.`}
           {library.online.length === 0 && ' No worker is online right now; it starts when one is.'}
         </p>
+        <AutoOptimiseSwitch projectId={projectId} setting={autoOptimise} userEmail={userEmail ?? 'team'} />
       </CardHeader>
 
       <CardContent className="p-0">
@@ -440,6 +453,77 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+/** What the last hourly check did, in a line. */
+function autoSummary(job: WorkerJobDoc | null): string {
+  if (!job) return 'The first check runs within the hour.';
+  if (job.status === 'queued') return 'A check is waiting for the worker.';
+  if (job.status === 'running') return `Checking now · ${job.progress ?? ''}`;
+  const when = job.finishedAt ? formatDistanceToNow(new Date(job.finishedAt), { addSuffix: true }) : '';
+  if (job.status === 'failed') return `The last check ${when} failed: ${job.error ?? 'unknown error'}`;
+  const groups = (job.result?.groups ?? []) as { altAdded: number; optimised: number; errors: string[] }[];
+  const alt = groups.reduce((sum, group) => sum + group.altAdded, 0);
+  const optimised = groups.reduce((sum, group) => sum + group.optimised, 0);
+  const problems = groups.filter((group) => group.errors.length).length;
+  const did =
+    alt || optimised
+      ? [alt && `ALT added to ${alt}`, optimised && `${optimised} optimised`].filter(Boolean).join(', ')
+      : 'nothing new';
+  return `Last checked ${when}: ${did}${problems ? ` · ${problems} section${problems === 1 ? '' : 's'} had a problem` : ''}.`;
+}
+
+/**
+ * The per-project "Auto-optimise new images" switch. When on, the hourly
+ * cron queues a `library_sweep`: new images get confident ALT and are
+ * optimised, staged in Webflow and never published.
+ */
+function AutoOptimiseSwitch({
+  projectId,
+  setting,
+  userEmail,
+}: {
+  projectId: string;
+  setting?: AutoOptimiseImages;
+  userEmail: string;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [job, setJob] = useState<WorkerJobDoc | null>(null);
+  const enabled = !!setting?.enabled;
+
+  useEffect(() => workerRepository.subscribeJob(autoOptimiseJobId(projectId), setJob), [projectId]);
+
+  const toggle = async (next: boolean) => {
+    setSaving(true);
+    try {
+      await projectsService.setAutoOptimiseImages(projectId, next, userEmail);
+      toast.success(next ? 'New images will be optimised automatically' : 'Auto-optimise is off');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not change that');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
+      <Switch
+        id={`auto-optimise-${projectId}`}
+        checked={enabled}
+        disabled={saving}
+        onCheckedChange={toggle}
+        className="mt-0.5"
+      />
+      <label htmlFor={`auto-optimise-${projectId}`} className="min-w-0 space-y-0.5">
+        <span className="block text-sm font-medium">Auto-optimise new images</span>
+        <span className="block text-xs text-muted-foreground">
+          {enabled
+            ? autoSummary(job)
+            : 'Every hour, images this project hasn’t seen get ALT text and are optimised. Staged in Webflow, never published.'}
+        </span>
+      </label>
+    </div>
   );
 }
 

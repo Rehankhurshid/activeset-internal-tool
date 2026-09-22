@@ -174,6 +174,7 @@ Vercel crons from [vercel.json](../../vercel.json) (UTC). Every route listed cal
 | `30 0 * * *` (00:30 daily) | `/api/cron/daily-scan` | [route.ts](../../src/app/api/cron/daily-scan/route.ts) | GET | site-monitoring |
 | `0 1 * * *` (01:00 daily) | `/api/cron/webflow-sitemap-diff` | [route.ts](../../src/app/api/cron/webflow-sitemap-diff/route.ts) | GET | webflow |
 | `0 4 * * *` (04:00 daily) | `/api/cron/health-report` | [route.ts](../../src/app/api/cron/health-report/route.ts) | GET | site-monitoring |
+| `20 * * * *` (hourly) | `/api/cron/auto-optimise` | [route.ts](../../src/app/api/cron/auto-optimise/route.ts) | GET | worker-alt-text-images |
 | `*/5 * * * *` (every 5 min) | `/api/cron/scan-jobs` | [route.ts](../../src/app/api/cron/scan-jobs/route.ts) | GET | site-audit |
 | `0 9 * * *` (09:00 daily) | `/api/cron/refrens-sync` | [route.ts](../../src/app/api/cron/refrens-sync/route.ts) | GET, POST | tools-and-extensions |
 | `*/15 * * * *` (every 15 min) | `/api/cron/clickup-refresh` | [route.ts](../../src/app/api/cron/clickup-refresh/route.ts) | GET | clickup-tasks |
