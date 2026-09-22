@@ -29,6 +29,7 @@ import {
   failJob,
   heartbeat,
   reportWorkerAlive,
+  type CurrentImage,
   type WorkerJob,
   type WorkerJobKind,
 } from '@/lib/worker/queue';
@@ -122,9 +123,9 @@ let activeWorkerId: string | undefined;
 let lastAliveAt = 0;
 
 async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
-  const progress = async (message: string, fraction?: number) => {
+  const progress = async (message: string, fraction?: number, current?: CurrentImage | null) => {
     log(dim(`  ${message}`));
-    await heartbeat(job.id, message, fraction).catch(() => undefined);
+    await heartbeat(job.id, message, fraction, current).catch(() => undefined);
     // The loop reports the machine alive between jobs, but a forty-page
     // measurement is one long job, and the app was showing a busy worker as
     // "Offline · last seen 1m ago" — which reads as broken exactly when it is

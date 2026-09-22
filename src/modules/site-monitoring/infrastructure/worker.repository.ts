@@ -39,6 +39,9 @@ export interface WorkerJobDoc {
   status: WorkerJobStatus;
   progress?: string;
   fraction?: number;
+  /** The image the job is on right now, while it is on one. */
+  currentSrc?: string | null;
+  currentPhase?: 'describing' | 'optimising' | null;
   claimedBy?: string;
   heartbeatAt?: string;
   finishedAt?: string;

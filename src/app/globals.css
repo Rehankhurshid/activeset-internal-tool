@@ -388,6 +388,48 @@
     animation: today-glow 3s ease-in-out infinite;
   }
 
+  /* Images screen: which image the worker is on. A scan line while it is
+     being described, a small squeeze while it is being shrunk. */
+  @keyframes image-scan {
+    0% {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    15%,
+    85% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(300%);
+      opacity: 0;
+    }
+  }
+
+  @keyframes image-squeeze {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(0.8);
+    }
+  }
+
+  .animate-image-scan {
+    animation: image-scan 1.4s ease-in-out infinite;
+  }
+
+  .animate-image-squeeze {
+    animation: image-squeeze 1.2s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-image-scan,
+    .animate-image-squeeze {
+      animation: none;
+    }
+  }
+
 }
 
 /* ---------------------------------------------------------------------------

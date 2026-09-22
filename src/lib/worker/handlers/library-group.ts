@@ -8,6 +8,7 @@ import { imageFingerprint } from '@/modules/site-monitoring/domain/audit-finding
 import { cmsSourceAssetIds } from '@/modules/site-monitoring/domain/webflow-assets';
 import { runAltApply } from './alt-apply';
 import { runImageApply } from './image-apply';
+import type { CurrentImage } from '@/lib/worker/queue';
 
 /**
  * One click for one group of a site's images: ALT text and optimisation.
@@ -66,7 +67,6 @@ export interface LibraryGroupResult {
 
 /** Webflow marks an inherited-but-unset alt with this sentinel. */
 const BLANK_ALTS = new Set(['', '__wf_reserved_inherit']);
-const DRAFT_CHUNK = 10;
 
 interface GroupImage {
   src: string;
@@ -90,7 +90,7 @@ export const groupKey = (group: LibraryGroup) => (group.kind === 'assets' ? 'ass
 export async function runLibraryGroup(
   projectId: string,
   payload: LibraryGroupPayload,
-  onProgress: (message: string, fraction?: number) => Promise<void> | void,
+  onProgress: (message: string, fraction?: number, current?: CurrentImage | null) => Promise<void> | void,
 ): Promise<LibraryGroupResult> {
   const project = await loadProjectDocAdmin(projectId);
   const siteId = project?.webflowConfig?.siteId;
@@ -182,19 +182,17 @@ export async function runLibraryGroup(
     result.alt.missing = missing.length;
     const toDraft = missing.filter((image) => !drafts.has(image.fingerprint));
 
-    for (let i = 0; i < toDraft.length; i += DRAFT_CHUNK) {
-      const chunk = toDraft.slice(i, i + DRAFT_CHUNK);
-      const { suggestions, failures } = await generateAltTextBatch(
-        chunk.map((image) => image.context),
-        {
-          onProgress: ({ done }) => {
-            void onProgress(
-              `Describing ${i + done}/${toDraft.length}`,
-              0.02 + ((i + done) / Math.max(1, toDraft.length)) * 0.6,
-            );
-          },
-        },
+    // One image at a time, named before it starts and saved as soon as it is
+    // done: the screen lights up the row being read, and its ALT box fills in
+    // the moment the draft exists rather than ten images later. A run that
+    // dies keeps every image it finished.
+    for (const [i, image] of toDraft.entries()) {
+      await onProgress(
+        `Describing ${i + 1}/${toDraft.length}`,
+        0.02 + (i / Math.max(1, toDraft.length)) * 0.6,
+        { src: image.src, phase: 'describing' },
       );
+      const { suggestions, failures } = await generateAltTextBatch([image.context]);
       await saveAltSuggestions(projectId, suggestions);
       for (const suggestion of suggestions) drafts.set(suggestion.fingerprint, suggestion);
       result.alt.drafted += suggestions.length;
@@ -220,7 +218,7 @@ export async function runLibraryGroup(
           collectionIds: group.kind === 'collection' ? [group.collectionId] : [],
           includeAssets: group.kind === 'assets',
         },
-        (message, fraction) => onProgress(`ALT · ${message}`, 0.62 + (fraction ?? 0) * 0.08),
+        (message, fraction) => onProgress(`ALT · ${message}`, 0.62 + (fraction ?? 0) * 0.08, null),
       );
       result.alt.decorative = confident.filter((image) => drafts.get(image.fingerprint)?.kind === 'decorative').length;
       result.alt.added = Math.max(0, confident.length - applied.skipped.length - result.alt.decorative);
@@ -243,7 +241,7 @@ export async function runLibraryGroup(
         publish: payload.publish,
         by: payload.by,
       },
-      (message, fraction) => onProgress(`Images · ${message}`, 0.7 + (fraction ?? 0) * 0.3),
+      (message, fraction, current) => onProgress(`Images · ${message}`, 0.7 + (fraction ?? 0) * 0.3, current),
     );
     const unchanged = applied.skipped.filter((skip) => /small|smaller|not a CMS image/.test(skip.reason)).length;
     result.optimise = {

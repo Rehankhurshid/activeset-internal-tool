@@ -13,6 +13,7 @@ import { backupPath, bunnyConfig, putToBunny, BUNNY_NOT_CONFIGURED } from '@/lib
 import { ensureOptimisedFolder } from '@/lib/cms/placement';
 import { sanitizeAssetFileName } from '@/lib/cms/assets';
 import crypto from 'node:crypto';
+import type { CurrentImage } from '@/lib/worker/queue';
 
 /**
  * Resize an image to the width its page actually displays it at, and point
@@ -109,7 +110,7 @@ function fileNameFor(src: string, width: number | null, ext: string): string {
 export async function runImageApply(
   projectId: string,
   payload: ImageApplyPayload,
-  onProgress: (message: string, fraction?: number) => Promise<void> | void,
+  onProgress: (message: string, fraction?: number, current?: CurrentImage | null) => Promise<void> | void,
 ): Promise<ImageApplyResult> {
   const targets = [
     ...(payload.fingerprints ?? []).map((fingerprint) => ({ fingerprint, src: undefined as string | undefined })),
@@ -200,7 +201,12 @@ export async function runImageApply(
   const now = new Date().toISOString();
 
   for (const [i, target] of requested.entries()) {
-    await onProgress(`Optimising ${i + 1}/${requested.length}`, 0.3 + (i / Math.max(1, requested.length)) * 0.4);
+    const currentSrc = target.src ?? measurements.get(target.fingerprint)?.src;
+    await onProgress(
+      `Optimising ${i + 1}/${requested.length}`,
+      0.3 + (i / Math.max(1, requested.length)) * 0.4,
+      currentSrc ? { src: currentSrc, phase: 'optimising' } : null,
+    );
 
     const entries = cmsIndex.get(target.fingerprint);
     const measured = measurements.get(target.fingerprint);
@@ -358,7 +364,7 @@ export async function runImageApply(
   }
 
   if (updates.length > 0) {
-    await onProgress(`Repointing ${updates.length} CMS fields`, 0.75);
+    await onProgress(`Repointing ${updates.length} CMS fields`, 0.75, null);
     const grouped = groupUpdatesByItem(updates);
     const byCollection = new Map<string, { id: string; fieldData: Record<string, unknown> }[]>();
     for (const entry of grouped.values()) {

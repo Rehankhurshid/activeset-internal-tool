@@ -147,12 +147,30 @@ export async function claimNextJob(
   return null;
 }
 
-export async function heartbeat(jobId: string, progress?: string, fraction?: number): Promise<void> {
+/** The image a job is working on right now, so the app can point at it. */
+export interface CurrentImage {
+  src: string;
+  phase: 'describing' | 'optimising';
+}
+
+export async function heartbeat(
+  jobId: string,
+  progress?: string,
+  fraction?: number,
+  current?: CurrentImage | null,
+): Promise<void> {
   await collection()
     .doc(jobId)
     .update(
       Object.fromEntries(
-        Object.entries({ heartbeatAt: nowIso(), progress, fraction }).filter(([, v]) => v !== undefined),
+        Object.entries({
+          heartbeatAt: nowIso(),
+          progress,
+          fraction,
+          // Cleared between images and in steps that are about no one image —
+          // "Repointing 40 CMS fields" should not leave the last thumbnail lit.
+          ...(current === undefined ? {} : { currentSrc: current?.src ?? null, currentPhase: current?.phase ?? null }),
+        }).filter(([, v]) => v !== undefined),
       ),
     );
 }

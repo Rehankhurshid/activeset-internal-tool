@@ -84,6 +84,35 @@ const isBlank = (value: string | null | undefined) => BLANK_ALTS.has((value ?? '
 const SECONDS_PER_IMAGE = 10;
 const PAGE = 100;
 
+type Phase = 'describing' | 'optimising';
+const PHASE_LABEL: Record<Phase, string> = { describing: 'Reading', optimising: 'Shrinking' };
+
+/**
+ * The image the worker is on, animated by what is happening to it: a scan
+ * line while it is being described, a squeeze while it is being shrunk. A
+ * progress bar says how far through a run is; this says which image, which is
+ * what someone watching actually wants to know.
+ */
+function WorkingThumb({ src, phase, size }: { src: string; phase: Phase; size: 'sm' | 'md' }) {
+  return (
+    <span
+      className={`relative shrink-0 overflow-hidden rounded border border-primary/60 bg-background ${
+        size === 'sm' ? 'h-7 w-7' : 'h-10 w-10'
+      }`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        className={`h-full w-full object-cover ${phase === 'optimising' ? 'animate-image-squeeze' : ''}`}
+      />
+      {phase === 'describing' && (
+        <span className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-transparent via-primary/70 to-transparent animate-image-scan" />
+      )}
+    </span>
+  );
+}
+
 /** One row per distinct image — the same image in five fields is one image. */
 function toRows(entries: CmsImageEntry[]): ImageRow[] {
   const byFingerprint = new Map<string, ImageRow>();
@@ -374,6 +403,32 @@ function GroupSection({
   const last = library.lastFor(group.key);
   const outcome = last ? resultLine(last) : null;
 
+  const current =
+    active?.status === 'running' && active.currentSrc
+      ? {
+          src: active.currentSrc,
+          fingerprint: imageFingerprint(active.currentSrc),
+          phase: (active.currentPhase ?? 'describing') as Phase,
+        }
+      : null;
+  const currentRow = current ? rows?.find((row) => row.fingerprint === current.fingerprint) : undefined;
+
+  /** Open the section and bring the row being worked on into view. */
+  const showCurrent = () => {
+    if (!current || !rows) return;
+    setOpen(true);
+    setReviewOnly(false);
+    const index = rows.findIndex((row) => row.fingerprint === current.fingerprint);
+    if (index >= shown) setShown(index + PAGE);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        document
+          .querySelector(`[data-fingerprint="${CSS.escape(current.fingerprint)}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+      ),
+    );
+  };
+
   const needsLook = useCallback(
     (row: ImageRow) => {
       if (!row.missing) return false;
@@ -422,9 +477,28 @@ function GroupSection({
         </Button>
 
         {active?.status === 'running' && (
-          <div className="w-full space-y-1 pl-6">
+          <div className="w-full space-y-1.5 pl-6">
             <Progress value={Math.round((active.fraction ?? 0) * 100)} className="h-1.5" />
-            <p className="text-xs text-muted-foreground truncate">{active.progress ?? 'Starting'}</p>
+            <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              {current && <WorkingThumb src={current.src} phase={current.phase} size="sm" />}
+              <span className="min-w-0 truncate">
+                {current ? (
+                  <>
+                    <span className="font-medium text-foreground">{PHASE_LABEL[current.phase]}</span>{' '}
+                    {currentRow ? currentRow.title : 'an image'}
+                    {currentRow?.subtitle ? ` · ${currentRow.subtitle}` : ''}
+                    <span className="tabular-nums"> — {active.progress}</span>
+                  </>
+                ) : (
+                  active.progress ?? 'Starting'
+                )}
+              </span>
+              {currentRow && (
+                <Button variant="link" size="sm" className="h-auto shrink-0 p-0 text-xs" onClick={showCurrent}>
+                  Show
+                </Button>
+              )}
+            </div>
           </div>
         )}
         {!active && outcome && (
@@ -465,7 +539,13 @@ function GroupSection({
               ) : (
                 <ul className="divide-y">
                   {visible.slice(0, shown).map((row) => (
-                    <ImageLine key={row.id} row={row} library={library} needsLook={needsLook(row)} />
+                    <ImageLine
+                      key={row.id}
+                      row={row}
+                      library={library}
+                      needsLook={needsLook(row)}
+                      working={current?.fingerprint === row.fingerprint ? current.phase : undefined}
+                    />
                   ))}
                 </ul>
               )}
@@ -484,7 +564,18 @@ function GroupSection({
   );
 }
 
-function ImageLine({ row, library, needsLook }: { row: ImageRow; library: LibraryOptimise; needsLook: boolean }) {
+function ImageLine({
+  row,
+  library,
+  needsLook,
+  working,
+}: {
+  row: ImageRow;
+  library: LibraryOptimise;
+  needsLook: boolean;
+  /** Set while the worker is on this image. */
+  working?: Phase;
+}) {
   const draft = library.draftFor(row.src);
   const seed = row.missing ? (draft && draft.kind !== 'decorative' ? draft.alt : '') : row.currentAlt;
   const [value, setValue] = useState<string | null>(null);
@@ -493,31 +584,48 @@ function ImageLine({ row, library, needsLook }: { row: ImageRow; library: Librar
   const changed = text.trim() !== row.currentAlt.trim() && (value !== null || needsLook);
 
   return (
-    <li className="flex items-center gap-3 px-4 py-2">
-      <a
-        href={row.src}
-        target="_blank"
-        rel="noreferrer"
-        className="h-10 w-10 shrink-0 overflow-hidden rounded border bg-background"
-        title={row.src}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={row.src} alt="" loading="lazy" className="h-full w-full object-cover" />
-      </a>
+    <li
+      data-fingerprint={row.fingerprint}
+      className={`flex items-center gap-3 px-4 py-2 transition-colors ${
+        working ? 'bg-primary/5 ring-1 ring-inset ring-primary/40' : ''
+      }`}
+    >
+      {working ? (
+        <WorkingThumb src={row.src} phase={working} size="md" />
+      ) : (
+        <a
+          href={row.src}
+          target="_blank"
+          rel="noreferrer"
+          className="h-10 w-10 shrink-0 overflow-hidden rounded border bg-background"
+          title={row.src}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={row.src} alt="" loading="lazy" className="h-full w-full object-cover" />
+        </a>
+      )}
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2 text-xs">
           <span className="truncate font-medium">{row.title}</span>
           {row.subtitle && <span className="truncate text-muted-foreground">{row.subtitle}</span>}
-          <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-            {!row.missing ? 'has ALT' : needsLook ? 'to review' : draft ? 'drafted' : 'missing'}
-          </span>
+          {working ? (
+            <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-primary">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {PHASE_LABEL[working]}…
+            </span>
+          ) : (
+            <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+              {!row.missing ? 'has ALT' : needsLook ? 'to review' : draft ? 'drafted' : 'missing'}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Input
             value={text}
             onChange={(event) => setValue(event.target.value)}
             placeholder={draft?.kind === 'decorative' ? 'Reads as decorative — leave empty' : 'No ALT text yet'}
-            className={`h-8 text-sm ${needsLook ? 'border-amber-500/50' : ''}`}
+            key={draft?.alt ?? 'empty'}
+            className={`h-8 text-sm ${needsLook ? 'border-amber-500/50' : ''} ${draft && row.missing && value === null ? 'animate-in fade-in duration-700' : ''}`}
           />
           {changed && (
             <Button
