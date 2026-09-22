@@ -70,7 +70,7 @@ init instance". So run the server as a service and pull through its API:
 
 ```powershell
 nssm install OllamaServe "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" serve
-nssm set OllamaServe AppEnvironmentExtra "OLLAMA_MODELS=C:\activeset\ollama-models" "OLLAMA_KEEP_ALIVE=15m"
+nssm set OllamaServe AppEnvironmentExtra "OLLAMA_MODELS=C:\activeset\ollama-models"
 nssm set OllamaServe Start SERVICE_AUTO_START
 nssm start OllamaServe
 
@@ -80,6 +80,11 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/pull' -Method Post -TimeoutSe
 
 `OLLAMA_MODELS` points outside the user profile so it does not matter which
 account runs the service. The 5.6 GB pull took about three minutes.
+
+Note there is deliberately no `OLLAMA_KEEP_ALIVE` here. It would be ignored:
+this app sends `keep_alive` in every request body, and the API parameter beats
+the server's environment. Set it on the *worker* service instead — see
+[Sharing the machine](#sharing-the-machine).
 
 **The worker service**, with NSSM rather than Task Scheduler because the
 `restart` and `update` commands exit the process and depend on being brought
@@ -104,6 +109,65 @@ Then `npm run worker doctor` should end in "Ready.", and
 not the 32B one** — the 3070 Ti sits at about 7.0 GB of 8 GB with
 `qwen2.5vl:7b` loaded, which leaves enough for Chrome. Only reach for
 `qwen2.5vl:32b` on a card with 20 GB or more.
+
+## Sharing the machine
+
+Goliath is also a desktop. The thing that makes it unusable while the worker
+is around is **not CPU — it is VRAM**: the vision model holds about 7 GB of
+the 8 GB card, and since driver 536.40 an over-subscribed card silently spills
+into system RAM rather than erroring, so the symptom is stutter rather than a
+clean failure.
+
+Pausing the worker does **not** give the card back. Pause stops it claiming
+jobs; the model stays resident until `keep_alive` expires. Three levers, in
+the order worth reaching for them:
+
+**1. "Free the GPU", in the worker panel.** Asks Ollama to unload whatever
+`/api/ps` reports as loaded, by requesting it with `keep_alive: 0`. Takes a
+second or two, needs no restart, and the next job reloads the model by itself.
+It works while the worker is paused, because commands are claimed before the
+paused check. `doctor` reports what is resident, so you can check from your
+phone before sitting down at the machine.
+
+**2. Shorten how long the model lingers.** The default is 15 minutes after the
+last image, which is right for a batch and wrong for a machine someone shares.
+`OLLAMA_KEEP_ALIVE` on the **worker** service — not `OllamaServe` — changes it:
+
+```powershell
+nssm set ActiveSetWorker AppEnvironmentExtra +OLLAMA_KEEP_ALIVE=2m
+nssm restart ActiveSetWorker
+```
+
+The `+` prefix matters. `AppEnvironmentExtra` is a single `REG_MULTI_SZ`, so
+the unprefixed form **replaces the whole block** and would drop
+`WORKER_EMIT_DIR`. `+KEY=VALUE` upserts one pair and leaves the rest alone;
+`-KEY` removes one. Keep it to one prefixed pair per call.
+
+Do not set this below about a minute: reloading a 6 GB model per image is the
+slowest thing this pipeline can do.
+
+**3. Make the CPU work polite.** One setting, no code, and Windows propagates
+it to `npm` → `node` → the headless Chrome the measuring job spawns:
+
+```powershell
+nssm set ActiveSetWorker AppPriority BELOW_NORMAL_PRIORITY_CLASS
+nssm restart ActiveSetWorker
+```
+
+This matters most for `image_budget`, which is the heaviest job on the box —
+one Chrome, every page at three viewports, then six images fetched and decoded
+at a time.
+
+Two things deliberately **not** done, so nobody re-derives them:
+
+- **CPU affinity pinning to the E-cores.** The 12600KF's efficiency cores are
+  conventionally logical CPUs 12–15, but that was never confirmed on this
+  machine, and pinning would slow `image_budget` a lot for a problem that is
+  not CPU-bound. `AppPriority` lets Windows' own scheduler place the work,
+  which on a hybrid CPU is what it is for.
+- **`OLLAMA_MAX_LOADED_MODELS=1`.** Near a no-op on an 8 GB card: the
+  scheduler already refuses to co-load a model that does not fit, and unloads
+  idle ones to make room. Keep-alive is the knob that holds the card.
 
 ## What it does
 
@@ -139,6 +203,7 @@ and offers:
 | Update | action | `git pull --ff-only`, `npm install`, restart. Refuses a dirty checkout. |
 | Run checks | action | Re-runs `doctor` and posts the report back into the panel. |
 | Clear cache | action | Forgets every cached alt-text judgement. |
+| Free the GPU | action | Unloads the vision model so the card is usable. Works while paused; the next job reloads it. |
 
 Settings and actions are deliberately different shapes. Pausing is a **state
 the machine converges on**, so pressing it twice is the same as pressing it

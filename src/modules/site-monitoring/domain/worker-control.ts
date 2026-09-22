@@ -24,9 +24,15 @@ export interface WorkerDesiredState {
 }
 
 /** One-shot things that cannot be expressed as state. */
-export type WorkerAction = 'restart' | 'update' | 'doctor' | 'clear_cache';
+export type WorkerAction = 'restart' | 'update' | 'doctor' | 'clear_cache' | 'release_gpu';
 
-export const WORKER_ACTIONS: readonly WorkerAction[] = ['restart', 'update', 'doctor', 'clear_cache'];
+export const WORKER_ACTIONS: readonly WorkerAction[] = [
+  'restart',
+  'update',
+  'doctor',
+  'clear_cache',
+  'release_gpu',
+];
 
 export function isWorkerAction(value: unknown): value is WorkerAction {
   return typeof value === 'string' && (WORKER_ACTIONS as readonly string[]).includes(value);
@@ -50,6 +56,11 @@ export const ACTION_LABEL: Record<WorkerAction, { label: string; detail: string;
     label: 'Clear cache',
     detail: 'Forget every cached alt-text judgement so the next run re-reads each image.',
     confirm: 'Cached judgements are re-generated at roughly ten seconds an image. Continue?',
+  },
+  release_gpu: {
+    label: 'Free the GPU',
+    detail:
+      'Unload the vision model so the graphics card is yours again. It reloads by itself on the next job.',
   },
 };
 

@@ -176,6 +176,26 @@ program.name('worker').description('Runs alt text and image measurement on this 
  * thing, and the `doctor` command sends this back to the app — so what the
  * team sees on a phone is what someone at the machine would see.
  */
+/**
+ * What the graphics card is holding right now.
+ *
+ * "The worker is idle" and "the card is free" are different questions — a
+ * model stays resident for `keep_alive` after the last image — and this is the
+ * one someone asks before sitting down at the machine.
+ */
+async function residentLine(): Promise<string> {
+  try {
+    const { listLoadedModels } = await import('@/lib/alt-text/ollama');
+    const loaded = await listLoadedModels();
+    if (loaded.length === 0) return 'GPU free — nothing loaded';
+    return `Loaded now: ${loaded
+      .map((model) => `${model.name} (${(model.vramBytes / 1024 ** 3).toFixed(1)} GB)`)
+      .join(', ')} — "Free the GPU" unloads it`;
+  } catch {
+    return '';
+  }
+}
+
 async function buildDoctorReport(): Promise<string> {
   const hardware = readHardware();
   const { host, model } = resolveOllama();
@@ -192,6 +212,8 @@ async function buildDoctorReport(): Promise<string> {
     `Model: ${model} (recommended ${recommendation.model} — ${recommendation.why})`,
     health.ok ? `Ollama ready at ${host}` : `Ollama: ${health.problem}`,
     health.models.length ? `Installed: ${health.models.join(', ')}` : '',
+    await residentLine(),
+    `Keep-alive: ${resolveOllama().keepAlive} after the last image`,
     browser ? `Browser: ${browser}` : 'No Chrome or Edge found',
     hasFirebaseAdminCredentials ? 'Firebase admin ready' : 'No Firebase admin credentials',
   ]
@@ -225,6 +247,9 @@ program
       health.ok ? `  ${green('Ollama ready')} ${dim(host)}` : `  ${red(health.problem ?? 'Ollama not ready')}`,
     );
     if (health.models.length) console.log(dim(`  installed: ${health.models.join(', ')}`));
+    const resident = await residentLine();
+    if (resident) console.log(`  ${resident.startsWith('GPU free') ? green(resident) : yellow(resident)}`);
+    console.log(dim(`  keep-alive: ${resolveOllama().keepAlive} after the last image`));
 
     console.log();
     console.log(bold('Browser'));

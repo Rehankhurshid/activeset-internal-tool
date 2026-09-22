@@ -14,9 +14,49 @@ export const DEFAULT_MODEL = 'qwen2.5vl:7b';
 export interface OllamaOptions {
   host?: string;
   model?: string;
-  /** How long the model stays resident between calls. Reloading a 6 GB model per image is the slowest thing you can do. */
+  /**
+   * How long the model stays resident between calls. Reloading a 6 GB model
+   * per image is the slowest thing you can do, so the default is generous;
+   * `OLLAMA_KEEP_ALIVE` shortens it on a machine somebody also wants to use.
+   */
   keepAlive?: string;
   timeoutMs?: number;
+}
+
+/** A model Ollama currently holds in memory, and what it is costing. */
+export interface LoadedModel {
+  name: string;
+  /** Bytes on the graphics card. Zero means it is resident in system RAM instead. */
+  vramBytes: number;
+}
+
+/**
+ * What Ollama is holding right now.
+ *
+ * Worth asking rather than assuming: a model stays resident for `keep_alive`
+ * after the last request, so "the worker is idle" and "the graphics card is
+ * free" are different questions.
+ */
+export async function listLoadedModels(options: OllamaOptions = {}): Promise<LoadedModel[]> {
+  const { host } = resolveOllama(options);
+  const res = await fetch(`${host}/api/ps`, { signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new OllamaError(`Ollama answered ${res.status} at ${host}`);
+  const body = (await res.json()) as { models?: { name?: string; size_vram?: number }[] };
+  return (body.models ?? [])
+    .filter((model): model is { name: string; size_vram?: number } => typeof model.name === 'string')
+    .map((model) => ({ name: model.name, vramBytes: model.size_vram ?? 0 }));
+}
+
+/** Ask Ollama to drop a model immediately, freeing whatever it held. */
+export async function unloadModel(name: string, options: OllamaOptions = {}): Promise<void> {
+  const { host } = resolveOllama(options);
+  const res = await fetch(`${host}/api/generate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model: name, keep_alive: 0 }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) throw new OllamaError(`Ollama refused to unload ${name} (${res.status})`);
 }
 
 export class OllamaError extends Error {
@@ -33,7 +73,11 @@ export function resolveOllama(options: OllamaOptions = {}) {
   return {
     host: (options.host || process.env.OLLAMA_HOST || DEFAULT_HOST).replace(/\/$/, ''),
     model: options.model || process.env.OLLAMA_ALT_MODEL || process.env.OLLAMA_MODEL || DEFAULT_MODEL,
-    keepAlive: options.keepAlive || '15m',
+    // Configurable, because it decides how long ~7 GB of an 8 GB card stays
+    // occupied after the last image. It is sent in the request body, and the
+    // API parameter beats the server's own OLLAMA_KEEP_ALIVE — so setting that
+    // on the Ollama service does nothing for us. Read it here or it is unreachable.
+    keepAlive: options.keepAlive || process.env.OLLAMA_KEEP_ALIVE || '15m',
     timeoutMs: options.timeoutMs ?? 180_000,
   };
 }

@@ -107,6 +107,47 @@ async function run(command: string, args: string[], cwd: string): Promise<string
 }
 
 /**
+ * Hand the graphics card back.
+ *
+ * Pausing the worker stops it claiming jobs, but the vision model stays
+ * resident — `qwen2.5vl:7b` is about 7 GB of an 8 GB card — so the machine is
+ * still unusable for anything else that wants the GPU. Ollama unloads a model
+ * when it is asked for with `keep_alive: 0`, so that is what this does, for
+ * whatever `/api/ps` says is currently loaded rather than for a model name we
+ * assume. Nothing is lost: the next job reloads it in a few seconds.
+ */
+async function releaseGpu(): Promise<{ ok: boolean; output: string }> {
+  const { listLoadedModels, unloadModel, resolveOllama } = await import('@/lib/alt-text/ollama');
+  const { host } = resolveOllama();
+
+  let loaded;
+  try {
+    loaded = await listLoadedModels();
+  } catch (error) {
+    return {
+      ok: false,
+      output: `Could not reach Ollama at ${host} — it may already be stopped. ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+
+  if (loaded.length === 0) return { ok: true, output: 'Nothing was loaded. The card is already free.' };
+
+  const freed: string[] = [];
+  for (const model of loaded) {
+    try {
+      await unloadModel(model.name);
+      freed.push(`${model.name} (${(model.vramBytes / 1024 ** 3).toFixed(1)} GB)`);
+    } catch (error) {
+      freed.push(`${model.name} — ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return { ok: true, output: `Unloaded ${freed.join(', ')}. The next job reloads it automatically.` };
+}
+
+/**
  * Do one named thing.
  *
  * `update` deliberately refuses a dirty tree: pulling over someone's
@@ -122,6 +163,10 @@ export async function performCommand(command: WorkerCommand, context: CommandCon
     case 'restart': {
       context.requestExit(`restart requested by ${command.requestedBy}`);
       return { ok: true, output: 'Restarting. The service manager brings it back within a few seconds.' };
+    }
+
+    case 'release_gpu': {
+      return releaseGpu();
     }
 
     case 'clear_cache': {
