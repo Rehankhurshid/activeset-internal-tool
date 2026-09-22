@@ -33,6 +33,11 @@ export interface UseCmsImagesReturn {
    * another's, and without reading every collection on the site up front.
    */
   loadCollectionImages: (collectionId: string) => Promise<CmsImageEntry[]>;
+  /**
+   * What each image in a collection looks like on the published site, by CMS
+   * image entry id. Read from Webflow's CDN, so up to five minutes old.
+   */
+  loadPublished: (collectionId: string) => Promise<Record<string, { alt: string; url: string }>>;
 
   // Reading only. Drafting, compressing and saving used to live here too, each
   // calling a route that wrote from the browser (one of them to Ollama on
@@ -234,6 +239,19 @@ export function useCmsImages(
     [canCall, projectId],
   );
 
+  const loadPublished = useCallback(
+    async (collectionId: string): Promise<Record<string, { alt: string; url: string }>> => {
+      if (!canCall || !projectId) return {};
+      const url = new URL('/api/webflow/cms/live', window.location.origin);
+      url.searchParams.set('collectionId', collectionId);
+      const res = await fetchForProject(projectId, url.toString());
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || 'Failed to read published items');
+      return result.data.entries;
+    },
+    [canCall, projectId],
+  );
+
   const fetchAllImages = useCallback(async (collectionIds: string[]) => {
     if (!canCall || !projectId) return;
 
@@ -306,6 +324,7 @@ export function useCmsImages(
     fetchImages,
     fetchAllImages,
     loadCollectionImages,
+    loadPublished,
     error,
     clearError,
     reset,

@@ -225,6 +225,17 @@ write "Numaan Ashraf, Headshot", because the field's name went in as the
 image's title attribute. A portrait naming anyone else, or no one, is still
 held.
 
+**Staged versus published.** Everything this tool writes to the CMS is staged;
+nothing is live until someone publishes. Each CMS row reads the published
+value from Webflow's Content Delivery API (`/api/webflow/cms/live`, via
+`api-cdn.webflow.com`) and says **Live**, **Not published yet** (hover for what
+visitors still see), or **Item not published**. The CDN is the right tool here
+and the wrong one for the work itself: it serves published items only, cached
+up to five minutes, and costs nothing against the rate limit when cached — so
+it would read stale values back after every write, but is ideal for "what do
+visitors see". Built after a wrong name was saved and then published from
+Webflow with nothing on the screen saying so.
+
 **The image index — nothing is done twice.** `projects/{id}/image_index`
 records, per image, what happened to its bytes (optimised, already optimal,
 copy ready for Designer, failed — at what width, what replaced it, what it

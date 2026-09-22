@@ -198,12 +198,20 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
   // Each collection's images, keyed by collection, filled in as they arrive so
   // the counts appear section by section rather than all at the end.
   const [cmsRows, setCmsRows] = useState<Record<string, ImageRow[]>>({});
+  /** What each collection's images look like on the published site, by entry id. */
+  const [published, setPublished] = useState<Record<string, Published>>({});
 
   const loadCollection = useCallback(
     async (collectionId: string) => {
       try {
         const rows = toRows(await cms.loadCollectionImages(collectionId));
         setCmsRows((previous) => ({ ...previous, [collectionId]: rows }));
+        // One cached request per collection, free of the rate limit. A failure
+        // here only means rows show no published state.
+        cms
+          .loadPublished(collectionId)
+          .then((entries) => setPublished((previous) => ({ ...previous, [collectionId]: entries })))
+          .catch(() => undefined);
       } catch {
         toast.error('Could not load one of the CMS collections');
       }
@@ -380,7 +388,13 @@ export function WebflowImagesDashboard({ projectId, projectName, userEmail, webf
 
       <CardContent className="p-0">
         {groups.map((group) => (
-          <GroupSection key={group.key} group={group} library={library} publish={publish} />
+          <GroupSection
+            key={group.key}
+            group={group}
+            library={library}
+            publish={publish}
+            published={group.isCms ? published[group.key] : undefined}
+          />
         ))}
       </CardContent>
     </Card>
@@ -391,10 +405,13 @@ function GroupSection({
   group,
   library,
   publish,
+  published,
 }: {
   group: GroupRow;
   library: LibraryOptimise;
   publish: boolean;
+  /** Undefined until read, or for general assets, which have no staged copy. */
+  published?: Published;
 }) {
   const [open, setOpen] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -616,6 +633,7 @@ function GroupSection({
                       working={current?.fingerprint === row.fingerprint ? current.phase : undefined}
                       picked={picked.has(row.fingerprint)}
                       onPick={(on) => togglePick(row.fingerprint, on)}
+                      published={published}
                     />
                   ))}
                 </ul>
@@ -632,6 +650,36 @@ function GroupSection({
         </div>
       )}
     </section>
+  );
+}
+
+type Published = Record<string, { alt: string; url: string }>;
+
+/** Whether the staged ALT and image are what the published site shows. */
+function LiveBadge({ state, live }: { state: 'live' | 'pending' | 'never'; live?: { alt: string; url: string } }) {
+  const lag = 'Published state is read from Webflow’s CDN and can be up to five minutes old.';
+  if (state === 'live') {
+    return (
+      <span className="flex shrink-0 items-center gap-1 text-[10px] text-green-600 dark:text-green-400" title={lag}>
+        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+        Live
+      </span>
+    );
+  }
+  if (state === 'pending') {
+    return (
+      <span
+        className="shrink-0 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+        title={`The published site still shows ${live?.alt ? `“${live.alt}”` : 'no ALT'}. Publish to put this live. ${lag}`}
+      >
+        Not published yet
+      </span>
+    );
+  }
+  return (
+    <span className="shrink-0 text-[10px] text-muted-foreground" title={`This CMS item has never been published. ${lag}`}>
+      Item not published
+    </span>
   );
 }
 
@@ -682,6 +730,7 @@ function ImageLine({
   working,
   picked,
   onPick,
+  published,
 }: {
   row: ImageRow;
   library: LibraryOptimise;
@@ -690,6 +739,7 @@ function ImageLine({
   working?: Phase;
   picked: boolean;
   onPick: (on: boolean) => void;
+  published?: Published;
 }) {
   const draft = library.draftFor(row.src);
   const indexed = library.indexFor(row.src);
@@ -725,6 +775,19 @@ function ImageLine({
   const changed =
     text.trim() !== (saved ?? row.currentAlt).trim() && (value !== null || (needsLook && saved === null));
 
+  // Staged against published. Everything this tool writes is staged, so a
+  // saved ALT is not on the site until someone publishes — and a wrong one
+  // that gets published should be visible here, not discovered by a visitor.
+  const staged = (saved ?? row.currentAlt).trim();
+  const live = published ? published[row.id] : undefined;
+  const liveState = !published
+    ? undefined
+    : !live
+      ? 'never'
+      : live.alt.trim() === staged && imageFingerprint(live.url) === row.fingerprint
+        ? 'live'
+        : 'pending';
+
   return (
     <li
       data-fingerprint={row.fingerprint}
@@ -752,6 +815,7 @@ function ImageLine({
           <span className="truncate font-medium">{row.title}</span>
           {row.subtitle && <span className="truncate text-muted-foreground">{row.subtitle}</span>}
           {done && <DoneBadge done={done} />}
+          {liveState && (staged || live?.alt) && <LiveBadge state={liveState} live={live} />}
           {working ? (
             <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-primary">
               <Loader2 className="h-3 w-3 animate-spin" />
