@@ -109,6 +109,11 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
     const [editingLinkId, setEditingLinkId] = React.useState<string | null>(null);
     const [isExpanded, setIsExpanded] = React.useState(false);
+    // A saved logo URL that no longer loads (e.g. a favicon the site has since
+    // moved) shows the initial instead of a broken image. Keyed by URL, so saving
+    // a new logo tries again.
+    const [failedLogoUrl, setFailedLogoUrl] = React.useState<string | null>(null);
+    const showLogo = !!project.logoUrl && project.logoUrl !== failedLogoUrl;
 
     const status: ProjectStatus = project.status || 'current';
     const tags: ProjectTag[] = project.tags || [];
@@ -229,11 +234,11 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
             >
                 {/* Row 1 — identity */}
                 <div className="flex items-start justify-between gap-2 p-3 pb-2 sm:p-4 sm:pb-2">
-                    <Link
-                        href={`/modules/project-links/${project.id}`}
-                        aria-label={`Open ${project.name}`}
-                        className="group/header flex min-w-0 flex-1 items-start gap-3 overflow-hidden"
-                    >
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                        {/* The logo sits beside the header Link, never inside it. Inside, it
+                            needed preventDefault() to stop the Link navigating, and Radix skips
+                            opening a popover whose trigger click is defaultPrevented, so the
+                            picker could never open. */}
                         <ProjectLogoDialog
                             projectId={project.id}
                             currentLogoUrl={project.logoUrl}
@@ -242,13 +247,6 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
                                 <button
                                     type="button"
                                     aria-label={`Set logo for ${project.name}`}
-                                    onClick={(e) => {
-                                        // Nested inside the header Link — stop this click from also
-                                        // triggering navigation while the logo popover still opens
-                                        // (Radix composes its own trigger onClick after this one).
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                    }}
                                     className={cn(
                                         "flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-sm font-bold transition-colors sm:h-10 sm:w-10",
                                         "shadow-sm border cursor-pointer hover:ring-2 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -257,7 +255,7 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
                                             : "bg-muted text-muted-foreground border-border/30"
                                     )}
                                 >
-                                    {project.logoUrl ? (
+                                    {showLogo ? (
                                         // Logos come from arbitrary hosts (auto-fetched favicons, storage), so
                                         // next/image would need a remotePattern per host.
                                         // eslint-disable-next-line @next/next/no-img-element
@@ -267,6 +265,7 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
                                             className="w-full h-full object-cover"
                                             loading="lazy"
                                             decoding="async"
+                                            onError={() => setFailedLogoUrl(project.logoUrl ?? null)}
                                         />
                                     ) : (
                                         project.name.charAt(0).toUpperCase()
@@ -275,21 +274,27 @@ function ProjectCardComponent({ project, onDelete }: ProjectCardProps) {
                             }
                         />
 
-                        <div className="min-w-0 flex flex-col gap-1">
-                            <h3 className={cn(
-                                "font-semibold text-base leading-tight truncate transition-colors",
-                                isCurrent
-                                    ? "text-foreground group-hover/header:text-primary"
-                                    : "text-muted-foreground group-hover/header:text-foreground"
-                            )}>
-                                {project.name}
-                            </h3>
-                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Circle className={cn("h-2 w-2 fill-current", statusStyles.dot)} />
-                                {PROJECT_STATUS_LABELS[status]}
-                            </span>
-                        </div>
-                    </Link>
+                        <Link
+                            href={`/modules/project-links/${project.id}`}
+                            aria-label={`Open ${project.name}`}
+                            className="group/header flex min-w-0 flex-1 items-start overflow-hidden"
+                        >
+                            <div className="min-w-0 flex flex-col gap-1">
+                                <h3 className={cn(
+                                    "font-semibold text-base leading-tight truncate transition-colors",
+                                    isCurrent
+                                        ? "text-foreground group-hover/header:text-primary"
+                                        : "text-muted-foreground group-hover/header:text-foreground"
+                                )}>
+                                    {project.name}
+                                </h3>
+                                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <Circle className={cn("h-2 w-2 fill-current", statusStyles.dot)} />
+                                    {PROJECT_STATUS_LABELS[status]}
+                                </span>
+                            </div>
+                        </Link>
+                    </div>
 
                     {/* Dropdown menu */}
                     <DropdownMenu>
