@@ -3,18 +3,23 @@
 import { useMemo, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import type { Project, ProjectTimeline, Task } from '@/types';
+import type { Project, ProjectChecklist, ProjectTimeline, Task } from '@/types';
 import { cn } from '@/lib/utils';
+import { legacyClientPlan, normalizeClientPlan, resolveClientPlan } from '../../domain/client-plan';
+import { normalizeClientStatus } from '../../domain/client-portal.types';
 import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
+import { ClientNowEditor } from '../components/ClientNowEditor';
+import { ClientPlanEditor } from '../components/ClientPlanEditor';
 import { ClientStatusChip } from '../components/ClientStatusChip';
-import { ClientStatusEditor } from '../components/ClientStatusEditor';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalLinkCard } from '../components/PortalLinkCard';
-import { PortalVisibilityLists } from '../components/PortalVisibilityLists';
 
 interface ClientPanelProps {
   project: Project;
+  /** Read only to show what an old portal still publishes before a plan is saved. */
   timeline: ProjectTimeline | null;
+  /** The checklist the tracker follows. Already subscribed by the project screen. */
+  checklists?: ProjectChecklist[];
   userEmail: string;
   /** Reserved for admin-only controls (client contacts / per-contact links) in the next phase. */
   isAdmin: boolean;
@@ -92,92 +97,118 @@ function PublishedAsks({ tasks }: { tasks: Task[] }) {
 }
 
 /**
- * Internal "Client" tab: the portal link, what the client is told, what they
- * can see, what they have written back, and how the page is branded.
- * Everything reads from the live project doc the detail screen already
- * subscribes to.
+ * The Client tab: the link to send, where the project is, and the plan the
+ * client sees. Everything reads from the live project doc and checklist the
+ * detail screen already subscribes to, and every change reaches the client's
+ * page on their next visit.
  */
 export function ClientPanel(props: ClientPanelProps) {
-  const { project, timeline, userEmail, tasks } = props;
+  const { project, timeline, userEmail, tasks, checklists = [] } = props;
   const [link, setLink] = useState<PortalLinkState | null>(null);
   const enabled = link ? link.enabled : project.clientPortal?.enabled === true;
+  const facing = project.clientFacing;
+  const status = normalizeClientStatus(facing?.status);
+
+  const plan = useMemo(() => (project.clientPlan ? normalizeClientPlan(project.clientPlan) : null), [project.clientPlan]);
+  // Until a plan is saved, an old portal keeps publishing its timeline and link switches.
+  const legacy = useMemo(
+    () => (plan ? null : legacyClientPlan({ timeline, links: project.links, currentPhaseId: facing?.currentPhaseId })),
+    [plan, timeline, project.links, facing?.currentPhaseId],
+  );
+  const resolved = useMemo(() => {
+    const shown = plan ?? legacy?.plan;
+    if (!shown) return null;
+    return resolveClientPlan(shown, checklists, {
+      currentStageId: plan ? facing?.currentStageId : legacy?.currentStageId,
+      status,
+    });
+  }, [plan, legacy, checklists, facing?.currentStageId, status]);
+  const following = useMemo(() => (plan ? resolveClientPlan(plan, checklists) : null), [plan, checklists]);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-base font-semibold">Client portal</h2>
+        <h2 className="text-base font-semibold">Client dashboard</h2>
         <ClientStatusChip project={project} size="md" />
         {!enabled && (
-          <span className="text-xs text-muted-foreground">Off — the client cannot see anything until the portal is enabled.</span>
+          <span className="text-xs text-muted-foreground">Off: the client can&apos;t open anything until the link is on.</span>
         )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="space-y-4">
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Link to send</SectionTitle>
+            <CardDescription className="text-xs">
+              A private page, no sign-in: where the project is, what they get and when, and the files.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PortalLinkCard projectId={project.id} project={project} onStateChange={setLink} />
+          </CardContent>
+        </Card>
+
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Now</SectionTitle>
+            <CardDescription className="text-xs">Where the project is, in the client&apos;s words.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ClientNowEditor
+              project={project}
+              stages={plan ? plan.stages : null}
+              resolved={resolved}
+              following={following}
+              userEmail={userEmail}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="gap-3">
+        <CardHeader>
+          <SectionTitle>Plan: what they get, and when</SectionTitle>
+          <CardDescription className="text-xs">
+            Stages with dates, what the client gets in each, and the files that go with them. Ticking the checklist moves
+            the tracker; you can also move it by hand above.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ClientPlanEditor
+            project={project}
+            plan={plan}
+            legacy={legacy}
+            resolved={resolved}
+            checklists={checklists}
+            userEmail={userEmail}
+          />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {tasks && (
           <Card className="gap-3">
             <CardHeader>
-              <SectionTitle>Portal link</SectionTitle>
+              <SectionTitle>What we need from them</SectionTitle>
               <CardDescription className="text-xs">
-                A private, sign-in-free page showing status, plan and deliverables.
+                Every open task marked “Needs client input”, titled exactly as the client reads it.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <PortalLinkCard projectId={project.id} project={project} onStateChange={setLink} />
+              <PublishedAsks tasks={tasks} />
             </CardContent>
           </Card>
+        )}
 
-          <Card className="gap-3">
-            <CardHeader>
-              <SectionTitle>Status the client sees</SectionTitle>
-              <CardDescription className="text-xs">
-                Saving or “Mark updated” refreshes the freshness stamp on the portal.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ClientStatusEditor project={project} phases={timeline?.phases ?? []} userEmail={userEmail} />
-            </CardContent>
-          </Card>
-
-        </div>
-
-        <div className="space-y-4">
-          <Card className="gap-3">
-            <CardHeader>
-              <SectionTitle>What the client can see</SectionTitle>
-              <CardDescription className="text-xs">
-                Only switched-on milestones (title, dates, status) and links reach the portal.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <PortalVisibilityLists projectId={project.id} timeline={timeline} links={project.links} />
-            </CardContent>
-          </Card>
-
-          {tasks && (
-            <Card className="gap-3">
-              <CardHeader>
-                <SectionTitle>What the client is being asked</SectionTitle>
-                <CardDescription className="text-xs">
-                  Every not-done task flagged “Needs client input” is published — there is no switch. The task title
-                  is what the client reads, word for word.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <PublishedAsks tasks={tasks} />
-              </CardContent>
-            </Card>
-          )}
-
-          <Card className="gap-3">
-            <CardHeader>
-              <SectionTitle>Branding</SectionTitle>
-              <CardDescription className="text-xs">Header copy on the portal page.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <PortalBrandingFields project={project} />
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Page header</SectionTitle>
+            <CardDescription className="text-xs">The name and welcome line at the top of their page.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <PortalBrandingFields project={project} />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

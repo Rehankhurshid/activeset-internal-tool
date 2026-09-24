@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ChevronDown, Eye } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
     Table,
@@ -12,11 +12,6 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
 import type {
     ProjectTimeline,
     TimelineItemStatus,
@@ -96,7 +91,6 @@ export function TimelineList({
                                         aria-hidden="true"
                                     />
                                     <span className="truncate">{milestone.title}</span>
-                                    {milestone.clientVisible === true && <ClientVisibleGlyph />}
                                 </div>
                             </TableCell>
                             <TableCell>
@@ -151,27 +145,6 @@ export function TimelineList({
                 </TableBody>
             </Table>
         </div>
-    );
-}
-
-/** Small eye glyph marking a milestone that is shown on the client portal. */
-export function ClientVisibleGlyph({ className }: { className?: string }) {
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <span
-                    role="img"
-                    aria-label="Visible to client"
-                    className={cn(
-                        'inline-flex shrink-0 items-center text-muted-foreground',
-                        className
-                    )}
-                >
-                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">Visible to client</TooltipContent>
-        </Tooltip>
     );
 }
 

@@ -23,8 +23,6 @@ import { ClientUpdatesBanner } from '@/components/projects/ClientUpdatesBanner';
 import { isPortalStale, normalizeClientStatus } from '@/modules/client-portal';
 import { todayIso } from '@/lib/review-status';
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from '@/components/ui/input';
-import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -32,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { AppNavigation } from '@/shared/ui';
 import { toast } from 'sonner';
 import { DashboardToolbar, type StatusFilter } from '@/modules/project-links/ui/components/DashboardToolbar';
+import { NewProjectDialog } from '@/modules/project-links/ui/components/NewProjectDialog';
 import { useListNavigation, useShortcut } from '@/shared/keyboard';
 
 const MAINTENANCE_TAGS: ProjectTag[] = ['retainer', 'maintenance', 'subscription'];
@@ -62,18 +61,25 @@ export function ProjectLinksDashboardScreen() {
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isCreating, setIsCreating] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [groupByClient, setGroupByClient] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('maintenance');
   const [activeTags, setActiveTags] = useState<ProjectTag[]>([]);
-  const { isLoading: isCreatingProject, execute: executeCreateProject } = useAsyncOperation<string>();
   const router = useRouter();
+  // Client names already in use, suggested by the New project dialog so one
+  // client's projects group together under one spelling.
+  const clientNames = useMemo(
+    () =>
+      Array.from(new Set(projects.map((p) => p.client?.trim()).filter((c): c is string => Boolean(c)))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [projects],
+  );
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // `?new=1` (the command palette's "New project") opens the create form straight away.
+  // `?new=1` (the command palette's "New project") opens the New project dialog straight away.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('new') === '1') setIsCreating(true);
   }, []);
@@ -91,26 +97,20 @@ export function ProjectLinksDashboardScreen() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleCreateProject = async () => {
-    if (!user || !newProjectName.trim()) return;
-
-    const trimmedName = newProjectName.trim();
-    const projectId = await executeCreateProject(async () => {
-      return await projectLinksRepository.createProject(user.uid, trimmedName);
+  // Called once the New project dialog has created the project (and its
+  // checklist and plan, when chosen).
+  const handleProjectCreated = (projectId: string, name: string) => {
+    // A new project may have no tags, so the default 'maintenance' filter
+    // would hide it. Switch to 'all' and clear tag chips so the user actually
+    // sees the project they just created.
+    setStatusFilter('all');
+    setActiveTags([]);
+    toast.success(`Project "${name}" created`, {
+      action: {
+        label: 'Open',
+        onClick: () => router.push(`/modules/project-links/${projectId}?tab=client`),
+      },
     });
-
-    if (projectId) {
-      setNewProjectName('');
-      setIsCreating(false);
-      // New projects start with no tags, so the default 'maintenance' filter
-      // would hide them. Switch to 'all' and clear tag chips so the user
-      // actually sees the project they just created.
-      setStatusFilter('all');
-      setActiveTags([]);
-      toast.success(`Project "${trimmedName}" created`);
-    } else {
-      toast.error('Failed to create project. See console for details.');
-    }
   };
 
   const handleDeleteProject = useCallback((projectId: string) => {
@@ -198,33 +198,25 @@ export function ProjectLinksDashboardScreen() {
     () => (groupByClient ? groupedProjects.flatMap((g) => g.projects) : filteredProjects),
     [groupByClient, groupedProjects, filteredProjects],
   );
+  // The dashboard's single keys pause while the New project dialog is open:
+  // otherwise Enter on its Create button would open whichever card was last
+  // hovered, and "c" or "v" would rearrange the page behind it.
+  const dashboardKeys = !isCreating;
   const { index: focusedIndex, itemProps } = useListNavigation({
     count: navProjects.length,
     onSelect: (i) => {
       const p = navProjects[i];
       if (p) router.push(`/modules/project-links/${p.id}`);
     },
+    enabled: dashboardKeys,
     group: 'Projects',
     selectLabel: 'Open project',
     hint: true,
   });
-  useShortcut({ id: 'projects-new', keys: 'n', label: 'New project', group: 'Projects', hint: true, handler: () => setIsCreating(true) });
-  useShortcut({ id: 'projects-search', keys: '/', label: 'Search projects', group: 'Projects', handler: () => searchInputRef.current?.focus() });
-  useShortcut({ id: 'projects-view', keys: 'v', label: 'Toggle grid / list', group: 'Projects', handler: () => setViewMode((m) => (m === 'grid' ? 'list' : 'grid')) });
-  useShortcut({ id: 'projects-group', keys: 'c', label: 'Group by client', group: 'Projects', handler: () => setGroupByClient((g) => !g) });
-  useShortcut({
-    id: 'projects-cancel',
-    keys: 'escape',
-    label: 'Cancel new project',
-    group: 'Projects',
-    hidden: true,
-    enabled: isCreating,
-    allowInInput: true,
-    handler: () => {
-      setIsCreating(false);
-      setNewProjectName('');
-    },
-  });
+  useShortcut({ id: 'projects-new', keys: 'n', label: 'New project', group: 'Projects', hint: true, enabled: dashboardKeys, handler: () => setIsCreating(true) });
+  useShortcut({ id: 'projects-search', keys: '/', label: 'Search projects', group: 'Projects', enabled: dashboardKeys, handler: () => searchInputRef.current?.focus() });
+  useShortcut({ id: 'projects-view', keys: 'v', label: 'Toggle grid / list', group: 'Projects', enabled: dashboardKeys, handler: () => setViewMode((m) => (m === 'grid' ? 'list' : 'grid')) });
+  useShortcut({ id: 'projects-group', keys: 'c', label: 'Group by client', group: 'Projects', enabled: dashboardKeys, handler: () => setGroupByClient((g) => !g) });
 
   const renderCard = (project: Project) => {
     const i = navProjects.indexOf(project);
@@ -392,43 +384,14 @@ export function ProjectLinksDashboardScreen() {
                 onNewProject={() => setIsCreating(true)}
               />
 
-              {/* Create Project Form */}
-              {isCreating && (
-                <Card className="mt-4">
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                      <Input
-                        placeholder="Enter project name..."
-                        value={newProjectName}
-                        onChange={(e) => setNewProjectName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()}
-                        autoFocus
-                        className="h-11 flex-1 sm:h-9"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={handleCreateProject}
-                          disabled={!newProjectName.trim() || isCreatingProject}
-                          className="h-11 flex-1 sm:h-9 sm:flex-none"
-                        >
-                          {isCreatingProject ? 'Creating...' : 'Create'}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setIsCreating(false);
-                            setNewProjectName('');
-                          }}
-                          disabled={isCreatingProject}
-                          className="h-11 flex-1 sm:h-9 sm:flex-none"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              <NewProjectDialog
+                open={isCreating}
+                onOpenChange={setIsCreating}
+                userId={user?.uid ?? ''}
+                userEmail={user?.email ?? ''}
+                clients={clientNames}
+                onCreated={handleProjectCreated}
+              />
             </div>
 
             {/* Daily review banner — only renders when there are current projects */}

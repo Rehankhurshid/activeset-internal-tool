@@ -71,6 +71,14 @@ export function formatDateRange(startIso: string, endIso: string, now: Date): st
   return `${start.day} ${monthName(start)} ${start.year} – ${end.day} ${monthName(end)} ${end.year}`;
 }
 
+/** A stage's dates: "10–18 Sep", "Due 18 Sep" or "From 10 Sep"; empty when it has none. */
+export function formatStageDates(startIso: string | undefined, dueIso: string | undefined, now: Date): string {
+  if (startIso && dueIso) return formatDateRange(startIso, dueIso, now);
+  if (dueIso) return `Due ${formatDay(dueIso, now)}`;
+  if (startIso) return `From ${formatDay(startIso, now)}`;
+  return '';
+}
+
 /** Whole UTC calendar days from `iso` to `now`; null when `iso` is missing or malformed. */
 export function daysAgo(iso: string | null | undefined, now: Date): number | null {
   const parts = parseIsoDay(iso);

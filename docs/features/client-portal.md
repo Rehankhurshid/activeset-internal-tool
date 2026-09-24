@@ -1,5 +1,7 @@
 # Client Portal
 
+> **Changed since this was written:** the page is now a plan-based client dashboard. What the client sees comes from `projects/{id}.clientPlan` (stages with dates, what they get, and files per stage), drafted from the project's checklist when the project is created and tracked live by that checklist. The timeline milestone and link visibility switches described below are gone. See [docs/modules/client-portal.md](../modules/client-portal.md) for the current behaviour.
+
 A private, branded page per project that a client can open from a link, plus the
 internal **Client** tab and dashboard signals the team uses to run it. This is the
 "client inclusion" layer: the client sees where the project is, what is next and

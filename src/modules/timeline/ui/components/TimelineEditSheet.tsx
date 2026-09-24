@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import {
     Select,
     SelectContent,
@@ -341,23 +340,6 @@ export function TimelineEditSheet({
                             />
                         </div>
 
-                        {/* Client visibility */}
-                        <div className="flex items-start justify-between gap-4 rounded-lg border px-3 py-2.5">
-                            <div className="space-y-0.5">
-                                <Label htmlFor="ms-client-visible">Visible to client</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Shows the title, dates and status on the client portal. Notes and assignee stay internal.
-                                </p>
-                            </div>
-                            <Switch
-                                id="ms-client-visible"
-                                checked={draft.clientVisible ?? false}
-                                onCheckedChange={(v) =>
-                                    setDraft({ ...draft, clientVisible: Boolean(v) })
-                                }
-                                className="mt-0.5"
-                            />
-                        </div>
                     </div>
 
                     {/* Footer */}

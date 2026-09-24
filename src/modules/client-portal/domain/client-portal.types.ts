@@ -1,10 +1,13 @@
-import type { ClientStatus } from '@/types';
-
 export type {
   ClientFacingState,
+  ClientPlan,
+  ClientPlanFile,
+  ClientPlanStage,
   ClientPortalSettings,
+  ClientStageKind,
   ClientStatus,
 } from '@/types';
+import type { ClientStatus } from '@/types';
 export {
   CLIENT_STATUSES,
   CLIENT_STATUS_LABELS,
@@ -12,42 +15,41 @@ export {
   normalizeClientStatus,
 } from '@/types';
 
-/** Milestone wording on the portal: never "Not Started" / "Blocked". */
-export type PortalMilestoneStatus = 'upcoming' | 'in_progress' | 'done' | 'on_hold';
+/** A file or link on the client's dashboard. */
+export interface PortalFileView {
+  id: string;
+  title: string;
+  /** Always http(s). */
+  url: string;
+}
 
-export const PORTAL_MILESTONE_LABELS: Record<PortalMilestoneStatus, string> = {
-  upcoming: 'Upcoming',
-  in_progress: 'In progress',
+export type PortalStageState = 'done' | 'current' | 'upcoming';
+
+/** Client wording for a stage's state. */
+export const PORTAL_STAGE_LABELS: Record<PortalStageState, string> = {
   done: 'Done',
-  on_hold: 'On hold',
+  current: 'Now',
+  upcoming: 'Coming up',
 };
 
-export interface PortalMilestoneView {
+/** One stage of the plan, as the client sees it. */
+export interface PortalStageView {
   id: string;
   title: string;
-  status: PortalMilestoneStatus;
+  state: PortalStageState;
   /** ISO YYYY-MM-DD */
-  startDate: string;
-  /** ISO YYYY-MM-DD (inclusive) */
-  endDate: string;
-}
-
-export interface PortalPhaseView {
-  id: string;
-  title: string;
-  order: number;
-  isCurrent: boolean;
-  /** Only milestones flagged `clientVisible`. May be empty. */
-  milestones: PortalMilestoneView[];
-  /** Synthetic "Other" group for visible milestones with no (or a deleted)
-   *  phase. Never part of the stepper or the phase count. */
-  ungrouped?: boolean;
-}
-
-export interface PortalDeliverableView {
-  id: string;
-  title: string;
-  url: string;
+  startDate?: string;
+  /** ISO YYYY-MM-DD: when the stage is due to finish. */
+  dueDate?: string;
+  /** What the client gets in this stage. */
+  deliverables: string[];
+  files: PortalFileView[];
+  /**
+   * How far through the stage we are, 0–100. Only on the current stage, and
+   * only when the checklist tracks it. The steps behind the number never leave
+   * the building; the number does.
+   */
+  percent?: number;
 }
 
 /** "What we need from you" row. Title and due date only — never descriptions. */
@@ -56,7 +58,6 @@ export interface PortalAskView {
   title: string;
   dueDate?: string;
 }
-
 
 /**
  * The ONLY payload the client portal page receives. Built by
@@ -78,13 +79,17 @@ export interface ClientPortalView {
   /** Portal wording for `status`. */
   statusLabel: string;
   statusNote?: string;
-  currentPhase?: { id: string; title: string; index: number; total: number };
-  nextMilestone?: PortalMilestoneView;
-  progress: { done: number; total: number };
-  /** ISO timestamp of the team's last "Mark updated" / status edit. */
+  /**
+   * ISO timestamp of the latest thing that moved the dashboard: the team's
+   * status note, a plan edit, or a tick on the checklist behind the tracker.
+   */
   lastUpdateAt?: string;
-  phases: PortalPhaseView[];
-  deliverables: PortalDeliverableView[];
+  /** The plan, in order. Empty until the team has one. */
+  stages: PortalStageView[];
+  /** Index into `stages`. Absent when every stage is done, or there are none. */
+  currentStageIndex?: number;
+  /** Files for the whole project rather than one stage. */
+  files: PortalFileView[];
   asks: PortalAskView[];
   /**
    * The stage waiting on the client's approval, when there is one.
@@ -120,12 +125,10 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'status',
   'statusLabel',
   'statusNote',
-  'currentPhase',
-  'nextMilestone',
-  'progress',
   'lastUpdateAt',
-  'phases',
-  'deliverables',
+  'stages',
+  'currentStageIndex',
+  'files',
   'asks',
   'review',
   'generatedAt',

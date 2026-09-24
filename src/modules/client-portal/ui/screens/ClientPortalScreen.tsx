@@ -1,11 +1,11 @@
 import type { ClientPortalView } from '../../domain/client-portal.types';
 import { PortalAsks } from '../components/PortalAsks';
-import { PortalDeliverables } from '../components/PortalDeliverables';
+import { PortalFiles } from '../components/PortalFiles';
 import { PortalFooter } from '../components/PortalFooter';
 import { PortalHeader } from '../components/PortalHeader';
-import { PortalPlan } from '../components/PortalPlan';
+import { PortalNowCard } from '../components/PortalNowCard';
 import { PortalReview } from '../components/PortalReview';
-import { PortalStatusCard } from '../components/PortalStatusCard';
+import { PortalStages } from '../components/PortalStages';
 import { TrackPortalView } from '../components/TrackPortalView';
 
 interface ClientPortalScreenProps {
@@ -21,10 +21,13 @@ function resolveNow(generatedAt: string): Date {
 }
 
 /**
- * The client-facing project page. Server-safe (no hooks); only the reply form
- * and the view beacon are client components. Everything renders inside
+ * The client's dashboard. Server-safe (no hooks); only the approval card and
+ * the view beacon are client components. Everything renders inside
  * `.portal-theme`, the light palette defined in globals.css, and uses token
  * utilities only.
+ *
+ * In reading order: where the project is, anything we are waiting on them for,
+ * then what they get and when, the files, and the one thing they can sign.
  */
 export function ClientPortalScreen({ view, token, preview = false }: ClientPortalScreenProps) {
   const now = resolveNow(view.generatedAt);
@@ -44,12 +47,12 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
           projectName={view.projectName}
           welcome={view.welcome}
         />
-        <PortalStatusCard view={view} now={now} />
-        <PortalPlan phases={view.phases} now={now} />
-        <PortalDeliverables deliverables={view.deliverables} websiteUrl={view.websiteUrl} />
+        <PortalNowCard view={view} now={now} />
         {view.asks.length > 0 && <PortalAsks asks={view.asks} now={now} />}
-        {/* Below the deliverables deliberately: there is no approving something
-            you have not been shown. */}
+        <PortalStages stages={view.stages} now={now} />
+        <PortalFiles files={view.files} websiteUrl={view.websiteUrl} />
+        {/* Below the stages and files deliberately: there is no approving
+            something you have not been shown. */}
         <PortalReview review={view.review} token={token} now={now} preview={preview} />
         <PortalFooter brandName={view.brandName} agencyContactEmail={view.agencyContactEmail} />
       </main>

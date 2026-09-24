@@ -23,11 +23,6 @@ export interface TimelineRepository {
         updates: Partial<TimelineMilestone>
     ) => Promise<void>;
     deleteMilestone: (projectId: string, milestoneId: string) => Promise<void>;
-    setMilestoneClientVisible: (
-        projectId: string,
-        milestoneId: string,
-        clientVisible: boolean
-    ) => Promise<void>;
     addPhase: (
         projectId: string,
         phase: Omit<TimelinePhase, 'id' | 'order'>
@@ -64,8 +59,6 @@ export const timelineRepository: TimelineRepository = {
         timelineService.updateMilestone(projectId, milestoneId, updates),
     deleteMilestone: (projectId, milestoneId) =>
         timelineService.deleteMilestone(projectId, milestoneId),
-    setMilestoneClientVisible: (projectId, milestoneId, clientVisible) =>
-        timelineService.setMilestoneClientVisible(projectId, milestoneId, clientVisible),
     addPhase: (projectId, phase) => timelineService.addPhase(projectId, phase),
     updatePhase: (projectId, phaseId, updates) =>
         timelineService.updatePhase(projectId, phaseId, updates),

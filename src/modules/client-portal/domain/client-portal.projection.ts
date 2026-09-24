@@ -1,62 +1,53 @@
 import type {
   ChecklistSection,
+  ClientPlanFile,
   Project,
   ProjectChecklist,
-  ProjectLink,
   ProjectTimeline,
   StageRole,
   Task,
-  TimelineItemStatus,
-  TimelineMilestone,
 } from '@/types';
 import { CLIENT_STATUS_PORTAL_LABELS, normalizeClientStatus } from '@/types';
+import {
+  latestChecklistChange,
+  legacyClientPlan,
+  normalizeClientPlan,
+  planTracksChecklist,
+  resolveClientPlan,
+  type ResolvedStage,
+} from './client-plan';
 import type {
   ClientPortalView,
   PortalAskView,
-  PortalDeliverableView,
-  PortalMilestoneStatus,
-  PortalMilestoneView,
-  PortalPhaseView,
+  PortalFileView,
   PortalReviewView,
+  PortalStageView,
 } from './client-portal.types';
 
 export interface BuildClientPortalViewInput {
   project: Project;
+  /** Read only for a portal shared before plans existed (see `legacyClientPlan`). */
   timeline: ProjectTimeline | null | undefined;
   /** Optional. Only tasks with `needsClientInput` and not done become asks. */
   tasks?: Task[];
-  /** Optional. Only a section with the `client_review` role becomes a review. */
+  /**
+   * Optional. The checklist the tracker follows, and where a `client_review`
+   * stage is found. Only counts and one section title ever leave it.
+   */
   checklists?: ProjectChecklist[];
   now?: Date;
 }
 
-const MILESTONE_STATUS: Record<TimelineItemStatus, PortalMilestoneStatus> = {
-  not_started: 'upcoming',
-  in_progress: 'in_progress',
-  completed: 'done',
-  blocked: 'on_hold',
-};
-
-function toPortalMilestone(m: TimelineMilestone): PortalMilestoneView {
-  return {
-    id: m.id,
-    title: m.title,
-    status: MILESTONE_STATUS[m.status] ?? 'upcoming',
-    startDate: m.startDate,
-    endDate: m.endDate,
-  };
-}
-
 /**
- * The "Open site" row. Only two things qualify: the Webflow custom domain,
- * which is the client's own public site, and a manual link the team has
- * explicitly switched on. Guessing from the title would publish a link whose
- * visibility switch reads OFF in the Client tab — the one place the team goes
- * to check what the client can see.
+ * "Open site". The Webflow custom domain is the client's own public site. A
+ * manual link switched on for the client counts too, but only on a portal that
+ * has no plan yet: those switches no longer exist, and a link nobody can turn
+ * off again must not stay on the page forever.
  */
-function detectWebsiteUrl(project: Project): string | undefined {
+function detectWebsiteUrl(project: Project, legacy: boolean): string | undefined {
   const custom = project.webflowConfig?.customDomain;
   if (custom) return custom.startsWith('http') ? custom : `https://${custom}`;
+  if (!legacy) return undefined;
   const live = (project.links || []).find(
     (l) =>
       l.source !== 'auto' &&
@@ -67,8 +58,23 @@ function detectWebsiteUrl(project: Project): string | undefined {
   return live?.url;
 }
 
-function toDeliverable(l: ProjectLink): PortalDeliverableView {
-  return { id: l.id, title: l.title, url: l.url };
+function toFile(file: ClientPlanFile): PortalFileView {
+  return { id: file.id, title: file.title, url: file.url };
+}
+
+function toStage(resolved: ResolvedStage): PortalStageView {
+  const { stage } = resolved;
+  const view: PortalStageView = {
+    id: stage.id,
+    title: stage.title,
+    state: resolved.state,
+    deliverables: [...stage.deliverables],
+    files: stage.files.map(toFile),
+  };
+  if (stage.startDate) view.startDate = stage.startDate;
+  if (stage.dueDate) view.dueDate = stage.dueDate;
+  if (resolved.state === 'current' && resolved.percent !== undefined) view.percent = resolved.percent;
+  return view;
 }
 
 function toAsk(t: Task): PortalAskView {
@@ -77,6 +83,15 @@ function toAsk(t: Task): PortalAskView {
   return ask;
 }
 
+/** The latest of some ISO timestamps, or undefined when none parse. */
+function latestIso(values: (string | undefined)[]): string | undefined {
+  let best = 0;
+  for (const value of values) {
+    const ms = value ? Date.parse(value) : NaN;
+    if (!Number.isNaN(ms) && ms > best) best = ms;
+  }
+  return best > 0 ? new Date(best).toISOString() : undefined;
+}
 
 function compact<T extends object>(obj: T): T {
   for (const key of Object.keys(obj) as Array<keyof T>) {
@@ -85,14 +100,6 @@ function compact<T extends object>(obj: T): T {
   return obj;
 }
 
-/**
- * Projects a project (+ timeline, + tasks) onto the client-facing view.
- *
- * This is the allow-list: nothing reaches the portal page that is not built
- * here, field by field. Internal status/tags, billing, tokens, emails (other
- * than the agency contact), milestone notes/assignees, task descriptions,
- * checklists, audits, images and invoices are all deliberately absent.
- */
 /**
  * The stage the client is being asked to sign off, if any.
  *
@@ -134,71 +141,43 @@ function toPortalReview(
   return reviews.find((r) => !r.approvedAt) ?? reviews[reviews.length - 1];
 }
 
+/**
+ * Projects a project (+ checklist, + tasks) onto the client's dashboard.
+ *
+ * This is the allow-list: nothing reaches the portal page that is not built
+ * here, field by field. Internal status/tags, billing, tokens, emails (other
+ * than the agency contact), checklist steps, milestone notes/assignees, task
+ * descriptions, audits, images and invoices are all deliberately absent. From
+ * the checklist the client gets a percentage and one section title (the stage
+ * they are asked to approve), never a step.
+ */
 export function buildClientPortalView(input: BuildClientPortalViewInput): ClientPortalView {
   const { project, timeline, tasks = [], checklists = [], now = new Date() } = input;
   const settings = project.clientPortal;
   const facing = project.clientFacing ?? {};
+  const status = normalizeClientStatus(facing.status);
 
-  const phasesSorted = [...(timeline?.phases ?? [])].sort((a, b) => a.order - b.order);
-  const visibleMilestones = (timeline?.milestones ?? []).filter((m) => m.clientVisible === true);
+  // The saved plan; failing that, what a portal shared before plans existed
+  // was already showing, so the client's page does not empty out under them.
+  const saved = project.clientPlan ? normalizeClientPlan(project.clientPlan) : null;
+  const legacy = saved
+    ? null
+    : legacyClientPlan({ timeline, links: project.links, currentPhaseId: facing.currentPhaseId });
+  const plan = saved ?? legacy?.plan ?? null;
+  const resolved = plan
+    ? resolveClientPlan(plan, checklists, {
+        currentStageId: saved ? facing.currentStageId : legacy?.currentStageId,
+        status,
+      })
+    : null;
 
-  // A phase earns a place on the client's page only by having something the
-  // client can see in it. Otherwise an internal phase title — "Internal QA &
-  // buffer", "Invoicing / handover" — would appear as a numbered step, and
-  // would pad the "Phase 2 of 6" count with stages that mean nothing to them.
-  const phases: PortalPhaseView[] = phasesSorted
-    .map((p) => ({
-      id: p.id,
-      title: p.title,
-      order: p.order,
-      isCurrent: false,
-      milestones: visibleMilestones
-        .filter((m) => m.phaseId === p.id)
-        .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.order - b.order)
-        .map(toPortalMilestone),
-    }))
-    .filter((p) => p.milestones.length > 0);
-
-  // Current phase: the team's explicit choice wins; otherwise the first phase
-  // (by order) with a visible milestone that is not done. Only real phases
-  // take part; the synthetic group appended below never does.
-  let currentIndex = facing.currentPhaseId
-    ? phases.findIndex((p) => p.id === facing.currentPhaseId)
-    : -1;
-  if (currentIndex < 0) {
-    currentIndex = phases.findIndex((p) => p.milestones.some((m) => m.status !== 'done'));
-  }
-  if (currentIndex >= 0) phases[currentIndex].isCurrent = true;
-  const realPhaseCount = phases.length;
-
-  // Visible milestones with no phase, or whose phase was deleted, still count
-  // (progress, next) and still render, under an "Other" group at the end.
-  const phaseIds = new Set(phases.map((p) => p.id));
-  const ungrouped = visibleMilestones
-    .filter((m) => !m.phaseId || !phaseIds.has(m.phaseId))
-    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.order - b.order)
-    .map(toPortalMilestone);
-  if (ungrouped.length > 0) {
-    phases.push({ id: '__ungrouped', title: 'Other', order: Number.MAX_SAFE_INTEGER, isCurrent: false, milestones: ungrouped, ungrouped: true });
-  }
-
-  const done = visibleMilestones.filter((m) => m.status === 'completed').length;
-  const nextMilestoneRaw = visibleMilestones
-    .filter((m) => m.status !== 'completed')
-    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.order - b.order)[0];
-
-  const deliverables = (project.links || [])
-    .filter((l) => l.source !== 'auto' && l.clientVisible === true)
-    .sort((a, b) => a.order - b.order)
-    .map(toDeliverable);
+  const stages = resolved ? resolved.stages.map(toStage) : [];
+  const currentStageIndex = resolved && resolved.currentIndex >= 0 ? resolved.currentIndex : undefined;
 
   const asks = tasks
     .filter((t) => t.needsClientInput === true && t.status !== 'done')
     .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || a.order - b.order)
     .map(toAsk);
-
-
-  const status = normalizeClientStatus(facing.status);
 
   const view: ClientPortalView = {
     projectId: project.id,
@@ -207,19 +186,19 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     brandLogoUrl: settings?.brandLogoUrl || project.logoUrl || undefined,
     welcome: settings?.welcome?.trim() || undefined,
     agencyContactEmail: project.reviewOwnerEmail || project.assigneeEmails?.[0] || undefined,
-    websiteUrl: detectWebsiteUrl(project),
+    websiteUrl: detectWebsiteUrl(project, !saved),
     status,
     statusLabel: CLIENT_STATUS_PORTAL_LABELS[status],
     statusNote: facing.statusNote?.trim() || undefined,
-    currentPhase:
-      currentIndex >= 0
-        ? { id: phases[currentIndex].id, title: phases[currentIndex].title, index: currentIndex, total: realPhaseCount }
-        : undefined,
-    nextMilestone: nextMilestoneRaw ? toPortalMilestone(nextMilestoneRaw) : undefined,
-    progress: { done, total: visibleMilestones.length },
-    lastUpdateAt: facing.lastUpdateAt || undefined,
-    phases,
-    deliverables,
+    lastUpdateAt: latestIso([
+      facing.lastUpdateAt,
+      saved?.updatedAt,
+      // A tick on the checklist moves the tracker, so it is news to the client too.
+      resolved && planTracksChecklist(resolved) ? latestChecklistChange(checklists) : undefined,
+    ]),
+    stages,
+    currentStageIndex,
+    files: (plan?.files ?? []).map(toFile),
     asks,
     review: toPortalReview(checklists, project.delivery?.approvals),
     generatedAt: now.toISOString(),

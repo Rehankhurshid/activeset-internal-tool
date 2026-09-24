@@ -422,6 +422,8 @@ export interface Project {
   /** Client-facing status the team maintains, plus counters the portal beacon
    *  writes through firebase-admin. Counter writes never touch `updatedAt`. */
   clientFacing?: ClientFacingState;
+  /** The client dashboard's plan: stages, dates, what they get, files. */
+  clientPlan?: ClientPlan;
   // --- Billing ---
   /** How the project is billed. Missing = 'fixed'. `adhoc` unlocks the
    *  per-task billable hours + "generate invoice from tasks" flow. */
@@ -1240,7 +1242,7 @@ export interface ClientPortalSettings {
 }
 
 /**
- * Client-facing state. `status`, `statusNote`, `currentPhaseId`, `lastUpdateAt`
+ * Client-facing state. `status`, `statusNote`, `currentStageId`, `lastUpdateAt`
  * and `lastUpdateBy` are written by the team (client SDK, bumps `updatedAt`).
  * The view counters are written only by firebase-admin from the portal beacon
  * with a merge that never touches `updatedAt`, so client opens do not reshuffle
@@ -1250,7 +1252,16 @@ export interface ClientFacingState {
   status?: ClientStatus;
   /** One line the client sees under the status chip. */
   statusNote?: string;
-  /** Phase id from project_timelines/{projectId}.phases[]; drives the stepper. */
+  /**
+   * The team's pick for the stage the project is in: a `clientPlan` stage id,
+   * or `'__complete__'` once every stage is done. Unset means the dashboard
+   * follows the checklist.
+   */
+  currentStageId?: string;
+  /**
+   * @deprecated From the timeline-based portal. Read only to keep an old portal
+   * showing what it showed until the team saves a `clientPlan`.
+   */
   currentPhaseId?: string;
   /** ISO timestamp of the last "Mark updated" / status edit. */
   lastUpdateAt?: string;
@@ -1264,3 +1275,62 @@ export interface ClientFacingState {
 }
 
 
+// --- CLIENT PLAN (the client dashboard: what they get, and when) ---
+
+/**
+ * The kinds of stage a client plan is made of. A plan is drafted from the
+ * project's own checklist, and the kind is what ties a stage to the checklist
+ * sections whose ticks move it along. It stays put when the team renames the
+ * stage, so "UX & UI" still follows the design sections.
+ */
+export type ClientStageKind =
+  | 'kickoff'
+  | 'discovery'
+  | 'design'
+  | 'build'
+  | 'review'
+  | 'launch'
+  | 'handover';
+
+/** A file or link the client can open from their dashboard. */
+export interface ClientPlanFile {
+  id: string;
+  title: string;
+  /** http(s) only; anything else is dropped before it reaches the client. */
+  url: string;
+}
+
+/** One stage of the plan the client sees. */
+export interface ClientPlanStage {
+  id: string;
+  title: string;
+  /**
+   * Which checklist sections track this stage. Absent on stages the team adds
+   * by hand, which move only when the team moves them.
+   */
+  kind?: ClientStageKind;
+  /** What the client receives in this stage, one line each. */
+  deliverables: string[];
+  /** ISO YYYY-MM-DD. */
+  startDate?: string;
+  /** ISO YYYY-MM-DD: when the stage is due to finish. */
+  dueDate?: string;
+  /** Files for this stage: the designs, the staging site, the handover doc. */
+  files: ClientPlanFile[];
+}
+
+/**
+ * The client dashboard's plan: stages with dates, what the client gets in each,
+ * and the files that go with them. Drafted when the project is created, edited
+ * in the Client tab, written through the client SDK in a transaction.
+ */
+export interface ClientPlan {
+  stages: ClientPlanStage[];
+  /** Files for the whole project rather than one stage. */
+  files: ClientPlanFile[];
+  /** The checklist template the plan was drafted from, for the record. */
+  templateId?: string;
+  /** ISO timestamp of the last edit. */
+  updatedAt?: string;
+  updatedBy?: string;
+}

@@ -7,7 +7,8 @@ import type { ClientPortalView } from '@/modules/client-portal/domain/client-por
 import type { Project, ProjectChecklist, ProjectTimeline, Task } from '@/types';
 
 /**
- * Server-side loader for the portal page: token → project + timeline + asks →
+ * Server-side loader for the portal page: token → project (and its client plan)
+ * + checklists + asks, plus the timeline for a portal that predates plans →
  * allow-listed view. Everything is read with firebase-admin; the page never
  * touches Firestore from the browser. The loader is strictly read-only: usage
  * is stamped by the view beacon, which knows the open is a real, counted one.
@@ -90,9 +91,9 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
       // filter happens in the projection.
       .limit(500)
       .get(),
-    // Read only so the projection can find the stage awaiting sign-off. None of
-    // the checklist's content reaches the client: the projection takes the
-    // section's title and nothing else.
+    // The checklist the client's tracker follows, and where the stage awaiting
+    // sign-off is found. None of its steps reach the client: the projection
+    // takes a percentage and one section title, nothing else.
     adminDb
       .collection(COLLECTIONS.PROJECT_CHECKLISTS)
       .where('projectId', '==', projectId)

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClientPortalView } from './client-portal.projection';
 import { CLIENT_PORTAL_VIEW_KEYS } from './client-portal.types';
-import type { Project, ProjectTimeline, Task } from '@/types';
+import type { ClientPlan, Project, ProjectChecklist, ProjectTimeline, Task } from '@/types';
 
 const SECRET = 'SECRET-SENTINEL';
 
@@ -64,49 +64,149 @@ function tasks(): Task[] {
   ];
 }
 
+const planFixture = (): ClientPlan => ({
+  stages: [
+    {
+      id: 'stg_kickoff',
+      title: 'Kickoff',
+      kind: 'kickoff',
+      deliverables: ['A kickoff call'],
+      startDate: '2026-09-01',
+      dueDate: '2026-09-05',
+      files: [{ id: 'f1', title: 'Kickoff notes', url: 'https://docs.google.com/notes' }],
+    },
+    {
+      id: 'stg_design',
+      title: 'Design',
+      kind: 'design',
+      deliverables: ['Homepage design', 'Inner pages'],
+      startDate: '2026-09-06',
+      dueDate: '2026-09-19',
+      files: [
+        { id: 'f2', title: 'Figma', url: 'https://figma.com/file/abc' },
+        { id: 'f3', title: 'Sneaky', url: 'javascript:alert(1)' },
+      ],
+    },
+    { id: 'stg_build', title: 'Build', kind: 'build', deliverables: ['Staging site'], startDate: '2026-09-20', dueDate: '2026-10-10', files: [] },
+  ],
+  files: [{ id: 'f4', title: 'Shared drive', url: 'https://drive.google.com/x' }],
+  templateId: `${SECRET}-template`,
+  updatedAt: '2026-09-16T09:00:00.000Z',
+  updatedBy: `${SECRET}@activeset.co`,
+});
+
+function sopChecklist(): ProjectChecklist {
+  const items = (prefix: string, statuses: ProjectChecklist['sections'][number]['items'][number]['status'][]) =>
+    statuses.map((status, i) => ({ id: `${prefix}${i}`, title: `${SECRET} step ${prefix}${i}`, status, order: i }));
+  return {
+    id: 'c1',
+    projectId: 'proj_1',
+    templateId: 't1',
+    templateName: `${SECRET} SOP`,
+    createdAt: new Date('2026-09-01'),
+    updatedAt: new Date('2026-09-17T12:00:00.000Z'),
+    sections: [
+      { id: 's1', title: `Kickoff ${SECRET}`, order: 0, role: 'kickoff', items: items('k', ['completed', 'completed']) },
+      { id: 's2', title: `Design ${SECRET}`, order: 1, items: items('d', ['completed', 'not_started', 'not_started', 'skipped']) },
+      { id: 's3', title: `Development ${SECRET}`, order: 2, items: items('b', ['not_started']) },
+    ],
+  } as ProjectChecklist;
+}
+
+const withPlan = (overrides: Partial<Project> = {}) => project({ clientPlan: planFixture(), ...overrides });
+
 describe('buildClientPortalView', () => {
-  it('emits only allow-listed keys', () => {
-    const view = buildClientPortalView({ project: project(), timeline: timeline(), tasks: tasks() });
+  it('emits only allow-listed keys, on the view and on every stage', () => {
+    const view = buildClientPortalView({ project: withPlan(), timeline: timeline(), tasks: tasks(), checklists: [sopChecklist()] });
     const allowed = new Set<string>(CLIENT_PORTAL_VIEW_KEYS);
     for (const key of Object.keys(view)) {
       assert.ok(allowed.has(key), `unexpected key on portal view: ${key}`);
     }
+    const stageKeys = new Set(['id', 'title', 'state', 'startDate', 'dueDate', 'deliverables', 'files', 'percent']);
+    for (const stage of view.stages) {
+      for (const key of Object.keys(stage)) assert.ok(stageKeys.has(key), `unexpected key on a stage: ${key}`);
+    }
   });
 
   it('never leaks internal data, even when present on the source objects', () => {
-    const view = buildClientPortalView({ project: project(), timeline: timeline(), tasks: tasks() });
+    // "paid" rather than "current": a stage's state is legitimately called current.
+    const view = buildClientPortalView({ project: withPlan({ status: 'paid' }), timeline: timeline(), tasks: tasks(), checklists: [sopChecklist()] });
     const json = JSON.stringify(view);
     assert.equal(json.includes(SECRET), false, `portal JSON leaked a sentinel: ${json}`);
     assert.equal(json.includes('retainer'), false, 'internal tags leaked');
-    assert.equal(json.includes('"current"'), false, 'internal project status leaked');
+    assert.equal(json.includes('"paid"'), false, 'internal project status leaked');
     assert.equal(json.includes('999'), false, 'billing leaked');
+    assert.equal(json.includes('"kind"'), false, 'how stages are tracked is ours');
   });
 
-  it('includes only client-visible manual links as deliverables', () => {
+  it('follows the checklist to the stage the project is in, with its progress', () => {
+    const view = buildClientPortalView({ project: withPlan({ clientFacing: undefined }), timeline: null, checklists: [sopChecklist()] });
+    assert.deepEqual(view.stages.map((s) => s.state), ['done', 'current', 'upcoming']);
+    assert.equal(view.currentStageIndex, 1);
+    // One of three design steps done (the skipped one does not count).
+    assert.equal(view.stages[1].percent, 33);
+    assert.equal(view.stages[0].percent, undefined, 'progress only shows on the current stage');
+    assert.deepEqual(view.stages[1].deliverables, ['Homepage design', 'Inner pages']);
+  });
+
+  it('honours the stage the team pinned, and shows everything done once delivered', () => {
+    const pinned = buildClientPortalView({
+      project: withPlan({ clientFacing: { currentStageId: 'stg_build' } }),
+      timeline: null,
+      checklists: [sopChecklist()],
+    });
+    assert.equal(pinned.currentStageIndex, 2);
+    assert.equal(pinned.stages[2].percent, 0);
+
+    const delivered = buildClientPortalView({
+      project: withPlan({ clientFacing: { status: 'delivered', currentStageId: 'stg_design' } }),
+      timeline: null,
+      checklists: [sopChecklist()],
+    });
+    assert.equal(delivered.currentStageIndex, undefined);
+    assert.ok(delivered.stages.every((s) => s.state === 'done'));
+  });
+
+  it('publishes plan files and stage files, and only http(s) ones', () => {
+    const view = buildClientPortalView({ project: withPlan(), timeline: null });
+    assert.deepEqual(view.files, [{ id: 'f4', title: 'Shared drive', url: 'https://drive.google.com/x' }]);
+    assert.deepEqual(view.stages[1].files.map((f) => f.id), ['f2']);
+    assert.equal(JSON.stringify(view).includes('javascript:'), false);
+  });
+
+  it('dates the last update by whatever moved last: the note, the plan or a checklist tick', () => {
+    const ticked = buildClientPortalView({ project: withPlan(), timeline: null, checklists: [sopChecklist()] });
+    assert.equal(ticked.lastUpdateAt, '2026-09-17T12:00:00.000Z');
+    const edited = buildClientPortalView({ project: withPlan(), timeline: null });
+    assert.equal(edited.lastUpdateAt, '2026-09-16T09:00:00.000Z');
+    const noted = buildClientPortalView({ project: project(), timeline: null });
+    assert.equal(noted.lastUpdateAt, '2026-09-15T10:00:00.000Z');
+  });
+
+  it('keeps an old portal showing what it showed until the team saves a plan', () => {
     const view = buildClientPortalView({ project: project(), timeline: timeline() });
-    assert.deepEqual(view.deliverables.map((d) => d.id), ['l1']);
+    // Only phases with a client-visible milestone, in phase order; the internal milestone stays hidden.
+    assert.deepEqual(view.stages.map((s) => s.title), ['Discovery', 'Design', 'Build']);
+    assert.deepEqual(view.stages.map((s) => s.deliverables), [['Kickoff'], ['Wireframes'], ['Staging review']]);
+    assert.equal(view.currentStageIndex, 1, 'the first phase with unfinished work');
+    assert.deepEqual(view.files.map((f) => f.title), ['Staging']);
+    assert.equal(view.websiteUrl, 'https://peakxv.com');
+
+    const chosen = buildClientPortalView({ project: project({ clientFacing: { currentPhaseId: 'ph_build' } }), timeline: timeline() });
+    assert.equal(chosen.currentStageIndex, 2);
   });
 
-  it('includes only client-visible milestones, sorted phases, softened statuses', () => {
-    const view = buildClientPortalView({ project: project(), timeline: timeline() });
-    assert.deepEqual(view.phases.map((p) => p.title), ['Discovery', 'Design', 'Build']);
-    assert.deepEqual(view.phases.flatMap((p) => p.milestones.map((m) => m.id)), ['m1', 'm2', 'm4']);
-    assert.equal(view.phases[2].milestones[0].status, 'on_hold');
-    assert.deepEqual(view.progress, { done: 1, total: 3 });
-    assert.equal(view.nextMilestone?.id, 'm2');
-  });
-
-  it('derives the current phase when the team has not chosen one, and honours the choice when it has', () => {
-    const derived = buildClientPortalView({ project: project(), timeline: timeline() });
-    assert.equal(derived.currentPhase?.title, 'Design');
-    assert.equal(derived.currentPhase?.index, 1);
-    assert.equal(derived.currentPhase?.total, 3);
-    const chosen = buildClientPortalView({
-      project: project({ clientFacing: { currentPhaseId: 'ph_build' } }),
+  it('stops publishing the old link switches once a plan is saved', () => {
+    const view = buildClientPortalView({
+      project: withPlan({
+        webflowConfig: undefined,
+        links: [{ id: 'l9', title: 'Live site', url: 'https://peakxv.com', order: 0, source: 'manual', clientVisible: true }],
+      }),
       timeline: timeline(),
     });
-    assert.equal(chosen.currentPhase?.title, 'Build');
-    assert.equal(chosen.phases.filter((p) => p.isCurrent).length, 1);
+    assert.equal(view.websiteUrl, undefined);
+    assert.deepEqual(view.files.map((f) => f.id), ['f4']);
+    assert.deepEqual(view.stages.map((s) => s.title), ['Kickoff', 'Design', 'Build']);
   });
 
   it('turns open needsClientInput tasks into asks with title and due date only', () => {
@@ -118,30 +218,13 @@ describe('buildClientPortalView', () => {
     const view = buildClientPortalView({ project: project(), timeline: timeline() });
     assert.equal(view.status, 'needs_client');
     assert.equal(view.statusLabel, 'Waiting on you');
-    const bare = buildClientPortalView({ project: project({ clientFacing: undefined, clientPortal: undefined, client: undefined, logoUrl: undefined }), timeline: null });
+    const bare = buildClientPortalView({ project: project({ clientFacing: undefined, clientPortal: undefined, client: undefined, logoUrl: undefined, links: [] }), timeline: null });
     assert.equal(bare.status, 'on_track');
     assert.equal(bare.brandName, 'Website Redesign');
     assert.equal(bare.brandLogoUrl, undefined);
-    assert.deepEqual(bare.phases, []);
-    assert.deepEqual(bare.progress, { done: 0, total: 0 });
-  });
-
-  it('keeps visible milestones without a phase (or with a deleted phase) in an Other group', () => {
-    const t = timeline();
-    t.milestones.push(
-      { id: 'm5', title: 'Content handover', status: 'not_started', startDate: '2026-09-05', endDate: '2026-09-06', order: 4, clientVisible: true },
-      { id: 'm6', title: 'Orphaned', phaseId: 'ph_deleted', status: 'in_progress', startDate: '2026-09-04', endDate: '2026-09-07', order: 5, clientVisible: true },
-    );
-    const view = buildClientPortalView({ project: project({ clientFacing: undefined }), timeline: t });
-    const other = view.phases[view.phases.length - 1];
-    assert.equal(other.ungrouped, true);
-    assert.equal(other.title, 'Other');
-    assert.deepEqual(other.milestones.map((m) => m.id), ['m6', 'm5']);
-    assert.deepEqual(view.progress, { done: 1, total: 5 });
-    assert.equal(view.nextMilestone?.id, 'm6');
-    assert.equal(view.currentPhase?.total, 3, 'the Other group is not a phase');
-    assert.equal(view.phases.filter((p) => p.isCurrent).length, 1);
-    assert.equal(view.phases.find((p) => p.isCurrent)?.title, 'Design');
+    assert.deepEqual(bare.stages, []);
+    assert.deepEqual(bare.files, []);
+    assert.equal(bare.currentStageIndex, undefined);
   });
 
   it('never derives "Open site" from a link whose visibility switch is off', () => {
@@ -154,45 +237,7 @@ describe('buildClientPortalView', () => {
     });
     assert.equal(view.websiteUrl, undefined);
     assert.equal(JSON.stringify(view).includes(SECRET), false);
-
-    const opted = buildClientPortalView({
-      project: project({
-        webflowConfig: undefined,
-        links: [
-          { id: 'l9', title: 'Live site', url: 'https://peakxv.com', order: 0, source: 'manual', clientVisible: true },
-        ],
-      }),
-      timeline: null,
-    });
-    assert.equal(opted.websiteUrl, 'https://peakxv.com');
   });
-
-  it('keeps phases with nothing visible off the stepper and out of the phase count', () => {
-    const t = timeline();
-    t.phases.push({ id: 'ph_internal', title: 'Internal QA & buffer', order: 3 });
-    t.milestones.push({
-      id: 'm9',
-      title: 'Internal buffer',
-      phaseId: 'ph_internal',
-      status: 'not_started',
-      startDate: '2026-10-01',
-      endDate: '2026-10-05',
-      order: 9,
-    });
-    const view = buildClientPortalView({ project: project({ clientFacing: undefined }), timeline: t });
-    assert.equal(
-      view.phases.some((p) => p.title === 'Internal QA & buffer'),
-      false,
-      'a phase with no client-visible milestone must not be named to the client',
-    );
-    // Discovery, Design and Build each keep a visible milestone; the empty one goes.
-    assert.deepEqual(view.phases.map((p) => p.title), ['Discovery', 'Design', 'Build']);
-    assert.equal(view.currentPhase?.total, 3);
-  });
-
-
-
-
 
   it('prefers portal branding overrides over project fields', () => {
     const view = buildClientPortalView({

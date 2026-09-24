@@ -9,7 +9,7 @@ export { buildClientPortalView } from './domain/client-portal.projection';
 export type { BuildClientPortalViewInput } from './domain/client-portal.projection';
 export {
   CLIENT_PORTAL_VIEW_KEYS,
-  PORTAL_MILESTONE_LABELS,
+  PORTAL_STAGE_LABELS,
   CLIENT_STATUSES,
   CLIENT_STATUS_LABELS,
   CLIENT_STATUS_PORTAL_LABELS,
@@ -17,15 +17,40 @@ export {
 } from './domain/client-portal.types';
 export type {
   ClientFacingState,
+  ClientPlan,
+  ClientPlanFile,
+  ClientPlanStage,
   ClientPortalSettings,
   ClientPortalView,
+  ClientStageKind,
   ClientStatus,
   PortalAskView,
-  PortalDeliverableView,
-  PortalMilestoneStatus,
-  PortalMilestoneView,
-  PortalPhaseView,
+  PortalFileView,
+  PortalStageState,
+  PortalStageView,
 } from './domain/client-portal.types';
+// The client dashboard's plan: drafted from a checklist, tracked by it.
+export {
+  CLIENT_STAGE_DEFAULTS,
+  CLIENT_STAGE_KINDS,
+  PLAN_COMPLETE,
+  STANDARD_STAGE_KINDS,
+  draftClientPlan,
+  legacyClientPlan,
+  newPlanId,
+  normalizeClientPlan,
+  planStageKinds,
+  resolveClientPlan,
+  safeHttpUrl,
+} from './domain/client-plan';
+export type {
+  DraftPlanOptions,
+  PlanSection,
+  PlanStageState,
+  ResolvedPlan,
+  ResolvedStage,
+  StageTracking,
+} from './domain/client-plan';
 export {
   CLIENT_STATUS_ORDER,
   PORTAL_STALE_AFTER_DAYS,

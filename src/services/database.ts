@@ -37,6 +37,8 @@ import {
   RequestSource,
   normalizeProjectStatus,
   ClientStatus,
+  ClientFacingState,
+  ClientPlan,
 } from '@/types';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
@@ -344,6 +346,38 @@ function stripAuditResultsFromLinks(links: ProjectLink[]): ProjectLink[] {
 }
 
 // Create default links for new projects (ensure each link has a unique id)
+/** What the New project dialog fills in beyond the name. Every field is optional. */
+export interface NewProjectSetup {
+  /** Client/company name, which groups projects together. */
+  client?: string;
+  tags?: ProjectTag[];
+  /** The lead: owns the daily review and is the contact on the client's dashboard. */
+  reviewOwnerEmail?: string;
+  assigneeEmails?: string[];
+  /** The client's own people, recorded on the portal settings. */
+  contactEmails?: string[];
+  /** The client dashboard's plan, drafted from the chosen project type. */
+  clientPlan?: ClientPlan;
+}
+
+/** The setup as project fields, leaving out anything empty (Firestore refuses undefined). */
+function newProjectFields(setup: NewProjectSetup): Partial<Project> {
+  const out: Partial<Project> = {};
+  const client = setup.client?.trim();
+  if (client) out.client = client;
+  if (setup.tags && setup.tags.length > 0) out.tags = Array.from(new Set(setup.tags));
+  const lead = setup.reviewOwnerEmail?.trim().toLowerCase();
+  if (lead) out.reviewOwnerEmail = lead;
+  const people = Array.from(
+    new Set([...(lead ? [lead] : []), ...(setup.assigneeEmails ?? []).map((e) => e.trim().toLowerCase())].filter(Boolean)),
+  );
+  if (people.length > 0) out.assigneeEmails = people;
+  const contacts = Array.from(new Set((setup.contactEmails ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean)));
+  if (contacts.length > 0) out.clientPortal = { enabled: false, contactEmails: contacts };
+  if (setup.clientPlan) out.clientPlan = setup.clientPlan;
+  return out;
+}
+
 const getDefaultLinks = (): ProjectLink[] => [
   {
     id: generateLinkId(),
@@ -377,7 +411,9 @@ const getDefaultLinks = (): ProjectLink[] => [
 
 export const projectsService = {
   // Create a new project
-  async createProject(userId: string, name: string): Promise<string> {
+  async createProject(userId: string, name: string, setup: NewProjectSetup = {}): Promise<string> {
+    const extras = newProjectFields(setup);
+
     if (isLocalProjectBypassEnabled()) {
       const now = new Date();
       const project = createLocalBypassProject({
@@ -387,6 +423,12 @@ export const projectsService = {
         createdAt: now,
         updatedAt: now,
         links: getDefaultLinks(),
+        // The fixture's sample client, people and tags belong to Revpack only.
+        client: undefined,
+        reviewOwnerEmail: undefined,
+        assigneeEmails: undefined,
+        tags: [],
+        ...extras,
       });
       writeLocalProjects([project, ...readLocalProjects()]);
       return project.id;
@@ -399,6 +441,7 @@ export const projectsService = {
         status: 'current' as ProjectStatus,
         tags: [] as ProjectTag[],
         links: getDefaultLinks(),
+        ...extras,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
@@ -1250,24 +1293,46 @@ export const projectsService = {
    */
   async updateClientFacing(
     projectId: string,
-    patch: { status?: ClientStatus; statusNote?: string | null; currentPhaseId?: string | null },
+    patch: { status?: ClientStatus; statusNote?: string | null; currentStageId?: string | null },
     byEmail: string,
     options: { touch?: boolean } = {},
   ): Promise<void> {
+    const by = byEmail.trim().toLowerCase();
+    const note = patch.statusNote?.trim();
+
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => {
+        const facing: ClientFacingState = { ...project.clientFacing };
+        if (options.touch) {
+          facing.lastUpdateAt = new Date().toISOString();
+          if (by) facing.lastUpdateBy = by;
+        }
+        if (patch.status !== undefined) facing.status = patch.status;
+        if (patch.statusNote !== undefined) {
+          if (note) facing.statusNote = note;
+          else delete facing.statusNote;
+        }
+        if (patch.currentStageId !== undefined) {
+          if (patch.currentStageId) facing.currentStageId = patch.currentStageId;
+          else delete facing.currentStageId;
+        }
+        return { ...project, clientFacing: facing };
+      });
+      return;
+    }
+
     try {
       const update: UpdateData<DocumentData> = { updatedAt: Timestamp.now() };
       if (options.touch) {
         update['clientFacing.lastUpdateAt'] = new Date().toISOString();
-        const by = byEmail.trim().toLowerCase();
         if (by) update['clientFacing.lastUpdateBy'] = by;
       }
       if (patch.status !== undefined) update['clientFacing.status'] = patch.status;
       if (patch.statusNote !== undefined) {
-        const note = patch.statusNote?.trim();
         update['clientFacing.statusNote'] = note ? note : deleteField();
       }
-      if (patch.currentPhaseId !== undefined) {
-        update['clientFacing.currentPhaseId'] = patch.currentPhaseId ? patch.currentPhaseId : deleteField();
+      if (patch.currentStageId !== undefined) {
+        update['clientFacing.currentStageId'] = patch.currentStageId ? patch.currentStageId : deleteField();
       }
       await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), update);
     } catch (error) {
@@ -1278,6 +1343,17 @@ export const projectsService = {
 
   /** "Mark updated": refreshes the freshness stamp the portal shows. */
   async markClientUpdated(projectId: string, byEmail: string): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({
+        ...project,
+        clientFacing: {
+          ...project.clientFacing,
+          lastUpdateAt: new Date().toISOString(),
+          lastUpdateBy: byEmail.trim().toLowerCase(),
+        },
+      }));
+      return;
+    }
     try {
       await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), {
         'clientFacing.lastUpdateAt': new Date().toISOString(),
@@ -1301,6 +1377,25 @@ export const projectsService = {
       contactEmails?: string[];
     },
   ): Promise<void> {
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => {
+        const portal = { enabled: false, ...project.clientPortal };
+        const set = (key: 'brandName' | 'brandLogoUrl' | 'welcome', value: string | null | undefined) => {
+          if (value === undefined) return;
+          const trimmed = value?.trim();
+          if (trimmed) portal[key] = trimmed;
+          else delete portal[key];
+        };
+        set('brandName', patch.brandName);
+        set('brandLogoUrl', patch.brandLogoUrl);
+        set('welcome', patch.welcome);
+        if (patch.contactEmails !== undefined) {
+          portal.contactEmails = Array.from(new Set(patch.contactEmails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
+        }
+        return { ...project, clientPortal: portal };
+      });
+      return;
+    }
     try {
       const update: UpdateData<DocumentData> = { updatedAt: Timestamp.now() };
       const text = (value: string | null | undefined) => {
@@ -1337,21 +1432,55 @@ export const projectsService = {
    * loses updates when two switches are flipped quickly, and the loser here is
    * a link the team believes they hid from the client.
    */
-  async updateLinkClientVisibility(projectId: string, linkId: string, clientVisible: boolean): Promise<void> {
+  /**
+   * Rewrite the client plan from its latest stored value. `mutate` gets the
+   * current plan (undefined when there is none) and returns the next one, or
+   * null to remove it; it may run more than once, so it must not have side
+   * effects. A transaction, so two people editing different stages at once do
+   * not undo each other. A plan edit is news to the client, so it also
+   * refreshes the "last updated" stamp the stale-portal nudge reads.
+   */
+  async updateClientPlan(
+    projectId: string,
+    mutate: (current: ClientPlan | undefined) => ClientPlan | null,
+    byEmail: string,
+  ): Promise<void> {
+    const by = byEmail.trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+    const stamp = (plan: ClientPlan): ClientPlan => ({ ...plan, updatedAt: nowIso, ...(by ? { updatedBy: by } : {}) });
+
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => {
+        const next = mutate(project.clientPlan);
+        const updated: Project = {
+          ...project,
+          clientFacing: { ...project.clientFacing, lastUpdateAt: nowIso, ...(by ? { lastUpdateBy: by } : {}) },
+        };
+        if (next) updated.clientPlan = stamp(next);
+        else delete updated.clientPlan;
+        return updated;
+      });
+      return;
+    }
+
     try {
       const ref = doc(db, PROJECTS_COLLECTION, projectId);
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists()) throw new DatabaseError('Project not found');
-        const links = ((snap.data()?.links ?? []) as ProjectLink[]).map((link) =>
-          link.id === linkId ? { ...link, clientVisible } : link,
-        );
-        tx.update(ref, { links, updatedAt: Timestamp.now() });
+        const next = mutate(snap.data()?.clientPlan as ClientPlan | undefined);
+        const update: UpdateData<DocumentData> = {
+          clientPlan: next ? stamp(next) : deleteField(),
+          'clientFacing.lastUpdateAt': nowIso,
+          updatedAt: Timestamp.now(),
+        };
+        if (by) update['clientFacing.lastUpdateBy'] = by;
+        tx.update(ref, update);
       });
     } catch (error) {
-      logError(error, 'updateLinkClientVisibility');
+      logError(error, 'updateClientPlan');
       if (error instanceof DatabaseError) throw error;
-      throw new DatabaseError('Failed to update link visibility');
+      throw new DatabaseError('Failed to save the client plan');
     }
   },
 };

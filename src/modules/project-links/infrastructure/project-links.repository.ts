@@ -1,11 +1,12 @@
-import { projectsService } from '@/services/database';
+import { projectsService, type NewProjectSetup } from '@/services/database';
 import type { CreateProjectLinkInput } from '@/types';
 import type { Project } from '../domain/project-links.types';
 
 export interface ProjectLinksRepository {
   subscribeToAllProjects: (callback: (projects: Project[]) => void) => () => void;
   subscribeToProject: (projectId: string, callback: (project: Project | null) => void) => () => void;
-  createProject: (userId: string, name: string) => Promise<string>;
+  /** The name is all a project needs; the New project dialog also sets its client, type, people and plan. */
+  createProject: (userId: string, name: string, setup?: NewProjectSetup) => Promise<string>;
   addLinkToProject: (projectId: string, link: CreateProjectLinkInput) => Promise<void>;
   updateProjectName: (projectId: string, name: string) => Promise<void>;
   updateProjectClient: (projectId: string, client: string) => Promise<void>;
@@ -20,7 +21,7 @@ export interface ProjectLinksRepository {
 export const projectLinksRepository: ProjectLinksRepository = {
   subscribeToAllProjects: (callback) => projectsService.subscribeToAllProjects(callback),
   subscribeToProject: (projectId, callback) => projectsService.subscribeToProject(projectId, callback),
-  createProject: (userId, name) => projectsService.createProject(userId, name),
+  createProject: (userId, name, setup) => projectsService.createProject(userId, name, setup),
   addLinkToProject: (projectId, link) => projectsService.addLinkToProject(projectId, link),
   updateProjectName: (projectId, name) => projectsService.updateProjectName(projectId, name),
   updateProjectClient: (projectId, client) => projectsService.updateProjectClient(projectId, client),

@@ -615,6 +615,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         <ClientPanel
                             project={project}
                             timeline={timeline ?? null}
+                            // The checklist the client's tracker follows, subscribed above for the tab counts.
+                            checklists={checklists}
                             userEmail={user.email ?? ''}
                             isAdmin={isAdmin}
                             // Already subscribed here for the tab counts. The panel
