@@ -446,7 +446,7 @@ export function ProjectLinksDashboardScreen() {
                       </div>
                       <div className={cn(
                         viewMode === 'grid'
-                          ? "grid gap-3 sm:gap-4 md:gap-6 md:grid-cols-2 xl:grid-cols-3"
+                          ? "grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 md:grid-cols-2 xl:grid-cols-3"
                           : "space-y-3 sm:space-y-4"
                       )}>
                         {clientProjects.map(renderCard)}
@@ -457,7 +457,7 @@ export function ProjectLinksDashboardScreen() {
               ) : (
                 <div className={cn(
                   viewMode === 'grid'
-                    ? "grid gap-3 sm:gap-4 md:gap-6 md:grid-cols-2 xl:grid-cols-3"
+                    ? "grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 md:grid-cols-2 xl:grid-cols-3"
                     : "space-y-3 sm:space-y-4"
                 )}>
                   {filteredProjects.map(renderCard)}
