@@ -1,4 +1,6 @@
-import 'server-only';
+// No `server-only` guard: `npm run fathom:sync` runs this from a plain Node
+// script, where that package does not exist. It reads firebase-admin and a
+// server env var, so it cannot work in a browser bundle anyway.
 import { db as adminDb } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
 import {
