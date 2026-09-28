@@ -1,7 +1,7 @@
 import { CircleCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ClientPortalView, PortalStageView } from '../../domain/client-portal.types';
-import { PortalFileList } from './PortalFileList';
+import { PortalStageDetail } from './PortalStageDetail';
 import { formatDay, formatRelativeDay, formatStageDates } from './portal-format';
 import { PortalSectionHeading } from './PortalSectionHeading';
 import { PortalStatusChip } from './PortalStatusChip';
@@ -49,7 +49,10 @@ interface PortalNowCardProps {
   now: Date;
 }
 
-/** "Where we are": the stage the project is in, how far through, when it is due, and its files. */
+/**
+ * "Where we are": the stage the project is in, how far through, when it is
+ * due, and — right under it — that stage's milestones, meetings and files.
+ */
 export function PortalNowCard({ view, now }: PortalNowCardProps) {
   const { stages, currentStageIndex } = view;
   const current = currentStageIndex !== undefined ? stages[currentStageIndex] : undefined;
@@ -87,7 +90,11 @@ export function PortalNowCard({ view, now }: PortalNowCardProps) {
               {current.title}
             </p>
             {current.percent !== undefined && (
-              <p className="shrink-0 text-sm font-medium tabular-nums text-foreground">{current.percent}%</p>
+              <p className="shrink-0 text-sm font-medium tabular-nums text-foreground">
+                {current.steps?.length
+                  ? `${current.steps.filter((step) => step.state === 'done').length} of ${current.steps.length} done`
+                  : `${current.percent}%`}
+              </p>
             )}
           </div>
           <StageTrack stages={stages} label={trackLabel} />
@@ -121,14 +128,12 @@ export function PortalNowCard({ view, now }: PortalNowCardProps) {
         </p>
       )}
 
-      {current && current.files.length > 0 && (
-        <div className="mt-6 space-y-3 border-t border-border pt-5">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Files for this stage
-          </h3>
-          <PortalFileList files={current.files} compact />
-        </div>
-      )}
+      {current &&
+        (current.steps?.length || current.meetings?.length || current.files.length > 0) && (
+          <div className="mt-6 border-t border-border pt-5">
+            <PortalStageDetail stage={current} now={now} />
+          </div>
+        )}
     </section>
   );
 }

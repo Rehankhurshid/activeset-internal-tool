@@ -116,3 +116,22 @@ export function brandInitial(name: string): string {
   const first = name.trim().charAt(0);
   return first ? first.toUpperCase() : '·';
 }
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+/** "Tue, 22 Sep" for a call; the year only when it is not this one. */
+export function formatMeetingDay(iso: string | null | undefined, now: Date): string {
+  const parts = parseIsoDay(iso);
+  if (!parts) return '';
+  const weekday = WEEKDAYS[new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay()];
+  return `${weekday}, ${formatDay(iso, now)}`;
+}
+
+/** "45 min", "1 h 20 min". */
+export function formatDuration(minutes: number | undefined): string {
+  if (!minutes || minutes <= 0) return '';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}

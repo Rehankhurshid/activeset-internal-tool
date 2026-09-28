@@ -32,7 +32,7 @@ If you change code covered by a doc, update that doc in the same change and bump
 | [webflow.md](./webflow.md) | Everything that calls the Webflow Data API v2: Pages/SEO editor, bulk SEO and AI SEO, Images (CMS/assets alt), Schema, Sitemap Sync plus drift cron, token storage in `project_secrets`, in-place ALT writes | `/modules/project-links/[id]?tab=webflow` | `src/app/api/webflow/**`, `src/components/webflow`, `src/lib/cms`, `src/lib/webflow-*.ts` |
 | [worker-alt-text-images.md](./worker-alt-text-images.md) | The always-on Windows GPU worker, `worker_jobs` and `workers`, every job kind, Ollama ALT drafting (`alt_suggestions`), image weight (`image_budget`), `image_index`, Bunny backups, the CLIs | Audit tab → Alt text / Weight; Webflow tab → Images | `scripts/worker.ts`, `src/lib/worker`, `src/lib/alt-text`, `src/lib/image-budget` |
 | [delivery.md](./delivery.md) | Kickoff to handover: the Delivery tab stage rail, page tracker (`projects/{id}/pages`), stacks, Google Sheet sync, launch readiness, **Checklist** tab and SOP templates, **Timeline** tab and templates, Checklist Creator, delivery-nudge cron | `?tab=delivery`, `?tab=checklist`, `?tab=timeline`, `/modules/checklist-creator` | `src/modules/{delivery,timeline,checklists}` |
-| [client-portal.md](./client-portal.md) | The client dashboard `/portal/<token>` and the **client plan** behind it (stages, dates, what the client gets, files; drafted from and tracked by the checklist), the team's Client tab, token mint/rotate/disable (`client_portal_tokens`, sha256-keyed), what the client can and cannot see, approvals, view counting | `/portal/[token]`, `?tab=client` | `src/modules/client-portal`, `src/lib/client-portal*.ts` |
+| [client-portal.md](./client-portal.md) | The client dashboard `/portal/<token>` and the stages behind it (the **Timeline** tab's phases and milestones when it has any, else the **client plan** drafted from and tracked by the checklist), files per stage, **Fathom meetings** filed by stage and shared on review, the team's Client tab, token mint/rotate/disable (`client_portal_tokens`, sha256-keyed), what the client can and cannot see, approvals, view counting | `/portal/[token]`, `?tab=client` | `src/modules/client-portal`, `src/lib/client-portal*.ts` |
 | [proposal.md](./proposal.md) | Proposals and contracts: editor, AI draft/block (Vercel AI Gateway), templates, comments and history, public view and e-signature (`/view/[id]`), PDF generation, view tracking, contract CLI | `/modules/proposal`, `/view/[id]` | `src/app/modules/proposal`, `src/app/api/proposals`, `src/lib/proposal-ai` |
 | [clickup-tasks.md](./clickup-tasks.md) | Tasks tab (`tasks`, `requests`), AI parsing of pasted messages, ClickUp list binding, two-way sync and webhooks, refresh cron, Slack nag bot, ClickUp settings | `?tab=tasks`, `/modules/clickup-settings` | `src/components/tasks`, `src/lib/clickup*.ts`, `src/app/api/clickup` |
 | [tools-and-extensions.md](./tools-and-extensions.md) | **Invoices / Refrens** (admin tab, `project_invoices`, sync cron, Skydo bridge extension), Chrome extensions and pairing, Internal Tools page, Raycast app, **Screenshot Runner** and `@activeset/capture` package, `/captures/[runId]`, misc scripts | `/modules/internal-tools`, `/modules/screenshot-runner`, `/modules/refrens-settings`, `?tab=invoices`, `/captures/[runId]` | `src/modules/{invoices,internal-tools,screenshot-runner}`, `apps/raycast`, `extensions/`, `packages/activeset-capture` |
@@ -89,6 +89,7 @@ All crons are defined in [vercel.json](../../vercel.json) (times in UTC) and aut
 | `*/15 * * * *` | `/api/cron/clickup-refresh` | clickup-tasks |
 | `0 14,19 * * 1-5` | `/api/cron/nag-tasks` | clickup-tasks |
 | `0 22 * * 1-5` | `/api/cron/review-digest` | project-links |
+| `40 * * * *` | `/api/cron/fathom-sync` | client-portal (files Fathom calls under projects, pending review) |
 | **not scheduled** | `/api/cron/cleanup`, `/api/cron/scan-notifications` | site-monitoring (these exist but never run automatically) |
 
 ## Lookup: Firestore collection → doc
@@ -104,7 +105,7 @@ Collection name constants live in [src/lib/constants.ts](../../src/lib/constants
 | `webflow_sessions`, `webflow_pings` | webflow (route) and tools-and-extensions (the Team Tracker extension that writes them) |
 | `worker_jobs`, `workers` (+ `control`, `commands`), `projects/{id}/alt_suggestions`, `projects/{id}/image_budget`, `projects/{id}/image_index` | worker-alt-text-images |
 | `projects/{id}/pages`, `project_checklists`, `sop_templates`, `project_timelines`, `timeline_templates` | delivery |
-| `client_portal_tokens`, `projects/{id}/portal_views` | client-portal |
+| `client_portal_tokens`, `projects/{id}/portal_views`, `projects/{id}/meetings` | client-portal |
 | `proposals`, `shared_proposals`, `proposal_comments`, `proposal_history`, `proposal_views`, `templates` | proposal |
 | `tasks`, `requests`, `app_secrets/clickup` | clickup-tasks |
 | `project_invoices`, `app_secrets/refrens`, `capture_runs` | tools-and-extensions |

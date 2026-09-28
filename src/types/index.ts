@@ -424,6 +424,14 @@ export interface Project {
   clientFacing?: ClientFacingState;
   /** The client dashboard's plan: stages, dates, what they get, files. */
   clientPlan?: ClientPlan;
+  /**
+   * How the Timeline tab appears on the client's page, when it drives it:
+   * files per phase, milestones kept back, and which email domains are this
+   * client's (for matching Fathom calls). The timeline itself stays in
+   * `project_timelines`, which is readable by anyone; these live here, on the
+   * team-only project doc, because the files are private links.
+   */
+  clientTimeline?: ClientTimelineSettings;
   // --- Billing ---
   /** How the project is billed. Missing = 'fixed'. `adhoc` unlocks the
    *  per-task billable hours + "generate invoice from tasks" flow. */
@@ -1333,4 +1341,71 @@ export interface ClientPlan {
   /** ISO timestamp of the last edit. */
   updatedAt?: string;
   updatedBy?: string;
+}
+
+/** Per-project settings for the Timeline on the client's page. */
+export interface ClientTimelineSettings {
+  /** Files for each Timeline phase, keyed by phase id. http(s) only. */
+  phaseFiles?: Record<string, ClientPlanFile[]>;
+  /** Files for the whole project, shown when the Timeline drives the page. */
+  files?: ClientPlanFile[];
+  /** Milestones kept off the client's page (internal work, admin steps). */
+  hiddenMilestoneIds?: string[];
+  /**
+   * The client's email domains, e.g. "assetplus.io": a Fathom call with anyone
+   * from one of these belongs to this project. Empty means "work it out" from
+   * the client contacts and the site's own domain.
+   */
+  meetingDomains?: string[];
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+/** Where a recorded call stands with the client. Nothing is shown until `shared`. */
+export type MeetingShareStatus = 'pending' | 'shared' | 'hidden';
+
+export interface ProjectMeetingAttendee {
+  name?: string;
+  email?: string;
+  /** Not an ActiveSet address. */
+  external: boolean;
+}
+
+export interface ProjectMeetingActionItem {
+  text: string;
+  /** The owner's name, as Fathom has it. */
+  owner?: string;
+}
+
+/**
+ * A recorded call about a project: `projects/{id}/meetings/{recordingId}`.
+ * Written by the Fathom sync with firebase-admin; the team shares, hides,
+ * moves or edits it through `/api/client-portal/[projectId]/meetings`. The
+ * collection is deny-by-default for browsers: summaries are candid notes.
+ */
+export interface ProjectMeeting {
+  id: string;
+  source: 'fathom';
+  title: string;
+  /** ISO timestamp the recording started. */
+  startedAt: string;
+  endedAt?: string;
+  /** The team's link to the call in Fathom. */
+  fathomUrl?: string;
+  /** Fathom's public share link: what the client's "Watch the recording" opens. */
+  shareUrl?: string;
+  attendees: ProjectMeetingAttendee[];
+  /** Fathom's summary, Markdown. May arrive an hour after the call. */
+  summary?: string;
+  actionItems: ProjectMeetingActionItem[];
+  /** The Timeline phase (or plan stage) it belongs to. */
+  phaseId?: string;
+  /** `team` once someone moved it by hand, which the sync then leaves alone. */
+  phaseSetBy?: 'auto' | 'team';
+  status: MeetingShareStatus;
+  /** What the client reads instead of Fathom's summary, when the team edited it. */
+  clientSummary?: string;
+  decidedAt?: string;
+  decidedBy?: string;
+  syncedAt: string;
 }

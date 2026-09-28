@@ -1,7 +1,8 @@
-import { Check } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PORTAL_STAGE_LABELS, type PortalStageView } from '../../domain/client-portal.types';
 import { PortalFileList } from './PortalFileList';
+import { PortalStageDetail, stageContentsLabel } from './PortalStageDetail';
 import { formatStageDates } from './portal-format';
 import { PortalSectionHeading } from './PortalSectionHeading';
 
@@ -24,13 +25,21 @@ function StageMarker({ stage, index }: { stage: PortalStageView; index: number }
 interface PortalStagesProps {
   stages: PortalStageView[];
   now: Date;
+  /** Timeline stages carry milestones and read as the project's plan; plan stages as what the client gets. */
+  planSource?: 'timeline' | 'plan';
 }
 
-/** "What you get, and when": every stage, its dates, what it delivers and its files. */
-export function PortalStages({ stages, now }: PortalStagesProps) {
+/**
+ * Every stage, its dates and where it stands. A stage with milestones or
+ * meetings opens (a `<details>`, no script) to show them with its files, so
+ * each stage carries its own context; the current one is already open above.
+ */
+export function PortalStages({ stages, now, planSource = 'plan' }: PortalStagesProps) {
   return (
     <section aria-labelledby="portal-stages-heading" className="space-y-5">
-      <PortalSectionHeading id="portal-stages-heading">What you get, and when</PortalSectionHeading>
+      <PortalSectionHeading id="portal-stages-heading">
+        {planSource === 'timeline' ? 'The plan, stage by stage' : 'What you get, and when'}
+      </PortalSectionHeading>
 
       {stages.length === 0 ? (
         <p className="text-sm text-muted-foreground">Your plan will appear here once kickoff is done.</p>
@@ -38,10 +47,13 @@ export function PortalStages({ stages, now }: PortalStagesProps) {
         <ol className="overflow-hidden rounded-2xl border border-border bg-card">
           {stages.map((stage, index) => {
             const dates = formatStageDates(stage.startDate, stage.dueDate, now);
+            const stepsDone = stage.steps?.filter((step) => step.state === 'done').length ?? 0;
             const stateLabel =
-              stage.state === 'current' && stage.percent !== undefined
-                ? `${PORTAL_STAGE_LABELS.current} · ${stage.percent}%`
-                : PORTAL_STAGE_LABELS[stage.state];
+              stage.state === 'current' && stage.steps?.length
+                ? `${PORTAL_STAGE_LABELS.current} · ${stepsDone} of ${stage.steps.length} done`
+                : stage.state === 'current' && stage.percent !== undefined
+                  ? `${PORTAL_STAGE_LABELS.current} · ${stage.percent}%`
+                  : PORTAL_STAGE_LABELS[stage.state];
             return (
               <li
                 key={stage.id}
@@ -90,7 +102,25 @@ export function PortalStages({ stages, now }: PortalStagesProps) {
                     </ul>
                   )}
 
-                  {stage.files.length > 0 && <PortalFileList files={stage.files} compact />}
+                  {stage.steps?.length || stage.meetings?.length ? (
+                    stage.state === 'current' ? (
+                      <p className="text-sm text-muted-foreground">
+                        {stageContentsLabel(stage)} · <a href="#portal-now-heading" className="underline underline-offset-2">see above</a>
+                      </p>
+                    ) : (
+                      <details className="group/stage">
+                        <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+                          {stageContentsLabel(stage)}
+                          <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 transition-transform group-open/stage:rotate-180" />
+                        </summary>
+                        <div className="pt-4">
+                          <PortalStageDetail stage={stage} now={now} />
+                        </div>
+                      </details>
+                    )
+                  ) : (
+                    stage.files.length > 0 && <PortalFileList files={stage.files} compact />
+                  )}
                 </div>
               </li>
             );

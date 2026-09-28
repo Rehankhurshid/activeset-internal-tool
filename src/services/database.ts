@@ -39,6 +39,7 @@ import {
   ClientStatus,
   ClientFacingState,
   ClientPlan,
+  ClientTimelineSettings,
 } from '@/types';
 import { DatabaseError, logError } from '@/lib/errors';
 import { COLLECTIONS } from '@/lib/constants';
@@ -1481,6 +1482,57 @@ export const projectsService = {
       logError(error, 'updateClientPlan');
       if (error instanceof DatabaseError) throw error;
       throw new DatabaseError('Failed to save the client plan');
+    }
+  },
+
+  /**
+   * Edit how the Timeline appears on the client's page: files per phase,
+   * milestones held back, the client's email domains. A transaction, like
+   * plan edits, and it stamps `clientFacing.lastUpdateAt`: a file added to a
+   * phase is news to the client.
+   */
+  async updateClientTimeline(
+    projectId: string,
+    mutate: (current: ClientTimelineSettings | undefined) => ClientTimelineSettings,
+    byEmail: string,
+  ): Promise<void> {
+    const by = byEmail.trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+    const stamp = (settings: ClientTimelineSettings): ClientTimelineSettings => ({
+      ...settings,
+      updatedAt: nowIso,
+      ...(by ? { updatedBy: by } : {}),
+    });
+
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({
+        ...project,
+        clientTimeline: stamp(mutate(project.clientTimeline)),
+        clientFacing: { ...project.clientFacing, lastUpdateAt: nowIso, ...(by ? { lastUpdateBy: by } : {}) },
+      }));
+      return;
+    }
+
+    try {
+      const ref = doc(db, PROJECTS_COLLECTION, projectId);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new DatabaseError('Project not found');
+        const next = stamp(mutate(snap.data()?.clientTimeline as ClientTimelineSettings | undefined));
+        // Firestore refuses undefined; drop any key an edit left empty.
+        const clean = Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined));
+        const update: UpdateData<DocumentData> = {
+          clientTimeline: clean,
+          'clientFacing.lastUpdateAt': nowIso,
+          updatedAt: Timestamp.now(),
+        };
+        if (by) update['clientFacing.lastUpdateBy'] = by;
+        tx.update(ref, update);
+      });
+    } catch (error) {
+      logError(error, 'updateClientTimeline');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to save the client timeline');
     }
   },
 };

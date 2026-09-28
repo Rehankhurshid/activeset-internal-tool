@@ -6,10 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import type { Project, ProjectChecklist, ProjectTimeline, Task } from '@/types';
 import { cn } from '@/lib/utils';
 import { legacyClientPlan, normalizeClientPlan, resolveClientPlan } from '../../domain/client-plan';
+import { resolveTimelinePlan, timelineStages } from '../../domain/client-timeline';
 import { normalizeClientStatus } from '../../domain/client-portal.types';
 import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
 import { ClientNowEditor } from '../components/ClientNowEditor';
+import { ClientMeetingsCard } from '../components/ClientMeetingsCard';
 import { ClientPlanEditor } from '../components/ClientPlanEditor';
+import { ClientTimelineEditor } from '../components/ClientTimelineEditor';
 import { ClientStatusChip } from '../components/ClientStatusChip';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalLinkCard } from '../components/PortalLinkCard';
@@ -109,6 +112,19 @@ export function ClientPanel(props: ClientPanelProps) {
   const facing = project.clientFacing;
   const status = normalizeClientStatus(facing?.status);
 
+  // The Timeline drives the client's page whenever it has milestones to show.
+  const timelineSources = useMemo(() => timelineStages(timeline, project.clientTimeline), [timeline, project.clientTimeline]);
+  const fromTimeline = timelineSources.length > 0;
+  const timelineResolved = useMemo(
+    () =>
+      fromTimeline ? resolveTimelinePlan(timelineSources, { currentStageId: facing?.currentStageId, status }) : null,
+    [fromTimeline, timelineSources, facing?.currentStageId, status],
+  );
+  const timelineFollowing = useMemo(
+    () => (fromTimeline ? resolveTimelinePlan(timelineSources) : null),
+    [fromTimeline, timelineSources],
+  );
+
   const plan = useMemo(() => (project.clientPlan ? normalizeClientPlan(project.clientPlan) : null), [project.clientPlan]);
   // Until a plan is saved, an old portal keeps publishing its timeline and link switches.
   const legacy = useMemo(
@@ -154,17 +170,42 @@ export function ClientPanel(props: ClientPanelProps) {
             <CardDescription className="text-xs">Where the project is, in the client&apos;s words.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ClientNowEditor
-              project={project}
-              stages={plan ? plan.stages : null}
-              resolved={resolved}
-              following={following}
-              userEmail={userEmail}
-            />
+            {fromTimeline ? (
+              <ClientNowEditor
+                project={project}
+                stages={timelineSources.map((source) => source.stage)}
+                resolved={timelineResolved}
+                following={timelineFollowing}
+                userEmail={userEmail}
+                followSource="timeline"
+              />
+            ) : (
+              <ClientNowEditor
+                project={project}
+                stages={plan ? plan.stages : null}
+                resolved={resolved}
+                following={following}
+                userEmail={userEmail}
+              />
+            )}
           </CardContent>
         </Card>
       </div>
 
+      {fromTimeline && timeline ? (
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Stages: from the Timeline</SectionTitle>
+            <CardDescription className="text-xs">
+              Each Timeline phase is a stage on the client&apos;s page, with its milestones, meetings and files. Edit phases
+              and dates on the Timeline tab; here, choose which milestones the client sees and attach files to each stage.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ClientTimelineEditor project={project} timeline={timeline} resolved={timelineResolved} userEmail={userEmail} />
+          </CardContent>
+        </Card>
+      ) : (
       <Card className="gap-3">
         <CardHeader>
           <SectionTitle>Plan: what they get, and when</SectionTitle>
@@ -180,6 +221,24 @@ export function ClientPanel(props: ClientPanelProps) {
             legacy={legacy}
             resolved={resolved}
             checklists={checklists}
+            userEmail={userEmail}
+          />
+        </CardContent>
+      </Card>
+      )}
+
+      <Card className="gap-3">
+        <CardHeader>
+          <SectionTitle>Meetings</SectionTitle>
+          <CardDescription className="text-xs">
+            Calls from Fathom with this client, filed under the stage they happened in. Nothing reaches the client until
+            you open a call and press Share.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ClientMeetingsCard
+            projectId={project.id}
+            stages={fromTimeline ? timelineSources.map((source) => source.stage) : (plan?.stages ?? [])}
             userEmail={userEmail}
           />
         </CardContent>

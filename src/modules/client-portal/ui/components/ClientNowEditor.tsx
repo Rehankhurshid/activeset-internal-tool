@@ -45,8 +45,14 @@ function sameDraft(a: Draft, b: Draft): boolean {
 }
 
 /** What the checklist alone says, in a sentence the team can check against the Delivery tab. */
-function checklistSays(following: ResolvedPlan | null): string {
+function checklistSays(following: ResolvedPlan | null, source: 'checklist' | 'timeline' = 'checklist'): string {
   if (!following || following.stages.length === 0) return '';
+  if (source === 'timeline') {
+    if (following.currentIndex < 0) return 'The Timeline says every milestone is done.';
+    const current = following.stages[following.currentIndex];
+    const t = current.tracking;
+    return `The Timeline puts the project in ${current.stage.title}${t ? `: ${t.done} of ${t.total} milestones done` : ''}.`;
+  }
   if (!planTracksChecklist(following)) {
     return 'No checklist tracks this plan, so move the stage on by hand. Add a checklist and rebuild the plan to make it follow along.';
   }
@@ -67,6 +73,8 @@ interface ClientNowEditorProps {
   /** The same plan following the checklist alone. */
   following: ResolvedPlan | null;
   userEmail: string;
+  /** What the stages follow when nobody pins one. */
+  followSource?: 'checklist' | 'timeline';
 }
 
 /**
@@ -75,7 +83,14 @@ interface ClientNowEditorProps {
  * delivers the saved values, and the draft only follows them while the form is
  * clean.
  */
-export function ClientNowEditor({ project, stages, resolved, following, userEmail }: ClientNowEditorProps) {
+export function ClientNowEditor({
+  project,
+  stages,
+  resolved,
+  following,
+  userEmail,
+  followSource = 'checklist',
+}: ClientNowEditorProps) {
   const facing = project.clientFacing;
   const server = useMemo<Draft>(
     () => ({
@@ -127,8 +142,8 @@ export function ClientNowEditor({ project, stages, resolved, following, userEmai
   let stageHint = '';
   if (!stages) stageHint = 'Set up the plan below to show the client which stage the project is in.';
   else if (draft.status === 'delivered') stageHint = 'Delivered: the client sees every stage done.';
-  else if (!knownPick) stageHint = checklistSays(following);
-  else stageHint = `Pinned by you. ${checklistSays(following)}`.trim();
+  else if (!knownPick) stageHint = checklistSays(following, followSource);
+  else stageHint = `Pinned by you. ${checklistSays(following, followSource)}`.trim();
 
   const handleSave = async () => {
     if (!dirty || saving) return;
@@ -195,7 +210,8 @@ export function ClientNowEditor({ project, stages, resolved, following, userEmai
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={FOLLOW} className="text-xs">
-                Follow the checklist{followingTitle ? ` (${followingTitle})` : ''}
+                Follow the {followSource === 'timeline' ? 'Timeline' : 'checklist'}
+                {followingTitle ? ` (${followingTitle})` : ''}
               </SelectItem>
               {pickable.map((stage, index) => (
                 <SelectItem key={stage.id} value={stage.id} className="text-xs">

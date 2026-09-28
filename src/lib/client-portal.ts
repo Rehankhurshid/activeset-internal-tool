@@ -4,7 +4,7 @@ import { COLLECTIONS } from '@/lib/constants';
 import { PortalAuthError, verifyPortalToken } from '@/lib/client-portal-tokens';
 import { buildClientPortalView } from '@/modules/client-portal/domain/client-portal.projection';
 import type { ClientPortalView } from '@/modules/client-portal/domain/client-portal.types';
-import type { Project, ProjectChecklist, ProjectTimeline, Task } from '@/types';
+import type { Project, ProjectChecklist, ProjectMeeting, ProjectTimeline, Task } from '@/types';
 
 /**
  * Server-side loader for the portal page: token → project (and its client plan)
@@ -80,7 +80,7 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
   }
 
   const { projectId, tokenHash, project: raw } = verified;
-  const [timelineSnap, asksSnap, checklistSnap] = await Promise.all([
+  const [timelineSnap, asksSnap, checklistSnap, meetingSnap] = await Promise.all([
     adminDb.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
     adminDb
       .collection(COLLECTIONS.TASKS)
@@ -99,6 +99,15 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
       .where('projectId', '==', projectId)
       .limit(20)
       .get(),
+    // Calls the team pressed Share on. Pending and hidden ones are never read
+    // here, and the projection checks the status again.
+    adminDb
+      .collection(COLLECTIONS.PROJECTS)
+      .doc(projectId)
+      .collection(COLLECTIONS.PROJECT_MEETINGS)
+      .where('status', '==', 'shared')
+      .limit(200)
+      .get(),
   ]);
 
   const project = toProject(projectId, raw);
@@ -109,8 +118,10 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
     (d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }) as unknown as ProjectChecklist,
   );
 
+  const meetings = meetingSnap.docs.map((d) => ({ ...(d.data() as ProjectMeeting), id: d.id }));
+
   return {
-    view: buildClientPortalView({ project, timeline, tasks, checklists }),
+    view: buildClientPortalView({ project, timeline, tasks, checklists, meetings }),
     projectId,
     tokenHash,
   };

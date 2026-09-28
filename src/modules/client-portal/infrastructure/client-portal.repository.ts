@@ -2,8 +2,33 @@
 
 import { projectsService } from '@/services/database';
 import { fetchAuthed } from '@/lib/api-client';
-import type { ClientPlan, ClientPlanFile, ClientPlanStage, ClientStatus } from '@/types';
+import type {
+  ClientPlan,
+  ClientPlanFile,
+  ClientPlanStage,
+  ClientStatus,
+  ClientTimelineSettings,
+  MeetingShareStatus,
+  ProjectMeeting,
+} from '@/types';
 import { normalizeClientPlan } from '../domain/client-plan';
+import { normalizeClientTimelineSettings } from '../domain/client-timeline';
+
+/** What the Client tab gets back from the meetings route. */
+export interface MeetingsState {
+  meetings: ProjectMeeting[];
+  /** Whether FATHOM_API_KEY is set on this deployment. */
+  connected: boolean;
+  /** The email domains whose calls are filed here. */
+  domains: string[];
+}
+
+export interface MeetingPatch {
+  status?: MeetingShareStatus;
+  phaseId?: string;
+  /** `null` goes back to Fathom's summary. */
+  clientSummary?: string | null;
+}
 
 /** Mirror of the JSON returned by /api/client-portal/[projectId]/link. */
 export interface PortalLinkState {
@@ -58,6 +83,18 @@ type ClientPortalRepository = {
   removeStage(projectId: string, stageId: string, byEmail: string): Promise<void>;
   moveStage(projectId: string, stageId: string, delta: -1 | 1, byEmail: string): Promise<void>;
   setPlanFiles(projectId: string, files: ClientPlanFile[], byEmail: string): Promise<void>;
+  editTimeline(
+    projectId: string,
+    byEmail: string,
+    edit: (settings: ClientTimelineSettings) => ClientTimelineSettings,
+  ): Promise<void>;
+  setPhaseFiles(projectId: string, phaseId: string, files: ClientPlanFile[], byEmail: string): Promise<void>;
+  setTimelineFiles(projectId: string, files: ClientPlanFile[], byEmail: string): Promise<void>;
+  setMilestoneHidden(projectId: string, milestoneId: string, hidden: boolean, byEmail: string): Promise<void>;
+  setMeetingDomains(projectId: string, domains: string[], byEmail: string): Promise<void>;
+  listMeetings(projectId: string): Promise<MeetingsState>;
+  syncMeetings(projectId: string): Promise<{ added: number; seen: number; filed: number }>;
+  updateMeeting(projectId: string, meetingId: string, patch: MeetingPatch): Promise<ProjectMeeting>;
 };
 
 /**
@@ -153,4 +190,53 @@ export const clientPortalRepository: ClientPortalRepository = {
 
   setPlanFiles: (projectId: string, files: ClientPlanFile[], byEmail: string) =>
     clientPortalRepository.editPlan(projectId, byEmail, (plan) => ({ ...plan, files })),
+
+  /** Edits the Timeline's client settings from their latest stored value, cleaned on the way in. */
+  editTimeline: (projectId, byEmail, edit) =>
+    projectsService.updateClientTimeline(
+      projectId,
+      (current) => normalizeClientTimelineSettings(edit(normalizeClientTimelineSettings(current))),
+      byEmail,
+    ),
+
+  setPhaseFiles: (projectId, phaseId, files, byEmail) =>
+    clientPortalRepository.editTimeline(projectId, byEmail, (settings) => ({
+      ...settings,
+      phaseFiles: { ...settings.phaseFiles, [phaseId]: files },
+    })),
+
+  setTimelineFiles: (projectId, files, byEmail) =>
+    clientPortalRepository.editTimeline(projectId, byEmail, (settings) => ({ ...settings, files })),
+
+  setMilestoneHidden: (projectId, milestoneId, hidden, byEmail) =>
+    clientPortalRepository.editTimeline(projectId, byEmail, (settings) => {
+      const rest = (settings.hiddenMilestoneIds ?? []).filter((id) => id !== milestoneId);
+      return { ...settings, hiddenMilestoneIds: hidden ? [...rest, milestoneId] : rest };
+    }),
+
+  setMeetingDomains: (projectId, domains, byEmail) =>
+    clientPortalRepository.editTimeline(projectId, byEmail, (settings) => ({ ...settings, meetingDomains: domains })),
+
+  async listMeetings(projectId) {
+    const res = await fetchAuthed(`/api/client-portal/${encodeURIComponent(projectId)}/meetings`);
+    return readJson<MeetingsState>(res, 'Failed to load calls');
+  },
+
+  async syncMeetings(projectId) {
+    const res = await fetchAuthed(`/api/client-portal/${encodeURIComponent(projectId)}/meetings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'sync' }),
+    });
+    return readJson<{ added: number; seen: number; filed: number }>(res, 'Could not check Fathom');
+  },
+
+  async updateMeeting(projectId, meetingId, patch) {
+    const res = await fetchAuthed(
+      `/api/client-portal/${encodeURIComponent(projectId)}/meetings/${encodeURIComponent(meetingId)}`,
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) },
+    );
+    const body = await readJson<{ meeting: ProjectMeeting }>(res, 'Could not update the call');
+    return body.meeting;
+  },
 };

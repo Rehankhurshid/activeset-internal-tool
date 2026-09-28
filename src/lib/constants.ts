@@ -29,6 +29,8 @@ export const COLLECTIONS = {
   // Server-only subcollection projects/{id}/portal_views: one row per counted
   // client portal open (beacon). Not in firestore.rules, so default deny.
   CLIENT_PORTAL_VIEWS: 'portal_views',
+  /** Subcollection `projects/{id}/meetings`: recorded calls, server-only (see client-portal.md). */
+  PROJECT_MEETINGS: 'meetings',
   // Delivery: one document per page being built, at projects/{id}/pages.
   // A subcollection rather than an array on the project so a large site does
   // not approach the 1MB document ceiling and two people can edit two rows.

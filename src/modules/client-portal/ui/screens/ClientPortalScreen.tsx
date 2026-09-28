@@ -49,7 +49,7 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         />
         <PortalNowCard view={view} now={now} />
         {view.asks.length > 0 && <PortalAsks asks={view.asks} now={now} />}
-        <PortalStages stages={view.stages} now={now} />
+        <PortalStages stages={view.stages} now={now} planSource={view.planSource} />
         <PortalFiles files={view.files} websiteUrl={view.websiteUrl} />
         {/* Below the stages and files deliberately: there is no approving
             something you have not been shown. */}

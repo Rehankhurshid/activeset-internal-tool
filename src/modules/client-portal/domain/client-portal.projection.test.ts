@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClientPortalView } from './client-portal.projection';
 import { CLIENT_PORTAL_VIEW_KEYS } from './client-portal.types';
-import type { ClientPlan, Project, ProjectChecklist, ProjectTimeline, Task } from '@/types';
+import type { ClientPlan, Project, ProjectChecklist, ProjectMeeting, ProjectTimeline, Task } from '@/types';
 
 const SECRET = 'SECRET-SENTINEL';
 
@@ -122,9 +122,13 @@ describe('buildClientPortalView', () => {
     for (const key of Object.keys(view)) {
       assert.ok(allowed.has(key), `unexpected key on portal view: ${key}`);
     }
-    const stageKeys = new Set(['id', 'title', 'state', 'startDate', 'dueDate', 'deliverables', 'files', 'percent']);
+    const stageKeys = new Set(['id', 'title', 'state', 'startDate', 'dueDate', 'deliverables', 'files', 'percent', 'steps', 'meetings']);
+    const stepKeys = new Set(['id', 'title', 'state', 'startDate', 'endDate']);
     for (const stage of view.stages) {
       for (const key of Object.keys(stage)) assert.ok(stageKeys.has(key), `unexpected key on a stage: ${key}`);
+      for (const step of stage.steps ?? []) {
+        for (const key of Object.keys(step)) assert.ok(stepKeys.has(key), `unexpected key on a milestone: ${key}`);
+      }
     }
   });
 
@@ -183,17 +187,11 @@ describe('buildClientPortalView', () => {
     assert.equal(noted.lastUpdateAt, '2026-09-15T10:00:00.000Z');
   });
 
-  it('keeps an old portal showing what it showed until the team saves a plan', () => {
-    const view = buildClientPortalView({ project: project(), timeline: timeline() });
-    // Only phases with a client-visible milestone, in phase order; the internal milestone stays hidden.
-    assert.deepEqual(view.stages.map((s) => s.title), ['Discovery', 'Design', 'Build']);
-    assert.deepEqual(view.stages.map((s) => s.deliverables), [['Kickoff'], ['Wireframes'], ['Staging review']]);
-    assert.equal(view.currentStageIndex, 1, 'the first phase with unfinished work');
+  it('keeps an old portal publishing its link switches until a plan is saved, when there is no timeline', () => {
+    const view = buildClientPortalView({ project: project(), timeline: null });
+    assert.equal(view.planSource, 'plan');
     assert.deepEqual(view.files.map((f) => f.title), ['Staging']);
     assert.equal(view.websiteUrl, 'https://peakxv.com');
-
-    const chosen = buildClientPortalView({ project: project({ clientFacing: { currentPhaseId: 'ph_build' } }), timeline: timeline() });
-    assert.equal(chosen.currentStageIndex, 2);
   });
 
   it('stops publishing the old link switches once a plan is saved', () => {
@@ -202,7 +200,7 @@ describe('buildClientPortalView', () => {
         webflowConfig: undefined,
         links: [{ id: 'l9', title: 'Live site', url: 'https://peakxv.com', order: 0, source: 'manual', clientVisible: true }],
       }),
-      timeline: timeline(),
+      timeline: null,
     });
     assert.equal(view.websiteUrl, undefined);
     assert.deepEqual(view.files.map((f) => f.id), ['f4']);
@@ -325,4 +323,123 @@ describe('the review the client is asked to sign off', () => {
     const view = buildClientPortalView({ project: project(), timeline: null, checklists: [withItems] });
     assert.ok(!JSON.stringify(view).includes('MarkUp'));
   });
+
+  describe('when the Timeline drives the page', () => {
+    const withTimeline = (overrides: Partial<Project> = {}) =>
+      project({
+        clientPlan: planFixture(),
+        clientTimeline: {
+          phaseFiles: {
+            ph_design: [
+              { id: 'pf1', title: 'Homepage in Figma', url: 'https://figma.com/file/home' },
+              { id: 'pf2', title: 'Sneaky', url: 'javascript:alert(1)' },
+            ],
+          },
+          files: [{ id: 'pf3', title: 'Brand guidelines', url: 'https://drive.google.com/brand' }],
+        },
+        ...overrides,
+      });
+
+    it('turns phases into stages and milestones into steps, in the timeline’s order', () => {
+      const view = buildClientPortalView({ project: withTimeline(), timeline: timeline() });
+      assert.equal(view.planSource, 'timeline');
+      assert.deepEqual(view.stages.map((s) => s.title), ['Discovery', 'Design', 'Build']);
+      assert.deepEqual(
+        view.stages.map((s) => s.steps?.map((step) => `${step.title}:${step.state}`)),
+        [['Kickoff:done'], ['Wireframes:current'], ['Internal QA:upcoming', 'Staging review:current']],
+      );
+      assert.equal(view.currentStageIndex, 1, 'the earliest phase with a milestone not done');
+      assert.deepEqual([view.stages[2].startDate, view.stages[2].dueDate], ['2026-09-20', '2026-09-28']);
+      assert.equal(view.stages[1].percent, 0);
+      assert.deepEqual(view.stages[1].files.map((f) => f.title), ['Homepage in Figma'], 'web links only');
+      assert.deepEqual(view.files.map((f) => f.title), ['Brand guidelines'], 'the timeline’s project files, not the plan’s');
+    });
+
+    it('keeps back the milestones the team hid, and a phase left empty by it', () => {
+      const view = buildClientPortalView({
+        project: withTimeline({ clientTimeline: { hiddenMilestoneIds: ['m3', 'm1'] } }),
+        timeline: timeline(),
+      });
+      assert.deepEqual(view.stages.map((s) => s.title), ['Design', 'Build']);
+      assert.deepEqual(view.stages[1].steps?.map((step) => step.title), ['Staging review']);
+      assert.equal(JSON.stringify(view).includes('Internal QA'), false);
+    });
+
+    it('lets the team pin a phase, and Delivered still wins', () => {
+      const pinned = buildClientPortalView({
+        project: withTimeline({ clientFacing: { currentStageId: 'ph_build' } }),
+        timeline: timeline(),
+      });
+      assert.equal(pinned.currentStageIndex, 2);
+      const delivered = buildClientPortalView({
+        project: withTimeline({ clientFacing: { status: 'delivered' } }),
+        timeline: timeline(),
+      });
+      assert.equal(delivered.currentStageIndex, undefined);
+      assert.ok(delivered.stages.every((s) => s.state === 'done'));
+    });
+  });
+
+  describe('meetings', () => {
+    const meeting = (overrides: Partial<ProjectMeeting>): ProjectMeeting => ({
+      id: 'r1',
+      source: 'fathom',
+      title: 'Design review',
+      startedAt: '2026-09-12T09:30:00.000Z',
+      endedAt: '2026-09-12T10:15:00.000Z',
+      fathomUrl: `https://fathom.video/calls/${SECRET}`,
+      shareUrl: 'https://fathom.video/share/abc',
+      attendees: [
+        { name: 'Anurag Surya', email: `anurag-${SECRET}@client.com`, external: true },
+        { email: `nameless-${SECRET}@client.com`, external: true },
+        { name: 'Rehan Khurshid', email: 'rehan@activeset.co', external: false },
+      ],
+      summary: `## Key takeaways\n- Homepage **approved**`,
+      actionItems: [{ text: 'Send the About copy', owner: 'Anurag Surya' }, { text: 'Share staging', owner: `x-${SECRET}@activeset.co` }],
+      status: 'shared',
+      syncedAt: '2026-09-12T11:00:00.000Z',
+      ...overrides,
+    });
+
+    it('shows only calls the team shared, by name, in the stage they belong to', () => {
+      const view = buildClientPortalView({
+        project: project(),
+        timeline: timeline(),
+        meetings: [
+          meeting({}),
+          meeting({ id: 'r2', title: 'Kickoff call', startedAt: '2026-09-02T09:00:00.000Z', phaseId: undefined }),
+          meeting({ id: 'r3', title: 'Pending one', status: 'pending' }),
+          meeting({ id: 'r4', title: 'Hidden one', status: 'hidden' }),
+          meeting({ id: 'r5', title: 'Filed by hand', phaseId: 'ph_build' }),
+        ],
+      });
+      const byStage = Object.fromEntries(view.stages.map((s) => [s.title, (s.meetings ?? []).map((m) => m.title)]));
+      assert.deepEqual(byStage, {
+        Discovery: ['Kickoff call'],
+        Design: ['Design review'],
+        Build: ['Filed by hand'],
+      });
+      const json = JSON.stringify(view);
+      assert.equal(json.includes(SECRET), false, 'no addresses, no workspace links');
+      assert.equal(json.includes('Pending one') || json.includes('Hidden one'), false);
+
+      const design = view.stages[1].meetings![0];
+      assert.deepEqual(design.attendees, ['Anurag Surya', 'Rehan Khurshid']);
+      assert.equal(design.durationMinutes, 45);
+      assert.equal(design.recordingUrl, 'https://fathom.video/share/abc');
+      assert.deepEqual(design.nextSteps, [{ text: 'Send the About copy', owner: 'Anurag Surya' }, { text: 'Share staging' }]);
+    });
+
+    it('prefers the team’s edit of the summary, and drops a recording link that is not a web link', () => {
+      const view = buildClientPortalView({
+        project: project(),
+        timeline: timeline(),
+        meetings: [meeting({ clientSummary: 'We agreed the homepage.', shareUrl: 'javascript:alert(1)' })],
+      });
+      const shared = view.stages[1].meetings![0];
+      assert.equal(shared.summary, 'We agreed the homepage.');
+      assert.equal(shared.recordingUrl, undefined);
+    });
+  });
 });
+

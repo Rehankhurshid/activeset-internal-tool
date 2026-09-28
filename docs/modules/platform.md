@@ -180,6 +180,7 @@ Vercel crons from [vercel.json](../../vercel.json) (UTC). Every route listed cal
 | `*/15 * * * *` (every 15 min) | `/api/cron/clickup-refresh` | [route.ts](../../src/app/api/cron/clickup-refresh/route.ts) | GET | clickup-tasks |
 | `0 14,19 * * 1-5` (14:00, 19:00 weekdays) | `/api/cron/nag-tasks` | [route.ts](../../src/app/api/cron/nag-tasks/route.ts) | GET | clickup-tasks |
 | `0 22 * * 1-5` (22:00 weekdays) | `/api/cron/review-digest` | [route.ts](../../src/app/api/cron/review-digest/route.ts) | GET | project-links |
+| `40 * * * *` (hourly) | `/api/cron/fathom-sync` | [route.ts](../../src/app/api/cron/fathom-sync/route.ts) | GET | client-portal |
 | `35 3 * * *` (03:35 daily) | `/api/cron/delivery-nudge` | [route.ts](../../src/app/api/cron/delivery-nudge/route.ts) | GET | delivery |
 
 Cron routes that exist but are **not scheduled** in `vercel.json`: [cleanup](../../src/app/api/cron/cleanup/route.ts) (GET, POST — prunes old audit logs/content changes; its comment says "should be triggered weekly") and [scan-notifications](../../src/app/api/cron/scan-notifications/route.ts) (GET — drains queued scan notifications as a fallback). Both still require the cron secret.

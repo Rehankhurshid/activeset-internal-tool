@@ -32,6 +32,34 @@ export const PORTAL_STAGE_LABELS: Record<PortalStageState, string> = {
   upcoming: 'Coming up',
 };
 
+/** A Timeline milestone inside a stage: title, where it stands, dates. Nothing else. */
+export interface PortalStepView {
+  id: string;
+  title: string;
+  state: PortalStageState;
+  /** ISO YYYY-MM-DD */
+  startDate?: string;
+  /** ISO YYYY-MM-DD */
+  endDate?: string;
+}
+
+/**
+ * A call the team chose to share. Names, never email addresses; the summary is
+ * Markdown, read by `parseSummary` into plain elements, never injected.
+ */
+export interface PortalMeetingView {
+  id: string;
+  title: string;
+  /** ISO timestamp the call started. */
+  date: string;
+  durationMinutes?: number;
+  attendees: string[];
+  summary?: string;
+  nextSteps: { text: string; owner?: string }[];
+  /** Fathom's share link. Always http(s). */
+  recordingUrl?: string;
+}
+
 /** One stage of the plan, as the client sees it. */
 export interface PortalStageView {
   id: string;
@@ -50,6 +78,10 @@ export interface PortalStageView {
    * the building; the number does.
    */
   percent?: number;
+  /** The stage's milestones, in order. Only when the Timeline drives the page. */
+  steps?: PortalStepView[];
+  /** Calls held in this stage that the team shared, newest first. */
+  meetings?: PortalMeetingView[];
 }
 
 /** "What we need from you" row. Title and due date only — never descriptions. */
@@ -84,6 +116,11 @@ export interface ClientPortalView {
    * status note, a plan edit, or a tick on the checklist behind the tracker.
    */
   lastUpdateAt?: string;
+  /**
+   * Where the stages come from: the Timeline tab (phases with milestones), or
+   * the plan drafted from the checklist. Decides the page's wording.
+   */
+  planSource: 'timeline' | 'plan';
   /** The plan, in order. Empty until the team has one. */
   stages: PortalStageView[];
   /** Index into `stages`. Absent when every stage is done, or there are none. */
@@ -126,6 +163,7 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'statusLabel',
   'statusNote',
   'lastUpdateAt',
+  'planSource',
   'stages',
   'currentStageIndex',
   'files',

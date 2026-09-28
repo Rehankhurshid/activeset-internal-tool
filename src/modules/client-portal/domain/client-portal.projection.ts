@@ -3,6 +3,7 @@ import type {
   ClientPlanFile,
   Project,
   ProjectChecklist,
+  ProjectMeeting,
   ProjectTimeline,
   StageRole,
   Task,
@@ -12,22 +13,36 @@ import {
   latestChecklistChange,
   legacyClientPlan,
   normalizeClientPlan,
+  normalizePlanFiles,
   planTracksChecklist,
   resolveClientPlan,
+  safeHttpUrl,
   type ResolvedStage,
 } from './client-plan';
+import { resolveTimelinePlan, stageForDate, timelineStages, type TimelineStep } from './client-timeline';
 import type {
   ClientPortalView,
   PortalAskView,
   PortalFileView,
+  PortalMeetingView,
   PortalReviewView,
   PortalStageView,
+  PortalStepView,
 } from './client-portal.types';
 
 export interface BuildClientPortalViewInput {
   project: Project;
-  /** Read only for a portal shared before plans existed (see `legacyClientPlan`). */
+  /**
+   * The Timeline tab. When it has milestones to show, its phases are the
+   * client's stages; otherwise it is read only for a portal shared before
+   * plans existed (see `legacyClientPlan`).
+   */
   timeline: ProjectTimeline | null | undefined;
+  /**
+   * Recorded calls. Only `shared` ones are used, whatever the caller passes:
+   * a summary the team has not read never reaches the client.
+   */
+  meetings?: ProjectMeeting[];
   /** Optional. Only tasks with `needsClientInput` and not done become asks. */
   tasks?: Task[];
   /**
@@ -77,10 +92,80 @@ function toStage(resolved: ResolvedStage): PortalStageView {
   return view;
 }
 
+function toStep(step: TimelineStep): PortalStepView {
+  const view: PortalStepView = { id: step.id, title: step.title, state: step.state };
+  if (step.startDate) view.startDate = step.startDate;
+  if (step.endDate) view.endDate = step.endDate;
+  return view;
+}
+
+const MAX_SUMMARY = 20_000;
+
+/**
+ * A shared call. Attendees by name only: a name the client already knows from
+ * the invite, never an address. The team's edit of the summary wins over
+ * Fathom's, and the recording is Fathom's public share link, not the team's.
+ */
+function toMeeting(meeting: ProjectMeeting): PortalMeetingView {
+  const names = new Set<string>();
+  for (const person of meeting.attendees ?? []) {
+    const name = person.name?.trim();
+    if (name && !name.includes('@')) names.add(name);
+  }
+  const view: PortalMeetingView = {
+    id: meeting.id,
+    title: meeting.title?.trim() || 'Call',
+    date: meeting.startedAt,
+    attendees: [...names].slice(0, 16),
+    nextSteps: (meeting.actionItems ?? [])
+      .filter((item) => item && typeof item.text === 'string' && item.text.trim())
+      .slice(0, 30)
+      .map((item) => {
+        const owner = item.owner?.trim();
+        return owner && !owner.includes('@') ? { text: item.text.trim(), owner } : { text: item.text.trim() };
+      }),
+  };
+  const start = Date.parse(meeting.startedAt);
+  const end = meeting.endedAt ? Date.parse(meeting.endedAt) : NaN;
+  if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) view.durationMinutes = Math.round((end - start) / 60_000);
+  const summary = (meeting.clientSummary?.trim() || meeting.summary?.trim() || '').slice(0, MAX_SUMMARY);
+  if (summary) view.summary = summary;
+  const recording = safeHttpUrl(meeting.shareUrl);
+  if (recording) view.recordingUrl = recording;
+  return view;
+}
+
+/** Shared calls, each in the stage it was filed under, else the one its date falls in. */
+function placeMeetings(stages: PortalStageView[], meetings: ProjectMeeting[]): void {
+  if (stages.length === 0) return;
+  const ids = new Set(stages.map((s) => s.id));
+  const shared = meetings
+    .filter((m) => m && m.status === 'shared' && typeof m.startedAt === 'string')
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  for (const meeting of shared) {
+    const target =
+      meeting.phaseId && ids.has(meeting.phaseId)
+        ? meeting.phaseId
+        : stageForDate(
+            stages.map((s) => ({ id: s.id, startDate: s.startDate, dueDate: s.dueDate })),
+            meeting.startedAt,
+          );
+    const stage = stages.find((s) => s.id === target);
+    if (!stage) continue;
+    (stage.meetings ??= []).push(toMeeting(meeting));
+  }
+}
+
 function toAsk(t: Task): PortalAskView {
   const ask: PortalAskView = { id: t.id, title: t.title };
   if (t.dueDate) ask.dueDate = t.dueDate;
   return ask;
+}
+
+function isoOf(value: Date | string | undefined): string | undefined {
+  if (!value) return undefined;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) || d.getTime() === 0 ? undefined : d.toISOString();
 }
 
 /** The latest of some ISO timestamps, or undefined when none parse. */
@@ -152,27 +237,41 @@ function toPortalReview(
  * they are asked to approve), never a step.
  */
 export function buildClientPortalView(input: BuildClientPortalViewInput): ClientPortalView {
-  const { project, timeline, tasks = [], checklists = [], now = new Date() } = input;
+  const { project, timeline, tasks = [], checklists = [], meetings = [], now = new Date() } = input;
   const settings = project.clientPortal;
   const facing = project.clientFacing ?? {};
   const status = normalizeClientStatus(facing.status);
 
-  // The saved plan; failing that, what a portal shared before plans existed
-  // was already showing, so the client's page does not empty out under them.
-  const saved = project.clientPlan ? normalizeClientPlan(project.clientPlan) : null;
-  const legacy = saved
-    ? null
-    : legacyClientPlan({ timeline, links: project.links, currentPhaseId: facing.currentPhaseId });
+  // The Timeline tab first: when it has milestones, its phases are the stages.
+  const timelineSources = timelineStages(timeline, project.clientTimeline);
+  const fromTimeline = timelineSources.length > 0;
+
+  // Otherwise the saved plan; failing that, what a portal shared before plans
+  // existed was already showing, so the client's page does not empty out.
+  const saved = !fromTimeline && project.clientPlan ? normalizeClientPlan(project.clientPlan) : null;
+  const legacy =
+    fromTimeline || saved
+      ? null
+      : legacyClientPlan({ timeline, links: project.links, currentPhaseId: facing.currentPhaseId });
   const plan = saved ?? legacy?.plan ?? null;
-  const resolved = plan
-    ? resolveClientPlan(plan, checklists, {
-        currentStageId: saved ? facing.currentStageId : legacy?.currentStageId,
-        status,
-      })
-    : null;
+  const resolved = fromTimeline
+    ? resolveTimelinePlan(timelineSources, { currentStageId: facing.currentStageId, status })
+    : plan
+      ? resolveClientPlan(plan, checklists, {
+          currentStageId: saved ? facing.currentStageId : legacy?.currentStageId,
+          status,
+        })
+      : null;
 
   const stages = resolved ? resolved.stages.map(toStage) : [];
+  if (fromTimeline) {
+    stages.forEach((stage, index) => {
+      stage.steps = timelineSources[index].steps.map(toStep);
+    });
+  }
+  placeMeetings(stages, meetings);
   const currentStageIndex = resolved && resolved.currentIndex >= 0 ? resolved.currentIndex : undefined;
+  const sharedMeetings = meetings.filter((m) => m?.status === 'shared');
 
   const asks = tasks
     .filter((t) => t.needsClientInput === true && t.status !== 'done')
@@ -186,7 +285,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     brandLogoUrl: settings?.brandLogoUrl || project.logoUrl || undefined,
     welcome: settings?.welcome?.trim() || undefined,
     agencyContactEmail: project.reviewOwnerEmail || project.assigneeEmails?.[0] || undefined,
-    websiteUrl: detectWebsiteUrl(project, !saved),
+    websiteUrl: detectWebsiteUrl(project, !saved && !fromTimeline),
     status,
     statusLabel: CLIENT_STATUS_PORTAL_LABELS[status],
     statusNote: facing.statusNote?.trim() || undefined,
@@ -194,11 +293,16 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
       facing.lastUpdateAt,
       saved?.updatedAt,
       // A tick on the checklist moves the tracker, so it is news to the client too.
-      resolved && planTracksChecklist(resolved) ? latestChecklistChange(checklists) : undefined,
+      !fromTimeline && resolved && planTracksChecklist(resolved) ? latestChecklistChange(checklists) : undefined,
+      // So is a milestone moving on the Timeline, a file added to a phase, or a call shared.
+      fromTimeline ? isoOf(timeline?.updatedAt) : undefined,
+      fromTimeline ? project.clientTimeline?.updatedAt : undefined,
+      ...sharedMeetings.map((m) => m.decidedAt),
     ]),
+    planSource: fromTimeline ? 'timeline' : 'plan',
     stages,
     currentStageIndex,
-    files: (plan?.files ?? []).map(toFile),
+    files: fromTimeline ? normalizePlanFiles(project.clientTimeline?.files).map(toFile) : (plan?.files ?? []).map(toFile),
     asks,
     review: toPortalReview(checklists, project.delivery?.approvals),
     generatedAt: now.toISOString(),
