@@ -47,6 +47,7 @@ export function DashboardToolbar({
   onClearTags,
   onNewProject,
 }: DashboardToolbarProps) {
+  const searching = searchQuery.trim().length > 0;
   return (
     <div className="mt-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -64,11 +65,16 @@ export function DashboardToolbar({
         </div>
 
         <div className="-mx-3 overflow-x-auto px-3 scrollbar-hidden sm:mx-0 sm:px-0">
+          {/* While searching, every tab is searched, so none shows as selected;
+              picking one clears the search and goes back to that tab. */}
           <Tabs
-            value={statusFilter}
-            onValueChange={(value) => onStatusFilterChange(value as StatusFilter)}
+            value={searching ? '' : statusFilter}
+            onValueChange={(value) => {
+              if (searching) onSearchChange('');
+              onStatusFilterChange(value as StatusFilter);
+            }}
           >
-            <TabsList className="h-10 sm:h-9">
+            <TabsList className={cn('h-10 sm:h-9', searching && 'opacity-60')} title={searching ? 'Searching every tab' : undefined}>
               {statusOptions.map(({ value, label, count }) => (
                 <TabsTrigger key={value} value={value} className="gap-1 px-2.5 text-xs">
                   {label}

@@ -126,16 +126,19 @@ export function ProjectLinksDashboardScreen() {
   // Filter projects
   const filteredProjects = useMemo(() => {
     return projects.filter(project => {
-      // Search filter
-      if (searchQuery && !project.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
+      // Search looks across every project, whatever tab is selected: finding
+      // a paused project from the Maintenance tab should not need a tab switch.
+      const query = searchQuery.trim().toLowerCase();
+      if (query) {
+        const haystack = `${project.name} ${project.client ?? ''}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
       }
-      // Status filter
-      if (statusFilter === 'needs_client') {
+      // Status filter: the selected tab, except while searching.
+      if (!query && statusFilter === 'needs_client') {
         // Client-facing bucket: portal on and the client owes us something.
         if (project.clientPortal?.enabled !== true) return false;
         if (normalizeClientStatus(project.clientFacing?.status) !== 'needs_client') return false;
-      } else if (statusFilter !== 'all') {
+      } else if (!query && statusFilter !== 'all') {
         const projectStatus = project.status || 'current';
         if (statusFilter === 'paused' || statusFilter === 'closed' || statusFilter === 'paid') {
           if (projectStatus !== statusFilter) return false;
@@ -469,7 +472,9 @@ export function ProjectLinksDashboardScreen() {
                   <FolderOpen className="h-12 w-12 text-muted-foreground/50 mb-4" />
                   <h3 className="text-lg font-medium mb-1">No projects found</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    {searchQuery || statusFilter !== 'all' || activeTags.length > 0
+                    {searchQuery.trim()
+                      ? `Nothing matches “${searchQuery.trim()}” in any tab${activeTags.length > 0 ? ' with these tags' : ''}`
+                      : statusFilter !== 'all' || activeTags.length > 0
                       ? 'Try adjusting your filters'
                       : 'Create your first project to get started'}
                   </p>

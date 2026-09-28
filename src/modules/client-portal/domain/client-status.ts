@@ -22,13 +22,22 @@ export function daysSinceClientUpdate(
   return daysBetweenIso(todayIso(parsed), today);
 }
 
-/** True when the portal is enabled and the last update is older than the threshold (or never). */
+/**
+ * True when the portal is enabled and the last update is older than the
+ * threshold (or never). A delivered project is never stale: there is nothing
+ * left to tell the client, and Privado sat in "Client updates due" for good
+ * after its delivery.
+ */
 export function isPortalStale(
-  project: { clientPortal?: { enabled?: boolean }; clientFacing?: Pick<ClientFacingState, 'lastUpdateAt'> },
+  project: {
+    clientPortal?: { enabled?: boolean };
+    clientFacing?: Pick<ClientFacingState, 'lastUpdateAt' | 'status'>;
+  },
   today: string = todayIso(),
   staleAfterDays: number = PORTAL_STALE_AFTER_DAYS,
 ): boolean {
   if (project.clientPortal?.enabled !== true) return false;
+  if (project.clientFacing?.status === 'delivered') return false;
   const days = daysSinceClientUpdate(project.clientFacing, today);
   return days === null || days > staleAfterDays;
 }

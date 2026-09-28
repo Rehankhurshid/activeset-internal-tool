@@ -62,14 +62,22 @@ export function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSav
         );
     }
 
+    // A template placeholder ("Live Website URL") with no address yet. It used
+    // to look like a real link and open a blank tab; now it asks for the URL.
+    const empty = !link.url?.trim();
+    const activate = empty ? onStartEdit : onOpen;
+
     return (
         <div
-            className="group/item relative flex min-h-9 items-center gap-2.5 rounded-lg p-2 hover:bg-muted/50 transition-colors cursor-pointer"
-            onClick={onOpen}
-            role="link"
+            className={cn(
+                'group/item relative flex min-h-9 items-center gap-2.5 rounded-lg p-2 hover:bg-muted/50 transition-colors cursor-pointer',
+                empty && 'opacity-70 hover:opacity-100',
+            )}
+            onClick={activate}
+            role={empty ? 'button' : 'link'}
             tabIndex={0}
-            aria-label={`Open ${link.title}`}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+            aria-label={empty ? `Add a URL for ${link.title}` : `Open ${link.title}`}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } }}
         >
             {link.url ? (
                 <img
@@ -84,7 +92,7 @@ export function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSav
                     }}
                 />
             ) : null}
-            <LinkIcon className={cn('w-3.5 h-3.5 shrink-0 text-muted-foreground/70', link.url && 'hidden')} />
+            <LinkIcon className={cn('w-3.5 h-3.5 shrink-0 text-muted-foreground/70', link.url && 'hidden', empty && 'border border-dashed border-muted-foreground/40 rounded-sm p-px')} />
 
             {/* Content */}
             <div className="flex-1 min-w-0 pr-16 sm:pr-6">
@@ -92,7 +100,7 @@ export function CardLinkItem({ link, isEditing, onStartEdit, onCancelEdit, onSav
                     {link.title}
                 </div>
                 <div className="text-[10px] text-muted-foreground/60 truncate group-hover/item:text-muted-foreground transition-colors leading-none">
-                    {(() => {
+                    {empty ? 'No URL yet · add one' : (() => {
                         try {
                             return new URL(link.url).hostname.replace('www.', '');
                         } catch {
