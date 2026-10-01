@@ -1,7 +1,7 @@
 ---
 module: platform
 title: Environment variables (master list)
-keywords: [env, environment variables, process.env, import.meta.env, .env.local, .env.vercel-production, vercel env, secrets, config, NEXT_PUBLIC, CRON_SECRET, firebase credentials, service account, GEMINI_API_KEY, SLACK, GMAIL, OLLAMA, CLICKUP, TYPESAFE, BUNNY, WEBFLOW_TOKEN, FATHOM_API_KEY]
+keywords: [env, environment variables, process.env, import.meta.env, .env.local, .env.vercel-production, vercel env, secrets, config, NEXT_PUBLIC, CRON_SECRET, firebase credentials, service account, GEMINI_API_KEY, SLACK, GMAIL, OLLAMA, CLICKUP, TYPESAFE, BUNNY, WEBFLOW_TOKEN, FATHOM_API_KEY, MARKUP_API_KEY]
 entry_points: []
 code_roots: [src, scripts, apps, packages/activeset-capture/src, packages/cms-alt/src, packages/schema-gen/src, extensions, next.config.ts]
 last_verified: 2026-09-23 @ a00f91e
@@ -81,6 +81,7 @@ last_verified: 2026-09-23 @ a00f91e
 | Name | Required? | Public? | Read in (files) | Purpose | Owner |
 |---|---|---|---|---|---|
 | `GEMINI_API_KEY` | Feature | No | [api/audit](../../src/app/api/audit/route.ts), [api/ai-seo-gen](../../src/app/api/ai-seo-gen/route.ts), [api/ai-checklist](../../src/app/api/ai-checklist/route.ts) | `@google/genai` key for content audit, SEO meta generation, AI checklist generation | site-audit (also webflow, project-links checklists) |
+| `MARKUP_API_KEY` | Agent script | No | [scripts/markup.ts](../../scripts/markup.ts) | MarkUp workspace API key (MarkUp → Workspace settings → Developer settings). Local `.env.local` only: the app itself never calls MarkUp, the agent's script does. Without it `npm run markup` stops with a message | delivery |
 | `FATHOM_API_KEY` | Feature | No | [fathom.ts](../../src/lib/fathom.ts) (`process.env[KEY_ENV]`) | Fathom API key (Fathom → Settings → API Access). Without it the hourly `/api/cron/fathom-sync` skips and the Client tab's Meetings card says Fathom is not connected | client-portal |
 | `PROPOSAL_AI_MODEL` | Optional (default `google/gemini-2.5-flash`) | No | [ai/proposal-draft](../../src/app/api/ai/proposal-draft/route.ts), [ai/proposal-block](../../src/app/api/ai/proposal-block/route.ts), [tasks/parse-request](../../src/app/api/tasks/parse-request/route.ts) | AI Gateway model id for proposal drafting and request→task parsing | proposal (also clickup-tasks) |
 | `NAG_AI_MODEL` | Optional (default `google/gemini-2.5-flash`) | No | nag-bot.ts | Model for the nag-bot message writer | clickup-tasks |

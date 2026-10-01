@@ -81,9 +81,16 @@ need the user's yes first.
 
 ## MarkUp
 
-MarkUp has a public API (https://developer.markup.io): `POST https://api.markup.io/api/v2/markups/url`
-with `{ url, name, workspaceId, parentFolderId }`, headers `Authorization: Bearer <key>` and
-`Markup-API-Version: 2023-02-22`; the response's `markupUrl` is the review link. One MarkUp per
-page; there is no "add a page to a MarkUp" call. The key is made by a workspace admin in MarkUp →
-Workspace settings → Developer settings, and goes in `MARKUP_API_KEY` (never pasted into chat).
-Creating MarkUps is outward-facing: ask first.
+`MARKUP_API_KEY` is in `.env.local` (workspace "ActiveSet", one folder per client).
+
+```bash
+npm run -s markup -- folders                      # every client folder
+npm run -s markup -- show "DreamTeam"             # its MarkUps, with review links
+npm run -s markup -- create "Different AI" https://different-ai.webflow.io/product https://… [--sub "LP"]   # dry run
+```
+
+One MarkUp per page (the API cannot add a page to an existing one); `create`
+skips a page that already has one in that folder. Creating is outward-facing:
+show the dry run and ask before `--write`. Put the review links into the
+checklist ("Create the MarkUp folder" → `markup`) and the Slack message the
+user approves, not anywhere the client sees without the team's yes.
