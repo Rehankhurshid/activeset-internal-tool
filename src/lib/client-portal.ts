@@ -47,7 +47,7 @@ function toProject(id: string, data: Record<string, unknown>): Project {
   };
 }
 
-function toTimeline(projectId: string, data: Record<string, unknown> | undefined): ProjectTimeline | null {
+export function toTimeline(projectId: string, data: Record<string, unknown> | undefined): ProjectTimeline | null {
   if (!data) return null;
   return {
     id: projectId,

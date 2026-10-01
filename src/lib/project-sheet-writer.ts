@@ -4,7 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
 import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
-import { loadSourceTemplates } from '@/lib/client-portal';
+import { loadSourceTemplates, toTimeline } from '@/lib/client-portal';
 import {
   GoogleApiError,
   batchUpdateSpreadsheet,
@@ -379,14 +379,15 @@ async function writeValues(spreadsheetId: string, content: ManagedSheetContent, 
 
 // --- What goes in ----------------------------------------------------------------
 
-async function contentFor(projectId: string): Promise<{ project: Project; content: ManagedSheetContent }> {
+export async function contentFor(projectId: string): Promise<{ project: Project; content: ManagedSheetContent }> {
   const projectSnap = await db.collection(COLLECTIONS.PROJECTS).doc(projectId).get();
   if (!projectSnap.exists) throw new ProjectSheetError(404, 'Project not found.');
   const project = { ...(projectSnap.data() as Project), id: projectId };
-  const [checklistSnap, pageSnap, askSnap] = await Promise.all([
+  const [checklistSnap, pageSnap, askSnap, timelineSnap] = await Promise.all([
     db.collection(COLLECTIONS.PROJECT_CHECKLISTS).where('projectId', '==', projectId).limit(20).get(),
     db.collection(COLLECTIONS.PROJECTS).doc(projectId).collection(COLLECTIONS.PROJECT_PAGES).limit(500).get(),
     db.collection(COLLECTIONS.TASKS).where('projectId', '==', projectId).where('needsClientInput', '==', true).limit(500).get(),
+    db.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
   ]);
   const checklists = checklistSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as ProjectChecklist);
   const templates = await loadSourceTemplates(checklists);
@@ -395,6 +396,7 @@ async function contentFor(projectId: string): Promise<{ project: Project; conten
     checklists,
     templates,
     agency: [AGENCY_START, AGENCY_CLOSE],
+    timeline: toTimeline(projectId, timelineSnap.exists ? (timelineSnap.data() as Record<string, unknown>) : undefined),
     pages: pageSnap.docs.map((d) => d.data() as SheetPageInput),
     asks: askSnap.docs.map((d) => d.data() as Task),
   });

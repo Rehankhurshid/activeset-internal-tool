@@ -1,7 +1,8 @@
-import type { ClientStepWho, Project, ProjectChecklist, SOPTemplate, SOPTemplateSection, Task } from '@/types';
+import type { ClientStepWho, Project, ProjectChecklist, ProjectTimeline, SOPTemplate, SOPTemplateSection, Task } from '@/types';
+import { normalizeClientStatus } from '@/types';
 import { servicesName, orderServices, isServiceId } from '@/lib/engagements';
-import { checklistProcess } from './checklist-process';
 import { resolveTimelinePlan } from './client-timeline';
+import { portalStageSources } from './portal-sources';
 
 /**
  * What the app writes into a project's sheet, from what the app knows.
@@ -9,7 +10,9 @@ import { resolveTimelinePlan } from './client-timeline';
  * Rehan, 2026-10-01: the sheet should be created by the app and "in sync
  * continuously with any update in Checklist", one per project, shaped by what
  * it bought. So the sheet is a view, written one way: the Process tab is the
- * checklist's client steps (only the stages this project has), Pages is the
+ * client's process exactly as their page shows it (the checklist's client
+ * steps, only the stages this project has; a project run from its Timeline
+ * whose checklist nobody ticked, like Privado, shows its Timeline), Pages is the
  * page tracker, What we need is every request flagged for the client. Nothing
  * here is typed by hand, which is why it has no Link, Note or Why columns: the
  * app would have nothing to put in them.
@@ -63,10 +66,12 @@ export interface SheetPageInput {
 }
 
 export interface ManagedSheetInput {
-  project: Pick<Project, 'name' | 'client' | 'services' | 'reviewOwnerEmail' | 'links'>;
+  project: Pick<Project, 'name' | 'client' | 'services' | 'reviewOwnerEmail' | 'links' | 'clientTimeline' | 'clientFacing'>;
   checklists: readonly Pick<ProjectChecklist, 'sections' | 'templateId' | 'templateIds' | 'createdAt'>[];
   templates?: readonly Pick<SOPTemplate, 'id' | 'service' | 'sections'>[];
   agency?: readonly Omit<SOPTemplateSection, 'order'>[];
+  /** The Timeline tab, which the client's page follows when the checklist has not been started. */
+  timeline?: Pick<ProjectTimeline, 'phases' | 'milestones'> | null;
   pages?: readonly SheetPageInput[];
   /** Tasks flagged for the client. Only `needsClientInput` ones are read. */
   asks?: readonly Pick<Task, 'title' | 'dueDate' | 'status' | 'needsClientInput' | 'order'>[];
@@ -125,12 +130,21 @@ function ourLead(checklists: ManagedSheetInput['checklists']): string {
 
 export function managedSheetContent(input: ManagedSheetInput): ManagedSheetContent {
   const { project } = input;
-  const process = checklistProcess(input.checklists, { templates: input.templates, agency: input.agency });
+  // The same stages the client's page shows, from the same place. (A sheet the
+  // app keeps is never read back, so no sheet goes in here.)
+  const process = portalStageSources({
+    checklists: input.checklists,
+    templates: input.templates,
+    agency: input.agency,
+    timeline: input.timeline,
+    timelineSettings: project.clientTimeline,
+  }).sources;
 
   // The step we are on: the first unfinished one in the stage the client's
   // page puts the project in, not merely the first unfinished row, so the
-  // sheet and the portal never disagree about where the project is.
-  const resolved = resolveTimelinePlan(process);
+  // sheet and the portal never disagree about where the project is. A
+  // delivered project is on none.
+  const resolved = resolveTimelinePlan(process, { status: normalizeClientStatus(project.clientFacing?.status) });
   const nowStage = resolved.currentIndex >= 0 ? process[resolved.currentIndex] : undefined;
   const nowStep = nowStage?.steps.find((s) => s.state !== 'done');
 

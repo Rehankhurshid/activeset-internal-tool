@@ -112,6 +112,38 @@ describe('managedSheetContent', () => {
   });
 });
 
+describe('a project the client’s page shows from its Timeline', () => {
+  // Privado: delivered and run from its Timeline; its checklist was never ticked.
+  const untouched = checklist([section('Build', [item('Build the pages')], { clientStage: 'Development', clientStep: 'Pages built' })]);
+  const timeline = {
+    phases: [{ id: 'd', title: 'Development', order: 0 }],
+    milestones: [
+      { id: 'm1', title: 'Homepage built', phaseId: 'd', status: 'completed' as const, startDate: '2026-08-01', endDate: '2026-08-10', order: 0 },
+      { id: 'm2', title: 'Site launched', phaseId: 'd', status: 'completed' as const, startDate: '2026-08-20', endDate: '2026-08-20', order: 1 },
+    ],
+  };
+  const content = (status?: 'delivered') =>
+    managedSheetContent({
+      project: { ...project, clientFacing: status ? { status } : undefined },
+      checklists: [untouched],
+      timeline,
+    });
+
+  it('writes the Timeline, as the page does, not the unticked checklist', () => {
+    assert.deepEqual(
+      content().process.map((r) => [r.stage, r.step, r.status, r.date]),
+      [
+        ['Development', 'Homepage built', 'Done', '2026-08-10'],
+        ['Development', 'Site launched', 'Done', '2026-08-20'],
+      ],
+    );
+  });
+
+  it('marks no step as now once the project is delivered', () => {
+    assert.equal(content('delivered').process.some((r) => r.now), false);
+  });
+});
+
 describe('page words', () => {
   it('uses the Process tab’s words', () => {
     assert.equal(pageWord(undefined), 'Not started');
