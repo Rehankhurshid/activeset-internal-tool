@@ -18,11 +18,13 @@
  *       { "item": "<item id, or the start of its title>", "status": "completed",
  *         "on": "2026-09-22", "values": { "held_on": "2026-09-22" },
  *         "source": "Fathom: DreamTeam KickOff Call, 22 Sep", "overwrite": false } ] }
+ *   `"due": "2026-10-20"` dates an item that is still to do: the client's page
+ *   shows a step's latest due date as "Planned".
  *
  * The rules the script holds an agent to:
  * - Every update names its source; it is stored on the item (`filledFrom`).
- * - A ticked item is never unticked, and a value someone typed is never
- *   replaced, unless the update says `"overwrite": true`.
+ * - A ticked item is never unticked, and a value or due date someone set is
+ *   never replaced, unless the update says `"overwrite": true`.
  * - Values go only into fields the item defines.
  * - `on` is the day it actually happened, so the client's page shows the
  *   real date rather than the day the agent ran.
@@ -198,6 +200,8 @@ interface PlanUpdate {
   item: string;
   status?: ChecklistItemStatus;
   on?: string;
+  /** When it is due, for an item still to do. */
+  due?: string;
   values?: Record<string, string>;
   source: string;
   overwrite?: boolean;
@@ -239,6 +243,7 @@ async function apply(file: string) {
     if (!update.source?.trim()) throw new Error(`"${update.item}": every update needs a source.`);
     if (update.status && !STATUSES.includes(update.status)) throw new Error(`"${update.item}": unknown status ${update.status}`);
     if (update.on && !/^\d{4}-\d{2}-\d{2}$/.test(update.on)) throw new Error(`"${update.item}": "on" must be YYYY-MM-DD`);
+    if (update.due && !/^\d{4}-\d{2}-\d{2}$/.test(update.due)) throw new Error(`"${update.item}": "due" must be YYYY-MM-DD`);
     const { checklist, section, item } = findItem(checklists, update.item);
     const lines: string[] = [];
 
@@ -258,6 +263,15 @@ async function apply(file: string) {
       item.completedAt = `${update.on}T12:00:00.000Z`;
     }
 
+    if (update.due && day(item.dueDate) !== update.due) {
+      if (item.dueDate && !update.overwrite) {
+        lines.push(`due date kept as ${day(item.dueDate)} (found ${update.due}; pass "overwrite" to replace)`);
+      } else {
+        lines.push(`due ${day(item.dueDate) || '-'} → ${update.due}`);
+        item.dueDate = update.due;
+      }
+    }
+
     for (const [field, value] of Object.entries(update.values ?? {})) {
       if (!(item.fields ?? []).some((f) => f.id === field)) throw new Error(`"${item.title}" has no field "${field}" (it has: ${(item.fields ?? []).map((f) => f.id).join(', ') || 'none'})`);
       const current = item.values?.[field] ?? '';
@@ -270,7 +284,7 @@ async function apply(file: string) {
       item.values = { ...(item.values ?? {}), [field]: value };
     }
 
-    const applied = lines.filter((l) => !l.includes('kept as') && !l.startsWith('status stays'));
+    const applied = lines.filter((l) => !l.includes(' kept as ') && !l.startsWith('status stays'));
     if (applied.length) {
       item.filledFrom = update.source.trim();
       touched.add(checklist);

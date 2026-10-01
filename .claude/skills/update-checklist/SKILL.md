@@ -52,6 +52,7 @@ npm run -s checklist -- create "<project id>" <SOP id> <SOP id> --write
 Rules (the script enforces the starred ones):
 - Only what the evidence shows. No evidence, no change: list it as missing instead.
 - `on` is the day it happened, not today. The client sees that date. *
+- `due` (YYYY-MM-DD) dates an item still to do; the client's page shows a step's latest due date as "Planned" (a launch date from a call goes on a Pre-Launch item). An existing due date is kept unless `overwrite`. *
 - Every update has a short `source` with a date; it is shown on the item. *
 - Never untick, never replace a typed value, unless the user asked: then `"overwrite": true` and say so. *
 - Values only into fields the item has (`show` lists them). *
