@@ -159,6 +159,17 @@ const WEB_DESIGN = draft(
       ],
     },
     {
+      // Added 2026-10-01 from DreamTeam, which ran exactly this instead of a brand workshop.
+      title: 'Art direction',
+      emoji: '🖼️',
+      clientStep: 'Art direction',
+      items: [
+        { title: 'Review the existing brand guide, site and references', emoji: '🔍' },
+        { title: 'Create 2–3 visual directions: moodboards and a few key frames', emoji: '🎨' },
+        { title: 'Present the directions and get one chosen', emoji: '📤', clientStep: 'Direction chosen', clientWho: 'client', howTo: WHEN_SENT },
+      ],
+    },
+    {
       title: 'Wireframes',
       emoji: '🧭',
       clientStep: 'Wireframes',

@@ -143,7 +143,7 @@ export interface ResolveTimelineOptions {
 /**
  * Every phase's state and progress, and which phase the project is in.
  *
- * The furthest phase where work has started, while it has anything left;
+ * The furthest phase where our work has started, while it has anything left;
  * else the next one with something to do. Not the earliest unfinished phase:
  * one housekeeping item nobody ticked in Kickoff must not keep a client
  * looking at "Kickoff" while their moodboard is done (DreamTeam, 2026-10-01).
@@ -171,9 +171,12 @@ export function resolveTimelinePlan(
     currentIndex = sources.findIndex((s) => s.stage.id === pinned);
     source = 'team';
   } else {
+    // Our own work starting is what moves the project on. A client step under
+    // way (assets for the build sent early) shows as waiting on them, but does
+    // not put the project in that stage.
     let furthest = -1;
     sources.forEach(({ steps }, index) => {
-      if (steps.some((s) => s.state !== 'upcoming')) furthest = index;
+      if (steps.some((s) => s.state !== 'upcoming' && s.owner !== 'client')) furthest = index;
     });
     if (furthest >= 0 && tracking[furthest].open > 0) {
       currentIndex = furthest;

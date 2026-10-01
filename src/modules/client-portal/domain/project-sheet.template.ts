@@ -85,6 +85,8 @@ export const PROCESS_STEPS: TemplateStep[] = [
   { stage: 'Copy', step: 'Copy approved', who: 'Client' },
 
   { stage: 'Web Design', step: 'References, assets & sitemap', who: 'Client' },
+  { stage: 'Web Design', step: 'Art direction', who: 'ActiveSet' },
+  { stage: 'Web Design', step: 'Direction chosen', who: 'Client' },
   { stage: 'Web Design', step: 'Wireframes', who: 'ActiveSet' },
   { stage: 'Web Design', step: 'Feedback on wireframes', who: 'Client' },
   { stage: 'Web Design', step: 'Homepage design', who: 'ActiveSet' },

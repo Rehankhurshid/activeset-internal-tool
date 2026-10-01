@@ -214,6 +214,14 @@ export function ChecklistItemRow({
                             Note
                         </span>
                     )}
+                    {item.filledFrom && (
+                        <span
+                            className="inline-flex max-w-[22rem] items-center truncate text-[10px] text-muted-foreground"
+                            title={`Filled in from: ${item.filledFrom}`}
+                        >
+                            Source: {item.filledFrom}
+                        </span>
+                    )}
                     {item.completedAt && item.status === 'completed' && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                             <Clock className="h-2.5 w-2.5" />

@@ -205,6 +205,31 @@ describe('checklistProcess', () => {
   });
 });
 
+describe('two checklists on one project', () => {
+  it('keeps the stages in working order, so the first one’s Handover does not land mid-project', () => {
+    const first = checklist(
+      [
+        section('Start', [item('Kickoff', { clientStep: 'Kickoff call' })], { clientStage: 'Kickoff' }),
+        section('Moodboard', [item('Moodboard')], { clientStage: 'Brand Design', clientStep: 'Moodboarding' }),
+        section('Close', [item('Videos')], { clientStage: 'Handover', clientStep: 'Walkthrough videos' }),
+      ],
+      { createdAt: new Date('2026-09-01') },
+    );
+    const second = checklist(
+      [
+        section('Homepage', [item('Design')], { clientStage: 'Web Design', clientStep: 'Homepage design' }),
+        section('Build', [item('Pages')], { clientStage: 'Development', clientStep: 'Pages built' }),
+        section('Odd', [item('Thing')], { clientStage: 'Extras', clientStep: 'Something else' }),
+      ],
+      { createdAt: new Date('2026-09-20') },
+    );
+    assert.deepEqual(
+      checklistProcess([second, first]).map((s) => s.stage.title),
+      ['Kickoff', 'Brand Design', 'Web Design', 'Development', 'Extras', 'Handover'],
+    );
+  });
+});
+
 describe('the agency’s own start and close', () => {
   it('label the kickoff call, the sign-off, and keep the housekeeping internal', () => {
     const steps = checklistProcess([], {}).length;

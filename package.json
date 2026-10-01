@@ -18,6 +18,7 @@
     "worker": "tsx scripts/worker.ts",
     "fathom:sync": "tsx scripts/fathom-sync.ts",
     "sheet:template": "tsx --tsconfig scripts/tsconfig.server-scripts.json scripts/build-project-sheet-template.ts",
+    "checklist": "tsx --tsconfig scripts/tsconfig.server-scripts.json scripts/checklist.ts",
     "contract:create": "tsx scripts/create-contract.ts",
     "contract:template": "tsx scripts/create-contract.ts template",
     "contract:instructions": "tsx scripts/create-contract.ts instructions",

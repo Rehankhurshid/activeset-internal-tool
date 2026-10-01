@@ -800,6 +800,12 @@ export interface ChecklistItem {
   clientWho?: ClientStepWho;
   /** Left out of the client's page even though its section is on it. */
   clientHidden?: boolean;
+  /**
+   * Where an agent found what it filled in or ticked here, in a few words
+   * ("Fathom: DreamTeam KickOff Call, 22 Sep"), so the team can check it.
+   * Set by `scripts/checklist.ts`; cleared by nobody, overwritten by the next fill.
+   */
+  filledFrom?: string;
 }
 
 // Section of the checklist (e.g., "Step 1: Project Planning & Kickoff")

@@ -431,6 +431,13 @@ function StageChecklistRow({
             project. Italics keep the two apart without a label. */}
         {item.notes && <p className="mt-1 text-xs italic text-muted-foreground/90">{item.notes}</p>}
 
+        {/* Filled in by an agent from the evidence: say where, so it can be checked. */}
+        {item.filledFrom && (
+          <p className="mt-1 truncate text-[11px] text-muted-foreground" title={item.filledFrom}>
+            Source: {item.filledFrom}
+          </p>
+        )}
+
         <div className="mt-1 flex flex-wrap items-center gap-2 empty:mt-0">
           {/* A step of its own on the client's page: for theirs, In progress
               is what tells them it is waiting on them. */}

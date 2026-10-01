@@ -62,6 +62,11 @@ describe('resolveTimelinePlan', () => {
       { stage: stage('b'), steps: [step('b1', 'upcoming')] },
     ];
     assert.equal(resolveTimelinePlan(fresh).currentIndex, 0);
+    const clientEarly = [
+      { stage: stage('a'), steps: [step('a1', 'done'), step('a2', 'upcoming')] },
+      { stage: stage('b'), steps: [{ ...step('b1', 'current'), owner: 'client' as const, waiting: true }, step('b2', 'upcoming')] },
+    ];
+    assert.equal(resolveTimelinePlan(clientEarly).currentIndex, 0, 'a client sending assets early does not start the stage');
     const leftovers = [
       { stage: stage('a'), steps: [step('a1', 'upcoming')] },
       { stage: stage('b'), steps: [step('b1', 'done')] },

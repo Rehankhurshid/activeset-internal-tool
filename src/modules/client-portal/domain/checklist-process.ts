@@ -7,7 +7,7 @@ import type {
   SOPTemplateItem,
   SOPTemplateSection,
 } from '@/types';
-import { SERVICE_LABELS, isServiceId } from '@/lib/engagements';
+import { HANDOVER_STAGE, KICKOFF_STAGE, LAUNCH_STAGE, SERVICE_LABELS, SERVICE_ORDER, isServiceId } from '@/lib/engagements';
 import { isIsoDay, type PlanStageState } from './client-plan';
 import type { TimelineStageSource, TimelineStep } from './client-timeline';
 
@@ -221,7 +221,7 @@ export function checklistProcess(
     }
   }
 
-  return stageOrder
+  return orderStages(stageOrder)
     .map((stage) => {
       const steps = [...buckets.values()]
         .filter((b) => b.stage === stage)
@@ -239,6 +239,26 @@ export function checklistProcess(
       return source;
     })
     .filter((source) => source.steps.length > 0);
+}
+
+/** Kickoff, the services in working order, Launch, Handover: the order the work happens in. */
+const CANONICAL_STAGES = [KICKOFF_STAGE, ...SERVICE_ORDER.map((s) => SERVICE_LABELS[s]), LAUNCH_STAGE, HANDOVER_STAGE].map((s) =>
+  s.toLowerCase(),
+);
+
+/**
+ * Stages in working order. With two checklists on a project, the first one's
+ * Handover would otherwise land before the second one's Web Design. A stage
+ * that is not one of ours keeps its place after the one it followed.
+ */
+function orderStages(appearance: string[]): string[] {
+  let anchor = -1;
+  const keyed = appearance.map((stage, index) => {
+    const canonical = CANONICAL_STAGES.indexOf(stage.toLowerCase());
+    if (canonical >= 0) anchor = canonical;
+    return { stage, key: canonical >= 0 ? canonical * 1000 : anchor * 1000 + 1 + index };
+  });
+  return keyed.sort((a, b) => a.key - b.key).map((k) => k.stage);
 }
 
 function toMillis(value: unknown): number {
