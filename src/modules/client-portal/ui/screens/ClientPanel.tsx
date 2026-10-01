@@ -298,14 +298,12 @@ export function ClientPanel(props: ClientPanelProps) {
         <Card className="gap-3">
           <CardHeader>
             <SectionTitle>Now</SectionTitle>
-            <CardDescription className="text-xs">Where the project is, in the client&apos;s words.</CardDescription>
           </CardHeader>
           <CardContent>
             {byPhase ? (
               <ClientNowEditor
                 project={project}
                 stages={timelineSources.map((source) => source.stage)}
-                resolved={timelineResolved}
                 following={timelineFollowing}
                 userEmail={userEmail}
                 followSource={fromSheet ? 'sheet' : fromChecklist ? 'checklist' : 'timeline'}
@@ -314,7 +312,6 @@ export function ClientPanel(props: ClientPanelProps) {
               <ClientNowEditor
                 project={project}
                 stages={plan ? plan.stages : null}
-                resolved={resolved}
                 following={following}
                 userEmail={userEmail}
               />

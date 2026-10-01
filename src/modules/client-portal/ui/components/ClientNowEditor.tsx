@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, CheckCheck, Loader2, Save } from 'lucide-react';
+import { CheckCheck, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import type { ClientPlanStage, ClientStatus, Project } from '@/types';
 import { CLIENT_STATUS_TONES, TONE_CLASSES } from '@/lib/ui-tones';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,8 @@ import { ageLabel, daysSinceClientUpdate, isPortalStale } from '../../domain/cli
 import { clientPortalRepository } from '../../infrastructure/client-portal.repository';
 
 const NOTE_MAX = 160;
+/** The counter appears only once the note is close to the limit. */
+const NOTE_WARN = 120;
 const FOLLOW = '__follow__';
 
 /** Just the text-colour classes of a tone, for a `bg-current` dot. */
@@ -44,34 +46,31 @@ function sameDraft(a: Draft, b: Draft): boolean {
   return a.status === b.status && a.statusNote.trim() === b.statusNote.trim() && a.currentStageId === b.currentStageId;
 }
 
-/** What the checklist alone says, in a sentence the team can check against the Delivery tab. */
-function checklistSays(following: ResolvedPlan | null, source: 'checklist' | 'timeline' | 'sheet' = 'checklist'): string {
+const SOURCE_NAME = { checklist: 'checklist', timeline: 'Timeline', sheet: 'project sheet' } as const;
+
+/** "Kickoff · 14/19": where the source alone puts the project, for the Follow option. */
+function followingLabel(following: ResolvedPlan | null): string {
   if (!following || following.stages.length === 0) return '';
-  if (source === 'timeline' || source === 'sheet') {
-    const name = source === 'sheet' ? "The project sheet's Timeline" : 'The Timeline';
-    if (following.currentIndex < 0) return `${name} says every milestone is done.`;
-    const current = following.stages[following.currentIndex];
-    const t = current.tracking;
-    return `${name} puts the project in ${current.stage.title}${t ? `: ${t.done} of ${t.total} milestones done` : ''}.`;
-  }
-  if (!planTracksChecklist(following)) {
-    return 'No checklist tracks this plan, so move the stage on by hand. Add a checklist and rebuild the plan to make it follow along.';
-  }
-  if (following.currentIndex < 0) return 'The checklist says every stage is done.';
+  if (following.currentIndex < 0) return 'all done';
   const current = following.stages[following.currentIndex];
-  if (!current.tracking) {
-    return `The checklist puts the project in ${current.stage.title}, which nothing in it tracks: move it on by hand.`;
-  }
-  return `The checklist puts the project in ${current.stage.title}: ${current.tracking.done} of ${current.tracking.total} steps ticked.`;
+  const t = current.tracking;
+  return t && t.total > 0 ? `${current.stage.title} · ${t.done}/${t.total}` : current.stage.title;
+}
+
+/** A line under the stage only when there is something to act on; the Follow option says the rest. */
+function stageProblem(following: ResolvedPlan | null, source: keyof typeof SOURCE_NAME): string {
+  if (source !== 'checklist' || !following || following.stages.length === 0) return '';
+  if (!planTracksChecklist(following)) return 'No checklist tracks this plan: pick the stage by hand.';
+  const current = following.currentIndex >= 0 ? following.stages[following.currentIndex] : undefined;
+  if (current && !current.tracking) return `Nothing on the checklist tracks ${current.stage.title}: move it on by hand.`;
+  return '';
 }
 
 interface ClientNowEditorProps {
   project: Pick<Project, 'id' | 'clientPortal' | 'clientFacing'>;
   /** Stages of the saved plan; null when there is none, so there is no stage to pick. */
   stages: ClientPlanStage[] | null;
-  /** The plan as the client sees it, the team's pick included. */
-  resolved: ResolvedPlan | null;
-  /** The same plan following the checklist alone. */
+  /** The plan following its source alone (checklist, Timeline or sheet), for the Follow option. */
   following: ResolvedPlan | null;
   userEmail: string;
   /** What the stages follow when nobody pins one. */
@@ -87,7 +86,6 @@ interface ClientNowEditorProps {
 export function ClientNowEditor({
   project,
   stages,
-  resolved,
   following,
   userEmail,
   followSource = 'checklist',
@@ -114,37 +112,29 @@ export function ClientNowEditor({
   const dirty = !sameDraft(draft, server);
   const [saving, setSaving] = useState(false);
   const [marking, setMarking] = useState(false);
-  const [advancing, setAdvancing] = useState(false);
 
   const pickable = stages ?? [];
   const knownPick =
     draft.currentStageId === PLAN_COMPLETE || pickable.some((s) => s.id === draft.currentStageId) ? draft.currentStageId : '';
   const stageValue = knownPick || FOLLOW;
-  const followingTitle =
-    following && following.currentIndex >= 0 ? following.stages[following.currentIndex]?.stage.title : undefined;
+  const followDetail = followingLabel(following);
 
   const days = daysSinceClientUpdate(facing);
   const stale = isPortalStale(project);
+  const by = facing?.lastUpdateBy?.split('@')[0];
   const lastUpdated =
-    days === null
-      ? 'Never marked updated'
-      : `Last updated ${ageLabel(days)}${facing?.lastUpdateBy ? ` by ${facing.lastUpdateBy}` : ''}`;
-
-  // "Next stage" moves on from the stage the client sees now.
-  const currentIndex = resolved?.currentIndex ?? -1;
-  const nextStage = stages && currentIndex >= 0 ? stages[currentIndex + 1] : undefined;
-  const next =
-    stages && currentIndex >= 0
-      ? nextStage
-        ? { id: nextStage.id, label: `Move to ${nextStage.title}`, done: `${nextStage.title} is the current stage` }
-        : { id: PLAN_COMPLETE, label: 'Mark every stage done', done: 'Every stage marked done' }
-      : null;
+    days === null ? 'Never marked updated' : `Updated ${days <= 0 ? 'today' : `${ageLabel(days)} ago`}${by ? ` by ${by}` : ''}`;
 
   let stageHint = '';
   if (!stages) stageHint = 'Set up the plan below to show the client which stage the project is in.';
   else if (draft.status === 'delivered') stageHint = 'Delivered: the client sees every stage done.';
-  else if (!knownPick) stageHint = checklistSays(following, followSource);
-  else stageHint = `Pinned by you. ${checklistSays(following, followSource)}`.trim();
+  else if (knownPick) stageHint = `Pinned by you. The ${SOURCE_NAME[followSource]} says ${followDetail || 'nothing yet'}.`;
+  else stageHint = stageProblem(following, followSource);
+  // The client's wording, only where it differs from ours ("Waiting on client" reads "Waiting on you").
+  const clientWording =
+    CLIENT_STATUS_PORTAL_LABELS[draft.status] !== CLIENT_STATUS_LABELS[draft.status]
+      ? CLIENT_STATUS_PORTAL_LABELS[draft.status]
+      : '';
 
   const handleSave = async () => {
     if (!dirty || saving) return;
@@ -170,19 +160,6 @@ export function ClientNowEditor({
     }
   };
 
-  const handleNext = async () => {
-    if (!next || advancing || dirty) return;
-    setAdvancing(true);
-    try {
-      await clientPortalRepository.updateClientFacing(project.id, { currentStageId: next.id }, userEmail, { touch: true });
-      toast.success(next.done);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to move the stage on');
-    } finally {
-      setAdvancing(false);
-    }
-  };
-
   const handleMarkUpdated = async () => {
     if (marking) return;
     setMarking(true);
@@ -197,22 +174,22 @@ export function ClientNowEditor({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor={`client-stage-${project.id}`} className="text-xs text-muted-foreground">Stage the client sees</Label>
-        <div className="flex flex-col gap-1.5 sm:flex-row">
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor={`client-stage-${project.id}`} className="text-xs text-muted-foreground">Stage</Label>
           <Select
             value={stageValue}
             onValueChange={(v) => setDraft((d) => ({ ...d, currentStageId: v === FOLLOW ? '' : v }))}
             disabled={!stages || stages.length === 0}
           >
-            <SelectTrigger id={`client-stage-${project.id}`} size="sm" className="w-full text-xs sm:flex-1">
+            <SelectTrigger id={`client-stage-${project.id}`} size="sm" className="w-full text-xs">
               <SelectValue placeholder="No plan yet" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={FOLLOW} className="text-xs">
-                Follow the {followSource === 'sheet' ? 'project sheet' : followSource === 'timeline' ? 'Timeline' : 'checklist'}
-                {followingTitle ? ` (${followingTitle})` : ''}
+                Follow the {SOURCE_NAME[followSource]}
+                {followDetail ? ` (${followDetail})` : ''}
               </SelectItem>
               {pickable.map((stage, index) => (
                 <SelectItem key={stage.id} value={stage.id} className="text-xs">
@@ -222,77 +199,80 @@ export function ClientNowEditor({
               <SelectItem value={PLAN_COMPLETE} className="text-xs">Every stage done</SelectItem>
             </SelectContent>
           </Select>
-          {next && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => void handleNext()}
-              disabled={advancing || dirty || saving}
-              title={dirty ? 'Save or undo your changes first' : undefined}
-            >
-              {advancing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
-              {next.label}
-            </Button>
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor={`client-status-${project.id}`} className="text-xs text-muted-foreground">Status</Label>
+          <Select value={draft.status} onValueChange={(v) => setDraft((d) => ({ ...d, status: v as ClientStatus }))}>
+            <SelectTrigger id={`client-status-${project.id}`} size="sm" className="w-full text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CLIENT_STATUSES.map((s) => (
+                <SelectItem key={s} value={s} className="text-xs">
+                  <span className={cn('inline-block h-1.5 w-1.5 rounded-full bg-current', toneText(s))} aria-hidden="true" />
+                  {CLIENT_STATUS_LABELS[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {(stageHint || clientWording) && (
+        <p className="text-[11px] text-muted-foreground">
+          {stageHint}
+          {stageHint && clientWording ? ' ' : ''}
+          {clientWording && (
+            <>
+              The client reads the status as <span className="text-foreground">{clientWording}</span>.
+            </>
+          )}
+        </p>
+      )}
+
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <Label htmlFor={`client-note-${project.id}`} className="text-xs text-muted-foreground">Note for the client</Label>
+          {draft.statusNote.length >= NOTE_WARN && (
+            <span className="text-[11px] tabular-nums text-muted-foreground">{draft.statusNote.length}/{NOTE_MAX}</span>
           )}
         </div>
-        {stageHint && <p className="text-[11px] text-muted-foreground">{stageHint}</p>}
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor={`client-status-${project.id}`} className="text-xs text-muted-foreground">Status</Label>
-        <Select value={draft.status} onValueChange={(v) => setDraft((d) => ({ ...d, status: v as ClientStatus }))}>
-          <SelectTrigger id={`client-status-${project.id}`} size="sm" className="w-full text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {CLIENT_STATUSES.map((s) => (
-              <SelectItem key={s} value={s} className="text-xs">
-                <span className={cn('inline-block h-1.5 w-1.5 rounded-full bg-current', toneText(s))} aria-hidden="true" />
-                {CLIENT_STATUS_LABELS[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-[11px] text-muted-foreground">
-          Client sees: <span className="text-foreground">{CLIENT_STATUS_PORTAL_LABELS[draft.status]}</span>
-        </p>
-      </div>
-
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor={`client-note-${project.id}`} className="text-xs text-muted-foreground">What&apos;s going on (one line)</Label>
-          <span className="text-[11px] tabular-nums text-muted-foreground">{draft.statusNote.length}/{NOTE_MAX}</span>
-        </div>
-        <Textarea
+        <Input
           id={`client-note-${project.id}`}
           value={draft.statusNote}
           maxLength={NOTE_MAX}
           onChange={(e) => setDraft((d) => ({ ...d, statusNote: e.target.value }))}
-          placeholder="e.g. “Homepage and About are on staging for your review.”"
-          className="min-h-14 text-sm"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void handleSave();
+          }}
+          placeholder="e.g. Homepage and About are on staging for your review."
+          className="h-8 text-sm"
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <p className={cn('text-xs', stale ? 'text-amber-700 dark:text-amber-300/90' : 'text-muted-foreground')}>{lastUpdated}</p>
-        <div className="flex items-center gap-1.5">
+        {/* One button: Save while there are changes; otherwise Mark updated, which
+            tells the client nothing changed but the page is current. */}
+        {dirty ? (
+          <Button size="sm" className="h-8 text-xs" onClick={() => void handleSave()} disabled={saving}>
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save
+          </Button>
+        ) : (
           <Button
             variant="outline"
             size="sm"
             className="h-8 text-xs"
             onClick={() => void handleMarkUpdated()}
-            disabled={marking || saving}
-            title="Refresh the freshness stamp the client sees without changing anything"
+            disabled={marking}
+            title="Nothing to change: stamp the client's page as up to date"
           >
             {marking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
             Mark updated
           </Button>
-          <Button size="sm" className="h-8 text-xs" onClick={() => void handleSave()} disabled={!dirty || saving}>
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Save
-          </Button>
-        </div>
+        )}
       </div>
     </div>
   );
