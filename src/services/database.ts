@@ -1900,6 +1900,19 @@ export const tasksService = {
             console.error('[tasksService] failed to re-read task for sync-update', err);
           });
       }
+
+      // A request for the client is a row on the project sheet's "What we
+      // need": its title, date, received or not, or the flag itself changing
+      // rewrites the sheet now rather than at the next 15-minute pass.
+      const sheetFields = ['title', 'status', 'dueDate', 'needsClientInput'] as const;
+      if (typeof window !== 'undefined' && sheetFields.some((f) => f in updates)) {
+        void getDoc(ref)
+          .then((s) => {
+            const d = s.data() as { projectId?: string; needsClientInput?: boolean } | undefined;
+            if (d?.projectId && (d.needsClientInput || 'needsClientInput' in updates)) requestProjectSheetWrite(d.projectId);
+          })
+          .catch(() => undefined);
+      }
     } catch (error) {
       logError(error, 'updateTask');
       throw new DatabaseError('Failed to update task');
@@ -1908,7 +1921,10 @@ export const tasksService = {
 
   async deleteTask(taskId: string): Promise<void> {
     try {
-      await deleteDoc(doc(db, TASKS_COLLECTION, taskId));
+      const ref = doc(db, TASKS_COLLECTION, taskId);
+      const before = (await getDoc(ref).catch(() => null))?.data() as { projectId?: string; needsClientInput?: boolean } | undefined;
+      await deleteDoc(ref);
+      if (before?.projectId && before.needsClientInput) requestProjectSheetWrite(before.projectId);
     } catch (error) {
       logError(error, 'deleteTask');
       throw new DatabaseError('Failed to delete task');
