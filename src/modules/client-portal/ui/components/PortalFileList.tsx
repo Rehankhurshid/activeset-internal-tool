@@ -15,7 +15,7 @@ function iconFor(url: string): LucideIcon {
 }
 
 interface PortalFileListProps {
-  files: (PortalFileView & { icon?: LucideIcon })[];
+  files: (PortalFileView & { icon?: LucideIcon; note?: string })[];
   /** Tighter rows for a list inside a card rather than a section of its own. */
   compact?: boolean;
   className?: string;
@@ -56,7 +56,7 @@ export function PortalFileList({ files, compact = false, className }: PortalFile
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-foreground">{file.title}</span>
-                <span className="block truncate text-xs text-muted-foreground">{hostnameOf(file.url)}</span>
+                <span className="block truncate text-xs text-muted-foreground">{file.note ?? hostnameOf(file.url)}</span>
               </span>
               <ArrowUpRight
                 aria-hidden="true"

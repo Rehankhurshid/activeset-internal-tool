@@ -4,6 +4,7 @@ import { PortalChanges } from '../components/PortalChanges';
 import { PortalReadiness } from '../components/PortalReadiness';
 import { PortalWork } from '../components/PortalWork';
 import { PortalYourTurn } from '../components/PortalYourTurn';
+import { PortalLinksSidebar } from '../components/PortalLinksSidebar';
 import { PortalFiles } from '../components/PortalFiles';
 import { PortalFooter } from '../components/PortalFooter';
 import { PortalHeader } from '../components/PortalHeader';
@@ -47,7 +48,9 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         </div>
       )}
 
-      <main className="mx-auto w-full max-w-[760px] space-y-8 px-4 py-8 sm:space-y-10 sm:px-6 sm:py-12">
+      {/* On wide screens the links sit beside the page and stay in view; below lg the page is one column as before. */}
+      <div className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 sm:py-12 lg:grid lg:grid-cols-[minmax(0,760px)_280px] lg:items-start lg:justify-center lg:gap-10">
+      <main className="w-full min-w-0 space-y-8 sm:space-y-10">
         <PortalHeader
           brandName={view.brandName}
           brandLogoUrl={view.brandLogoUrl}
@@ -65,12 +68,18 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         {!showsProcess(view.planSource) && <PortalStages stages={view.stages} now={now} planSource={view.planSource} />}
         <PortalReadiness readiness={view.readiness} />
         <PortalChanges changes={view.changes} now={now} />
-        <PortalFiles files={view.files} websiteUrl={view.websiteUrl} />
+        <div className="lg:hidden">
+          <PortalFiles files={view.files} websiteUrl={view.websiteUrl} />
+        </div>
         {/* Below the stages and files deliberately: there is no approving
             something you have not been shown. */}
         <PortalReview review={view.review} token={token} now={now} preview={preview} />
         <PortalFooter brandName={view.brandName} agencyContactEmail={view.agencyContactEmail} />
       </main>
+      <div className="hidden lg:sticky lg:top-8 lg:block">
+        <PortalLinksSidebar view={view} />
+      </div>
+      </div>
 
       <TrackPortalView token={token} preview={preview} />
     </div>
