@@ -1,11 +1,19 @@
 'use client';
 
+import { Fragment } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Plus, Search, Filter, Check, X } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Plus, Search, Filter, Check, X, ChevronDown } from 'lucide-react';
 import { type ProjectTag } from '@/modules/project-links';
 import { PROJECT_TAG_LABELS } from '@/types';
 import { PROJECT_TAG_TONES } from '@/lib/ui-tones';
@@ -15,6 +23,15 @@ import { Kbd } from '@/shared/keyboard';
 export type StatusFilter = 'all' | 'maintenance' | 'active' | 'paused' | 'closed' | 'paid' | 'needs_client';
 
 export const ALL_TAGS: ProjectTag[] = ['retainer', 'one_time', 'subscription', 'maintenance', 'consulting'];
+
+/** Shown as tabs. The rest (paused, closed, paid, waiting on client) sit under
+ *  "More", still on their number keys. */
+const PRIMARY_STATUS_FILTERS: StatusFilter[] = ['all', 'maintenance', 'active'];
+
+// Mirrors TabsTrigger (components/ui/tabs.tsx) plus the toolbar's own sizing,
+// for the hand-rolled "More" button. Keep in sync if that changes.
+const moreTriggerClasses =
+  'inline-flex h-[calc(100%-1px)] items-center justify-center gap-1 rounded-md border border-transparent px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring focus-visible:ring-[3px] focus-visible:outline-1';
 
 interface StatusFilterOption {
   value: StatusFilter;
@@ -48,6 +65,13 @@ export function DashboardToolbar({
   onNewProject,
 }: DashboardToolbarProps) {
   const searching = searchQuery.trim().length > 0;
+  const primaryOptions = statusOptions.filter((o) => PRIMARY_STATUS_FILTERS.includes(o.value));
+  const overflowOptions = statusOptions.filter((o) => !PRIMARY_STATUS_FILTERS.includes(o.value));
+  const activeOverflow = searching ? undefined : overflowOptions.find((o) => o.value === statusFilter);
+  const selectStatus = (value: StatusFilter) => {
+    if (searching) onSearchChange('');
+    onStatusFilterChange(value);
+  };
   return (
     <div className="mt-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -69,18 +93,60 @@ export function DashboardToolbar({
               picking one clears the search and goes back to that tab. */}
           <Tabs
             value={searching ? '' : statusFilter}
-            onValueChange={(value) => {
-              if (searching) onSearchChange('');
-              onStatusFilterChange(value as StatusFilter);
-            }}
+            onValueChange={(value) => selectStatus(value as StatusFilter)}
           >
             <TabsList className={cn('h-10 sm:h-9', searching && 'opacity-60')} title={searching ? 'Searching every tab' : undefined}>
-              {statusOptions.map(({ value, label, count }) => (
+              {primaryOptions.map(({ value, label, count }) => (
                 <TabsTrigger key={value} value={value} className="gap-1 px-2.5 text-xs">
                   {label}
                   <span className="text-[10px] text-muted-foreground">{count}</span>
                 </TabsTrigger>
               ))}
+              {overflowOptions.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        moreTriggerClasses,
+                        activeOverflow
+                          ? 'bg-background text-foreground shadow-sm dark:border-input dark:bg-input/30'
+                          : 'text-foreground hover:bg-background/60 dark:text-muted-foreground dark:hover:text-foreground',
+                      )}
+                      aria-label="More status filters"
+                    >
+                      {activeOverflow ? (
+                        <>
+                          {activeOverflow.label}
+                          <span className="text-[10px] text-muted-foreground">{activeOverflow.count}</span>
+                        </>
+                      ) : (
+                        'More'
+                      )}
+                      <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {overflowOptions.map(({ value, label, count }) => (
+                      <Fragment key={value}>
+                        {/* Waiting on client is the client's status, not ours: set it apart. */}
+                        {value === 'needs_client' && <DropdownMenuSeparator />}
+                        <DropdownMenuItem
+                          onSelect={() => selectStatus(value)}
+                          className={cn('gap-2 text-xs', activeOverflow?.value === value && 'bg-accent text-accent-foreground')}
+                        >
+                          <span className="flex-1">
+                            {label} <span className="text-[10px] text-muted-foreground tabular-nums">{count}</span>
+                          </span>
+                          <Kbd className="hidden sm:inline-flex">
+                            {statusOptions.findIndex((o) => o.value === value) + 1}
+                          </Kbd>
+                        </DropdownMenuItem>
+                      </Fragment>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </TabsList>
           </Tabs>
         </div>
