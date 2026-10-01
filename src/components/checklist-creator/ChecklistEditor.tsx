@@ -11,6 +11,8 @@ import {
     ClientStepWho,
     ServiceId,
     StageRole,
+    DeliverableOwner,
+    DeliverablePriority,
 } from '@/types';
 import { checklistService } from '@/services/ChecklistService';
 import { SERVICE_LABELS, SERVICE_ORDER } from '@/lib/engagements';
@@ -172,6 +174,8 @@ const stripUid = (sections: EditableSection[]): SOPTemplateSection[] =>
         clientStep: s.clientStep?.trim() || undefined,
         clientWho: s.clientStep?.trim() ? s.clientWho : undefined,
         onProjectSheet: s.onProjectSheet || undefined,
+        sheetTab: s.sheetTab?.trim() || undefined,
+        summary: s.summary?.trim() || undefined,
         items: s.items.map((it, iIdx) => ({
             title: it.title,
             emoji: it.emoji,
@@ -197,6 +201,9 @@ const stripUid = (sections: EditableSection[]): SOPTemplateSection[] =>
             clientStep: it.clientStep?.trim() || undefined,
             clientWho: it.clientStep?.trim() ? it.clientWho : undefined,
             clientHidden: it.clientHidden || undefined,
+            owner: it.owner,
+            priority: it.priority,
+            week: it.week?.trim() || undefined,
             order: iIdx,
         })),
     }));
@@ -868,13 +875,36 @@ function SortableSectionCard({
                             aria-label="The stage heading the client sees it under"
                             className="h-7 w-36 text-xs"
                         />
-                        <label className="ml-2 flex items-center gap-1.5 text-muted-foreground">
-                            <Checkbox
-                                checked={!!section.onProjectSheet}
-                                onCheckedChange={(checked) => onUpdateSection(sIndex, { onProjectSheet: checked === true ? true : undefined })}
+                    </div>
+                    {/*
+                      Where this section sits on the project sheet: a band of
+                      that tab, its deliverables numbered with owner, priority,
+                      status, week and notes. Blank keeps it off the sheet.
+                    */}
+                    <div className="ml-8 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-muted-foreground">On the sheet</span>
+                        <Input
+                            value={section.sheetTab ?? (section.onProjectSheet ? 'Checklist' : '')}
+                            onChange={(e) => onUpdateSection(sIndex, { sheetTab: e.target.value || undefined, onProjectSheet: undefined })}
+                            placeholder="Not on the sheet"
+                            list="sheet-tab-options"
+                            aria-label="The project sheet tab this section is a band of"
+                            className="h-7 w-44 text-xs"
+                        />
+                        <datalist id="sheet-tab-options">
+                            <option value="Checklist" />
+                            <option value="SEO & AEO" />
+                            <option value="Analytics & Tracking" />
+                        </datalist>
+                        {(section.sheetTab || section.onProjectSheet) && (
+                            <Input
+                                value={section.summary ?? ''}
+                                onChange={(e) => onUpdateSection(sIndex, { summary: e.target.value || undefined })}
+                                placeholder="One line under the band: what it covers"
+                                aria-label="The line under this section's band on the sheet"
+                                className="h-7 min-w-[260px] flex-1 text-xs"
                             />
-                            List its steps on the project sheet
-                        </label>
+                        )}
                     </div>
 
                     <div className="pl-4 border-l-2 border-muted ml-6 space-y-3">
@@ -1411,6 +1441,46 @@ function SortableItemRow({
                             On the checklist, a client&apos;s step gets a “Sent · waiting on them” button: press it when you send
                             the thing, and their page says “Waiting on you” until you tick it.
                         </p>
+                    </div>
+                    {/* The deliverable plan's defaults; a project can change them. */}
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-muted-foreground">Owner</span>
+                        <Select
+                            value={item.owner ?? 'activeset'}
+                            onValueChange={(value) => onUpdateItem(sIndex, iIndex, { owner: value === 'activeset' ? undefined : (value as DeliverableOwner) })}
+                        >
+                            <SelectTrigger className="h-7 w-28 text-xs" aria-label="Who delivers it">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="activeset" className="text-xs">ActiveSet</SelectItem>
+                                <SelectItem value="client" className="text-xs">Client</SelectItem>
+                                <SelectItem value="joint" className="text-xs">Joint</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground">Priority</span>
+                        <Select
+                            value={item.priority ?? 'none'}
+                            onValueChange={(value) => onUpdateItem(sIndex, iIndex, { priority: value === 'none' ? undefined : (value as DeliverablePriority) })}
+                        >
+                            <SelectTrigger className="h-7 w-20 text-xs" aria-label="Priority">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none" className="text-xs">None</SelectItem>
+                                <SelectItem value="P0" className="text-xs">P0</SelectItem>
+                                <SelectItem value="P1" className="text-xs">P1</SelectItem>
+                                <SelectItem value="P2" className="text-xs">P2</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground">Week</span>
+                        <Input
+                            value={item.week ?? ''}
+                            onChange={(e) => onUpdateItem(sIndex, iIndex, { week: e.target.value || undefined })}
+                            placeholder="e.g. 2, 5-6, Monthly"
+                            aria-label="Target week"
+                            className="h-7 w-32 text-xs"
+                        />
                     </div>
                     {!item.clientStep?.trim() && (
                         <label className="flex items-center gap-2 text-xs text-muted-foreground">

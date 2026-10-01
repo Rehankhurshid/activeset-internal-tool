@@ -18,6 +18,8 @@ import {
     ProjectChecklist,
     ChecklistSection,
     ChecklistItem,
+    DeliverableOwner,
+    DeliverablePriority,
     ChecklistItemStatus,
     SOPTemplate,
 } from '@/types';
@@ -358,6 +360,45 @@ export const checklistService = {
             logError(error, 'updateChecklistItemValues');
             if (error instanceof DatabaseError) throw error;
             throw new DatabaseError('Failed to save what was recorded');
+        }
+    },
+
+    /**
+     * A deliverable's owner, priority or target week, as the project sheet
+     * shows them; `null` clears one. The sheet is rewritten moments later.
+     */
+    async updateItemPlan(
+        checklistId: string,
+        sectionId: string,
+        itemId: string,
+        patch: { owner?: DeliverableOwner | null; priority?: DeliverablePriority | null; week?: string | null }
+    ): Promise<void> {
+        try {
+            const checklist = await this.getChecklist(checklistId);
+            if (!checklist) throw new DatabaseError('Checklist not found');
+            const sections = checklist.sections.map((section) => {
+                if (section.id !== sectionId) return section;
+                return {
+                    ...section,
+                    items: section.items.map((item) => {
+                        if (item.id !== itemId) return item;
+                        const next: ChecklistItem = { ...item };
+                        for (const key of ['owner', 'priority', 'week'] as const) {
+                            if (!(key in patch)) continue;
+                            const value = patch[key];
+                            if (value === null || value === '') delete next[key];
+                            else (next as unknown as Record<string, unknown>)[key] = value;
+                        }
+                        return next;
+                    }),
+                };
+            });
+            await updateDoc(doc(db, CHECKLISTS_COLLECTION, checklistId), { sections: stripUndefined(sections), updatedAt: Timestamp.now() });
+            requestProjectSheetWrite(checklist.projectId);
+        } catch (error) {
+            logError(error, 'updateItemPlan');
+            if (error instanceof DatabaseError) throw error;
+            throw new DatabaseError('Failed to save the deliverable plan');
         }
     },
 

@@ -23,6 +23,12 @@ export function portalLinks(view: Pick<ClientPortalView, 'websiteUrl' | 'stages'
       links.push({ id: `step-${step.id}`, title, url: step.url, ...(title !== step.title ? { note: step.title } : {}) });
     }
   }
+  // The calls the team shared, newest first: what was said is as much a reference as the files.
+  const calls = view.stages
+    .flatMap((stage) => stage.meetings ?? [])
+    .filter((m) => m.recordingUrl)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  for (const call of calls) links.push({ id: `call-${call.id}`, title: call.title, url: call.recordingUrl!, note: `Call recording · ${new Date(call.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}` });
   links.push(...view.files);
   const seen = new Set<string>();
   return links.filter((l) => (seen.has(l.url) ? false : (seen.add(l.url), true)));

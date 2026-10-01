@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChecklistItem, ChecklistSection, ProjectChecklist } from '@/types';
 import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
-import { clientKeyLinks, developmentWord, managedSheetContent, pageWord, seoToFix, sheetChecks } from './project-sheet.content';
+import { clientKeyLinks, developmentWord, managedSheetContent, pageWord, seoToFix, sheetBoards, sheetPlan } from './project-sheet.content';
 
 let seq = 0;
 const item = (title: string, extra: Partial<ChecklistItem> = {}): ChecklistItem => ({ id: `i${++seq}`, title, status: 'not_started', order: seq, ...extra });
@@ -156,24 +156,44 @@ describe('page words', () => {
   });
 });
 
-describe('the Checklist tab', () => {
+describe('the deliverables tabs', () => {
   const qa = section('Step 6: QA Checklist', [
-    item('\u{1F3C1} Check every page has a title and meta description', { status: 'completed', completedAt: '2026-10-02T09:00:00Z' }),
+    item('\u{1F3C1} Check every page has a title and meta description', { status: 'completed', completedAt: '2026-10-02T09:00:00Z', priority: 'P0', week: '2' }),
     item('Review class naming', { clientHidden: true }),
-    item('Test every form', { status: 'in_progress', dueDate: '2026-10-15' }),
+    item('Test every form', { status: 'in_progress', owner: 'joint', notes: 'Waiting on the CRM' }),
   ]);
+  const seo = section('Technical SEO', [item('Crawl the site'), item('Fix redirects', { status: 'skipped' })], { sheetTab: 'SEO & AEO', summary: 'Technical health only.' });
   const build = section('Step 3: Page Development', [item('Build the navbar')]);
+  const sop = [{ id: 't', service: 'development' as const, sections: [
+    { title: 'Step 6: QA Checklist', items: [], order: 0, onProjectSheet: true },
+    { title: 'Technical SEO', order: 1, items: [{ title: 'Crawl the site', status: 'not_started' as const, order: 0, priority: 'P0' as const, week: '1' }] },
+  ] }];
 
-  it('lists the steps of sections marked on the SOP, by title, without hidden ones or emoji', () => {
-    const rows = sheetChecks([checklist([build, qa])], [{ id: 't', service: 'development', sections: [{ title: 'Step 6: QA Checklist', items: [], order: 0, onProjectSheet: true }] }]);
-    assert.deepEqual(rows, [
-      { section: 'QA Checklist', check: 'Check every page has a title and meta description', status: 'Done', date: '2026-10-02' },
-      { section: 'QA Checklist', check: 'Test every form', status: 'In progress', date: '2026-10-15' },
+  it('bands each tab by section, numbered, with owner, priority, status, week and notes; SOP marks and defaults are borrowed', () => {
+    const boards = sheetBoards([checklist([build, qa, seo])], sop, 'DreamTeam');
+    assert.deepEqual(boards.map((b) => [b.tab, b.sections.map((s) => s.title)]), [
+      ['Checklist', ['QA Checklist']],
+      ['SEO & AEO', ['Technical SEO']],
     ]);
+    assert.deepEqual(boards[0].sections[0].rows, [
+      { deliverable: 'Check every page has a title and meta description', owner: 'ActiveSet', priority: 'P0', status: 'Done', week: '2', notes: '' },
+      { deliverable: 'Test every form', owner: 'Joint', priority: '', status: 'In progress', week: '', notes: 'Waiting on the CRM' },
+    ]);
+    assert.equal(boards[1].sections[0].summary, 'Technical health only.');
+    assert.deepEqual(boards[1].sections[0].rows[0], { deliverable: 'Crawl the site', owner: 'ActiveSet', priority: 'P0', status: 'Not started', week: '1', notes: '' });
   });
 
-  it('reads the mark on the checklist itself too', () => {
-    assert.equal(sheetChecks([checklist([{ ...build, onProjectSheet: true }])]).length, 1);
+  it('names the client as the owner of their deliverables', () => {
+    const boards = sheetBoards([checklist([section('Access', [item('Grant GA4 access', { owner: 'client' })], { sheetTab: 'Analytics & Tracking' })])], [], 'DreamTeam');
+    assert.equal(boards[0].sections[0].rows[0].owner, 'DreamTeam');
+  });
+
+  it('rolls each band up for the Overview, leaving out what is not needed', () => {
+    const plan = sheetPlan(sheetBoards([checklist([qa, seo])], sop));
+    assert.deepEqual(plan, [
+      { area: 'QA Checklist', tab: 'Checklist', deliverables: 2, p0: 1, done: 1, progress: 50 },
+      { area: 'Technical SEO', tab: 'SEO & AEO', deliverables: 1, p0: 1, done: 0, progress: 0 },
+    ]);
   });
 });
 

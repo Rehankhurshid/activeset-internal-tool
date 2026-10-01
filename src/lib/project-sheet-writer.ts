@@ -16,7 +16,7 @@ import {
 } from '@/lib/google-api';
 import { ProjectSheetError, serviceAccountEmail } from '@/lib/project-sheet';
 import {
-  MANAGED_CHECKS_HEADER,
+  MANAGED_BOARD_HEADER,
   MANAGED_HELP,
   MANAGED_INPUTS_HEADER,
   MANAGED_SEO_HEADER,
@@ -27,6 +27,7 @@ import {
   MAX_LINKS,
   managedSheetContent,
   type ManagedSheetContent,
+  type SheetBoard,
   type SheetPageInput,
   type SheetSeoInput,
 } from '@/modules/client-portal/domain/project-sheet.content';
@@ -130,6 +131,9 @@ const WHO_COLOURS: Record<string, string> = { ActiveSet: '#475569', Client: '#B4
 const ROWS = 300;
 const FIELD_ROW = 2;
 const LINKS_ROW = FIELD_ROW + MANAGED_OVERVIEW_FIELDS.length + 1;
+/** The Overview's roll-up: a heading, then one line per band of the deliverables tabs. */
+const PLAN_ROW = LINKS_ROW + 1 + MAX_LINKS + 1;
+const MAX_PLAN = 12;
 
 type Range = { sheetId: number; startRowIndex: number; endRowIndex: number; startColumnIndex: number; endColumnIndex: number };
 const range = (sheetId: number, r0: number, r1: number, c0: number, c1: number): Range => ({
@@ -248,7 +252,7 @@ async function layOut(spreadsheetId: string): Promise<void> {
     .filter((p): p is { sheetId: number; title: string } => !!p);
   const id = (title: string) => ids.find((p) => p.title === title)!.sheetId;
   const [OV, PR, PG, IN] = [id(MANAGED_TABS.overview), id(MANAGED_TABS.process), id(MANAGED_TABS.pages), id(MANAGED_TABS.inputs)];
-  const [CK, SE] = [id(MANAGED_TABS.checks), id(MANAGED_TABS.seo)];
+  const SE = id(MANAGED_TABS.seo);
   const all = (sheet: number, c0: number, c1: number) => range(sheet, 1, ROWS, c0, c1);
   const fields = MANAGED_OVERVIEW_FIELDS.length;
 
@@ -331,23 +335,32 @@ async function layOut(spreadsheetId: string): Promise<void> {
     ...chips(all(IN, 2, 3), STATUS_COLOURS),
 
     ...[OV, PR, PG, IN].map((sheet, i) => kept(sheet, Object.values(MANAGED_TABS)[i])),
-    ...formatChecks(CK),
+    ...formatPlan(OV),
     ...formatSeo(SE),
   ]);
+}
+
+/** The Overview's PLAN block: the heading, then area · "3 of 15 done · 6 P0 · 20%". */
+function formatPlan(OV: number) {
+  return [
+    text(range(OV, PLAN_ROW, PLAN_ROW + 1, 0, 2), font(DISPLAY, 9, C.muted, { bold: true })),
+    text(range(OV, PLAN_ROW + 1, PLAN_ROW + 1 + MAX_PLAN, 0, 1), font(DISPLAY, 10, C.body, { bold: true }), { wrapStrategy: 'CLIP' }),
+    text(range(OV, PLAN_ROW + 1, PLAN_ROW + 1 + MAX_PLAN, 1, 2), font(BODY, 10, C.body), { horizontalAlignment: 'LEFT' }),
+    lines(OV, PLAN_ROW + 1, PLAN_ROW + 1 + MAX_PLAN, 0, 2),
+  ];
 }
 
 /**
  * Bumped when a tab is added after sheets already exist: a sheet laid out
  * under an older version gets the missing tabs on its next write.
  * 2 (2026-10-01): Checklist and SEO. 3 (same day): a Link column on Process.
+ * 4 (same day): the deliverables tabs drawn as bands on every write, the SEO
+ * tab renamed "Page SEO", and the Overview's PLAN roll-up.
  */
-export const LAYOUT_VERSION = 3;
+export const LAYOUT_VERSION = 4;
 
-/** The tabs added after the first four, and how each is laid out. */
-const EXTRA_TABS = [
-  { title: MANAGED_TABS.checks, colour: '#059669', cols: MANAGED_CHECKS_HEADER.length, frozen: 1 },
-  { title: MANAGED_TABS.seo, colour: '#DB2777', cols: MANAGED_SEO_HEADER.length, frozen: 1 },
-];
+/** The fixed tabs added after the first four, and how each is laid out. Deliverables tabs are drawn by `writeBoards`. */
+const EXTRA_TABS = [{ title: MANAGED_TABS.seo, colour: '#DB2777', cols: MANAGED_SEO_HEADER.length, frozen: 1 }];
 
 /** Process column H: the step's link (the moodboard, the sitemap), after the hidden "now" column. */
 function formatProcessLink(PR: number) {
@@ -369,26 +382,6 @@ function formatProcessLink(PR: number) {
     ...widths(PR, [48, 150, 440, 120, 180, 130, 20, 280]).slice(7),
     { repeatCell: { range: range(PR, 1, ROWS, 7, 8), cell: { userEnteredFormat: { textFormat: font(BODY, 10, C.link, { underline: true }), verticalAlignment: 'MIDDLE', wrapStrategy: 'CLIP', padding: { top: 6, bottom: 6, left: 10, right: 10 } } }, fields: 'userEnteredFormat(textFormat,verticalAlignment,wrapStrategy,padding)' } },
     lines(PR, 1, ROWS, 7, 8),
-  ];
-}
-
-/** Checklist: Section · Check · Status · Date, QA and launch checks from the project's checklist. */
-function formatChecks(CK: number) {
-  const all = (c0: number, c1: number) => range(CK, 1, ROWS, c0, c1);
-  return [
-    base(CK, 4),
-    ...header(CK, 4),
-    ...widths(CK, [200, 620, 160, 130]),
-    lines(CK, 1, ROWS, 0, 4),
-    text(all(0, 1), font(DISPLAY, 10, C.muted, { bold: true }), { wrapStrategy: 'CLIP' }),
-    text(all(1, 2), font(BODY, 11, C.ink), { wrapStrategy: 'CLIP' }),
-    text(all(2, 3), font(DISPLAY, 10, C.muted, { bold: true }), { horizontalAlignment: 'CENTER' }),
-    centre(range(CK, 0, 1, 2, 3)),
-    text(all(3, 4), font(BODY, 10, C.muted)),
-    dates(all(3, 4)),
-    rule(range(CK, 1, ROWS, 0, 4), formula('=$C2="Done"'), { textFormat: { foregroundColorStyle: { rgbColor: hex(C.faint) } } }),
-    ...chips(all(2, 3), { ...STATUS_COLOURS, 'Not needed': { bg: '#F1F5F9', fg: '#94A3B8' } }),
-    kept(CK, MANAGED_TABS.checks),
   ];
 }
 
@@ -424,6 +417,18 @@ function formatSeo(SE: number) {
  * missing and restyles the Overview's help lines, which grew with them.
  */
 async function upgradeLayout(spreadsheetId: string): Promise<void> {
+  // v4: "SEO" is now "Page SEO", and the old Checklist tab (one flat table with
+  // its own rules) gives way to the banded one `writeBoards` draws.
+  const before = await getSpreadsheetMeta(spreadsheetId);
+  const renames: Record<string, unknown>[] = [];
+  const oldSeo = before.tabs.find((t) => t.title === 'SEO');
+  if (oldSeo?.sheetId !== undefined && !before.tabs.some((t) => t.title === MANAGED_TABS.seo)) {
+    renames.push({ updateSheetProperties: { properties: { sheetId: oldSeo.sheetId, title: MANAGED_TABS.seo }, fields: 'title' } });
+  }
+  const oldChecks = before.tabs.find((t) => t.title === MANAGED_TABS.checks);
+  if (oldChecks?.sheetId !== undefined) renames.push({ deleteSheet: { sheetId: oldChecks.sheetId } });
+  if (renames.length) await batchUpdateSpreadsheet(spreadsheetId, renames);
+
   const meta = await getSpreadsheetMeta(spreadsheetId);
   const have = new Set(meta.tabs.map((t) => t.title));
   const missing = EXTRA_TABS.filter((t) => !have.has(t.title));
@@ -451,7 +456,6 @@ async function upgradeLayout(spreadsheetId: string): Promise<void> {
     );
     for (const reply of added.replies ?? []) {
       const props = (reply as { addSheet?: { properties?: { sheetId: number; title: string } } }).addSheet?.properties;
-      if (props?.title === MANAGED_TABS.checks) requests.push(...formatChecks(props.sheetId));
       if (props?.title === MANAGED_TABS.seo) requests.push(...formatSeo(props.sheetId));
     }
   }
@@ -461,6 +465,7 @@ async function upgradeLayout(spreadsheetId: string): Promise<void> {
       text(range(OV, FIELD_ROW + 1, FIELD_ROW + MANAGED_HELP.length, 3, 4), font(BODY, 10, '#334155')),
       fill(range(OV, FIELD_ROW, FIELD_ROW + MANAGED_HELP.length, 3, 4), '#F5F3FF'),
       { autoResizeDimensions: { dimensions: { sheetId: OV, dimension: 'ROWS', startIndex: FIELD_ROW, endIndex: FIELD_ROW + MANAGED_HELP.length } } },
+      ...formatPlan(OV),
     );
   }
   if (requests.length) await batchUpdateSpreadsheet(spreadsheetId, requests);
@@ -490,6 +495,13 @@ async function writeValues(spreadsheetId: string, content: ManagedSheetContent, 
         ['', ''],
         ['KEY LINKS', ''],
         ...links,
+        ['', ''],
+        ['PLAN', ''],
+        ...padded(
+          content.plan.map((p) => [p.area, `${p.done} of ${p.deliverables} done · ${p.p0} P0 · ${p.progress}%`]),
+          2,
+          MAX_PLAN,
+        ),
       ],
     },
     { tab: MANAGED_TABS.overview, start: `D${FIELD_ROW + 1}`, rows: MANAGED_HELP.map((line) => [line]) },
@@ -514,10 +526,6 @@ async function writeValues(spreadsheetId: string, content: ManagedSheetContent, 
       rows: padded([[...MANAGED_INPUTS_HEADER], ...content.inputs.map((r) => [r.item, r.neededBy, r.status])], MANAGED_INPUTS_HEADER.length, ROWS),
     },
     {
-      tab: MANAGED_TABS.checks,
-      rows: padded([[...MANAGED_CHECKS_HEADER], ...content.checks.map((r) => [r.section, r.check, r.status, r.date])], MANAGED_CHECKS_HEADER.length, ROWS),
-    },
-    {
       tab: MANAGED_TABS.seo,
       rows: padded(
         [
@@ -529,6 +537,178 @@ async function writeValues(spreadsheetId: string, content: ManagedSheetContent, 
       ),
     },
   ]);
+}
+
+// --- Deliverables tabs (bands) -------------------------------------------------
+
+const BAND = { bg: '#24124D', fg: '#FFFFFF', sub: '#D9D3F5', label: '#4F2BD9' };
+const PRIORITY_COLOURS: Record<string, { bg: string; fg: string }> = {
+  P0: { bg: '#F97316', fg: '#FFFFFF' },
+  P1: { bg: '#FFEDD5', fg: '#9A3412' },
+  P2: { bg: '#F1F5F9', fg: '#475569' },
+};
+/** Columns A (a margin) to H: # · Deliverable · Owner · Priority · Status · Week · Notes, as the Dreamteam Website Plan has them. */
+const BOARD_WIDTHS = [24, 48, 520, 120, 96, 140, 90, 380];
+const BOARD_COLS = BOARD_WIDTHS.length;
+const BOARD_TAB_COLOURS = ['#059669', '#7C3AED', '#0284C7', '#D97706', '#DB2777', '#475569'];
+
+type BoardRowKind = 'gap' | 'title' | 'summary' | 'header' | 'item';
+
+/** Where each band's rows land, and what each row is. */
+function layOutBoard(board: SheetBoard): { kind: BoardRowKind; values: (string | number)[]; priority?: string; status?: string }[] {
+  const blank = (): (string | number)[] => Array.from({ length: BOARD_COLS }, () => '');
+  const rows: { kind: BoardRowKind; values: (string | number)[]; priority?: string; status?: string }[] = [{ kind: 'gap', values: blank() }];
+  board.sections.forEach((section, index) => {
+    if (index > 0) rows.push({ kind: 'gap', values: blank() }, { kind: 'gap', values: blank() });
+    const title = blank();
+    title[1] = section.title.toUpperCase();
+    rows.push({ kind: 'title', values: title });
+    const summary = blank();
+    summary[1] = section.summary;
+    rows.push({ kind: 'summary', values: summary });
+    rows.push({ kind: 'gap', values: blank() });
+    rows.push({ kind: 'header', values: ['', ...MANAGED_BOARD_HEADER] });
+    section.rows.forEach((row, n) =>
+      rows.push({
+        kind: 'item',
+        // A leading apostrophe keeps "5-6" a week, not 5 June (Sheets reads USER_ENTERED values).
+        values: ['', n + 1, row.deliverable, row.owner, row.priority, row.status, row.week ? `'${row.week}` : '', row.notes],
+        priority: row.priority,
+        status: row.status,
+      }),
+    );
+  });
+  return rows;
+}
+
+/** The formats for one drawn board: reset, then bands, headers, chips and lines. */
+function formatBoard(sheetId: number, rows: ReturnType<typeof layOutBoard>, rowCount: number) {
+  const requests: Record<string, unknown>[] = [
+    { unmergeCells: { range: range(sheetId, 0, rowCount, 0, BOARD_COLS) } },
+    {
+      repeatCell: {
+        range: range(sheetId, 0, rowCount, 0, BOARD_COLS),
+        cell: {
+          userEnteredFormat: {
+            backgroundColorStyle: { rgbColor: hex(C.white) },
+            textFormat: font(BODY, 11, C.body),
+            verticalAlignment: 'MIDDLE',
+            wrapStrategy: 'WRAP',
+            padding: { top: 6, bottom: 6, left: 8, right: 8 },
+          },
+        },
+        fields: 'userEnteredFormat',
+      },
+    },
+    rowHeight(sheetId, 0, rowCount, 34),
+    ...widths(sheetId, BOARD_WIDTHS),
+  ];
+  rows.forEach((row, r) => {
+    if (row.kind === 'gap') requests.push(rowHeight(sheetId, r, r + 1, 14));
+    if (row.kind === 'title' || row.kind === 'summary') {
+      requests.push(
+        { mergeCells: { range: range(sheetId, r, r + 1, 1, BOARD_COLS), mergeType: 'MERGE_ALL' } },
+        fill(range(sheetId, r, r + 1, 0, BOARD_COLS), BAND.bg),
+        row.kind === 'title'
+          ? text(range(sheetId, r, r + 1, 1, BOARD_COLS), font(DISPLAY, 22, BAND.fg, { bold: true }), { verticalAlignment: 'BOTTOM', wrapStrategy: 'OVERFLOW_CELL' })
+          : text(range(sheetId, r, r + 1, 1, BOARD_COLS), font(BODY, 11, BAND.sub), { verticalAlignment: 'TOP', wrapStrategy: 'OVERFLOW_CELL' }),
+        rowHeight(sheetId, r, r + 1, row.kind === 'title' ? 64 : 34),
+      );
+    }
+    if (row.kind === 'header') {
+      requests.push(
+        text(range(sheetId, r, r + 1, 1, BOARD_COLS), font(DISPLAY, 11, BAND.label, { bold: true })),
+        {
+          updateBorders: {
+            range: range(sheetId, r, r + 1, 1, BOARD_COLS),
+            top: { style: 'SOLID_MEDIUM', colorStyle: { rgbColor: hex(BAND.label) } },
+            bottom: { style: 'SOLID_THICK', colorStyle: { rgbColor: hex(C.line) } },
+          },
+        },
+        rowHeight(sheetId, r, r + 1, 40),
+      );
+    }
+    if (row.kind === 'item') {
+      requests.push(
+        text(range(sheetId, r, r + 1, 1, 2), font(BODY, 11, C.muted), { horizontalAlignment: 'CENTER' }),
+        text(range(sheetId, r, r + 1, 2, 3), font(BODY, 11, C.ink)),
+        text(range(sheetId, r, r + 1, 6, 7), font(BODY, 11, C.body), { horizontalAlignment: 'CENTER' }),
+        text(range(sheetId, r, r + 1, 7, 8), font(BODY, 11, C.body)),
+        { updateBorders: { range: range(sheetId, r, r + 1, 1, BOARD_COLS), bottom: { style: 'DOTTED', colorStyle: { rgbColor: hex(C.line) } } } },
+        // A long deliverable wraps onto a second line rather than being cut off.
+        { autoResizeDimensions: { dimensions: { sheetId, dimension: 'ROWS', startIndex: r, endIndex: r + 1 } } },
+      );
+      const p = PRIORITY_COLOURS[row.priority ?? ''];
+      requests.push(
+        fill(range(sheetId, r, r + 1, 4, 5), p?.bg ?? C.white),
+        text(range(sheetId, r, r + 1, 4, 5), font(DISPLAY, 11, p?.fg ?? C.body, { bold: row.priority === 'P0' }), { horizontalAlignment: 'CENTER' }),
+      );
+      const st = STATUS_COLOURS[row.status ?? ''] ?? STATUS_COLOURS['Not started'];
+      requests.push(
+        fill(range(sheetId, r, r + 1, 5, 6), st.bg),
+        text(range(sheetId, r, r + 1, 5, 6), font(DISPLAY, 10, st.fg, { bold: true }), { horizontalAlignment: 'CENTER' }),
+      );
+      if (row.status === 'Done' || row.status === 'Not needed') {
+        requests.push(text(range(sheetId, r, r + 1, 2, 3), font(BODY, 11, C.faint)));
+      }
+    }
+  });
+  return requests;
+}
+
+/**
+ * Draws every deliverables tab: adds the ones the sheet does not have yet
+ * (after "What we need", before "Page SEO"), then rewrites each tab's values
+ * and formats in full, since a band can grow or move between writes.
+ */
+async function writeBoards(spreadsheetId: string, boards: SheetBoard[]): Promise<void> {
+  if (boards.length === 0) return;
+  const meta = await getSpreadsheetMeta(spreadsheetId);
+  const ids = new Map(meta.tabs.map((t) => [t.title, t.sheetId]));
+  const firstIndex = Math.max(0, meta.tabs.findIndex((t) => t.title === MANAGED_TABS.inputs) + 1);
+  const missing = boards.filter((b) => !ids.has(b.tab));
+  if (missing.length) {
+    const added = await batchUpdateSpreadsheet(
+      spreadsheetId,
+      missing.map((b) => {
+        const index = boards.indexOf(b);
+        return {
+          addSheet: {
+            properties: {
+              title: b.tab,
+              index: firstIndex + index,
+              tabColorStyle: { rgbColor: hex(BOARD_TAB_COLOURS[index % BOARD_TAB_COLOURS.length]) },
+              gridProperties: { rowCount: ROWS, columnCount: BOARD_COLS, hideGridlines: true },
+            },
+          },
+        };
+      }),
+    );
+    const protections: Record<string, unknown>[] = [];
+    for (const reply of added.replies ?? []) {
+      const props = (reply as { addSheet?: { properties?: { sheetId: number; title: string } } }).addSheet?.properties;
+      if (props) {
+        ids.set(props.title, props.sheetId);
+        protections.push(kept(props.sheetId, props.title));
+      }
+    }
+    if (protections.length) await batchUpdateSpreadsheet(spreadsheetId, protections);
+  }
+
+  const values: { tab: string; rows: (string | number)[][] }[] = [];
+  const formats: Record<string, unknown>[] = [];
+  for (const board of boards) {
+    const sheetId = ids.get(board.tab);
+    if (sheetId === undefined) continue;
+    const rows = layOutBoard(board);
+    const rowCount = Math.max(ROWS, rows.length + 20);
+    formats.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { rowCount, columnCount: BOARD_COLS } }, fields: 'gridProperties.rowCount,gridProperties.columnCount' } });
+    formats.push(...formatBoard(sheetId, rows, rowCount));
+    values.push({ tab: board.tab, rows: padded(rows.map((r) => r.values), BOARD_COLS, rowCount) });
+  }
+  // Values first: rows can only be fitted to text that is already there.
+  await writeRanges(spreadsheetId, values);
+  await batchUpdateSpreadsheet(spreadsheetId, formats);
 }
 
 // --- What goes in ----------------------------------------------------------------
@@ -682,6 +862,7 @@ export async function writeManagedSheet(projectId: string, options: { force?: bo
       record.layoutVersion = LAYOUT_VERSION;
     }
     await writeValues(record.spreadsheetId, content, at);
+    await writeBoards(record.spreadsheetId, content.boards);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await ref.update({ writeError: { message, configuration: error instanceof GoogleApiError && error.configuration, at: at.toISOString() } });

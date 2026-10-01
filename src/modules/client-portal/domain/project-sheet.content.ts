@@ -1,4 +1,4 @@
-import type { ClientStepWho, Project, ProjectChecklist, ProjectTimeline, SOPTemplate, SOPTemplateSection, Task } from '@/types';
+import type { ChecklistSection, ClientStepWho, Project, ProjectChecklist, ProjectTimeline, SOPTemplate, SOPTemplateSection, Task } from '@/types';
 import { normalizeClientStatus } from '@/types';
 import { servicesName, orderServices, isServiceId } from '@/lib/engagements';
 import { resolveTimelinePlan } from './client-timeline';
@@ -26,13 +26,14 @@ export const MANAGED_TABS = {
   pages: 'Pages',
   inputs: 'What we need',
   checks: 'Checklist',
-  seo: 'SEO',
+  seo: 'Page SEO',
 } as const;
 
 export const MANAGED_PROCESS_HEADER = ['#', 'Stage', 'Step', 'Who', 'Status', 'Date'] as const;
 export const MANAGED_PAGES_HEADER = ['Page', 'Copy', 'Design', 'Development', 'Link'] as const;
 export const MANAGED_INPUTS_HEADER = ['Item', 'Needed by', 'Status'] as const;
-export const MANAGED_CHECKS_HEADER = ['Section', 'Check', 'Status', 'Date'] as const;
+/** Every band on a deliverables tab (Checklist, SEO & AEO, Analytics & Tracking…) has these columns. */
+export const MANAGED_BOARD_HEADER = ['#', 'Deliverable', 'Owner', 'Priority', 'Status', 'Week', 'Notes'] as const;
 export const MANAGED_SEO_HEADER = [
   'Page',
   'SEO title',
@@ -55,7 +56,7 @@ export const MANAGED_HELP = [
   '2. Process is every step of the project, in order. Done shows the day it was done; otherwise the day it is planned for. Link opens what the step is about.',
   '3. Pages shows where each page is: copy, design and development.',
   '4. What we need is everything we are waiting on from you, and what has arrived.',
-  '5. Checklist is our QA, SEO and launch checks; SEO is what each page tells search engines and AI answers, as of the date shown.',
+  '5. Checklist, SEO & AEO and Analytics list every deliverable with its owner, priority, status and target week; Page SEO is what each page tells search engines and AI answers, as of the date shown.',
   '6. Edits made here are replaced at the next update, so tell your ActiveSet lead instead.',
 ] as const;
 
@@ -71,8 +72,14 @@ export interface ManagedSheetContent {
   process: { stage: string; step: string; who: string; status: string; date: string; link: string; now?: boolean }[];
   pages: { page: string; copy: string; design: string; development: string; link: string }[];
   inputs: { item: string; neededBy: string; status: string }[];
-  /** The steps of the checklist's sections marked for the sheet: QA, SEO, pre-launch. */
-  checks: { section: string; check: string; status: string; date: string }[];
+  /**
+   * The deliverables tabs (Rehan, 2026-10-01, after the Dreamteam Website
+   * Plan): each tab a list of bands, one per checklist section given that tab,
+   * its deliverables numbered with owner, priority, status, week and notes.
+   */
+  boards: SheetBoard[];
+  /** The Overview's roll-up: one line per band. */
+  plan: { area: string; tab: string; deliverables: number; p0: number; done: number; progress: number }[];
   /** Each scanned page, as search engines and AI answers read it. */
   seo: {
     page: string;
@@ -87,6 +94,20 @@ export interface ManagedSheetContent {
     toFix: string;
     checked: string;
   }[];
+}
+
+export interface SheetBoardRow {
+  deliverable: string;
+  owner: string;
+  priority: string;
+  status: string;
+  week: string;
+  notes: string;
+}
+
+export interface SheetBoard {
+  tab: string;
+  sections: { title: string; summary: string; rows: SheetBoardRow[] }[];
 }
 
 /** One page's last scan, as much as the SEO tab reads of it. */
@@ -189,31 +210,80 @@ const dayOf = (iso: string | undefined) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso
 /** A step's title without the emoji a template starts it with. */
 const plain = (title: string) => title.replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '').trim();
 
+const OWNER_WORDS = { activeset: 'ActiveSet', joint: 'Joint' } as const;
+
+/** The tab a section is a band of: its own, else the SOP's for a section of that title; "Checklist" is what the older mark meant. */
+function tabOf(section: Pick<ChecklistSection, 'sheetTab' | 'onProjectSheet'> | undefined): string | undefined {
+  return section?.sheetTab?.trim() || (section?.onProjectSheet ? MANAGED_TABS.checks : undefined);
+}
+
 /**
- * The steps of every section marked for the sheet. A checklist made before its
- * SOP marked the section borrows the mark by section title, as client labels are.
+ * Every deliverables tab, from the checklists. A checklist made before its SOP
+ * gave a section a tab, a summary, or an item an owner, priority or week,
+ * borrows them from the SOP by section and item title, as client labels are.
  */
-export function sheetChecks(
+export function sheetBoards(
   checklists: ManagedSheetInput['checklists'],
   templates: ManagedSheetInput['templates'] = [],
-): ManagedSheetContent['checks'] {
-  const marked = new Set(
-    (templates ?? []).flatMap((t) => t.sections.filter((s) => s.onProjectSheet).map((s) => s.title.trim().toLowerCase())),
-  );
-  return checklists.flatMap((checklist) =>
-    [...(checklist.sections ?? [])]
-      .filter((section) => section.onProjectSheet || marked.has(section.title.trim().toLowerCase()))
-      .flatMap((section) =>
-        [...(section.items ?? [])]
-          .filter((item) => !item.clientHidden)
-          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-          .map((item) => ({
-            section: plain(section.title).replace(/^step \d+:\s*/i, ''),
-            check: plain(item.title),
+  clientName = 'Client',
+): SheetBoard[] {
+  const sopSections = new Map<string, SOPTemplateSection>();
+  for (const template of templates ?? []) {
+    for (const section of template.sections) {
+      const key = section.title.trim().toLowerCase();
+      if (!sopSections.has(key)) sopSections.set(key, section as SOPTemplateSection);
+    }
+  }
+  const boards = new Map<string, SheetBoard>();
+  for (const checklist of checklists) {
+    for (const section of [...(checklist.sections ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+      const sop = sopSections.get(section.title.trim().toLowerCase());
+      const tab = tabOf(section) ?? tabOf(sop);
+      if (!tab) continue;
+      const sopItems = new Map((sop?.items ?? []).map((i) => [i.title.trim().toLowerCase(), i]));
+      const rows = [...(section.items ?? [])]
+        .filter((item) => !item.clientHidden)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .map((item) => {
+          const from = sopItems.get(item.title.trim().toLowerCase());
+          const owner = item.owner ?? from?.owner ?? 'activeset';
+          return {
+            deliverable: plain(item.title),
+            owner: owner === 'client' ? clientName : OWNER_WORDS[owner],
+            priority: item.priority ?? from?.priority ?? '',
             status: CHECK_WORDS[item.status ?? ''] ?? 'Not started',
-            date: item.status === 'completed' ? dayOf(item.completedAt) : dayOf(item.dueDate),
-          })),
-      ),
+            week: item.week ?? from?.week ?? '',
+            notes: item.notes?.trim() || '',
+          };
+        });
+      if (rows.length === 0) continue;
+      const board = boards.get(tab) ?? { tab, sections: [] };
+      board.sections.push({
+        title: plain(section.title).replace(/^step \d+:\s*/i, ''),
+        summary: section.summary?.trim() || sop?.summary?.trim() || '',
+        rows,
+      });
+      boards.set(tab, board);
+    }
+  }
+  return [...boards.values()];
+}
+
+/** The Overview's roll-up: deliverables, P0s, done and progress per band ("Not needed" counts for nothing). */
+export function sheetPlan(boards: SheetBoard[]): ManagedSheetContent['plan'] {
+  return boards.flatMap((board) =>
+    board.sections.map((section) => {
+      const live = section.rows.filter((r) => r.status !== 'Not needed');
+      const done = live.filter((r) => r.status === 'Done').length;
+      return {
+        area: section.title,
+        tab: board.tab,
+        deliverables: live.length,
+        p0: live.filter((r) => r.priority === 'P0').length,
+        done,
+        progress: live.length ? Math.round((done / live.length) * 100) : 0,
+      };
+    }),
   );
 }
 
@@ -296,6 +366,7 @@ export function managedSheetContent(input: ManagedSheetInput): ManagedSheetConte
   const kickoff = rows.find((r) => /kickoff call/i.test(r.step));
   const launch = rows.find((r) => r.stage === 'Launch') ?? rows.find((r) => /go live|launch/i.test(r.step));
   const client = project.client?.trim() || project.name;
+  const boards = sheetBoards(input.checklists, input.templates, client);
 
   const pages = [...(input.pages ?? [])]
     .sort((a, b) => a.order - b.order)
@@ -333,7 +404,8 @@ export function managedSheetContent(input: ManagedSheetInput): ManagedSheetConte
     process: rows,
     pages,
     inputs,
-    checks: sheetChecks(input.checklists, input.templates),
+    boards,
+    plan: sheetPlan(boards),
     seo: seoRows(input.seo),
   };
 }

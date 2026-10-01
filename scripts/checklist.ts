@@ -91,12 +91,14 @@ async function show(ref: string) {
     console.log(`\nCHECKLIST ${checklist.id} · ${checklist.templateName}`);
     for (const section of [...checklist.sections].sort((a, b) => a.order - b.order)) {
       const client = section.clientStep ? ` → client: "${section.clientStep}"${section.clientWho ? ` (${section.clientWho})` : ''}` : '';
-      console.log(`\n## ${section.title}${client}`);
+      const tab = section.sheetTab || (section.onProjectSheet ? 'Checklist' : '');
+      console.log(`\n## ${section.title}${client}${tab ? ` · sheet: ${tab}` : ''}`);
       for (const item of [...section.items].sort((a, b) => a.order - b.order)) {
         const when = item.completedAt ? ` ${day(item.completedAt)}` : '';
         const fields = (item.fields ?? []).map((f) => `${f.id}(${f.type})=${JSON.stringify(item.values?.[f.id] ?? '')}`).join(', ');
         const own = item.clientStep ? ` → client: "${item.clientStep}"${item.clientWho ? ` (${item.clientWho})` : ''}` : '';
-        console.log(`  ${item.id} [${item.status}${when}] ${item.title}${own}`);
+        const plan = [item.priority, item.owner && item.owner !== 'activeset' ? item.owner : '', item.week ? `wk ${item.week}` : ''].filter(Boolean).join(' · ');
+        console.log(`  ${item.id} [${item.status}${when}] ${item.title}${own}${plan ? `  {${plan}}` : ''}`);
         if (fields) console.log(`      fields: ${fields}`);
         if (item.filledFrom) console.log(`      filled from: ${item.filledFrom}`);
       }
@@ -203,6 +205,11 @@ interface PlanUpdate {
   on?: string;
   /** When it is due, for an item still to do. */
   due?: string;
+  /** The deliverable plan: who delivers it, P0–P2, target week ("2", "5-6", "Monthly"), and a short note. */
+  owner?: 'activeset' | 'client' | 'joint';
+  priority?: 'P0' | 'P1' | 'P2';
+  week?: string;
+  notes?: string;
   values?: Record<string, string>;
   source: string;
   overwrite?: boolean;
@@ -272,6 +279,20 @@ async function apply(file: string) {
         lines.push(`due ${day(item.dueDate) || '-'} → ${update.due}`);
         item.dueDate = update.due;
       }
+    }
+
+    // The deliverable plan. A value someone set is kept unless the update says overwrite.
+    if (update.owner && !['activeset', 'client', 'joint'].includes(update.owner)) throw new Error(`"${update.item}": owner is activeset, client or joint`);
+    if (update.priority && !['P0', 'P1', 'P2'].includes(update.priority)) throw new Error(`"${update.item}": priority is P0, P1 or P2`);
+    for (const key of ['owner', 'priority', 'week', 'notes'] as const) {
+      const wanted = update[key]?.trim();
+      if (!wanted || item[key] === wanted) continue;
+      if (item[key] && !update.overwrite) {
+        lines.push(`${key} kept as ${JSON.stringify(item[key])} (found ${JSON.stringify(wanted)}; pass "overwrite" to replace)`);
+        continue;
+      }
+      lines.push(`${key}: ${JSON.stringify(item[key] ?? '')} → ${JSON.stringify(wanted)}`);
+      (item as unknown as Record<string, string>)[key] = wanted;
     }
 
     for (const [field, value] of Object.entries(update.values ?? {})) {

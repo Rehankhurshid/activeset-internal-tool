@@ -768,12 +768,27 @@ export type ServiceId = 'brand' | 'copy' | 'web_design' | 'development';
 export type ClientStepWho = 'activeset' | 'client' | 'together';
 
 // Individual checklist item
+/** Who delivers a checklist deliverable, as the project sheet's Owner column says it. */
+export type DeliverableOwner = 'activeset' | 'client' | 'joint';
+export type DeliverablePriority = 'P0' | 'P1' | 'P2';
+export const DELIVERABLE_OWNERS: readonly DeliverableOwner[] = ['activeset', 'client', 'joint'];
+export const DELIVERABLE_PRIORITIES: readonly DeliverablePriority[] = ['P0', 'P1', 'P2'];
+
 export interface ChecklistItem {
   id: string;
   title: string;
   emoji?: string;            // From the SOP (e.g., "🐸", "📑")
   status: ChecklistItemStatus;
   notes?: string;            // Free-text notes per item
+  /**
+   * The deliverable plan (Rehan, 2026-10-01, after the Dreamteam Website Plan):
+   * who delivers it, how much it matters (P0 first) and the target week of the
+   * project ("2", "5-6", "Monthly"). An SOP sets defaults; a project changes
+   * them. The project sheet shows all three beside the status.
+   */
+  owner?: DeliverableOwner;
+  priority?: DeliverablePriority;
+  week?: string;
   referenceLink?: string;    // External link
   hoverImage?: string;       // Image URL to show on hover
   assignee?: string;         // Assigned team member email
@@ -853,8 +868,17 @@ export interface ChecklistSection {
   /**
    * List this section's steps on the project sheet's Checklist tab (QA, SEO,
    * pre-launch), each with its status. Hidden items stay off it.
+   * Superseded by `sheetTab` ("Checklist" is what this meant); still read.
    */
   onProjectSheet?: boolean;
+  /**
+   * The project sheet tab this section is a band of ("SEO & AEO", "Checklist",
+   * "Analytics & Tracking"), its deliverables numbered with owner, priority,
+   * status, week and notes. Unset: not on the sheet.
+   */
+  sheetTab?: string;
+  /** One line under the section's band on the sheet: what it covers, and what it does not. */
+  summary?: string;
 }
 
 // Full project checklist
@@ -897,6 +921,10 @@ export interface SOPTemplateSection {
   clientStage?: string;
   /** See `ChecklistSection.onProjectSheet`. */
   onProjectSheet?: boolean;
+  /** See `ChecklistSection.sheetTab`. */
+  sheetTab?: string;
+  /** See `ChecklistSection.summary`. */
+  summary?: string;
 }
 
 // SOP template definition (for the template selector)

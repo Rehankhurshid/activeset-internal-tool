@@ -52,6 +52,7 @@ npm run -s checklist -- create "<project id>" <SOP id> <SOP id> --write
 Rules (the script enforces the starred ones):
 - Only what the evidence shows. No evidence, no change: list it as missing instead.
 - `on` is the day it happened, not today. The client sees that date. *
+- `owner` (activeset, client, joint), `priority` (P0–P2), `week` ("2", "5-6", "Monthly") and `notes` fill the deliverable plan the project sheet shows (SEO & AEO, Analytics & Tracking, Checklist tabs). Take them from the client's plan sheet or a call when they differ from the SOP's defaults; a set value is kept unless `overwrite`. *
 - `due` (YYYY-MM-DD) dates an item still to do; the client's page shows a step's latest due date as "Planned" (a launch date from a call goes on a Pre-Launch item). An existing due date is kept unless `overwrite`. *
 - Every update has a short `source` with a date; it is shown on the item. *
 - Never untick, never replace a typed value, unless the user asked: then `"overwrite": true` and say so. *

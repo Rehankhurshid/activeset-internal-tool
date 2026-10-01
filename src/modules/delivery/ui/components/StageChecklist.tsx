@@ -9,14 +9,21 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { daysBetweenIso, todayIso } from '@/lib/review-status';
 import { cn } from '@/lib/utils';
+import { DELIVERABLE_OWNERS, DELIVERABLE_PRIORITIES } from '@/types';
 import type {
   ChecklistItem,
+  DeliverableOwner,
+  DeliverablePriority,
   ChecklistItemField,
   ChecklistItemLink,
   ChecklistItemStatus,
@@ -337,8 +344,18 @@ interface StageChecklistRowProps {
   values: Record<string, string>;
   onChange: (status: ChecklistItemStatus) => void;
   onValueCommit: (fieldId: string, value: string) => void;
+  /** Owner, priority or week; `null` clears one. */
+  onPlanChange: (patch: { owner?: DeliverableOwner | null; priority?: DeliverablePriority | null; week?: string | null }) => void;
   disabled?: boolean;
 }
+
+const OWNER_LABELS: Record<DeliverableOwner, string> = { activeset: 'ActiveSet', client: 'Client', joint: 'Joint' };
+const WEEKS = ['1', '2', '3', '4', '5', '6', '7', '8', 'Monthly'];
+const PRIORITY_TONE: Record<DeliverablePriority, string> = {
+  P0: 'border-orange-500/50 bg-orange-500/10 text-orange-700 dark:text-orange-300',
+  P1: 'border-amber-500/30 text-amber-700 dark:text-amber-300',
+  P2: 'text-muted-foreground',
+};
 
 function StageChecklistRow({
   item,
@@ -347,6 +364,7 @@ function StageChecklistRow({
   values,
   onChange,
   onValueCommit,
+  onPlanChange,
   disabled,
 }: StageChecklistRowProps) {
   const config = STATUS_CONFIG[status];
@@ -419,6 +437,22 @@ function StageChecklistRow({
         )}
 
         <div className="mt-1 flex flex-wrap items-center gap-2 empty:mt-0">
+          {/* The deliverable plan, as the project sheet shows it. */}
+          {item.priority && (
+            <Badge variant="outline" className={cn('h-5 px-1.5 text-[10px] font-semibold', PRIORITY_TONE[item.priority])}>
+              {item.priority}
+            </Badge>
+          )}
+          {item.owner && item.owner !== 'activeset' && (
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal text-muted-foreground">
+              {OWNER_LABELS[item.owner]}
+            </Badge>
+          )}
+          {item.week && (
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal text-muted-foreground">
+              {/^\d/.test(item.week) ? `Week ${item.week}` : item.week}
+            </Badge>
+          )}
           {/* A step of its own on the client's page: for theirs, In progress
               is what tells them it is waiting on them. */}
           {item.clientStep && (
@@ -596,6 +630,39 @@ function StageChecklistRow({
                 </DropdownMenuItem>
               );
             })}
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Priority{item.priority ? ` · ${item.priority}` : ''}</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {DELIVERABLE_PRIORITIES.map((p) => (
+                  <DropdownMenuItem key={p} onClick={() => onPlanChange({ priority: p })}>
+                    {p}
+                  </DropdownMenuItem>
+                ))}
+                {item.priority && <DropdownMenuItem onClick={() => onPlanChange({ priority: null })}>No priority</DropdownMenuItem>}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Owner · {OWNER_LABELS[item.owner ?? 'activeset']}</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {DELIVERABLE_OWNERS.map((o) => (
+                  <DropdownMenuItem key={o} onClick={() => onPlanChange({ owner: o })}>
+                    {OWNER_LABELS[o]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Week{item.week ? ` · ${item.week}` : ''}</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {WEEKS.map((w) => (
+                  <DropdownMenuItem key={w} onClick={() => onPlanChange({ week: w })}>
+                    {/^\d/.test(w) ? `Week ${w}` : w}
+                  </DropdownMenuItem>
+                ))}
+                {item.week && <DropdownMenuItem onClick={() => onPlanChange({ week: null })}>No week</DropdownMenuItem>}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -777,6 +844,11 @@ export function StageChecklist({
             disabled={disabled}
             onChange={(status) => handleChange(item.id, status)}
             onValueCommit={(fieldId, value) => handleValueCommit(item.id, fieldId, value)}
+            onPlanChange={(patch) => {
+              void deliveryRepository.setChecklistItemPlan(checklistId, sectionId, item.id, patch).catch(() => {
+                toast.error('Could not save that');
+              });
+            }}
           />
         ))}
       </div>

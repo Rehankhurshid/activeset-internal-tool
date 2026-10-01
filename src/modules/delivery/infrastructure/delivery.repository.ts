@@ -22,7 +22,10 @@ import { fetchAuthed } from '@/lib/api-client';
 import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
 import { checklistService } from '@/services/ChecklistService';
-import type { ChecklistItemStatus, ProjectChecklist, ProjectLink, SOPTemplate } from '@/types';
+import type { ChecklistItemStatus, ProjectChecklist, ProjectLink, SOPTemplate,
+  DeliverableOwner,
+  DeliverablePriority,
+} from '@/types';
 import type { MissingBasic } from '../domain/delivery.basics';
 import type { Improvement } from '../domain/delivery.feedback';
 import type {
@@ -383,6 +386,16 @@ export const deliveryRepository = {
    * edited, so two people filling in two fields of the same step do not undo
    * each other.
    */
+  /** Owner, priority or week of a deliverable; `null` clears one. */
+  setChecklistItemPlan(
+    checklistId: string,
+    sectionId: string,
+    itemId: string,
+    patch: { owner?: DeliverableOwner | null; priority?: DeliverablePriority | null; week?: string | null },
+  ): Promise<void> {
+    return checklistService.updateItemPlan(checklistId, sectionId, itemId, patch);
+  },
+
   setChecklistItemValues(
     checklistId: string,
     sectionId: string,

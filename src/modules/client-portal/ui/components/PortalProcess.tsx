@@ -1,6 +1,6 @@
-import { Check, ExternalLink } from 'lucide-react';
+import { Check, ExternalLink, Video } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { PortalStageView, PortalStepView } from '../../domain/client-portal.types';
+import type { PortalMeetingView, PortalStageView, PortalStepView } from '../../domain/client-portal.types';
 import { formatDay, formatStageDates } from './portal-format';
 import { PortalSectionHeading } from './PortalSectionHeading';
 
@@ -26,6 +26,32 @@ function StepStatus({ step, now }: { step: PortalStepView; now: Date }) {
   }
   if (step.state === 'current') return <span className="text-xs font-medium text-foreground">In progress</span>;
   return day ? <span className="text-xs text-muted-foreground">Planned · {formatDay(day, now)}</span> : null;
+}
+
+/** A call that happened, with the round video mark so it reads at a glance, and the recording when the team shared one. */
+function MeetingLine({ meeting, now }: { meeting: PortalMeetingView; now: Date }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+        <Video className="h-3 w-3" strokeWidth={2.25} />
+      </span>
+      <span>
+        Call · {formatDay(meeting.date.slice(0, 10), now)}
+        {meeting.durationMinutes ? ` · ${meeting.durationMinutes} min` : ''}
+      </span>
+      {meeting.recordingUrl && (
+        <a
+          href={meeting.recordingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-2 hover:underline"
+        >
+          Watch recording
+          <ExternalLink aria-hidden="true" className="h-3 w-3" />
+        </a>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -58,6 +84,16 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
           const steps = stage.steps ?? [];
           const done = steps.filter((s) => s.state === 'done').length;
           const dates = formatStageDates(stage.startDate, stage.dueDate, now);
+          // A call on the day a step was done sits under that step (the kickoff
+          // call under "Kickoff call"); any other call gets a row of its own.
+          const meetings = [...(stage.meetings ?? [])].sort((a, b) => a.date.localeCompare(b.date));
+          const onStep = new Map<string, PortalMeetingView[]>();
+          const loose: PortalMeetingView[] = [];
+          for (const meeting of meetings) {
+            const step = steps.find((s) => s.endDate && s.endDate === meeting.date.slice(0, 10));
+            if (step) onStep.set(step.id, [...(onStep.get(step.id) ?? []), meeting]);
+            else loose.push(meeting);
+          }
           return (
             <section key={stage.id} aria-label={stage.title} className="border-b border-border last:border-b-0">
               <header
@@ -124,6 +160,9 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
                             <ExternalLink aria-hidden="true" className="h-3 w-3" />
                           </a>
                         )}
+                        {(onStep.get(step.id) ?? []).map((meeting) => (
+                          <MeetingLine key={meeting.id} meeting={meeting} now={now} />
+                        ))}
                       </div>
                       <div className="shrink-0 pt-0.5 text-right">
                         <StepStatus step={step} now={now} />
@@ -131,6 +170,17 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
                     </li>
                   );
                 })}
+                {loose.map((meeting) => (
+                  <li key={meeting.id} className="flex items-start gap-3 border-t border-border/70 px-4 py-3 first:border-t-0 sm:px-5">
+                    <span aria-hidden="true" className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                      <Video className="h-3.5 w-3.5" strokeWidth={2.25} />
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="text-sm text-foreground">{meeting.title}</p>
+                      <MeetingLine meeting={meeting} now={now} />
+                    </div>
+                  </li>
+                ))}
               </ol>
             </section>
           );
