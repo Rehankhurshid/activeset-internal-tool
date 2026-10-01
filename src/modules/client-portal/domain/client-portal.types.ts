@@ -8,6 +8,8 @@ export type {
   ClientStatus,
 } from '@/types';
 import type { ClientStatus } from '@/types';
+import type { SheetChangeState, WorkState } from './project-sheet.types';
+export type { WorkState } from './project-sheet.types';
 export {
   CLIENT_STATUSES,
   CLIENT_STATUS_LABELS,
@@ -32,6 +34,9 @@ export const PORTAL_STAGE_LABELS: Record<PortalStageState, string> = {
   upcoming: 'Coming up',
 };
 
+/** Whose step a milestone is, when it is not only ours: the client's own, or one we do together. */
+export type PortalStepOwner = 'client' | 'both';
+
 /** A Timeline milestone inside a stage: title, where it stands, dates. Nothing else. */
 export interface PortalStepView {
   id: string;
@@ -41,6 +46,8 @@ export interface PortalStepView {
   startDate?: string;
   /** ISO YYYY-MM-DD */
   endDate?: string;
+  /** From the project sheet's Owner column, as a role: never a person's name. */
+  owner?: PortalStepOwner;
 }
 
 /**
@@ -84,11 +91,95 @@ export interface PortalStageView {
   meetings?: PortalMeetingView[];
 }
 
-/** "What we need from you" row. Title and due date only — never descriptions. */
+/**
+ * "What we need from you" row. From a task: title and due date only, never its
+ * description. From the project sheet's Client Inputs tab, also the columns
+ * that tab writes for the client: why it matters, the section, their own owner,
+ * where it goes.
+ */
 export interface PortalAskView {
   id: string;
   title: string;
+  /** ISO YYYY-MM-DD */
   dueDate?: string;
+  /** A due date the sheet gives in words ("Day 1"). */
+  dueText?: string;
+  why?: string;
+  group?: string;
+  /** The client's own person for it. */
+  owner?: string;
+  /** Where to put it, or the sheet tab to fill. Always http(s). */
+  url?: string;
+  /** `fill`: a `[Fill this]` tab of the project sheet. */
+  kind?: 'input' | 'decision' | 'fill';
+  /** How much of a `[Fill this]` tab is filled. */
+  progress?: { done: number; total: number };
+}
+
+/** One row of a tracker tab: a page, a deliverable, an animation, a task. */
+export interface PortalWorkItemView {
+  id: string;
+  title: string;
+  group?: string;
+  /** The stage this row belongs to, when the sheet ties it to a Timeline phase. */
+  stageId?: string;
+  /** Where the row stands across all its tracks. */
+  state: WorkState;
+  /** One per track, in the workstream's order. */
+  states: WorkState[];
+  /** ISO YYYY-MM-DD */
+  targetDate?: string;
+  targetText?: string;
+  /** Staging, design and document links on the row. */
+  links: PortalFileView[];
+}
+
+/** A tracker tab, as the client sees it. Assignees and notes are never read from the sheet. */
+export interface PortalWorkstreamView {
+  id: string;
+  title: string;
+  /** Column labels: "Copy", "Design", "Dev: Desktop"... */
+  tracks: string[];
+  items: PortalWorkItemView[];
+}
+
+/** A change outside the signed scope: what it is, what it costs, and whether it is agreed. */
+export interface PortalChangeView {
+  id: string;
+  ref?: string;
+  title: string;
+  state: SheetChangeState;
+  /** ISO YYYY-MM-DD */
+  raisedDate?: string;
+  affects?: string;
+  estimate?: string;
+  days?: string;
+}
+
+export interface PortalCheckGroupView {
+  title: string;
+  done: number;
+  total: number;
+  checks: { title: string; done: boolean }[];
+}
+
+/** How ready for launch the project is: the launch checklist, SEO tags, redirects. */
+export interface PortalReadinessView {
+  id: string;
+  title: string;
+  done: number;
+  total: number;
+  groups?: PortalCheckGroupView[];
+}
+
+/** The project's headline facts, from the sheet's Overview tab. */
+export interface PortalFactsView {
+  engagement?: string;
+  /** ISO YYYY-MM-DD */
+  kickoffDate?: string;
+  /** ISO YYYY-MM-DD */
+  targetLaunchDate?: string;
+  targetLaunchText?: string;
 }
 
 /**
@@ -117,10 +208,13 @@ export interface ClientPortalView {
    */
   lastUpdateAt?: string;
   /**
-   * Where the stages come from: the Timeline tab (phases with milestones), or
-   * the plan drafted from the checklist. Decides the page's wording.
+   * Where the stages come from: the project sheet's Timeline tab, the app's
+   * Timeline tab (phases with milestones), or the plan drafted from the
+   * checklist. Decides the page's wording.
    */
-  planSource: 'timeline' | 'plan';
+  planSource: 'sheet' | 'timeline' | 'plan';
+  /** Headline facts from the project sheet's Overview. */
+  facts?: PortalFactsView;
   /** The plan, in order. Empty until the team has one. */
   stages: PortalStageView[];
   /** Index into `stages`. Absent when every stage is done, or there are none. */
@@ -128,6 +222,16 @@ export interface ClientPortalView {
   /** Files for the whole project rather than one stage. */
   files: PortalFileView[];
   asks: PortalAskView[];
+  /** Client inputs already received, counted rather than listed. */
+  asksReceived?: number;
+  /** The project sheet's trackers. */
+  work?: PortalWorkstreamView[];
+  /** Change requests from the sheet's Change Log. */
+  changes?: PortalChangeView[];
+  /** Launch checklist, SEO tags and redirects, as counts. */
+  readiness?: PortalReadinessView[];
+  /** The project sheet, when the team chose to link the client to it. */
+  sheetUrl?: string;
   /**
    * The stage waiting on the client's approval, when there is one.
    *
@@ -164,10 +268,16 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'statusNote',
   'lastUpdateAt',
   'planSource',
+  'facts',
   'stages',
   'currentStageIndex',
   'files',
   'asks',
+  'asksReceived',
+  'work',
+  'changes',
+  'readiness',
+  'sheetUrl',
   'review',
   'generatedAt',
 ] as const;

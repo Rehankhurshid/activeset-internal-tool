@@ -1,5 +1,9 @@
 import type { ClientPortalView } from '../../domain/client-portal.types';
 import { PortalAsks } from '../components/PortalAsks';
+import { PortalChanges } from '../components/PortalChanges';
+import { PortalReadiness } from '../components/PortalReadiness';
+import { PortalWork } from '../components/PortalWork';
+import { PortalYourTurn } from '../components/PortalYourTurn';
 import { PortalFiles } from '../components/PortalFiles';
 import { PortalFooter } from '../components/PortalFooter';
 import { PortalHeader } from '../components/PortalHeader';
@@ -26,8 +30,10 @@ function resolveNow(generatedAt: string): Date {
  * `.portal-theme`, the light palette defined in globals.css, and uses token
  * utilities only.
  *
- * In reading order: where the project is, anything we are waiting on them for,
- * then what they get and when, the files, and the one thing they can sign.
+ * In reading order: where the project is, whether anything is waiting on them
+ * and what, the work itself, what they get and when, how ready launch is, any
+ * change outside scope, the files, and the one thing they can sign. Sections
+ * fed by the project sheet render nothing when no sheet is bound.
  */
 export function ClientPortalScreen({ view, token, preview = false }: ClientPortalScreenProps) {
   const now = resolveNow(view.generatedAt);
@@ -46,10 +52,16 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
           brandLogoUrl={view.brandLogoUrl}
           projectName={view.projectName}
           welcome={view.welcome}
+          facts={view.facts}
+          now={now}
         />
         <PortalNowCard view={view} now={now} />
-        {view.asks.length > 0 && <PortalAsks asks={view.asks} now={now} />}
+        <PortalYourTurn view={view} now={now} />
+        {view.asks.length > 0 && <PortalAsks asks={view.asks} received={view.asksReceived} now={now} />}
+        {view.work && <PortalWork work={view.work} generatedAt={view.generatedAt} />}
         <PortalStages stages={view.stages} now={now} planSource={view.planSource} />
+        <PortalReadiness readiness={view.readiness} />
+        <PortalChanges changes={view.changes} now={now} />
         <PortalFiles files={view.files} websiteUrl={view.websiteUrl} />
         {/* Below the stages and files deliberately: there is no approving
             something you have not been shown. */}

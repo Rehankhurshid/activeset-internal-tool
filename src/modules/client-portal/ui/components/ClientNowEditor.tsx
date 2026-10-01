@@ -45,13 +45,14 @@ function sameDraft(a: Draft, b: Draft): boolean {
 }
 
 /** What the checklist alone says, in a sentence the team can check against the Delivery tab. */
-function checklistSays(following: ResolvedPlan | null, source: 'checklist' | 'timeline' = 'checklist'): string {
+function checklistSays(following: ResolvedPlan | null, source: 'checklist' | 'timeline' | 'sheet' = 'checklist'): string {
   if (!following || following.stages.length === 0) return '';
-  if (source === 'timeline') {
-    if (following.currentIndex < 0) return 'The Timeline says every milestone is done.';
+  if (source === 'timeline' || source === 'sheet') {
+    const name = source === 'sheet' ? "The project sheet's Timeline" : 'The Timeline';
+    if (following.currentIndex < 0) return `${name} says every milestone is done.`;
     const current = following.stages[following.currentIndex];
     const t = current.tracking;
-    return `The Timeline puts the project in ${current.stage.title}${t ? `: ${t.done} of ${t.total} milestones done` : ''}.`;
+    return `${name} puts the project in ${current.stage.title}${t ? `: ${t.done} of ${t.total} milestones done` : ''}.`;
   }
   if (!planTracksChecklist(following)) {
     return 'No checklist tracks this plan, so move the stage on by hand. Add a checklist and rebuild the plan to make it follow along.';
@@ -74,7 +75,7 @@ interface ClientNowEditorProps {
   following: ResolvedPlan | null;
   userEmail: string;
   /** What the stages follow when nobody pins one. */
-  followSource?: 'checklist' | 'timeline';
+  followSource?: 'checklist' | 'timeline' | 'sheet';
 }
 
 /**
@@ -210,7 +211,7 @@ export function ClientNowEditor({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={FOLLOW} className="text-xs">
-                Follow the {followSource === 'timeline' ? 'Timeline' : 'checklist'}
+                Follow the {followSource === 'sheet' ? 'project sheet' : followSource === 'timeline' ? 'Timeline' : 'checklist'}
                 {followingTitle ? ` (${followingTitle})` : ''}
               </SelectItem>
               {pickable.map((stage, index) => (

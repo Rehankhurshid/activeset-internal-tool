@@ -35,6 +35,10 @@ export const COLLECTIONS = {
   // A subcollection rather than an array on the project so a large site does
   // not approach the 1MB document ceiling and two people can edit two rows.
   PROJECT_PAGES: 'pages',
+  // Server-only: project_sheets/{projectId}, the Google Sheet bound to a
+  // project and the last snapshot read from it (see client-portal.md). Absent
+  // from firestore.rules on purpose (default deny) — firebase-admin only.
+  PROJECT_SHEETS: 'project_sheets',
 } as const;
 
 // UI constants

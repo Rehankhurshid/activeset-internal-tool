@@ -4,11 +4,13 @@ import { COLLECTIONS } from '@/lib/constants';
 import { PortalAuthError, verifyPortalToken } from '@/lib/client-portal-tokens';
 import { buildClientPortalView } from '@/modules/client-portal/domain/client-portal.projection';
 import type { ClientPortalView } from '@/modules/client-portal/domain/client-portal.types';
+import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
+import { snapshotOf } from '@/lib/project-sheet';
 import type { Project, ProjectChecklist, ProjectMeeting, ProjectTimeline, Task } from '@/types';
 
 /**
  * Server-side loader for the portal page: token → project (and its client plan)
- * + checklists + asks, plus the timeline for a portal that predates plans →
+ * + checklists + asks + the project sheet's snapshot, plus the timeline →
  * allow-listed view. Everything is read with firebase-admin; the page never
  * touches Firestore from the browser. The loader is strictly read-only: usage
  * is stamped by the view beacon, which knows the open is a real, counted one.
@@ -80,7 +82,7 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
   }
 
   const { projectId, tokenHash, project: raw } = verified;
-  const [timelineSnap, asksSnap, checklistSnap, meetingSnap] = await Promise.all([
+  const [timelineSnap, asksSnap, checklistSnap, meetingSnap, sheetSnap] = await Promise.all([
     adminDb.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
     adminDb
       .collection(COLLECTIONS.TASKS)
@@ -108,6 +110,9 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
       .where('status', '==', 'shared')
       .limit(200)
       .get(),
+    // The project sheet's last snapshot. Read from Firestore, never from
+    // Google: a client's page must not wait on, or fail with, the Sheets API.
+    adminDb.collection(COLLECTIONS.PROJECT_SHEETS).doc(projectId).get(),
   ]);
 
   const project = toProject(projectId, raw);
@@ -119,9 +124,10 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
   );
 
   const meetings = meetingSnap.docs.map((d) => ({ ...(d.data() as ProjectMeeting), id: d.id }));
+  const sheet = snapshotOf(sheetSnap.exists ? (sheetSnap.data() as ProjectSheetRecord) : null);
 
   return {
-    view: buildClientPortalView({ project, timeline, tasks, checklists, meetings }),
+    view: buildClientPortalView({ project, timeline, tasks, checklists, meetings, sheet }),
     projectId,
     tokenHash,
   };

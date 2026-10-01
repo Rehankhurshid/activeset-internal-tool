@@ -35,6 +35,8 @@ export interface TimelineStep {
   state: PlanStageState;
   startDate?: string;
   endDate?: string;
+  /** Only from the project sheet, whose Owner column says when a step is the client's. */
+  owner?: 'client' | 'both';
 }
 
 /** One phase with the milestones the client sees in it. */

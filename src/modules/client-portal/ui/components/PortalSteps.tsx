@@ -35,6 +35,11 @@ export function PortalSteps({ steps, now }: { steps: PortalStepView[]; now: Date
                 )}
               >
                 {step.title}
+                {step.owner && (
+                  <span className="ml-2 inline-block rounded-full bg-amber-100 px-1.5 py-px align-[1px] text-[10px] font-semibold text-amber-900">
+                    {step.owner === 'client' ? 'You' : 'Together'}
+                  </span>
+                )}
                 <span className="sr-only">, {STATE_WORD[step.state]}</span>
               </span>
             </span>

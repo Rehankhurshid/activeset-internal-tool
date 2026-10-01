@@ -26,7 +26,7 @@ interface PortalStagesProps {
   stages: PortalStageView[];
   now: Date;
   /** Timeline stages carry milestones and read as the project's plan; plan stages as what the client gets. */
-  planSource?: 'timeline' | 'plan';
+  planSource?: 'sheet' | 'timeline' | 'plan';
 }
 
 /**
@@ -38,7 +38,7 @@ export function PortalStages({ stages, now, planSource = 'plan' }: PortalStagesP
   return (
     <section aria-labelledby="portal-stages-heading" className="space-y-5">
       <PortalSectionHeading id="portal-stages-heading">
-        {planSource === 'timeline' ? 'The plan, stage by stage' : 'What you get, and when'}
+        {planSource === 'plan' ? 'What you get, and when' : 'The plan, stage by stage'}
       </PortalSectionHeading>
 
       {stages.length === 0 ? (

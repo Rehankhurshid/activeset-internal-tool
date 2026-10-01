@@ -20,6 +20,8 @@ import {
   type ResolvedStage,
 } from './client-plan';
 import { resolveTimelinePlan, stageForDate, timelineStages, type TimelineStep } from './client-timeline';
+import { sheetAsks, sheetChanges, sheetFacts, sheetFiles, sheetReadiness, sheetStageSources, sheetWork } from './project-sheet.portal';
+import type { ProjectSheetSnapshot } from './project-sheet.types';
 import type {
   ClientPortalView,
   PortalAskView,
@@ -50,6 +52,13 @@ export interface BuildClientPortalViewInput {
    * stage is found. Only counts and one section title ever leave it.
    */
   checklists?: ProjectChecklist[];
+  /**
+   * Optional. The project sheet's last snapshot. Its Timeline tab drives the
+   * stages unless the team chose the app's Timeline; its inputs, trackers,
+   * change log and launch checks add to the page. Only what
+   * `project-sheet.portal.ts` builds from it ever reaches the view.
+   */
+  sheet?: ProjectSheetSnapshot | null;
   now?: Date;
 }
 
@@ -96,6 +105,7 @@ function toStep(step: TimelineStep): PortalStepView {
   const view: PortalStepView = { id: step.id, title: step.title, state: step.state };
   if (step.startDate) view.startDate = step.startDate;
   if (step.endDate) view.endDate = step.endDate;
+  if (step.owner) view.owner = step.owner;
   return view;
 }
 
@@ -160,6 +170,25 @@ function toAsk(t: Task): PortalAskView {
   const ask: PortalAskView = { id: t.id, title: t.title };
   if (t.dueDate) ask.dueDate = t.dueDate;
   return ask;
+}
+
+/**
+ * Sheet asks and task asks together, soonest first; asks with no date go last.
+ * A task flagged for the client that repeats a sheet input word for word is
+ * the same ask, so it shows once.
+ */
+function mergeAsks(fromSheet: PortalAskView[], fromTasks: PortalAskView[]): PortalAskView[] {
+  const sheetTitles = new Set(fromSheet.map((a) => a.title.trim().toLowerCase()));
+  return [...fromSheet, ...fromTasks.filter((a) => !sheetTitles.has(a.title.trim().toLowerCase()))]
+    .map((ask, order) => ({ ask, order }))
+    .sort((a, b) => (a.ask.dueDate ?? '9999').localeCompare(b.ask.dueDate ?? '9999') || a.order - b.order)
+    .map(({ ask }) => ask);
+}
+
+/** Files once each, by address. */
+function dedupeFiles(files: PortalFileView[]): PortalFileView[] {
+  const seen = new Set<string>();
+  return files.filter((f) => (seen.has(f.url) ? false : (seen.add(f.url), true)));
 }
 
 function isoOf(value: Date | string | undefined): string | undefined {
@@ -237,24 +266,29 @@ function toPortalReview(
  * they are asked to approve), never a step.
  */
 export function buildClientPortalView(input: BuildClientPortalViewInput): ClientPortalView {
-  const { project, timeline, tasks = [], checklists = [], meetings = [], now = new Date() } = input;
+  const { project, timeline, tasks = [], checklists = [], meetings = [], sheet = null, now = new Date() } = input;
   const settings = project.clientPortal;
   const facing = project.clientFacing ?? {};
   const status = normalizeClientStatus(facing.status);
 
-  // The Timeline tab first: when it has milestones, its phases are the stages.
-  const timelineSources = timelineStages(timeline, project.clientTimeline);
-  const fromTimeline = timelineSources.length > 0;
+  // The project sheet's Timeline first, unless the team chose the app's and it
+  // has something to show; then the Timeline tab; then the plan.
+  const appSources = timelineStages(timeline, project.clientTimeline);
+  const sheetSources = sheet ? sheetStageSources(sheet.data.timeline) : [];
+  const fromSheet = sheetSources.length > 0 && !(sheet?.stagesFrom === 'app' && appSources.length > 0);
+  const fromTimeline = !fromSheet && appSources.length > 0;
+  const timelineSources = fromSheet ? sheetSources : appSources;
+  const byPhase = fromSheet || fromTimeline;
 
   // Otherwise the saved plan; failing that, what a portal shared before plans
   // existed was already showing, so the client's page does not empty out.
-  const saved = !fromTimeline && project.clientPlan ? normalizeClientPlan(project.clientPlan) : null;
+  const saved = !byPhase && project.clientPlan ? normalizeClientPlan(project.clientPlan) : null;
   const legacy =
-    fromTimeline || saved
+    byPhase || saved
       ? null
       : legacyClientPlan({ timeline, links: project.links, currentPhaseId: facing.currentPhaseId });
   const plan = saved ?? legacy?.plan ?? null;
-  const resolved = fromTimeline
+  const resolved = byPhase
     ? resolveTimelinePlan(timelineSources, { currentStageId: facing.currentStageId, status })
     : plan
       ? resolveClientPlan(plan, checklists, {
@@ -264,7 +298,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
       : null;
 
   const stages = resolved ? resolved.stages.map(toStage) : [];
-  if (fromTimeline) {
+  if (byPhase) {
     stages.forEach((stage, index) => {
       stage.steps = timelineSources[index].steps.map(toStep);
     });
@@ -273,10 +307,18 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
   const currentStageIndex = resolved && resolved.currentIndex >= 0 ? resolved.currentIndex : undefined;
   const sharedMeetings = meetings.filter((m) => m?.status === 'shared');
 
-  const asks = tasks
+  const taskAsks = tasks
     .filter((t) => t.needsClientInput === true && t.status !== 'done')
     .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || a.order - b.order)
     .map(toAsk);
+  const fromSheetAsks = sheet ? sheetAsks(sheet) : { asks: [], received: 0 };
+  const asks = mergeAsks(fromSheetAsks.asks, taskAsks);
+
+  const baseFiles = byPhase ? normalizePlanFiles(project.clientTimeline?.files).map(toFile) : (plan?.files ?? []).map(toFile);
+  const files = sheet ? dedupeFiles([...sheetFiles(sheet), ...baseFiles]) : baseFiles;
+  const work = sheet ? sheetWork(sheet.data, new Set(stages.map((s) => s.id))) : [];
+  const changes = sheet ? sheetChanges(sheet.data) : [];
+  const readiness = sheet ? sheetReadiness(sheet.data) : [];
 
   const view: ClientPortalView = {
     projectId: project.id,
@@ -285,7 +327,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     brandLogoUrl: settings?.brandLogoUrl || project.logoUrl || undefined,
     welcome: settings?.welcome?.trim() || undefined,
     agencyContactEmail: project.reviewOwnerEmail || project.assigneeEmails?.[0] || undefined,
-    websiteUrl: detectWebsiteUrl(project, !saved && !fromTimeline),
+    websiteUrl: detectWebsiteUrl(project, !saved && !byPhase),
     status,
     statusLabel: CLIENT_STATUS_PORTAL_LABELS[status],
     statusNote: facing.statusNote?.trim() || undefined,
@@ -293,17 +335,25 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
       facing.lastUpdateAt,
       saved?.updatedAt,
       // A tick on the checklist moves the tracker, so it is news to the client too.
-      !fromTimeline && resolved && planTracksChecklist(resolved) ? latestChecklistChange(checklists) : undefined,
+      !byPhase && resolved && planTracksChecklist(resolved) ? latestChecklistChange(checklists) : undefined,
       // So is a milestone moving on the Timeline, a file added to a phase, or a call shared.
       fromTimeline ? isoOf(timeline?.updatedAt) : undefined,
-      fromTimeline ? project.clientTimeline?.updatedAt : undefined,
+      byPhase ? project.clientTimeline?.updatedAt : undefined,
+      // The sheet changing between two syncs is news too, whichever section it moved.
+      sheet?.changedAt,
       ...sharedMeetings.map((m) => m.decidedAt),
     ]),
-    planSource: fromTimeline ? 'timeline' : 'plan',
+    planSource: fromSheet ? 'sheet' : fromTimeline ? 'timeline' : 'plan',
+    facts: sheet ? sheetFacts(sheet.data.overview) : undefined,
     stages,
     currentStageIndex,
-    files: fromTimeline ? normalizePlanFiles(project.clientTimeline?.files).map(toFile) : (plan?.files ?? []).map(toFile),
+    files,
     asks,
+    asksReceived: fromSheetAsks.received > 0 ? fromSheetAsks.received : undefined,
+    work: work.length ? work : undefined,
+    changes: changes.length ? changes : undefined,
+    readiness: readiness.length ? readiness : undefined,
+    sheetUrl: sheet?.showSheetLink && sheet.url ? sheet.url : undefined,
     review: toPortalReview(checklists, project.delivery?.approvals),
     generatedAt: now.toISOString(),
   };

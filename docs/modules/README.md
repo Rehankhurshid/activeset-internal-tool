@@ -90,6 +90,7 @@ All crons are defined in [vercel.json](../../vercel.json) (times in UTC) and aut
 | `0 14,19 * * 1-5` | `/api/cron/nag-tasks` | clickup-tasks |
 | `0 22 * * 1-5` | `/api/cron/review-digest` | project-links |
 | `40 * * * *` | `/api/cron/fathom-sync` | client-portal (files Fathom calls under projects, pending review) |
+| `*/15 * * * *` | `/api/cron/project-sheet-sync` | client-portal (re-reads every bound project sheet into its snapshot) |
 | **not scheduled** | `/api/cron/cleanup`, `/api/cron/scan-notifications` | site-monitoring (these exist but never run automatically) |
 
 ## Lookup: Firestore collection → doc
@@ -105,7 +106,7 @@ Collection name constants live in [src/lib/constants.ts](../../src/lib/constants
 | `webflow_sessions`, `webflow_pings` | webflow (route) and tools-and-extensions (the Team Tracker extension that writes them) |
 | `worker_jobs`, `workers` (+ `control`, `commands`), `projects/{id}/alt_suggestions`, `projects/{id}/image_budget`, `projects/{id}/image_index` | worker-alt-text-images |
 | `projects/{id}/pages`, `project_checklists`, `sop_templates`, `project_timelines`, `timeline_templates` | delivery |
-| `client_portal_tokens`, `projects/{id}/portal_views`, `projects/{id}/meetings` | client-portal |
+| `client_portal_tokens`, `projects/{id}/portal_views`, `projects/{id}/meetings`, `project_sheets` | client-portal |
 | `proposals`, `shared_proposals`, `proposal_comments`, `proposal_history`, `proposal_views`, `templates` | proposal |
 | `tasks`, `requests`, `app_secrets/clickup` | clickup-tasks |
 | `project_invoices`, `app_secrets/refrens`, `capture_runs` | tools-and-extensions |

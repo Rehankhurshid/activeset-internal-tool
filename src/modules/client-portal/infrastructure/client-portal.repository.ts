@@ -12,6 +12,7 @@ import type {
   ProjectMeeting,
 } from '@/types';
 import { normalizeClientPlan } from '../domain/client-plan';
+import type { ProjectSheetRecord, SheetStagesFrom, SheetTabRole } from '../domain/project-sheet.types';
 import { normalizeClientTimelineSettings } from '../domain/client-timeline';
 
 /** What the Client tab gets back from the meetings route. */
@@ -54,6 +55,20 @@ export interface PortalViewRow {
 
 export type PortalLinkAction = 'enable' | 'rotate' | 'disable';
 
+/** What the Client tab gets back from the sheet route. */
+export interface ProjectSheetState {
+  sheet: ProjectSheetRecord | null;
+  /** The address a sheet must be shared with; null when the deployment has no service account. */
+  serviceAccountEmail: string | null;
+}
+
+export interface ProjectSheetSettings {
+  /** `role: null` goes back to what the tab's name says. */
+  tab?: { title: string; role: SheetTabRole | null };
+  stagesFrom?: SheetStagesFrom;
+  showSheetLink?: boolean;
+}
+
 async function readJson<T>(res: Response, fallback: string): Promise<T> {
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new Error(body?.error || `${fallback} (${res.status})`);
@@ -95,7 +110,21 @@ type ClientPortalRepository = {
   listMeetings(projectId: string): Promise<MeetingsState>;
   syncMeetings(projectId: string): Promise<{ added: number; seen: number; filed: number }>;
   updateMeeting(projectId: string, meetingId: string, patch: MeetingPatch): Promise<ProjectMeeting>;
+  getSheet(projectId: string): Promise<ProjectSheetState>;
+  bindSheet(projectId: string, url: string): Promise<ProjectSheetState>;
+  syncSheet(projectId: string): Promise<ProjectSheetState>;
+  updateSheetSettings(projectId: string, settings: ProjectSheetSettings): Promise<ProjectSheetState>;
+  unbindSheet(projectId: string): Promise<ProjectSheetState>;
 };
+
+async function postSheet(projectId: string, body: Record<string, unknown>, fallback: string): Promise<ProjectSheetState> {
+  const res = await fetchAuthed(`/api/client-portal/${encodeURIComponent(projectId)}/sheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return readJson<ProjectSheetState>(res, fallback);
+}
 
 /**
  * Everything the Client tab needs. Token operations go through the admin-only
@@ -239,4 +268,15 @@ export const clientPortalRepository: ClientPortalRepository = {
     const body = await readJson<{ meeting: ProjectMeeting }>(res, 'Could not update the call');
     return body.meeting;
   },
+
+  async getSheet(projectId) {
+    const res = await fetchAuthed(`/api/client-portal/${encodeURIComponent(projectId)}/sheet`);
+    return readJson<ProjectSheetState>(res, 'Could not load the project sheet');
+  },
+
+  bindSheet: (projectId, url) => postSheet(projectId, { action: 'bind', url }, 'Could not bind the sheet'),
+  syncSheet: (projectId) => postSheet(projectId, { action: 'sync' }, 'Could not read the sheet'),
+  updateSheetSettings: (projectId, settings) =>
+    postSheet(projectId, { action: 'settings', ...settings }, 'Could not save'),
+  unbindSheet: (projectId) => postSheet(projectId, { action: 'unbind' }, 'Could not unbind the sheet'),
 };

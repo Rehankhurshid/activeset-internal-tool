@@ -25,7 +25,7 @@ service cloud.firestore {
     // writes go through firebase-admin in route handlers. Collections that
     // are NOT listed anywhere in this file are also denied by default —
     // client_portal_tokens, projects/{id}/portal_views, extension_tokens,
-    // project_invoices and app_secrets rely on that.
+    // project_invoices, app_secrets and project_sheets rely on that.
     // ──────────────────────────────────────────────────────────────────────
     match /project_secrets/{projectId} {
       allow read, write: if false;

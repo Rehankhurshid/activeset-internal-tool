@@ -217,6 +217,96 @@ export async function shareSpreadsheetByLink(spreadsheetId: string): Promise<voi
   });
 }
 
+export interface SpreadsheetTab {
+  title: string;
+  /** `GRID` for a normal tab; `OBJECT` for a sheet holding only a chart, which has no cells to read. */
+  type: string;
+}
+
+export interface SpreadsheetMeta {
+  spreadsheetId: string;
+  title: string;
+  url: string;
+  /** The spreadsheet's locale (`en_US`, `en_IN`): how its numeric dates are written. */
+  locale?: string;
+  /** Tabs, in the sheet's order. */
+  tabs: SpreadsheetTab[];
+}
+
+/** Title, link, locale and tabs. Also the cheapest way to learn whether the app can see a sheet at all. */
+export async function getSpreadsheetMeta(spreadsheetId: string): Promise<SpreadsheetMeta> {
+  const body = await googleFetch<{
+    spreadsheetId?: string;
+    spreadsheetUrl?: string;
+    properties?: { title?: string; locale?: string };
+    sheets?: { properties?: { title?: string; sheetType?: string } }[];
+  }>(
+    `${SHEETS_API}/${encodeURIComponent(spreadsheetId)}?fields=${encodeURIComponent('spreadsheetId,spreadsheetUrl,properties(title,locale),sheets.properties(title,sheetType)')}`,
+  );
+  return {
+    spreadsheetId: body.spreadsheetId ?? spreadsheetId,
+    title: body.properties?.title ?? '',
+    url: body.spreadsheetUrl ?? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
+    locale: body.properties?.locale,
+    tabs: (body.sheets ?? [])
+      .map((s) => ({ title: s.properties?.title ?? '', type: s.properties?.sheetType ?? 'GRID' }))
+      .filter((t) => t.title),
+  };
+}
+
+/** A cell as read for the project sheet: its displayed text and the link on it, if any. */
+export interface LinkedCell {
+  v: string;
+  link?: string;
+}
+
+/** How much of each tab the project sheet reader looks at. Far beyond any tracker in Drive today. */
+const PROJECT_SHEET_RANGE = 'A1:AD800';
+
+/** A tab title as an A1 range prefix: quoted, with quotes doubled. */
+function quoteTab(title: string): string {
+  return `'${title.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Several tabs in one request, as displayed (dates and statuses as the team
+ * sees them, formulas already calculated) and with each cell's link, which a
+ * plain values read leaves out. Staging links are usually a hyperlinked word.
+ */
+export async function readTabsWithLinks(spreadsheetId: string, tabs: string[]): Promise<Map<string, LinkedCell[][]>> {
+  const out = new Map<string, LinkedCell[][]>();
+  if (tabs.length === 0) return out;
+  const ranges = tabs.map((t) => `ranges=${encodeURIComponent(`${quoteTab(t)}!${PROJECT_SHEET_RANGE}`)}`).join('&');
+  const fields = encodeURIComponent('sheets(properties(title),data(startRow,startColumn,rowData(values(formattedValue,hyperlink))))');
+  const body = await googleFetch<{
+    sheets?: {
+      properties?: { title?: string };
+      data?: { startRow?: number; startColumn?: number; rowData?: { values?: { formattedValue?: string; hyperlink?: string }[] }[] }[];
+    }[];
+  }>(`${SHEETS_API}/${encodeURIComponent(spreadsheetId)}?includeGridData=true&${ranges}&fields=${fields}`);
+
+  for (const sheet of body.sheets ?? []) {
+    const title = sheet.properties?.title;
+    if (!title) continue;
+    const grid: LinkedCell[][] = [];
+    for (const data of sheet.data ?? []) {
+      const rowOffset = data.startRow ?? 0;
+      const colOffset = data.startColumn ?? 0;
+      (data.rowData ?? []).forEach((row, i) => {
+        const cells: LinkedCell[] = [];
+        (row.values ?? []).forEach((value, j) => {
+          const cell: LinkedCell = { v: value.formattedValue ?? '' };
+          if (value.hyperlink) cell.link = value.hyperlink;
+          cells[colOffset + j] = cell;
+        });
+        grid[rowOffset + i] = Array.from(cells, (c) => c ?? { v: '' });
+      });
+    }
+    out.set(title, Array.from(grid, (row) => row ?? []));
+  }
+  return out;
+}
+
 /** Pulls the spreadsheet id out of any Google Sheets URL, or accepts a bare id. */
 export function parseSpreadsheetId(input: string): string | null {
   const trimmed = input.trim();

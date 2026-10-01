@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import type { Project, ProjectChecklist, ProjectTimeline, Task } from '@/types';
 import { cn } from '@/lib/utils';
 import { legacyClientPlan, normalizeClientPlan, resolveClientPlan } from '../../domain/client-plan';
-import { resolveTimelinePlan, timelineStages } from '../../domain/client-timeline';
+import { resolveTimelinePlan, timelineStages, type TimelineStageSource } from '../../domain/client-timeline';
+import { sheetStageSources } from '../../domain/project-sheet.portal';
+import type { ResolvedPlan } from '../../domain/client-plan';
 import { normalizeClientStatus } from '../../domain/client-portal.types';
 import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
 import { ClientNowEditor } from '../components/ClientNowEditor';
@@ -16,6 +18,7 @@ import { ClientTimelineEditor } from '../components/ClientTimelineEditor';
 import { ClientStatusChip } from '../components/ClientStatusChip';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalLinkCard } from '../components/PortalLinkCard';
+import { ProjectSheetCard, useProjectSheet } from '../components/ProjectSheetCard';
 
 interface ClientPanelProps {
   project: Project;
@@ -99,6 +102,36 @@ function PublishedAsks({ tasks }: { tasks: Task[] }) {
   );
 }
 
+const STAGE_STATE_WORD = { done: 'Done', current: 'Now', upcoming: 'Coming up' } as const;
+
+/**
+ * The stages the project sheet's Timeline gives the client, read-only: they
+ * are edited in the sheet, and the next read brings them here.
+ */
+function SheetStagesList({ resolved, sources }: { resolved: ResolvedPlan; sources: TimelineStageSource[] }) {
+  return (
+    <ol className="divide-y divide-border/60">
+      {resolved.stages.map((r, index) => {
+        const steps = sources[index]?.steps ?? [];
+        const done = steps.filter((s) => s.state === 'done').length;
+        const theirs = steps.filter((s) => s.owner === 'client' || s.owner === 'both').length;
+        return (
+          <li key={r.stage.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2">
+            <span className={cn('text-sm', r.state === 'current' && 'font-medium')}>
+              {index + 1}. {r.stage.title}
+            </span>
+            <span className="text-[11px] tabular-nums text-muted-foreground">
+              {STAGE_STATE_WORD[r.state]} · {done}/{steps.length} milestones
+              {theirs ? ` · ${theirs} the client's` : ''}
+              {r.stage.startDate || r.stage.dueDate ? ` · ${[r.stage.startDate, r.stage.dueDate].filter(Boolean).join(' → ')}` : ''}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 /**
  * The Client tab: the link to send, where the project is, and the plan the
  * client sees. Everything reads from the live project doc and checklist the
@@ -112,17 +145,24 @@ export function ClientPanel(props: ClientPanelProps) {
   const facing = project.clientFacing;
   const status = normalizeClientStatus(facing?.status);
 
-  // The Timeline drives the client's page whenever it has milestones to show.
-  const timelineSources = useMemo(() => timelineStages(timeline, project.clientTimeline), [timeline, project.clientTimeline]);
-  const fromTimeline = timelineSources.length > 0;
+  // The project sheet's Timeline drives the client's page when a sheet is bound
+  // and has one (unless the team chose the app's); then the app's Timeline tab
+  // whenever it has milestones to show; then the plan. Same rule as the portal.
+  const sheetState = useProjectSheet(project.id);
+  const sheetRecord = sheetState.state?.sheet ?? null;
+  const appSources = useMemo(() => timelineStages(timeline, project.clientTimeline), [timeline, project.clientTimeline]);
+  const sheetSources = useMemo(() => sheetStageSources(sheetRecord?.data?.timeline), [sheetRecord]);
+  const fromSheet = sheetSources.length > 0 && !(sheetRecord?.stagesFrom === 'app' && appSources.length > 0);
+  const fromTimeline = !fromSheet && appSources.length > 0;
+  const timelineSources = fromSheet ? sheetSources : appSources;
+  const byPhase = fromSheet || fromTimeline;
   const timelineResolved = useMemo(
-    () =>
-      fromTimeline ? resolveTimelinePlan(timelineSources, { currentStageId: facing?.currentStageId, status }) : null,
-    [fromTimeline, timelineSources, facing?.currentStageId, status],
+    () => (byPhase ? resolveTimelinePlan(timelineSources, { currentStageId: facing?.currentStageId, status }) : null),
+    [byPhase, timelineSources, facing?.currentStageId, status],
   );
   const timelineFollowing = useMemo(
-    () => (fromTimeline ? resolveTimelinePlan(timelineSources) : null),
-    [fromTimeline, timelineSources],
+    () => (byPhase ? resolveTimelinePlan(timelineSources) : null),
+    [byPhase, timelineSources],
   );
 
   const plan = useMemo(() => (project.clientPlan ? normalizeClientPlan(project.clientPlan) : null), [project.clientPlan]);
@@ -170,14 +210,14 @@ export function ClientPanel(props: ClientPanelProps) {
             <CardDescription className="text-xs">Where the project is, in the client&apos;s words.</CardDescription>
           </CardHeader>
           <CardContent>
-            {fromTimeline ? (
+            {byPhase ? (
               <ClientNowEditor
                 project={project}
                 stages={timelineSources.map((source) => source.stage)}
                 resolved={timelineResolved}
                 following={timelineFollowing}
                 userEmail={userEmail}
-                followSource="timeline"
+                followSource={fromSheet ? 'sheet' : 'timeline'}
               />
             ) : (
               <ClientNowEditor
@@ -192,7 +232,32 @@ export function ClientPanel(props: ClientPanelProps) {
         </Card>
       </div>
 
-      {fromTimeline && timeline ? (
+      <Card className="gap-3">
+        <CardHeader>
+          <SectionTitle>Project sheet</SectionTitle>
+          <CardDescription className="text-xs">
+            The Google Sheet the team runs the project in. The client&apos;s page reads it; the app never writes to it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProjectSheetCard projectId={project.id} sheetState={sheetState} hasAppTimeline={appSources.length > 0} />
+        </CardContent>
+      </Card>
+
+      {fromSheet && timelineResolved ? (
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Stages: from the project sheet</SectionTitle>
+            <CardDescription className="text-xs">
+              Each phase in the sheet&apos;s Timeline tab is a stage on the client&apos;s page, with its milestones; rows the
+              Owner column gives to the client show as theirs. Edit them in the sheet.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SheetStagesList resolved={timelineResolved} sources={timelineSources} />
+          </CardContent>
+        </Card>
+      ) : fromTimeline && timeline ? (
         <Card className="gap-3">
           <CardHeader>
             <SectionTitle>Stages: from the Timeline</SectionTitle>
@@ -238,7 +303,7 @@ export function ClientPanel(props: ClientPanelProps) {
         <CardContent>
           <ClientMeetingsCard
             projectId={project.id}
-            stages={fromTimeline ? timelineSources.map((source) => source.stage) : (plan?.stages ?? [])}
+            stages={byPhase ? timelineSources.map((source) => source.stage) : (plan?.stages ?? [])}
             userEmail={userEmail}
           />
         </CardContent>
