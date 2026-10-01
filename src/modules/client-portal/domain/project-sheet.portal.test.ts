@@ -66,6 +66,14 @@ describe('buildClientPortalView with a project sheet', () => {
     assert.deepEqual(v.stages[0].steps!.map((s) => s.owner ?? 'team'), ['both', 'client', 'team']);
   });
 
+  it('dates a stage from its phase when its milestones have no dates', () => {
+    const [stage] = sheetStageSources({
+      phases: [{ key: '1', title: 'Foundation', start: { iso: '2026-08-31' }, end: { iso: '2026-09-06' }, milestones: [{ id: 'm', title: 'Kickoff', state: 'not_started' }] }],
+    });
+    assert.equal(stage.stage.startDate, '2026-08-31');
+    assert.equal(stage.stage.dueDate, '2026-09-06');
+  });
+
   it('wins over the app Timeline, unless the team chose the app one', () => {
     assert.equal(view(snapshot(), { timeline: appTimeline }).planSource, 'sheet');
     const app = view(snapshot({ stagesFrom: 'app' }), { timeline: appTimeline });

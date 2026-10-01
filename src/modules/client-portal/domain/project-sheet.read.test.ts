@@ -173,6 +173,31 @@ describe('readProjectSheet: Different AI', () => {
     assert.equal(phases[1].milestones[1].owner, 'client');
   });
 
+  it('dates phases from the Overview when the Timeline rows carry none, as in the live sheet', () => {
+    const undated = DIFFERENT_AI.map((t) =>
+      t.title === 'Timeline'
+        ? tab('Timeline', [
+            ['Timeline'],
+            ['4-week plan from the proposal. Dates recalculate from the Kickoff date on the Overview tab.'],
+            [],
+            ['Phase', 'Milestone / deliverable', 'Owner', 'Starts', 'Ends', 'Status', 'Wk 1 31 Aug', 'Notes'],
+            ['1', 'Kickoff call', 'Rehan + Client'],
+            ['2', 'Build: Home, Product', 'ActiveSet'],
+            [],
+            ['', 'Rows turn red when the end date has passed and the status is not Approved. Extend a phase by changing the kickoff date.'],
+          ])
+        : t,
+    );
+    const { data: d } = readProjectSheet(undated, { today: TODAY });
+    assert.deepEqual(
+      d.timeline!.phases.map((p) => [p.title, p.start?.iso, p.end?.iso, p.milestones.length]),
+      [
+        ['Foundation and motion direction', '2026-08-31', '2026-09-06', 1],
+        ['Core pages and animation production', '2026-09-07', '2026-09-13', 1],
+      ],
+    );
+  });
+
   it('reads client inputs with their sections, and decisions as decisions', () => {
     assert.deepEqual(
       data.inputs.map((i) => [i.title.slice(0, 20), i.state, i.group, i.kind]),

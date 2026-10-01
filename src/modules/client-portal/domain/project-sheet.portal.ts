@@ -47,8 +47,11 @@ export function sheetStageSources(timeline: SheetTimeline | undefined): Timeline
   return timeline.phases
     .filter((phase) => phase.milestones.length > 0)
     .map((phase) => {
+      // The milestones' own dates first; else the phase's, from the Overview.
       const starts = phase.milestones.map((m) => m.start?.iso).filter(isIsoDay).sort();
       const ends = phase.milestones.map((m) => m.end?.iso ?? m.start?.iso).filter(isIsoDay).sort();
+      if (starts.length === 0 && isIsoDay(phase.start?.iso)) starts.push(phase.start.iso);
+      if (ends.length === 0 && isIsoDay(phase.end?.iso)) ends.push(phase.end.iso);
       const stage: ClientPlanStage = { id: ids.get(phase.key)!, title: phase.title, deliverables: [], files: [] };
       if (starts.length) stage.startDate = starts[0];
       if (ends.length) stage.dueDate = ends[ends.length - 1];

@@ -58,6 +58,8 @@ export interface SheetOverview {
   links: SheetLink[];
   /** Phase number → name, from a PHASES block ("1  Foundation" → { '1': 'Foundation' }). */
   phaseNames: Record<string, string>;
+  /** Phase number → its dates, from the same block: used when the Timeline's own rows have none. */
+  phaseDates?: Record<string, { start?: SheetDate; end?: SheetDate }>;
 }
 
 /** Whose step a milestone is. Names are never kept. */
@@ -76,6 +78,9 @@ export interface SheetPhase {
   /** The phase as written ("1", "Week 2", "Discovery"); stable across syncs while the text stays. */
   key: string;
   title: string;
+  /** The phase's own dates, from the Overview's PHASES block, for when its milestones carry none. */
+  start?: SheetDate;
+  end?: SheetDate;
   milestones: SheetMilestone[];
 }
 

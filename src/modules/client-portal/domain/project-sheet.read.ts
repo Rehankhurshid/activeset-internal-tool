@@ -216,9 +216,10 @@ function readTable(grid: SheetGrid, header: HeaderMatch, titleField: string, tit
     if (filled.length === 1) {
       const lone = cleanText(row[filled[0]]?.v, 200);
       if (/^\d+(\.0)?$/.test(lone)) continue;
-      // In the title column, a sentence is a row with nothing filled in yet ("What is AEO? A guide…"),
-      // unless nothing follows it: then it is the footnote under the table.
-      if (filled[0] === titleCol && !isHeading(lone) && (!isSentence(lone) || hasMoreRows(grid, r))) {
+      // In the title column, a sentence is a row with nothing filled in yet ("What is AEO? A guide…")
+      // when a row of this table follows straight after it; otherwise it is the footnote under the
+      // table (Different AI's Lottie tab puts its footnote in the Animation column).
+      if (filled[0] === titleCol && !isHeading(lone) && (!isSentence(lone) || nextRowIsData(grid, r, header, titleCol))) {
         if (!looksLikeHeaderEcho(row, titleCol, titlePattern)) rows.push({ index: r, cells: row, group });
         continue;
       }
@@ -233,15 +234,22 @@ function readTable(grid: SheetGrid, header: HeaderMatch, titleField: string, tit
       if (second) return { header, rows, next: second };
     }
     if (echo || !text(row, titleCol)) continue;
+    // "Total approved", "Grand total": a sum under the table, not a row of it.
+    if (/^(sub ?|grand )?totals?( approved| cost| hours| estimate| spend)?:?$/i.test(text(row, titleCol))) continue;
     rows.push({ index: r, cells: row, group });
   }
   return { header, rows };
 }
 
-/** Whether a row with more than one filled cell comes after row `r`. */
-function hasMoreRows(grid: SheetGrid, r: number): boolean {
-  for (let k = r + 1; k < grid.length; k++) if (filledCols(grid[k]).length > 1) return true;
-  return false;
+/**
+ * Whether the row right after `r` (no blank row between) is a row of this
+ * table: its title cell and at least one other column the header named.
+ */
+function nextRowIsData(grid: SheetGrid, r: number, header: HeaderMatch, titleCol: number): boolean {
+  const next = grid[r + 1];
+  if (!next || !text(next, titleCol)) return false;
+  const others = [...header.cols.values(), ...header.links, ...header.tracks].filter((c) => c !== titleCol);
+  return others.length === 0 || others.some((c) => text(next, c));
 }
 
 /** The second row of a two-row header ("No. | Page"), repeated header words, and the like. */
@@ -280,6 +288,7 @@ interface Context {
   monthFirst: boolean;
   unknown: Set<string>;
   phaseNames: Record<string, string>;
+  phaseDates: NonNullable<SheetOverview['phaseDates']>;
 }
 
 function date(raw: string, ctx: Context) {
@@ -332,13 +341,22 @@ function readOverview(grid: SheetGrid, ctx: Context): { overview: SheetOverview;
         found.push('Key links');
       }
 
-      // PHASES: "1  Foundation and motion direction" under a Phase header.
+      // PHASES: "1  Foundation and motion direction | 31 Aug | 06 Sep" under Phase | Starts | Ends.
       if (label === 'phase' && /^(starts?|start date)$/.test(normalizeHeader(cleanText(row[c + 1]?.v, 40)))) {
+        const hasEnd = /^(ends?|end date|due)$/.test(normalizeHeader(cleanText(row[c + 2]?.v, 40)));
         for (let k = r + 1; k < grid.length; k++) {
           const cell = cleanText(grid[k]?.[c]?.v, 120);
           const named = cell.match(/^(\d+)[\s.:)-]+(.+)$/);
           if (!named) break;
           overview.phaseNames[named[1]] = named[2].trim();
+          const start = date(text(grid[k], c + 1), ctx);
+          const end = hasEnd ? date(text(grid[k], c + 2), ctx) : undefined;
+          if (start?.iso || end?.iso) {
+            (overview.phaseDates ??= {})[named[1]] = {
+              ...(start?.iso ? { start } : {}),
+              ...(end?.iso ? { end } : {}),
+            };
+          }
         }
         if (Object.keys(overview.phaseNames).length) found.push('Phases');
       }
@@ -346,6 +364,7 @@ function readOverview(grid: SheetGrid, ctx: Context): { overview: SheetOverview;
   }
 
   ctx.phaseNames = overview.phaseNames;
+  ctx.phaseDates = overview.phaseDates ?? {};
   return {
     overview,
     report: {
@@ -379,6 +398,9 @@ function readTimelineTable(table: Table, tab: string, ctx: Context, into: Map<st
     if (!target) {
       if (into.size >= CAPS.phases) continue;
       target = { key: phase.key, title: phase.title, milestones: [] };
+      const dates = ctx.phaseDates[phase.key];
+      if (dates?.start) target.start = dates.start;
+      if (dates?.end) target.end = dates.end;
       into.set(phase.key, target);
     }
     const milestone: SheetMilestone = {
@@ -677,6 +699,7 @@ export function readProjectSheet(tabs: SheetTabInput[], options: ReadOptions = {
     monthFirst: isMonthFirstLocale(options.locale),
     unknown: new Set(),
     phaseNames: {},
+    phaseDates: {},
   };
   const plans = planTabs(
     tabs.map((t) => t.title),

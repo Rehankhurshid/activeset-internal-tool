@@ -66,10 +66,14 @@ export const DIFFERENT_AI: SheetTabInput[] = [
     ['ID', 'Animation', 'Proposed placement', 'Concept (one line)', 'Trigger', 'Loop', 'Concept / Storyboard', 'Storyboard approved on', 'Illustration prep', 'Animation', 'Optimised export', 'Size (KB)', 'Implementation', 'Mobile fallback', 'Revisions used (max 2)', 'Assignee', 'Storyboard link', 'Source file link', 'Notes'],
     ['L1', 'Hero motion: Home', 'Home > Hero', 'Goal expands into touchpoints', 'On load', 'Yes', 'Approved', '03 Sep', 'In Progress', 'Not Started', 'Not Started', '', 'Not Started', 'Not Started', '0', 'Tejas', '', '', ''],
     ['L2', 'Solution / how it works', 'Home > Solution', 'Step-through of planning', 'On scroll', 'No', 'Ready for Review', '', 'Not Started', 'Not Started', 'Not Started', '', 'Not Started', 'Not Started', '0', 'Tejas', '', '', ''],
-    ['Placements are proposals from the sitemap for the kickoff call. Confirm or swap them with the client, then lock at storyboard stage.'],
-    ['PRODUCTION PIPELINE (per animation)'],
-    ['Stage', 'What happens', 'Output', 'Who approves', 'Target phase'],
-    ['Concept', 'Animation idea tied to a page section', '1-line concept + reference', 'Client', 'Phase 1'],
+    [],
+    // As in the real sheet: the footnote sits in the Animation column, then a blank row, then another block.
+    ['', 'Placements are proposals from the sitemap for the kickoff call. Confirm or swap them with the client, then lock at storyboard stage.'],
+    [],
+    ['', 'PRODUCTION PIPELINE (per animation)'],
+    ['', 'Stage', 'What happens', 'Output', 'Who approves', 'Target phase'],
+    ['', 'Concept', 'Animation idea tied to a page section', '1-line concept + reference', 'Client', 'Phase 1'],
+    ['', 'Storyboard', 'Key frames sketched, timing and trigger defined', 'Storyboard PDF / Figma', 'Client (sign-off gate)', 'Phase 1'],
   ]),
   tab('Timeline', [
     ['Timeline'],
@@ -133,7 +137,8 @@ export const DIFFERENT_AI: SheetTabInput[] = [
     ['CR-02', '05 Sep', 'Client', 'Lottie', 'Extra Lottie on the Demo hero', 'Demo', '$250', '2', 'Approved', '06 Sep', ''],
     ['CR-03'],
     ['CR-04'],
-    ['Total approved', '', '', '', '', '', '$250', '2.0'],
+    // As in the real sheet: the total sits in the Description column.
+    ['', '', '', '', 'Total approved', '', '$250', '2.0'],
   ]),
 ];
 
