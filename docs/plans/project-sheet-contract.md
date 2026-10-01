@@ -1,6 +1,7 @@
 # Project sheet contract
 
 > Status: phases 1–3 built (2026-10-01); the four-tab ActiveSet format and its master sheet replaced the seven use-case templates the same day.
+> **Direction changed later on 2026-10-01:** the app now creates each project's sheet in a Shared Drive and writes it one way from the checklist, the page tracker and the client asks (Rehan: "Checklist → sheet", "Shaped per engagement", "A Shared Drive"). The reader below still serves projects on a hand-kept sheet; an app-kept sheet is never read back. See `docs/modules/client-portal.md` → "Later on 2026-10-01".
 > Strategy page with the interactive sheet explorer and portal preview:
 > https://claude.ai/artifact/DH5gt8xGfV1ipKkapAzsRL
 

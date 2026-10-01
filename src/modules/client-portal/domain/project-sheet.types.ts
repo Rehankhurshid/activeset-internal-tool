@@ -260,6 +260,16 @@ export interface ProjectSheetRecord {
   syncError?: { message: string; configuration?: boolean; at: string };
   report?: SheetReport;
   data?: ProjectSheetData;
+  /**
+   * Created and written by the app (Rehan, 2026-10-01: checklist → sheet).
+   * The app never reads a managed sheet back: the client's page follows the
+   * checklist, and the sheet is a view of it for whoever prefers a sheet.
+   */
+  managed?: boolean;
+  /** Managed sheets: when the app last wrote it, what it wrote, and the last failure. */
+  writtenAt?: string;
+  writtenHash?: string;
+  writeError?: { message: string; configuration?: boolean; at: string };
 }
 
 /** What the portal projection receives: the snapshot and the team's switches, nothing else. */

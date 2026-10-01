@@ -68,4 +68,6 @@ export type { PortalLinkAction, PortalLinkState, PortalViewRow } from './infrast
 
 export { ClientPortalScreen } from './ui/screens/ClientPortalScreen';
 export { ClientPanel } from './ui/screens/ClientPanel';
+// The project sheet the app creates and keeps: on the Client tab and the Delivery tab's Pages stage.
+export { ProjectSheetPanel } from './ui/components/ProjectSheetPanel';
 export { ClientStatusChip } from './ui/components/ClientStatusChip';

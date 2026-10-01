@@ -44,6 +44,7 @@ import {
 } from '@/types';
 import { DatabaseError, logError } from '@/lib/errors';
 import { orderServices } from '@/lib/engagements';
+import { requestProjectSheetWrite } from '@/lib/project-sheet-trigger';
 import { COLLECTIONS } from '@/lib/constants';
 import { compactAuditResult } from '@/lib/scan-utils';
 
@@ -1759,6 +1760,8 @@ export const tasksService = {
       });
       const ref = await addDoc(collection(db, TASKS_COLLECTION), payload as Record<string, unknown>);
       pushNewTasksToClickUp(input.projectId, [ref.id]);
+      // A request for the client is a row on the project sheet's "What we need".
+      if (input.needsClientInput) requestProjectSheetWrite(input.projectId);
       return ref.id;
     } catch (error) {
       logError(error, 'createTask');

@@ -16,7 +16,8 @@ import { ClientMeetingsCard } from '../components/ClientMeetingsCard';
 import { ClientStatusChip } from '../components/ClientStatusChip';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalLinkCard } from '../components/PortalLinkCard';
-import { ProjectSheetCard, useProjectSheet } from '../components/ProjectSheetCard';
+import { useProjectSheet } from '../components/ProjectSheetCard';
+import { ProjectSheetPanel } from '../components/ProjectSheetPanel';
 
 interface ClientPanelProps {
   project: Project;
@@ -237,7 +238,7 @@ export function ClientPanel(props: ClientPanelProps) {
             <SectionTitle>Project sheet</SectionTitle>
           </CardHeader>
           <CardContent>
-            <ProjectSheetCard projectId={project.id} sheetState={sheetState} hasAppTimeline={picked.kind === 'timeline'} />
+            <ProjectSheetPanel projectId={project.id} sheetState={sheetState} hasAppTimeline={picked.kind === 'timeline'} />
           </CardContent>
         </Card>
       </div>

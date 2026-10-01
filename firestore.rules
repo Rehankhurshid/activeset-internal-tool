@@ -225,6 +225,13 @@ service cloud.firestore {
       allow read, write: if isActiveSetUser();
     }
 
+    // App settings - server-only. Where the app creates project sheets (the
+    // Shared Drive folder) and the like; read and written with firebase-admin.
+    // Unlisted collections are denied anyway; this says so on purpose.
+    match /app_settings/{id} {
+      allow read, write: if false;
+    }
+
     // Proposal Views - server-only. /api/proposals/[id]/view writes through
     // firebase-admin; agency dashboard reads the aggregate counters off the
     // proposal doc, not this collection. Deny direct client access.

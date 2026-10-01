@@ -56,7 +56,8 @@ export async function getProjectSheetRecord(projectId: string): Promise<ProjectS
 
 /** What the portal projection gets: the data and the team's switches, nothing else. */
 export function snapshotOf(record: ProjectSheetRecord | null | undefined): ProjectSheetSnapshot | null {
-  if (!record?.data) return null;
+  // A sheet the app writes is a view of the checklist, never a source for the portal.
+  if (!record?.data || record.managed) return null;
   return {
     data: record.data,
     url: record.url,
@@ -286,6 +287,8 @@ export async function syncAllProjectSheets(options: { pageSize?: number; concurr
 
     const projects = await db.getAll(...ids.map((id) => db.collection(COLLECTIONS.PROJECTS).doc(id)));
     const live = ids.filter((id, i) => {
+      // Sheets the app writes are kept by writeAllManagedSheets, never read back.
+      if (page.docs[i].get('managed') === true) return false;
       if (projects[i].exists) return true;
       removed++;
       void doc(id).delete();

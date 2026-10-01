@@ -64,7 +64,7 @@ function toTimeline(projectId: string, data: Record<string, unknown> | undefined
  * checklist made before SOPs carried them does not have itself. Best effort: a
  * failed read costs those labels, never the client's page.
  */
-async function loadSourceTemplates(checklists: ProjectChecklist[]): Promise<Pick<SOPTemplate, 'id' | 'service' | 'sections'>[]> {
+export async function loadSourceTemplates(checklists: ProjectChecklist[]): Promise<Pick<SOPTemplate, 'id' | 'service' | 'sections'>[]> {
   const ids = [
     ...new Set(
       checklists.flatMap((c) => (c.templateIds?.length ? c.templateIds : c.templateId ? [c.templateId] : [])),

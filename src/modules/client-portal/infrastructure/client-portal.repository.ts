@@ -60,6 +60,8 @@ export interface ProjectSheetState {
   sheet: ProjectSheetRecord | null;
   /** The address a sheet must be shared with; null when the deployment has no service account. */
   serviceAccountEmail: string | null;
+  /** The Shared Drive the app creates project sheets in; null until someone sets it up. */
+  drive?: { folderId: string; name: string; url: string } | null;
 }
 
 export interface ProjectSheetSettings {
@@ -111,6 +113,8 @@ type ClientPortalRepository = {
   syncMeetings(projectId: string): Promise<{ added: number; seen: number; filed: number }>;
   updateMeeting(projectId: string, meetingId: string, patch: MeetingPatch): Promise<ProjectMeeting>;
   getSheet(projectId: string): Promise<ProjectSheetState>;
+  createSheet(projectId: string): Promise<ProjectSheetState>;
+  setSheetDrive(projectId: string, url: string): Promise<ProjectSheetState>;
   bindSheet(projectId: string, url: string): Promise<ProjectSheetState>;
   syncSheet(projectId: string): Promise<ProjectSheetState>;
   updateSheetSettings(projectId: string, settings: ProjectSheetSettings): Promise<ProjectSheetState>;
@@ -274,6 +278,8 @@ export const clientPortalRepository: ClientPortalRepository = {
     return readJson<ProjectSheetState>(res, 'Could not load the project sheet');
   },
 
+  createSheet: (projectId) => postSheet(projectId, { action: 'create' }, 'Could not create the sheet'),
+  setSheetDrive: (projectId, url) => postSheet(projectId, { action: 'drive', url }, 'Could not use that drive'),
   bindSheet: (projectId, url) => postSheet(projectId, { action: 'bind', url }, 'Could not bind the sheet'),
   syncSheet: (projectId) => postSheet(projectId, { action: 'sync' }, 'Could not read the sheet'),
   updateSheetSettings: (projectId, settings) =>

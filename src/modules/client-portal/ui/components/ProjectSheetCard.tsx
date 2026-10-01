@@ -49,7 +49,7 @@ function agoLabel(iso: string | undefined, now: number): string {
 }
 
 /** The project sheet's state for the Client tab, loaded once and replaced by every action's answer. */
-export function useProjectSheet(projectId: string) {
+export function useProjectSheet(projectId: string, enabled = true) {
   const [state, setState] = useState<ProjectSheetState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,8 +63,9 @@ export function useProjectSheet(projectId: string) {
   }, [projectId]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    // Off when a parent already holds this state and passes it down.
+    if (enabled) void reload();
+  }, [reload, enabled]);
 
   return { state, setState, error, reload };
 }

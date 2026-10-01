@@ -11,6 +11,7 @@ import {
   updateProjectSheetSettings,
   type ProjectSheetSettingsPatch,
 } from '@/lib/project-sheet';
+import { createManagedSheet, getProjectSheetDrive, setProjectSheetDrive, writeManagedSheet, type ProjectSheetDrive } from '@/lib/project-sheet-writer';
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
 
 export const runtime = 'nodejs';
@@ -31,8 +32,8 @@ async function authorise(req: NextRequest, projectId: string): Promise<Caller | 
 }
 
 /** The record for the Client tab. The snapshot is already client-safe; the report is for the team. */
-function stateOf(record: ProjectSheetRecord | null) {
-  return { sheet: record, serviceAccountEmail: serviceAccountEmail() };
+function stateOf(record: ProjectSheetRecord | null, drive: ProjectSheetDrive | null) {
+  return { sheet: record, drive, serviceAccountEmail: serviceAccountEmail() };
 }
 
 function failure(error: unknown) {
@@ -53,7 +54,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ proj
   const caller = await authorise(req, projectId);
   if (caller instanceof NextResponse) return caller;
   try {
-    return NextResponse.json(stateOf(await getProjectSheetRecord(projectId)));
+    const [record, drive] = await Promise.all([getProjectSheetRecord(projectId), getProjectSheetDrive()]);
+    return NextResponse.json(stateOf(record, drive));
   } catch (error) {
     return failure(error);
   }
@@ -61,8 +63,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ proj
 
 /**
  * POST /api/client-portal/[projectId]/sheet
- *  - `{ action: 'bind', url }`   point the project at a sheet and read it
- *  - `{ action: 'sync' }`        read it again now
+ *  - `{ action: 'create' }`      create the project's sheet in the Shared Drive and fill it
+ *  - `{ action: 'write' }`       write an app-kept sheet now, if anything changed (the app asks after edits)
+ *  - `{ action: 'drive', url }`  the Shared Drive (or folder) the app creates sheets in; once, for every project
+ *  - `{ action: 'bind', url }`   point the project at a hand-kept sheet and read it
+ *  - `{ action: 'sync' }`        read it again now (an app-kept sheet: write it now)
  *  - `{ action: 'settings', tab?, stagesFrom?, showSheetLink? }`
  *  - `{ action: 'unbind' }`      forget the sheet and its snapshot
  */
@@ -77,11 +82,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
   } & ProjectSheetSettingsPatch;
 
   try {
+    const drive = () => getProjectSheetDrive();
     switch (body.action) {
+      case 'create':
+        return NextResponse.json(stateOf(await createManagedSheet(projectId, caller.email), await drive()));
+      case 'write': {
+        const record = await getProjectSheetRecord(projectId);
+        // Asked after every edit, for every project: most have no app-kept sheet, and that is fine.
+        if (!record?.managed) return NextResponse.json({ skipped: true });
+        return NextResponse.json(stateOf(await writeManagedSheet(projectId), await drive()));
+      }
+      case 'drive': {
+        const saved = await setProjectSheetDrive(body.url, caller.email);
+        return NextResponse.json(stateOf(await getProjectSheetRecord(projectId), saved));
+      }
       case 'bind':
-        return NextResponse.json(stateOf(await bindProjectSheet(projectId, body.url, caller.email)));
-      case 'sync':
-        return NextResponse.json(stateOf(await syncProjectSheet(projectId)));
+        return NextResponse.json(stateOf(await bindProjectSheet(projectId, body.url, caller.email), await drive()));
+      case 'sync': {
+        const record = await getProjectSheetRecord(projectId);
+        const next = record?.managed ? await writeManagedSheet(projectId, { force: true }) : await syncProjectSheet(projectId);
+        return NextResponse.json(stateOf(next, await drive()));
+      }
       case 'settings':
         return NextResponse.json(
           stateOf(
@@ -90,11 +111,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
               stagesFrom: body.stagesFrom,
               showSheetLink: body.showSheetLink,
             }),
+            await drive(),
           ),
         );
       case 'unbind':
         await unbindProjectSheet(projectId);
-        return NextResponse.json(stateOf(null));
+        return NextResponse.json(stateOf(null, await drive()));
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
     }

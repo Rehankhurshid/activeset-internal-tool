@@ -22,6 +22,7 @@ import {
     SOPTemplate,
 } from '@/types';
 import { COLLECTIONS } from '@/lib/constants';
+import { requestProjectSheetWrite } from '@/lib/project-sheet-trigger';
 import { getTemplateById, getDefaultTemplate, SOP_TEMPLATES } from '@/lib/sop-templates';
 import { DatabaseError, logError } from '@/lib/errors';
 // The one place a service reaches into a module: the diff between a project's
@@ -230,6 +231,8 @@ export const checklistService = {
                     'clientFacing.lastUpdateAt': new Date().toISOString(),
                     ...(userEmail ? { 'clientFacing.lastUpdateBy': userEmail.trim().toLowerCase() } : {}),
                 }).catch(() => {});
+                // And the project's sheet, which shows the same step.
+                requestProjectSheetWrite(checklist.projectId);
             }
         } catch (error) {
             logError(error, 'updateItemStatus');

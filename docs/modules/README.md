@@ -106,7 +106,7 @@ Collection name constants live in [src/lib/constants.ts](../../src/lib/constants
 | `webflow_sessions`, `webflow_pings` | webflow (route) and tools-and-extensions (the Team Tracker extension that writes them) |
 | `worker_jobs`, `workers` (+ `control`, `commands`), `projects/{id}/alt_suggestions`, `projects/{id}/image_budget`, `projects/{id}/image_index` | worker-alt-text-images |
 | `projects/{id}/pages`, `project_checklists`, `sop_templates`, `project_timelines`, `timeline_templates` | delivery |
-| `client_portal_tokens`, `projects/{id}/portal_views`, `projects/{id}/meetings`, `project_sheets` | client-portal |
+| `client_portal_tokens`, `projects/{id}/portal_views`, `projects/{id}/meetings`, `project_sheets`, `app_settings/project_sheets` | client-portal |
 | `proposals`, `shared_proposals`, `proposal_comments`, `proposal_history`, `proposal_views`, `templates` | proposal |
 | `tasks`, `requests`, `app_secrets/clickup` | clickup-tasks |
 | `project_invoices`, `app_secrets/refrens`, `capture_runs` | tools-and-extensions |

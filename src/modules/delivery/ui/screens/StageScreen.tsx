@@ -12,7 +12,8 @@ import { KickoffExtras } from '../components/KickoffExtras';
 import { LaunchExtras } from '../components/LaunchExtras';
 import { buildAuditsByPageId, buildAutoVerdicts } from '../components/launch-scan';
 import { StageChecklist } from '../components/StageChecklist';
-import { TrackerSheetCard } from '../components/TrackerSheetCard';
+import { ImportPagesFromSheet } from '../components/ImportPagesFromSheet';
+import { ProjectSheetPanel } from '@/modules/client-portal';
 import { DeliveryScreen } from './DeliveryScreen';
 
 /**
@@ -148,13 +149,15 @@ export function StageScreen({
         <div className="space-y-4">
           {list}
           <Card className="gap-3">
-            <CardHeader>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Client tracker sheet
+                Project sheet
               </CardTitle>
+              <ImportPagesFromSheet projectId={project.id} />
             </CardHeader>
             <CardContent>
-              <TrackerSheetCard project={project} pageCount={pages.length} />
+              {/* The same sheet the Client tab shows: the app creates it and keeps these pages in it. */}
+              <ProjectSheetPanel projectId={project.id} compact />
             </CardContent>
           </Card>
           <DeliveryScreen project={project} stack={stack} userEmail={userEmail} />

@@ -39,6 +39,8 @@ export const COLLECTIONS = {
   // project and the last snapshot read from it (see client-portal.md). Absent
   // from firestore.rules on purpose (default deny) — firebase-admin only.
   PROJECT_SHEETS: 'project_sheets',
+  /** Server-only app settings (firebase-admin). `project_sheets`: the Shared Drive project sheets are created in. */
+  APP_SETTINGS: 'app_settings',
 } as const;
 
 // UI constants

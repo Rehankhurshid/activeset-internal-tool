@@ -17,6 +17,7 @@ import {
   type UpdateData,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { requestProjectSheetWrite } from '@/lib/project-sheet-trigger';
 import { fetchAuthed } from '@/lib/api-client';
 import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
@@ -188,6 +189,7 @@ export const deliveryRepository = {
           updatedAt: created,
         } as Record<string, unknown>),
       );
+      requestProjectSheetWrite(projectId);
       return ref.id;
     } catch (error) {
       logError(error, 'addPage');
@@ -246,6 +248,7 @@ export const deliveryRepository = {
         await batch.commit();
       }
 
+      requestProjectSheetWrite(projectId);
       return { added: candidates.length, skipped: links.length - candidates.length };
     } catch (error) {
       logError(error, 'importFromLinks');
@@ -262,6 +265,7 @@ export const deliveryRepository = {
       const update: UpdateData<DocumentData> = { ...patch, updatedAt: nowIso() };
       if (patch.path !== undefined) update.path = normalizePagePath(patch.path);
       await updateDoc(pageRef(projectId, pageId), update);
+      requestProjectSheetWrite(projectId);
     } catch (error) {
       logError(error, 'updatePage');
       throw new DatabaseError('Failed to update the page');
@@ -286,6 +290,8 @@ export const deliveryRepository = {
         [`work.${disciplineId}`]: status,
         updatedAt: nowIso(),
       });
+      // The project sheet's Pages tab shows this status.
+      requestProjectSheetWrite(projectId);
     } catch (error) {
       logError(error, 'setPageWork');
       throw new DatabaseError('Failed to update the status');
@@ -312,6 +318,7 @@ export const deliveryRepository = {
   async deletePage(projectId: string, pageId: string): Promise<void> {
     try {
       await deleteDoc(pageRef(projectId, pageId));
+      requestProjectSheetWrite(projectId);
     } catch (error) {
       logError(error, 'deletePage');
       throw new DatabaseError('Failed to remove the page');
@@ -325,6 +332,7 @@ export const deliveryRepository = {
       const updatedAt = nowIso();
       orderedIds.forEach((id, order) => batch.update(pageRef(projectId, id), { order, updatedAt }));
       await batch.commit();
+      requestProjectSheetWrite(projectId);
     } catch (error) {
       logError(error, 'reorderPages');
       throw new DatabaseError('Failed to reorder the pages');
@@ -474,25 +482,8 @@ export const deliveryRepository = {
   // --- The client's tracker sheet ------------------------------------------
   // Everything here goes through /api/delivery/[projectId]/sheet: the Google
   // credentials are the server's service account and must never reach a
-  // browser. The app owns the page data; the sheet is a view of it.
-
-  /** Writes the Project Tracker tab. `sheetUrl` picks the sheet the first time. */
-  async syncSheet(
-    projectId: string,
-    sheetUrl?: string,
-  ): Promise<{
-    spreadsheetUrl: string;
-    sheetTitle: string;
-    rows: number;
-    created: boolean;
-    syncedAt: string;
-  }> {
-    return sheetAction(projectId, { action: 'sync', ...(sheetUrl ? { sheetUrl } : {}) }, 'Failed to update the tracker sheet');
-  },
-
-  async shareSheet(projectId: string, email: string): Promise<void> {
-    await sheetAction(projectId, { action: 'share', email }, 'Failed to share the tracker sheet');
-  },
+  // browser. Writing the sheet is the project sheet's job now (client-portal);
+  // what is left here is importing pages from a sheet the team already has.
 
   /** Reads a sheet and reports what would be imported, writing nothing. */
   async previewSheetImport(
@@ -524,6 +515,7 @@ export const deliveryRepository = {
         const updatedAt = nowIso();
         ids.forEach((id, order) => tx.update(pageRef(projectId, id), { order, updatedAt }));
       });
+      requestProjectSheetWrite(projectId);
     } catch (error) {
       logError(error, 'movePage');
       if (error instanceof DatabaseError) throw error;

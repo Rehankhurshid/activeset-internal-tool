@@ -70,7 +70,7 @@ export { deliveryRepository, normalizePagePath, titleFromPath } from './infrastr
 export { DeliveryTab } from './ui/screens/DeliveryTab';
 export { DeliveryScreen } from './ui/screens/DeliveryScreen';
 export { StageScreen } from './ui/screens/StageScreen';
-export { TrackerSheetCard } from './ui/components/TrackerSheetCard';
+export { ImportPagesFromSheet } from './ui/components/ImportPagesFromSheet';
 export { buildKickoffEmail } from './domain/kickoff.email';
 export {
   TRACKER_TAB_TITLE,

@@ -28,6 +28,14 @@ export const SHEETS_SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
 ].join(' ');
 
+/**
+ * Creating a sheet inside the team's Shared Drive, and checking that folder,
+ * needs the plain Drive scope: `drive.file` cannot see a folder the app did not
+ * create. It still reaches only what has been shared with the service account,
+ * which is that Shared Drive.
+ */
+const DRIVE_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'].join(' ');
+
 export class GoogleApiError extends Error {
   constructor(
     public status: number,
@@ -108,8 +116,8 @@ export async function getGoogleAccessToken(scopes: string = SHEETS_SCOPES): Prom
   return cached.token;
 }
 
-async function googleFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const token = await getGoogleAccessToken();
+async function googleFetch<T>(url: string, init: RequestInit = {}, scopes: string = SHEETS_SCOPES): Promise<T> {
+  const token = await getGoogleAccessToken(scopes);
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -147,11 +155,50 @@ export interface SheetGrid {
 }
 
 /*
- * There is no createSpreadsheet here on purpose. Google gives service accounts
- * no Drive storage (this app's reports a quota of 0), so a spreadsheet the app
- * creates is refused with "The caller does not have permission". The app writes
- * into sheets the team owns and has shared with it as an Editor.
+ * Google gives service accounts no Drive storage of their own (this app's
+ * reports a quota of 0), so a spreadsheet created in "its" Drive is refused
+ * with "The caller does not have permission". Created inside a Shared Drive the
+ * service account belongs to, the file is the Shared Drive's, and it works:
+ * that is `createSpreadsheetInFolder`.
  */
+
+/** A Drive folder (or a Shared Drive's root) as a link or a bare id. */
+export function parseDriveFolderId(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const value = input.trim();
+  const fromUrl = value.match(/\/folders\/([A-Za-z0-9_-]{10,})/);
+  if (fromUrl) return fromUrl[1];
+  return /^[A-Za-z0-9_-]{10,}$/.test(value) ? value : null;
+}
+
+export interface DriveFolder {
+  id: string;
+  name: string;
+  /** Set when the folder lives in a Shared Drive. */
+  driveId?: string;
+  canAddChildren: boolean;
+}
+
+/** What the service account can see of a folder, to check it can create sheets there. */
+export async function getDriveFolder(folderId: string): Promise<DriveFolder> {
+  const file = await googleFetch<{ id: string; name: string; mimeType: string; driveId?: string; capabilities?: { canAddChildren?: boolean } }>(
+    `${DRIVE_API}/${encodeURIComponent(folderId)}?supportsAllDrives=true&fields=id,name,mimeType,driveId,capabilities(canAddChildren)`,
+    {},
+    DRIVE_SCOPES,
+  );
+  if (file.mimeType !== 'application/vnd.google-apps.folder') throw new GoogleApiError(400, `"${file.name}" is a file, not a folder.`);
+  return { id: file.id, name: file.name, driveId: file.driveId, canAddChildren: file.capabilities?.canAddChildren === true };
+}
+
+/** A new, empty spreadsheet in a Shared Drive folder. */
+export async function createSpreadsheetInFolder(folderId: string, name: string): Promise<{ id: string; url: string }> {
+  const file = await googleFetch<{ id: string; webViewLink?: string }>(
+    `${DRIVE_API}?supportsAllDrives=true&fields=id,webViewLink`,
+    { method: 'POST', body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.spreadsheet', parents: [folderId] }) },
+    DRIVE_SCOPES,
+  );
+  return { id: file.id, url: file.webViewLink ?? `https://docs.google.com/spreadsheets/d/${file.id}/edit` };
+}
 
 /** A tab title as an A1 range prefix: quoted, with quotes doubled. */
 function quoteTab(title: string): string {

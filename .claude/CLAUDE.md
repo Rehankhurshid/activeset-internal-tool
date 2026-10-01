@@ -99,7 +99,8 @@ API documentation is in `/docs/misc/`:
 | `projects/{id}/audit_decisions` | Team decisions on audit findings (decorative / ignored / fixed / verified), keyed by finding fingerprint (see docs/plans/audit-redesign.md) |
 | `projects/{id}/alt_suggestions` | Alt text drafted by Ollama, locally or on the worker; read-only in the app (see docs/features/alt-text.md) |
 | `projects/{id}/image_budget` | What each image weighs against the width the page displays it at, measured in a real browser by the worker (see docs/features/worker.md) |
-| `project_sheets` | Server-only. The Google Sheet bound to a project and the last snapshot read from it; the team writes the sheet, the app only reads it (see docs/modules/client-portal.md, docs/plans/project-sheet-contract.md) |
+| `project_sheets` | Server-only. A project's Google Sheet: either one the app creates in the team's Shared Drive and keeps from the checklist, pages and asks (`managed: true`, written only), or a hand-kept one bound by the team and read into a snapshot (see docs/modules/client-portal.md, docs/plans/project-sheet-contract.md) |
+| `app_settings` | Server-only app-wide settings; `app_settings/project_sheets` is the Shared Drive the app creates project sheets in |
 | `worker_jobs` | Queue for the always-on worker machine. The app queues, the worker claims and completes |
 | `workers` | One doc per worker machine, heartbeated so the app can show who is online |
 
