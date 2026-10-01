@@ -53,7 +53,7 @@ interface Tagging {
 
 const TAGGINGS: Tagging[] = [
   {
-    name: 'Site Branding',
+    name: 'Brand Identity', // was "Site Branding" until 2026-10-01
     service: 'brand',
     sections: [
       { match: 'Input & Requirements', step: 'Brand questionnaire & assets', who: 'client' },
@@ -86,7 +86,7 @@ const TAGGINGS: Tagging[] = [
     ],
   },
   {
-    name: 'Figma to Webflow',
+    name: 'Webflow Build', // was "Figma to Webflow" until 2026-10-01
     service: 'development',
     sections: [
       { match: 'Input', step: 'Fonts, logins & tracking codes', who: 'client' },
@@ -142,7 +142,7 @@ function draft(name: string, icon: string, description: string, service: Service
 const WEB_DESIGN = draft(
   'Web Design',
   '🖥️',
-  'Website design in Figma, from references to approved designs for every page. Draft for review: edit freely.',
+  'Figma designs, from references and art direction to approved desktop and mobile pages.',
   'web_design',
   [
     {
@@ -230,9 +230,9 @@ const WEB_DESIGN = draft(
 );
 
 const COPY = draft(
-  'Copy',
+  'Website Copy',
   '✍️',
-  'Website copy, from messaging to approved words on every page. Draft for review: edit freely.',
+  'Messaging first, then the copy for every page, through feedback to approval.',
   'copy',
   [
     {

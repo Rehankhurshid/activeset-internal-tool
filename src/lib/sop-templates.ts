@@ -271,12 +271,16 @@ function numbered(sections: Omit<SOPTemplateSection, 'order'>[]): SOPTemplateSec
 export const SOP_TEMPLATES: SOPTemplate[] = [
     {
         id: 'webflow_migration_v1',
-        name: 'Website Migration to Webflow',
-        description: 'Complete SOP for migrating a website to Webflow — from input gathering to launch.',
-        icon: '📄',
+        // Labelled like Webflow Build, so a migration's page follows its checklist too.
+        service: 'development',
+        name: 'Webflow Migration',
+        description: 'An existing site moved to Webflow: page audit, rebuild, CMS, redirects and launch.',
+        icon: '🚚',
         sections: numbered([
             {
                 title: 'Input',
+                clientStep: 'Fonts, logins & tracking codes',
+                clientWho: 'client',
                 emoji: '📥',
                 // The build cannot start without these, which is what `blocking` says.
                 role: 'kickoff',
@@ -342,6 +346,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 1: Project Planning',
+                clientStage: 'Kickoff',
                 emoji: '\u{1F4C1}',
                 items: makeItems([
                     {
@@ -353,6 +358,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 2: Design Preparation (Developer)',
+                clientStep: 'Webflow setup & style guide',
                 emoji: '🎨',
                 items: makeItems([
                     { title: 'Check the styleguide is consistent: spacing, typography, colours', emoji: '✒️' },
@@ -366,6 +372,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 3: Webflow Project Setup',
+                clientStep: 'Webflow setup & style guide',
                 emoji: '🧱',
                 items: makeItems([
                     {
@@ -382,6 +389,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 4: CMS Configuration',
+                clientStep: 'CMS, forms & integrations',
                 emoji: '🗃️',
                 items: makeItems([
                     {
@@ -401,6 +409,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 5: Page Development & Layout',
+                clientStep: 'Pages built for desktop & mobile',
                 emoji: '🧩',
                 // The build itself: the page grid renders in this stage.
                 role: 'pages',
@@ -419,6 +428,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 6: Integrations & Custom Code',
+                clientStep: 'CMS, forms & integrations',
                 emoji: '🔧',
                 items: makeItems([
                     { title: 'Add SEO titles, descriptions and Open Graph fields', emoji: '⚓', autoCheck: 'meta_description' },
@@ -431,6 +441,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 7: QA & Pre-Launch Checklist',
+                clientStep: 'QA on every device',
                 emoji: '🧪',
                 role: 'launch',
                 items: makeItems([
@@ -447,15 +458,18 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 8: Client Review',
+                clientStep: 'Fixes from your review',
                 emoji: '\u{1F91D}',
                 role: 'client_review',
                 items: makeItems([
-                    { title: 'Share the staging and MarkUp links for feedback', emoji: '\u{1F517}' },
+                    { title: 'Share the staging and MarkUp links for feedback', emoji: '\u{1F517}', clientStep: 'Review on staging', clientWho: 'client' },
                     { title: 'Work through the MarkUp comments', emoji: '\u{1F4AC}' },
                 ]),
             },
             {
                 title: 'Step 9: Launch',
+                clientStage: 'Launch',
+                clientStep: 'Go live',
                 emoji: '🚀',
                 role: 'launch',
                 items: makeItems([
@@ -495,9 +509,9 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
         // What the client sees of it is labelled per section and item: the
         // steps their page shows, moved along by this checklist's ticks.
         service: 'brand',
-        name: 'Brand Evolution',
-        description: 'Complete SOP for brand evolution — from kickoff questionnaire through research, moodboards, stylescapes, logo, collateral to brand book handover.',
-        icon: '🎨',
+        name: 'Brand Identity + Collateral',
+        description: 'The fuller brand process: research and competitor mapping, moodboards, stylescape, logo, stationery and collateral, brand book.',
+        icon: '🗂️',
         sections: numbered([
             {
                 title: 'Input & Requirements',

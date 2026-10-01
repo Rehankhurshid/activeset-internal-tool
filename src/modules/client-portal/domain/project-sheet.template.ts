@@ -10,8 +10,8 @@
  * then "Feedback on moodboard"), which is what lets the client see when the
  * project is waiting on them.
  *
- * The steps come from the team's own processes: the "Site Branding" and
- * "Figma to Webflow" SOPs in the Checklist Creator and the timelines of eight
+ * The steps come from the team's own processes: the "Brand Identity" (then
+ * "Site Branding") and "Webflow Build" (then "Figma to Webflow") SOPs in the Checklist Creator and the timelines of eight
  * live projects. `scripts/build-project-sheet-template.ts` writes this into
  * the master sheet in Drive; after that the master is the source of truth
  * (decision 3 in docs/plans/project-sheet-contract.md), and teams copy it.

@@ -334,6 +334,13 @@ describe('portalStageSources', () => {
     assert.deepEqual(picked.sources[0].steps.map((s) => s.title), ['Kickoff call']);
   });
 
+  it('keeps the Timeline while nobody has ticked the checklist', () => {
+    const untouched = checklist([section('Start: client setup', [item('Schedule the kickoff call')])]);
+    const picked = portalStageSources({ checklists: [untouched], agency: [AGENCY_START, AGENCY_CLOSE], timeline });
+    assert.equal(picked.kind, 'timeline');
+    assert.equal(portalStageSources({ checklists: [untouched], agency: [AGENCY_START, AGENCY_CLOSE] }).kind, 'checklist', 'with no Timeline, it drives from day one');
+  });
+
   it('keeps the Timeline for a checklist nothing labels', () => {
     const plain = checklist([section('Step 1', [item('Do a thing', done('2026-09-02'))])]);
     assert.equal(portalStageSources({ checklists: [plain], timeline }).kind, 'timeline');

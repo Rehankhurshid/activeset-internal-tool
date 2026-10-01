@@ -14,6 +14,9 @@ import type { SheetStagesFrom, SheetTimeline } from './project-sheet.types';
  * 2. The checklist, when its SOP says what the client sees: labels on the
  *    checklist itself, or borrowed from the SOP it was made from (Rehan,
  *    2026-10-01: the stage is the checklist's to manage, not ours by hand).
+ *    A checklist nobody has ticked does not take over from a Timeline that
+ *    has milestones: Privado, delivered and run from its Timeline, would
+ *    otherwise have shown its client every step not started.
  * 3. The Timeline tab, when it has milestones.
  * 4. Otherwise nothing here, and the client plan drives the page.
  */
@@ -53,7 +56,12 @@ export function portalStageSources(input: PortalSourcesInput): PortalSources {
   if (fromSheet) {
     return { kind: 'sheet', sources: followedSheet.sources, process, followed: followedSheet.followed, unmatched: followedSheet.unmatched };
   }
-  if (process.length > 0) return { kind: 'checklist', sources: process, process, followed: 0, unmatched: [] };
+  const used = checklists.some((c) =>
+    (c.sections ?? []).some((s) => (s.items ?? []).some((i) => i.status === 'completed' || i.status === 'in_progress')),
+  );
+  if (process.length > 0 && (used || app.length === 0)) {
+    return { kind: 'checklist', sources: process, process, followed: 0, unmatched: [] };
+  }
   if (app.length > 0) return { kind: 'timeline', sources: app, process, followed: 0, unmatched: [] };
   return { kind: null, sources: [], process, followed: 0, unmatched: [] };
 }

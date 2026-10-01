@@ -79,13 +79,36 @@ export function engagementOf(services: readonly unknown[] | null | undefined): E
   return ENGAGEMENTS.find((e) => e.services.length === core.length && e.services.every((s) => core.includes(s)));
 }
 
-/** Every SOP tagged with each service, in the order given. */
+/**
+ * Every SOP tagged with each service, the team's own before the built-ins,
+ * otherwise in the order given. The first is what a new project gets, and the
+ * team's own SOP is the one they keep current; a built-in ships with the app.
+ */
 export function templatesByService(templates: readonly SOPTemplate[]): Record<ServiceId, SOPTemplate[]> {
   const out: Record<ServiceId, SOPTemplate[]> = { brand: [], copy: [], web_design: [], development: [] };
-  for (const template of templates) {
+  const ordered = [...templates.filter((t) => !t.isBuiltIn), ...templates.filter((t) => t.isBuiltIn)];
+  for (const template of ordered) {
     if (isServiceId(template.service)) out[template.service].push(template);
   }
   return out;
+}
+
+/** Which engagements a service is part of, in words, for where SOPs are listed. */
+export function usedIn(service: ServiceId): string {
+  if (service === 'copy') return 'An add-on to any engagement';
+  return ENGAGEMENTS.filter((e) => e.services.includes(service))
+    .map((e) => e.label)
+    .join(' · ');
+}
+
+/** How many distinct steps the client sees from an SOP: its labelled sections and items. */
+export function clientStepCount(template: Pick<SOPTemplate, 'sections'>): number {
+  const labels = new Set<string>();
+  for (const section of template.sections ?? []) {
+    if (section.clientStep?.trim()) labels.add(section.clientStep.trim().toLowerCase());
+    for (const item of section.items ?? []) if (item.clientStep?.trim()) labels.add(item.clientStep.trim().toLowerCase());
+  }
+  return labels.size;
 }
 
 export interface ServicePick {

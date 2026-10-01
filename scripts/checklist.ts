@@ -40,7 +40,7 @@ import { buildClientPortalView } from '@/modules/client-portal/domain/client-por
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
 import { snapshotOf } from '@/lib/project-sheet';
 import { agencyBasicsFor } from '@/modules/delivery/domain/delivery.basics';
-import type { ChecklistItem, ChecklistItemStatus, ChecklistSection, Project, ProjectChecklist, ProjectMeeting, SOPTemplate } from '@/types';
+import type { ChecklistItem, ChecklistItemStatus, ChecklistSection, Project, ProjectChecklist, ProjectMeeting, ProjectTimeline, SOPTemplate } from '@/types';
 
 const WRITE = process.argv.includes('--write');
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
@@ -136,10 +136,14 @@ async function client(ref: string) {
   const templates = (await Promise.all(ids.map((id) => loadTemplate(id).catch(() => null)))).filter((t): t is SOPTemplate => t !== null);
   const sheetDoc = await db.collection(COLLECTIONS.PROJECT_SHEETS).doc(project.id).get();
   const sheet = snapshotOf(sheetDoc.exists ? (sheetDoc.data() as ProjectSheetRecord) : null);
+  const timelineDoc = await db.collection(COLLECTIONS.PROJECT_TIMELINES).doc(project.id).get();
+  const timeline = timelineDoc.exists
+    ? ({ ...(timelineDoc.data() as ProjectTimeline), id: project.id, projectId: project.id } as ProjectTimeline)
+    : null;
   const view = buildClientPortalView({
     sheet,
     project: { ...doc, id: project.id, links: [], createdAt: new Date(), updatedAt: new Date() },
-    timeline: null,
+    timeline,
     checklists,
     templates,
     agency: [AGENCY_START, AGENCY_CLOSE],

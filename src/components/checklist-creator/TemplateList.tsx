@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { SERVICE_LABELS } from '@/lib/engagements';
+import { SERVICE_LABELS, SERVICE_ORDER, clientStepCount, isServiceId, templatesByService, usedIn } from '@/lib/engagements';
 import { Plus, MoreVertical, Pencil, Copy, Trash2, Lock, FileDown, FileText, ClipboardCopy } from 'lucide-react';
 import { downloadAsPDF, downloadAsMarkdown, copyAsMarkdown } from '@/lib/template-export';
 import { toast } from 'sonner';
@@ -87,43 +87,66 @@ export function TemplateList({ onEdit, onNew }: TemplateListProps) {
         );
     }
 
-    const builtIn = templates.filter(t => t.isBuiltIn);
-    const custom = templates.filter(t => !t.isBuiltIn);
+    // One group per service, in working order; the team's own SOPs first, so
+    // the first card in a group is the one a new project gets.
+    const byService = templatesByService(templates);
+    const untagged = templates.filter((t) => !isServiceId(t.service));
+    const card = (t: SOPTemplate, isDefault: boolean) => (
+        <TemplateCard
+            key={t.id}
+            template={t}
+            isDefault={isDefault}
+            // A built-in opens in the editor as a copy: saving makes it yours.
+            onEdit={() => onEdit(t)}
+            onDuplicate={() => handleDuplicate(t)}
+            onDelete={t.isBuiltIn ? undefined : () => setDeleteTarget(t)}
+        />
+    );
 
     return (
         <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {/* New Template Card */}
-                <Card
-                    className="border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors cursor-pointer group"
-                    onClick={onNew}
-                >
-                    <CardContent className="flex flex-col items-center justify-center h-full min-h-[140px] gap-3 text-muted-foreground group-hover:text-primary transition-colors">
-                        <Plus className="h-8 w-8" />
-                        <span className="font-medium">New Template</span>
-                    </CardContent>
-                </Card>
+            <div className="space-y-8">
+                {SERVICE_ORDER.map((service) => {
+                    const list = byService[service];
+                    return (
+                        <section key={service} aria-labelledby={`sop-group-${service}`} className="space-y-3">
+                            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b pb-2">
+                                <h2 id={`sop-group-${service}`} className="text-base font-semibold">
+                                    {SERVICE_LABELS[service]}
+                                </h2>
+                                <span className="text-xs text-muted-foreground">{usedIn(service)}</span>
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {list.length > 0 ? (
+                                    list.map((t, i) => card(t, i === 0 && list.length > 1))
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={onNew}
+                                        className="flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-muted-foreground/25 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                                    >
+                                        <Plus className="h-5 w-5" />
+                                        No SOP for {SERVICE_LABELS[service]} yet
+                                    </button>
+                                )}
+                            </div>
+                        </section>
+                    );
+                })}
 
-                {/* Custom templates first */}
-                {custom.map(t => (
-                    <TemplateCard
-                        key={t.id}
-                        template={t}
-                        onEdit={() => onEdit(t)}
-                        onDuplicate={() => handleDuplicate(t)}
-                        onDelete={() => setDeleteTarget(t)}
-                    />
-                ))}
-
-                {/* Built-in templates */}
-                {builtIn.map(t => (
-                    <TemplateCard
-                        key={t.id}
-                        template={t}
-                        onEdit={() => handleDuplicate(t)} // duplicate to edit built-in
-                        onDuplicate={() => handleDuplicate(t)}
-                    />
-                ))}
+                {untagged.length > 0 && (
+                    <section aria-labelledby="sop-group-other" className="space-y-3">
+                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b pb-2">
+                            <h2 id="sop-group-other" className="text-base font-semibold">
+                                Other
+                            </h2>
+                            <span className="text-xs text-muted-foreground">
+                                Not one of our services: picked by hand under “Something else” in New project
+                            </span>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{untagged.map((t) => card(t, false))}</div>
+                    </section>
+                )}
             </div>
 
             {/* Delete confirmation */}
@@ -151,17 +174,32 @@ export function TemplateList({ onEdit, onNew }: TemplateListProps) {
 
 interface TemplateCardProps {
     template: SOPTemplate;
+    /** The one a new project gets, where a service has more than one. */
+    isDefault?: boolean;
     onEdit: () => void;
     onDuplicate: () => void;
     onDelete?: () => void; // undefined for built-in
 }
 
-function TemplateCard({ template, onEdit, onDuplicate, onDelete }: TemplateCardProps) {
+function TemplateCard({ template, isDefault, onEdit, onDuplicate, onDelete }: TemplateCardProps) {
     const sectionCount = template.sections?.length || 0;
     const itemCount = template.sections?.reduce((sum, s) => sum + (s.items?.length || 0), 0) || 0;
+    const clientSteps = clientStepCount(template);
 
     return (
-        <Card className="group relative hover:shadow-md transition-shadow">
+        <Card
+            role="button"
+            tabIndex={0}
+            aria-label={`Open ${template.name}`}
+            onClick={onEdit}
+            onKeyDown={(e) => {
+                if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    onEdit();
+                }
+            }}
+            className="group relative cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
             <CardContent className="p-4 space-y-3">
                 {/* Header row */}
                 <div className="flex items-start justify-between">
@@ -169,21 +207,37 @@ function TemplateCard({ template, onEdit, onDuplicate, onDelete }: TemplateCardP
                         <span className="text-2xl flex-shrink-0">{template.icon}</span>
                         <div className="min-w-0">
                             <h3 className="font-semibold text-sm truncate">{template.name}</h3>
-                            {template.isBuiltIn && (
-                                <Badge variant="secondary" className="text-[10px] mt-0.5 gap-1">
-                                    <Lock className="h-2.5 w-2.5" /> Built-in
-                                </Badge>
+                            {(isDefault || template.isBuiltIn) && (
+                                <div className="mt-0.5 flex gap-1">
+                                    {isDefault && (
+                                        <Badge className="text-[10px]" title="New projects that buy this service get this one">
+                                            Default
+                                        </Badge>
+                                    )}
+                                    {template.isBuiltIn && (
+                                        <Badge variant="secondary" className="text-[10px] gap-1" title="Ships with the app: editing makes your own copy">
+                                            <Lock className="h-2.5 w-2.5" /> Built-in
+                                        </Badge>
+                                    )}
+                                </div>
                             )}
                         </div>
                     </div>
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`More for ${template.name}`}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                className="h-7 w-7 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 focus-visible:opacity-100 transition-opacity"
+                            >
                                 <MoreVertical className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenuItem onClick={onEdit}>
                                 <Pencil className="h-4 w-4 mr-2" />
                                 {template.isBuiltIn ? 'Duplicate & Edit' : 'Edit'}
@@ -223,20 +277,11 @@ function TemplateCard({ template, onEdit, onDuplicate, onDelete }: TemplateCardP
                     <p className="text-xs text-muted-foreground line-clamp-2">{template.description}</p>
                 )}
 
-                {/* Stats */}
-                <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px]">
-                        {sectionCount} section{sectionCount !== 1 ? 's' : ''}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px]">
-                        {itemCount} item{itemCount !== 1 ? 's' : ''}
-                    </Badge>
-                    {template.service && SERVICE_LABELS[template.service] && (
-                        <Badge variant="secondary" className="text-[10px]" title="New projects that buy this service get this checklist">
-                            {SERVICE_LABELS[template.service]}
-                        </Badge>
-                    )}
-                </div>
+                {/* What it holds, and how much of it the client sees. */}
+                <p className="text-[11px] tabular-nums text-muted-foreground">
+                    {sectionCount} stage{sectionCount !== 1 ? 's' : ''} · {itemCount} step{itemCount !== 1 ? 's' : ''}
+                    {clientSteps > 0 ? ` · the client sees ${clientSteps}` : ' · nothing labelled for the client'}
+                </p>
             </CardContent>
         </Card>
     );
