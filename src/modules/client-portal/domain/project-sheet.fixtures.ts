@@ -246,12 +246,12 @@ export const LAUNCH_PLAN: SheetTabInput[] = [
 /** Statuses and dates as a team would fill them, keyed by step title. */
 const PROGRESS: Record<string, [string, string, string?, string?]> = {
   'Kickoff call': ['Done', '3 Sep 2026'],
-  'Brief & questionnaire': ['Done', '5 Sep 2026'],
-  'Brand assets, logins & access': ['Done', '6 Sep 2026'],
+  'Slack channel & project setup': ['Done', '4 Sep 2026'],
+  'Brand questionnaire & assets': ['Done', '6 Sep 2026'],
   'Brand discovery workshop': ['Done', '8 Sep 2026'],
   Moodboarding: ['Done', '10 Sep 2026', 'https://www.figma.com/board/moodboard'],
   'Feedback on moodboard': ['Waiting on client', '12 Sep 2026', 'https://www.figma.com/board/moodboard', 'Two directions: pick one, or mix them'],
-  'Colours & typography locked': ['Not started', '15 Sep 2026'],
+  'Colours, type & visual direction': ['Not started', '15 Sep 2026'],
 };
 
 export const ACTIVESET_SHEET: SheetTabInput[] = [
@@ -277,7 +277,7 @@ export const ACTIVESET_SHEET: SheetTabInput[] = [
         return [row[0], row[1], row[2], row[3], status, when, link ?? '', note ?? ''];
       })
       // A step the team dropped for this client.
-      .map((row): Cell[] => (row[2] === 'Brand discovery workshop' ? row : row[2] === 'Logo concepts' ? [...row.slice(0, 4), 'Skipped', ...row.slice(5)] : row)),
+      .map((row): Cell[] => (row[2] === 'Logo & identity revisions' ? [...row.slice(0, 4), 'Skipped', ...row.slice(5)] : row)),
   ),
   tab('Pages', [
     [...PAGES_HEADER],

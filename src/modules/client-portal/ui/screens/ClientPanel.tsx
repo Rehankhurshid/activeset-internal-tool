@@ -1,13 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import type { Project, ProjectChecklist, ProjectTimeline, Task } from '@/types';
+import type { Project, ProjectChecklist, ProjectTimeline, SOPTemplate, Task } from '@/types';
+import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
 import { cn } from '@/lib/utils';
+import { checklistService } from '@/services/ChecklistService';
 import { legacyClientPlan, normalizeClientPlan, resolveClientPlan } from '../../domain/client-plan';
 import { resolveTimelinePlan, timelineStages, type TimelineStageSource } from '../../domain/client-timeline';
-import { sheetStageSources } from '../../domain/project-sheet.portal';
+import { portalStageSources } from '../../domain/portal-sources';
 import type { ResolvedPlan } from '../../domain/client-plan';
 import { normalizeClientStatus } from '../../domain/client-portal.types';
 import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
@@ -103,6 +105,55 @@ function PublishedAsks({ tasks }: { tasks: Task[] }) {
 }
 
 const STAGE_STATE_WORD = { done: 'Done', current: 'Now', upcoming: 'Coming up' } as const;
+const AGENCY_SECTIONS = [AGENCY_START, AGENCY_CLOSE];
+
+/** "Done · 12 Oct", "Waiting on client", "In progress", "Planned · 3 Nov", "Not started". */
+function stepWord(step: TimelineStageSource['steps'][number]): string {
+  const day = step.endDate ?? step.startDate;
+  if (step.state === 'done') return day ? `Done · ${formatDue(day)}` : 'Done';
+  if (step.waiting) return 'Waiting on client';
+  if (step.state === 'current') return 'In progress';
+  return day ? `Planned · ${formatDue(day)}` : 'Not started';
+}
+
+/**
+ * The process the client sees, step by step, as the checklist has it: each
+ * step's state comes from ticking the checklist items its SOP files under it.
+ * Read-only here; change it by ticking, or relabel it in the SOP.
+ */
+function ChecklistProcessList({ resolved, sources }: { resolved: ResolvedPlan; sources: TimelineStageSource[] }) {
+  return (
+    <div className="space-y-3">
+      {resolved.stages.map((r, index) => {
+        const steps = sources[index]?.steps ?? [];
+        return (
+          <section key={r.stage.id} aria-label={r.stage.title} className="space-y-1">
+            <h4 className={cn('text-[11px] font-semibold uppercase tracking-wide', r.state === 'current' ? 'text-foreground' : 'text-muted-foreground')}>
+              {r.stage.title} · {STAGE_STATE_WORD[r.state]}
+            </h4>
+            <ol className="divide-y divide-border/60">
+              {steps.map((step) => (
+                <li key={step.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-1.5">
+                  <span className={cn('text-sm', step.state === 'done' && 'text-muted-foreground')}>
+                    {step.title}
+                    {step.owner && (
+                      <span className="ml-2 rounded-full bg-muted px-1.5 py-px text-[10px] font-semibold text-muted-foreground">
+                        {step.owner === 'client' ? 'Client' : 'Together'}
+                      </span>
+                    )}
+                  </span>
+                  <span className={cn('text-[11px] tabular-nums', step.waiting ? 'font-medium text-amber-700' : 'text-muted-foreground')}>
+                    {stepWord(step)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
 
 /**
  * The stages the project sheet's Timeline gives the client, read-only: they
@@ -133,6 +184,31 @@ function SheetStagesList({ resolved, sources }: { resolved: ResolvedPlan; source
 }
 
 /**
+ * The SOPs this project's checklists were made from, for the client-step labels
+ * of a checklist made before SOPs carried them. Read once per set of checklists;
+ * a failed read leaves those labels out, as on the client's page.
+ */
+function useSourceTemplates(checklists: ProjectChecklist[]): SOPTemplate[] {
+  const key = [...new Set(checklists.flatMap((c) => c.templateIds ?? [c.templateId]))].filter(Boolean).sort().join(',');
+  const [templates, setTemplates] = useState<SOPTemplate[]>([]);
+  useEffect(() => {
+    if (!key) return;
+    let cancelled = false;
+    const ids = key.split(',');
+    checklistService
+      .getSOPTemplates()
+      .then((all) => {
+        if (!cancelled) setTemplates(all.filter((t) => ids.includes(t.id)));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
+  return key ? templates : [];
+}
+
+/**
  * The Client tab: the link to send, where the project is, and the plan the
  * client sees. Everything reads from the live project doc and checklist the
  * detail screen already subscribes to, and every change reaches the client's
@@ -145,17 +221,32 @@ export function ClientPanel(props: ClientPanelProps) {
   const facing = project.clientFacing;
   const status = normalizeClientStatus(facing?.status);
 
-  // The project sheet's Timeline drives the client's page when a sheet is bound
-  // and has one (unless the team chose the app's); then the app's Timeline tab
-  // whenever it has milestones to show; then the plan. Same rule as the portal.
+  // The project sheet's Process when a sheet is bound and has one (moved along
+  // by the checklist; unless the team chose the app's Timeline); then a
+  // checklist labelled for the client; then the Timeline tab; then the plan.
+  // The portal decides with the same function, so the two cannot disagree.
   const sheetState = useProjectSheet(project.id);
   const sheetRecord = sheetState.state?.sheet ?? null;
+  const templates = useSourceTemplates(checklists);
   const appSources = useMemo(() => timelineStages(timeline, project.clientTimeline), [timeline, project.clientTimeline]);
-  const sheetSources = useMemo(() => sheetStageSources(sheetRecord?.data?.timeline), [sheetRecord]);
-  const fromSheet = sheetSources.length > 0 && !(sheetRecord?.stagesFrom === 'app' && appSources.length > 0);
-  const fromTimeline = !fromSheet && appSources.length > 0;
-  const timelineSources = fromSheet ? sheetSources : appSources;
-  const byPhase = fromSheet || fromTimeline;
+  const picked = useMemo(
+    () =>
+      portalStageSources({
+        checklists,
+        templates,
+        agency: AGENCY_SECTIONS,
+        sheetTimeline: sheetRecord?.data?.timeline,
+        stagesFrom: sheetRecord?.stagesFrom,
+        timeline,
+        timelineSettings: project.clientTimeline,
+      }),
+    [checklists, templates, sheetRecord, timeline, project.clientTimeline],
+  );
+  const fromSheet = picked.kind === 'sheet';
+  const fromChecklist = picked.kind === 'checklist';
+  const fromTimeline = picked.kind === 'timeline';
+  const timelineSources = picked.sources;
+  const byPhase = picked.kind !== null;
   const timelineResolved = useMemo(
     () => (byPhase ? resolveTimelinePlan(timelineSources, { currentStageId: facing?.currentStageId, status }) : null),
     [byPhase, timelineSources, facing?.currentStageId, status],
@@ -217,7 +308,7 @@ export function ClientPanel(props: ClientPanelProps) {
                 resolved={timelineResolved}
                 following={timelineFollowing}
                 userEmail={userEmail}
-                followSource={fromSheet ? 'sheet' : 'timeline'}
+                followSource={fromSheet ? 'sheet' : fromChecklist ? 'checklist' : 'timeline'}
               />
             ) : (
               <ClientNowEditor
@@ -249,12 +340,30 @@ export function ClientPanel(props: ClientPanelProps) {
           <CardHeader>
             <SectionTitle>Stages: from the project sheet</SectionTitle>
             <CardDescription className="text-xs">
-              Each phase in the sheet&apos;s Timeline tab is a stage on the client&apos;s page, with its milestones; rows the
-              Owner column gives to the client show as theirs. Edit them in the sheet.
+              Each stage in the sheet&apos;s Process tab is a stage on the client&apos;s page, with its steps; rows the Who
+              column gives to the client show as theirs. Edit them in the sheet.
+              {picked.process.length > 0 &&
+                (picked.unmatched.length === 0
+                  ? ' Every step moves with the checklist as you tick it.'
+                  : ` ${picked.followed} step${picked.followed === 1 ? '' : 's'} move with the checklist as you tick it; these move only in the sheet: ${picked.unmatched.join(', ')}.`)}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <SheetStagesList resolved={timelineResolved} sources={timelineSources} />
+          </CardContent>
+        </Card>
+      ) : fromChecklist && timelineResolved ? (
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Process: from the checklist</SectionTitle>
+            <CardDescription className="text-xs">
+              What the client sees, step by step. Each step moves as you tick the checklist items behind it, and is done on
+              the day the last one is ticked. A client step reads “Waiting on you” to them while its item is In progress, so
+              set it In progress when you send something for review. The labels come from the SOP in the Checklist Creator.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChecklistProcessList resolved={timelineResolved} sources={timelineSources} />
           </CardContent>
         </Card>
       ) : fromTimeline && timeline ? (

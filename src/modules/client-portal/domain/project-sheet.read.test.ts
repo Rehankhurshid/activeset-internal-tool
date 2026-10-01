@@ -119,18 +119,21 @@ describe('readProjectSheet: the ActiveSet project sheet', () => {
 
   it('reads Process as stages in order, one date per step, with whose turn it is', () => {
     const phases = data.timeline!.phases;
-    assert.deepEqual(phases.map((p) => p.title), ['Kickoff', 'Brand Design', 'Web Design', 'Development', 'Launch']);
+    assert.deepEqual(phases.map((p) => p.title), ['Kickoff', 'Brand Design', 'Web Design', 'Development', 'Launch', 'Handover']);
     const [kickoff, brand] = phases;
     assert.deepEqual(kickoff.milestones.map((m) => [m.title, m.state, m.owner, m.end?.iso]), [
       ['Kickoff call', 'done', 'both', '2026-09-03'],
-      ['Brief & questionnaire', 'done', 'client', '2026-09-05'],
-      ['Brand assets, logins & access', 'done', 'client', '2026-09-06'],
+      ['Slack channel & project setup', 'done', 'team', '2026-09-04'],
     ]);
+    assert.deepEqual(
+      [brand.milestones[0].title, brand.milestones[0].owner, brand.milestones[0].end?.iso],
+      ['Brand questionnaire & assets', 'client', '2026-09-06'],
+    );
     const feedback = brand.milestones.find((m) => m.title === 'Feedback on moodboard')!;
     assert.equal(feedback.state, 'in_review', '"Waiting on client" is the client’s turn');
     assert.equal(feedback.link, 'https://www.figma.com/board/moodboard');
     assert.equal(feedback.note, 'Two directions: pick one, or mix them');
-    assert.equal(brand.milestones.find((m) => m.title === 'Logo concepts')!.state, 'not_needed');
+    assert.equal(brand.milestones.find((m) => m.title === 'Logo & identity revisions')!.state, 'not_needed');
   });
 
   it('reads the Overview, Pages and What we need tabs', () => {

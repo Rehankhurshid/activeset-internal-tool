@@ -40,8 +40,10 @@ import {
   ClientFacingState,
   ClientPlan,
   ClientTimelineSettings,
+  ServiceId,
 } from '@/types';
 import { DatabaseError, logError } from '@/lib/errors';
+import { orderServices } from '@/lib/engagements';
 import { COLLECTIONS } from '@/lib/constants';
 import { compactAuditResult } from '@/lib/scan-utils';
 
@@ -359,6 +361,8 @@ export interface NewProjectSetup {
   contactEmails?: string[];
   /** The client dashboard's plan, drafted from the chosen project type. */
   clientPlan?: ClientPlan;
+  /** What the client bought: the services the checklist was built from. */
+  services?: ServiceId[];
 }
 
 /** The setup as project fields, leaving out anything empty (Firestore refuses undefined). */
@@ -376,6 +380,8 @@ function newProjectFields(setup: NewProjectSetup): Partial<Project> {
   const contacts = Array.from(new Set((setup.contactEmails ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean)));
   if (contacts.length > 0) out.clientPortal = { enabled: false, contactEmails: contacts };
   if (setup.clientPlan) out.clientPlan = setup.clientPlan;
+  const services = orderServices(setup.services);
+  if (services.length > 0) out.services = services;
   return out;
 }
 

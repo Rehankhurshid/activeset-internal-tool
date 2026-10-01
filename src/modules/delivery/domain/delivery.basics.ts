@@ -225,6 +225,10 @@ export function agencyBasicsFor(sections: ChecklistSection[]): ChecklistSection[
       title: template.title,
       emoji: template.emoji,
       role: template.role,
+      // What the client sees of it: the kickoff call, the sign-off.
+      ...(template.clientStage ? { clientStage: template.clientStage } : {}),
+      ...(template.clientStep ? { clientStep: template.clientStep } : {}),
+      ...(template.clientWho ? { clientWho: template.clientWho } : {}),
       order: 0,
       items: items.map((item, order) => ({ ...item, id: newId('item'), status: 'not_started' as const, order })),
     };

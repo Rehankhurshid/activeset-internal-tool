@@ -98,6 +98,7 @@ const STAGE_COLOURS: Record<string, { bg: string; fg: string }> = {
   'Web Design': { bg: '#E0F2FE', fg: '#075985' },
   Development: { bg: '#E0E7FF', fg: '#3730A3' },
   Launch: { bg: '#FFEDD5', fg: '#9A3412' },
+  Handover: { bg: '#D1FAE5', fg: '#065F46' },
 };
 
 /** One colour per status, the same on every tab. */

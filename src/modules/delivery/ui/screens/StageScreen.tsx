@@ -92,6 +92,11 @@ export function StageScreen({
             {source && ` · ${source}`}
             {next && ` · Next: ${next}`}
             {stage.kind === 'pages' && ' · The build itself, a row per page'}
+            {stage.kind === 'section' && stage.section.clientStep && (
+              <span title="Ticking this stage's items moves this step on the client's page">
+                {' · '}The client sees “{stage.section.clientStep}”
+              </span>
+            )}
           </p>
         </div>
 

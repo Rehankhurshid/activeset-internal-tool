@@ -173,9 +173,10 @@ describe('buildClientPortalView with a project sheet', () => {
     assert.equal(v.planSource, 'sheet');
     assert.deepEqual(v.stages.map((s) => [s.title, s.state]), [
       ['Kickoff', 'done'], ['Brand Design', 'current'], ['Web Design', 'upcoming'], ['Development', 'upcoming'], ['Launch', 'upcoming'],
+      ['Handover', 'upcoming'],
     ]);
     const brand = v.stages[1].steps!;
-    assert.equal(brand.some((s) => s.title === 'Logo concepts'), false, 'a skipped step is out of scope and hidden');
+    assert.equal(brand.some((s) => s.title === 'Logo & identity revisions'), false, 'a skipped step is out of scope and hidden');
     const feedback = brand.find((s) => s.title === 'Feedback on moodboard')!;
     assert.deepEqual(
       { state: feedback.state, waiting: feedback.waiting, url: feedback.url, note: feedback.note, endDate: feedback.endDate },

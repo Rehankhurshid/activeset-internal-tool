@@ -1,4 +1,4 @@
-import type { ClientPortalView } from '../../domain/client-portal.types';
+import { showsProcess, type ClientPortalView } from '../../domain/client-portal.types';
 import { PortalAsks } from '../components/PortalAsks';
 import { PortalChanges } from '../components/PortalChanges';
 import { PortalReadiness } from '../components/PortalReadiness';
@@ -58,11 +58,11 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         />
         <PortalNowCard view={view} now={now} />
         <PortalYourTurn view={view} now={now} />
-        {/* From the project sheet, the whole process as one numbered list, right under where we are. */}
-        {view.planSource === 'sheet' && <PortalProcess stages={view.stages} now={now} />}
+        {/* From the project sheet or the checklist, the whole process as one numbered list, right under where we are. */}
+        {showsProcess(view.planSource) && <PortalProcess stages={view.stages} now={now} />}
         {view.asks.length > 0 && <PortalAsks asks={view.asks} received={view.asksReceived} now={now} />}
         {view.work && <PortalWork work={view.work} generatedAt={view.generatedAt} />}
-        {view.planSource !== 'sheet' && <PortalStages stages={view.stages} now={now} planSource={view.planSource} />}
+        {!showsProcess(view.planSource) && <PortalStages stages={view.stages} now={now} planSource={view.planSource} />}
         <PortalReadiness readiness={view.readiness} />
         <PortalChanges changes={view.changes} now={now} />
         <PortalFiles files={view.files} websiteUrl={view.websiteUrl} />

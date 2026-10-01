@@ -51,6 +51,10 @@ export type {
   ResolvedStage,
   StageTracking,
 } from './domain/client-plan';
+// The client's process, read off the checklist the team ticks.
+export { checklistProcess, followChecklist, stepKey } from './domain/checklist-process';
+export { portalStageSources } from './domain/portal-sources';
+export { MASTER_TEMPLATE_COPY_URL } from './domain/project-sheet.template';
 export {
   CLIENT_STATUS_ORDER,
   PORTAL_STALE_AFTER_DAYS,

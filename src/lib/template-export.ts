@@ -5,8 +5,11 @@ import {
     ChecklistItemLink,
     ChecklistItemField,
     ChecklistItemTemplate,
+    ClientStepWho,
+    ServiceId,
     StageRole,
 } from '@/types';
+import { SERVICE_LABELS, SERVICE_ORDER } from '@/lib/engagements';
 import jsPDF from 'jspdf';
 
 /**
@@ -34,6 +37,11 @@ import jsPDF from 'jspdf';
  * What is deliberately never written is `values`: what a project recorded when it
  * ticked a step is that project's, and a template that carried it would hand one
  * client's dates and links to the next.
+ *
+ * What the client sees of a template rides along the same way: `> Service:`
+ * under the description, `> Client stage:`, `> Client step:` and `> Whose step:`
+ * under a section, and `Client step:`, `Whose step:` and `Hidden from client:`
+ * bullets under an item.
  */
 
 /** Every role the parser will accept, so a hand-typed one that matches nothing is dropped instead. */
@@ -67,7 +75,29 @@ const SUB_BULLET_KEYS = new Set([
     'messagebody',
     'option',
     'options',
+    'clientstep',
+    'whosestep',
+    'hiddenfromclient',
 ]);
+
+const CLIENT_WHO: ClientStepWho[] = ['activeset', 'client', 'together'];
+
+/** "Client", "both", "ActiveSet", "us": whose step it is, from however it was typed. */
+function parseWho(raw: string): ClientStepWho | undefined {
+    const value = raw.trim().toLowerCase().replace(/[\s_-]+/g, '');
+    if (value === 'both' || value === 'joint') return 'together';
+    if (value === 'us' || value === 'ours' || value === 'we') return 'activeset';
+    if (value === 'them' || value === 'theirs') return 'client';
+    return CLIENT_WHO.find((who) => who === value);
+}
+
+/** "Web Design" or "web_design": the service, by its name or its id. */
+function parseService(raw: string): ServiceId | undefined {
+    const value = raw.trim().toLowerCase().replace(/[\s_-]+/g, '');
+    return SERVICE_ORDER.find(
+        (id) => id.replace(/_/g, '') === value || SERVICE_LABELS[id].toLowerCase().replace(/\s+/g, '') === value,
+    );
+}
 
 /** The field types the parser will accept; anything else is read as free text. */
 const FIELD_TYPES: ChecklistItemField['type'][] = ['date', 'url', 'text', 'emails'];
@@ -208,6 +238,13 @@ function itemSubBullets(item: SOPTemplateItem): string[] {
     if (item.template) {
         lines.push(...messageSubBullets(item.template));
     }
+    if (item.clientStep) {
+        lines.push(`  - 👁️ Client step: ${item.clientStep}`);
+        if (item.clientWho) lines.push(`  - 👁️ Whose step: ${item.clientWho}`);
+    }
+    if (item.clientHidden) {
+        lines.push(`  - 🙈 Hidden from client: yes`);
+    }
     // `item.values` is missing on purpose. See the note at the top of the file:
     // a template that carried it would seed every project with another's answers.
 
@@ -228,6 +265,10 @@ export function templateToMarkdown(template: Partial<SOPTemplate>): string {
         lines.push(`> ${template.description}`);
         lines.push('');
     }
+    if (template.service && SERVICE_LABELS[template.service]) {
+        lines.push(`> Service: ${SERVICE_LABELS[template.service]}`);
+        lines.push('');
+    }
     lines.push('---');
     lines.push('');
 
@@ -238,8 +279,16 @@ export function templateToMarkdown(template: Partial<SOPTemplate>): string {
         // its items, so losing it is expensive rather than cosmetic. Every
         // section is a stage whether or not it has one.
         const role = roleOfSection(section);
-        if (role) {
-            lines.push(`> Role: ${role}`);
+        const facts: string[] = [];
+        if (role) facts.push(`> Role: ${role}`);
+        // What the client sees of this section: its heading and its step.
+        if (section.clientStage) facts.push(`> Client stage: ${section.clientStage}`);
+        if (section.clientStep) {
+            facts.push(`> Client step: ${section.clientStep}`);
+            if (section.clientWho) facts.push(`> Whose step: ${section.clientWho}`);
+        }
+        if (facts.length) {
+            lines.push(...facts);
             lines.push('');
         }
         for (const item of section.items || []) {
@@ -264,6 +313,7 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
     let name = '';
     let icon = '📝';
     let description = '';
+    let service: ServiceId | undefined;
     const sections: SOPTemplateSection[] = [];
 
     let currentSection: SOPTemplateSection | null = null;
@@ -300,6 +350,10 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
     // "> Stage: kickoff" that came before it.
     const roleRegex = /^>\s*Role\s*:\s*(.+)$/i;
     const stageRegex = /^>\s*Stage\s*:\s*(.+)$/i;
+    const serviceRegex = /^>\s*Service\s*:\s*(.+)$/i;
+    const clientStageRegex = /^>\s*Client\s*stage\s*:\s*(.+)$/i;
+    const clientStepRegex = /^>\s*Client\s*step\s*:\s*(.+)$/i;
+    const whoRegex = /^>\s*Whose\s*step\s*:\s*(.+)$/i;
     const blockquoteRegex = /^>\s*(.+)$/;
     const dividerRegex = /^---+\s*$/;
 
@@ -405,6 +459,15 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
             }
         }
 
+        // The service the template delivers, written under the description.
+        if (sections.length === 0 && !currentSection) {
+            const sv = line.match(serviceRegex);
+            if (sv) {
+                service = parseService(sv[1]);
+                continue;
+            }
+        }
+
         // Description (first blockquote line(s) before any section)
         if (!descriptionCaptured && sections.length === 0 && !currentSection) {
             const bq = line.match(blockquoteRegex);
@@ -456,6 +519,21 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
             const roleMatch = line.match(roleRegex);
             if (roleMatch) {
                 currentSection.role = parseRole(roleMatch[1]);
+                continue;
+            }
+            const clientStage = line.match(clientStageRegex);
+            if (clientStage) {
+                currentSection.clientStage = clientStage[1].trim() || undefined;
+                continue;
+            }
+            const clientStep = line.match(clientStepRegex);
+            if (clientStep) {
+                currentSection.clientStep = clientStep[1].trim() || undefined;
+                continue;
+            }
+            const who = line.match(whoRegex);
+            if (who) {
+                currentSection.clientWho = parseWho(who[1]);
                 continue;
             }
             // Legacy "> Stage: kickoff". Read as the role of the same name so an
@@ -561,6 +639,17 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
                     case 'messagebody':
                         message = { ...(message || {}), body: appendLine(message?.body, value) };
                         continue;
+                    case 'clientstep':
+                        if (value) currentItem.clientStep = value;
+                        continue;
+                    case 'whosestep': {
+                        const who = parseWho(value);
+                        if (who) currentItem.clientWho = who;
+                        continue;
+                    }
+                    case 'hiddenfromclient':
+                        if (/^(yes|true|1)$/i.test(value)) currentItem.clientHidden = true;
+                        continue;
                     case 'option':
                     case 'options':
                         // A choice with nothing in it is not a choice to offer.
@@ -599,6 +688,7 @@ export function parseMarkdownToTemplate(md: string): Partial<SOPTemplate> {
         name,
         icon,
         description,
+        ...(service ? { service } : {}),
         sections,
     };
 }

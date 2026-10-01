@@ -10,6 +10,7 @@ import {
     query,
     where,
     Timestamp,
+    deleteField,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { toSafeDate } from '@/lib/firestore-dates';
@@ -22,6 +23,7 @@ import {
 } from '@/types';
 import { COLLECTIONS } from '@/lib/constants';
 import { getTemplateById, getDefaultTemplate, SOP_TEMPLATES } from '@/lib/sop-templates';
+import { SERVICE_LABELS, isServiceId } from '@/lib/engagements';
 import { DatabaseError, logError } from '@/lib/errors';
 // The one place a service reaches into a module: the diff between a project's
 // checklist and its template is delivery's own idea of what counts as process.
@@ -66,8 +68,13 @@ function stripUndefined<T>(obj: T): T {
  * added to `ChecklistItem` does not have to be remembered here.
  */
 function instantiateTemplate(template: SOPTemplate): ChecklistSection[] {
+    // The heading the client sees these sections' steps under: the service the
+    // SOP delivers, unless a section names its own ("Launch" inside the build).
+    // Fixed here, so retagging the SOP later moves nothing on a live project.
+    const stage = isServiceId(template.service) ? SERVICE_LABELS[template.service] : undefined;
     return template.sections.map((section) => stripUndefined({
         ...section,
+        clientStage: section.clientStage || stage,
         id: `sec_${generateId()}`,
         items: section.items.map((item) => stripUndefined({
             ...item,
@@ -678,9 +685,12 @@ export const checklistService = {
             const clean = stripUndefined(updates) as Record<string, unknown>;
             // A template's identity and its built-in flag are not editable, so
             // they are dropped rather than written back.
-            const payload = Object.fromEntries(
+            const payload: Record<string, unknown> = Object.fromEntries(
                 Object.entries(clean).filter(([key]) => key !== 'id' && key !== 'isBuiltIn'),
             );
+            // Untagging an SOP has to reach Firestore: an undefined service is
+            // stripped above, which would leave the old tag in place.
+            if ('service' in updates && !updates.service) payload.service = deleteField();
             await updateDoc(ref, {
                 ...payload,
                 updatedAt: Timestamp.now(),

@@ -206,6 +206,81 @@ describe('Markdown round trip', () => {
   });
 });
 
+describe('what the client sees, through the Markdown tab', () => {
+  const labelled = {
+    name: 'Site Branding',
+    icon: '🎨',
+    description: 'From discovery to the brand book.',
+    service: 'brand' as const,
+    sections: [
+      {
+        title: 'Phase 2: Analysis + Moodboard',
+        emoji: '📊',
+        order: 0,
+        clientStage: 'Brand Design',
+        clientStep: 'Moodboarding',
+        items: [
+          { title: 'Create visual moodboard(s)', status: 'not_started' as const, order: 0 },
+          {
+            title: 'Present moodboard to client for feedback',
+            status: 'not_started' as const,
+            order: 1,
+            clientStep: 'Feedback on moodboard',
+            clientWho: 'client' as const,
+          },
+          { title: 'Internal review', status: 'not_started' as const, order: 2, clientHidden: true },
+        ],
+      },
+      {
+        title: 'Phase 1: Brand Discovery',
+        emoji: '🔍',
+        order: 1,
+        role: 'kickoff' as const,
+        clientStep: 'Brand discovery workshop',
+        clientWho: 'together' as const,
+        items: [{ title: 'Run the workshop', status: 'not_started' as const, order: 0 }],
+      },
+    ],
+  };
+  const md = templateToMarkdown(labelled);
+  const parsed = parseMarkdownToTemplate(md);
+
+  it('keeps the service the template delivers, out of the description', () => {
+    assert.match(md, /> Service: Brand Design/);
+    assert.equal(parsed.service, 'brand');
+    assert.equal(parsed.description, 'From discovery to the brand book.');
+  });
+
+  it('keeps each section’s client stage, step and whose step it is', () => {
+    const [mood, discovery] = parsed.sections ?? [];
+    assert.equal(mood.clientStage, 'Brand Design');
+    assert.equal(mood.clientStep, 'Moodboarding');
+    assert.equal(discovery.role, 'kickoff');
+    assert.equal(discovery.clientStep, 'Brand discovery workshop');
+    assert.equal(discovery.clientWho, 'together');
+  });
+
+  it('keeps an item’s own client step, and an item hidden from the client', () => {
+    const items = parsed.sections?.[0].items ?? [];
+    assert.equal(items[1].clientStep, 'Feedback on moodboard');
+    assert.equal(items[1].clientWho, 'client');
+    assert.equal(items[2].clientHidden, true);
+    assert.equal(items[0].clientStep, undefined);
+  });
+
+  it('reads whose step it is however it was typed', () => {
+    const typed = parseMarkdownToTemplate(
+      '# T\n\n---\n\n## S\n\n> Client step: Review\n> Whose step: Both\n\n- [ ] A\n  - 👁️ Client step: Sign-off\n  - 👁️ Whose step: Client\n',
+    );
+    assert.equal(typed.sections?.[0].clientWho, 'together');
+    assert.equal(typed.sections?.[0].items[0].clientWho, 'client');
+  });
+
+  it('survives a second trip unchanged', () => {
+    assert.equal(templateToMarkdown(parsed), md);
+  });
+});
+
 describe('a role written by hand', () => {
   it('is read case-insensitively, and spaces count as underscores', () => {
     const parsed = parseMarkdownToTemplate('# T\n\n## Review\n\n> Role: Client Review\n\n- [ ] Something\n');

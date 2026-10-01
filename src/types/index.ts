@@ -425,6 +425,12 @@ export interface Project {
   /** The client dashboard's plan: stages, dates, what they get, files. */
   clientPlan?: ClientPlan;
   /**
+   * What the client bought, chosen when the project is made. Its checklist is
+   * built from the SOPs for these, and its ticks then drive the process the
+   * client sees. Absent on projects made before engagements existed.
+   */
+  services?: ServiceId[];
+  /**
    * How the Timeline tab appears on the client's page, when it drives it:
    * files per phase, milestones kept back, and which email domains are this
    * client's (for matching Fathom calls). The timeline itself stays in
@@ -737,6 +743,18 @@ export interface ChecklistItemTemplate {
   options?: string[];
 }
 
+/**
+ * The services ActiveSet sells. A project's engagement is the set it bought:
+ * "Development only", "Web Design + Development", "Brand + Web + Development",
+ * each with Copy as an add-on. Every SOP in the Checklist Creator can be tagged
+ * with the one service it delivers, and a new project's checklist is those SOPs
+ * put together. See `src/lib/engagements.ts`.
+ */
+export type ServiceId = 'brand' | 'copy' | 'web_design' | 'development';
+
+/** Whose step it is, as the client sees it. Unset means ours. */
+export type ClientStepWho = 'activeset' | 'client' | 'together';
+
 // Individual checklist item
 export interface ChecklistItem {
   id: string;
@@ -771,6 +789,17 @@ export interface ChecklistItem {
   values?: Record<string, string>;
   /** A message to copy and send. */
   template?: ChecklistItemTemplate;
+  /**
+   * This item is a step of its own on the client's page, rather than part of
+   * its section's step: "Present the moodboard for feedback" inside a section
+   * the client sees as "Moodboarding". A client's step reads "Waiting on you"
+   * while the item is in progress, so mark it In progress when it is sent.
+   */
+  clientStep?: string;
+  /** Whose `clientStep` this is. Unset means ours. */
+  clientWho?: ClientStepWho;
+  /** Left out of the client's page even though its section is on it. */
+  clientHidden?: boolean;
 }
 
 // Section of the checklist (e.g., "Step 1: Project Planning & Kickoff")
@@ -790,6 +819,19 @@ export interface ChecklistSection {
    * sections have no role — they are an ordinary step in the arc.
    */
   role?: StageRole;
+  /**
+   * The step the client sees for this section, e.g. "Moodboarding". Its items
+   * are that step: it is done when they all are, on the day the last one was
+   * ticked. A section without one stays internal. Copied from the SOP.
+   */
+  clientStep?: string;
+  /** Whose step `clientStep` is. Unset means ours. */
+  clientWho?: ClientStepWho;
+  /**
+   * The heading the client sees this section's steps under, e.g. "Brand
+   * Design". Set from the SOP's service when the checklist is made.
+   */
+  clientStage?: string;
 }
 
 // Full project checklist
@@ -825,6 +867,11 @@ export interface SOPTemplateSection {
   stage?: ChecklistStage;
   /** Carried onto every checklist made from this template. */
   role?: StageRole;
+  /** See `ChecklistSection.clientStep`. */
+  clientStep?: string;
+  clientWho?: ClientStepWho;
+  /** See `ChecklistSection.clientStage`. Unset means the template's service. */
+  clientStage?: string;
 }
 
 // SOP template definition (for the template selector)
@@ -834,6 +881,12 @@ export interface SOPTemplate {
   description: string;
   icon: string;              // Emoji icon
   sections: SOPTemplateSection[];
+  /**
+   * The service this SOP delivers. A new project's checklist is built from one
+   * tagged SOP per service the client bought, and its sections appear to the
+   * client under that service's name unless a section says otherwise.
+   */
+  service?: ServiceId;
   isBuiltIn?: boolean;       // true for static templates (read-only)
   createdAt?: Date;
   updatedAt?: Date;

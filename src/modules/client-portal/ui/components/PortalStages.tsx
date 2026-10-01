@@ -1,6 +1,6 @@
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { PORTAL_STAGE_LABELS, type PortalStageView } from '../../domain/client-portal.types';
+import { PORTAL_STAGE_LABELS, type PortalPlanSource, type PortalStageView } from '../../domain/client-portal.types';
 import { PortalFileList } from './PortalFileList';
 import { PortalStageDetail, stageContentsLabel } from './PortalStageDetail';
 import { formatStageDates } from './portal-format';
@@ -26,7 +26,7 @@ interface PortalStagesProps {
   stages: PortalStageView[];
   now: Date;
   /** Timeline stages carry milestones and read as the project's plan; plan stages as what the client gets. */
-  planSource?: 'sheet' | 'timeline' | 'plan';
+  planSource?: PortalPlanSource;
 }
 
 /**

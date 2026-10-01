@@ -432,6 +432,27 @@ function StageChecklistRow({
         {item.notes && <p className="mt-1 text-xs italic text-muted-foreground/90">{item.notes}</p>}
 
         <div className="mt-1 flex flex-wrap items-center gap-2 empty:mt-0">
+          {/* A step of its own on the client's page: for theirs, In progress
+              is what tells them it is waiting on them. */}
+          {item.clientStep && (
+            <Badge
+              variant="outline"
+              title={
+                item.clientWho === 'client'
+                  ? 'The client sees this as their step. Set it In progress when you send it: their page says “Waiting on you” until you tick it.'
+                  : 'The client sees this as a step of its own.'
+              }
+              className={cn(
+                'h-5 px-1.5 text-[10px] font-normal',
+                item.clientWho === 'client' && status === 'in_progress'
+                  ? 'border-amber-500/40 text-amber-700 dark:text-amber-300'
+                  : 'text-muted-foreground',
+              )}
+            >
+              Client sees: {item.clientStep}
+              {item.clientWho === 'client' && status === 'in_progress' ? ' · waiting on them' : ''}
+            </Badge>
+          )}
           {status === 'skipped' && (
             <Badge
               variant="outline"

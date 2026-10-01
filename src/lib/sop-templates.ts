@@ -1,6 +1,7 @@
 import {
     AutoCheckId,
     ChecklistItemField,
+    ClientStepWho,
     ChecklistItemLink,
     ChecklistItemTemplate,
     SOPTemplate,
@@ -35,6 +36,11 @@ type ItemSpec = {
     fields?: ChecklistItemField[];
     /** A message to copy and send, so the step does not start with composing one. */
     template?: ChecklistItemTemplate;
+    /** A step of its own on the client's page. See `ChecklistItem.clientStep`. */
+    clientStep?: string;
+    clientWho?: ClientStepWho;
+    /** Kept off the client's page although its section is on it. */
+    clientHidden?: boolean;
 };
 
 const makeItems = (items: ItemSpec[]): SOPTemplateItem[] =>
@@ -64,9 +70,15 @@ export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
     title: 'Start: client setup',
     emoji: '\u{1F91D}',
     role: 'kickoff',
+    // What the client sees of the start: the call, then their channel and
+    // tracker being set up. The team's own housekeeping stays off their page.
+    clientStage: 'Kickoff',
+    clientStep: 'Slack channel & project setup',
     items: makeItems([
         {
             title: 'Schedule the kickoff call',
+            clientStep: 'Kickoff call',
+            clientWho: 'together',
             emoji: '\u{1F4C5}',
             blocking: true,
             howTo: 'Book it the day the deal closes, not the week after. The gap between signing and the first call is where a project quietly loses its first fortnight.',
@@ -81,6 +93,8 @@ export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
         },
         {
             title: 'Run the kickoff call and write up what was agreed',
+            clientStep: 'Kickoff call',
+            clientWho: 'together',
             emoji: '\u{1F4DE}',
             blocking: true,
             howTo: 'Cover four things and nothing else: what is in scope, the deadline, who does what on both sides, and where we will talk day to day. Send the write-up the same day \u2014 memory of a call diverges within about a week, and the write-up is what you point at when it does.',
@@ -141,6 +155,7 @@ export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
         },
         {
             title: 'Create the ClickUp task list',
+            clientHidden: true,
             emoji: '\u2611\uFE0F',
             howTo: 'Use the \u2699\uFE0F One Click Setup so the list matches this SOP. Then link it on the project so the two do not drift.',
             fields: [{ id: 'clickup', label: 'ClickUp list', type: 'url' }],
@@ -157,6 +172,7 @@ export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
         },
         {
             title: 'Create the MarkUp folder',
+            clientHidden: true,
             emoji: '\u{1F4DD}',
             howTo: 'Where the client leaves feedback on staging, pinned to the thing they mean. It saves the round of "the button on the third section" that costs half a day.',
             links: [{ label: 'MarkUp', url: 'https://www.markup.io/' }],
@@ -164,6 +180,7 @@ export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
         },
         {
             title: 'Hold the internal kickoff',
+            clientHidden: true,
             emoji: '\u{1F9E0}',
             howTo: 'The team without the client, after the client call. Deadline, what is going to be awkward to build, and anything in the brief nobody understands yet. The last one is the point \u2014 it is much cheaper to admit it now.',
             fields: [{ id: 'held_on', label: 'Held on', type: 'date' }],
@@ -175,6 +192,8 @@ export const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
     title: 'Close: handover & sign-off',
     emoji: '\u2705',
     role: 'client_review',
+    clientStage: 'Handover',
+    clientStep: 'Walkthrough videos & handover docs',
     items: makeItems([
         {
             title: 'Record the walkthrough videos',
@@ -197,6 +216,8 @@ export const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
         },
         {
             title: 'Get written approval',
+            clientStep: 'Final sign-off',
+            clientWho: 'client',
             emoji: '\u2705',
             blocking: true,
             howTo: 'In writing, from whoever can actually sign it off. Verbal approval on a call is not what you want to be relying on if this goes sideways. If their portal is on, they can approve there and it is recorded for you.',
@@ -211,6 +232,8 @@ export const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
         },
         {
             title: 'Agree what happens next',
+            clientStep: 'Support after launch',
+            clientWho: 'together',
             emoji: '\u{1F501}',
             howTo: 'Retainer, ad-hoc support, or nothing. Asking at handover is much easier than raising it three weeks later, and the answer decides whether this project is closed or just quiet.',
             fields: [{ id: 'outcome', label: 'What was agreed', type: 'text', placeholder: 'Retainer / ad-hoc / nothing' }],
@@ -221,6 +244,7 @@ export const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
         },
         {
             title: 'Archive the project files and close the ClickUp list',
+            clientHidden: true,
             emoji: '\u{1F5C4}\uFE0F',
             howTo: 'Assets, source files and credentials somewhere findable, and the ClickUp list closed so it stops showing up in everyone\u2019s week.',
         },

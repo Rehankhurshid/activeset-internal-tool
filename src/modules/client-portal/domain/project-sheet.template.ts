@@ -32,7 +32,7 @@ export const TEMPLATE_TABS = {
   inputs: 'What we need',
 } as const;
 
-export const STAGES = ['Kickoff', 'Copy', 'Brand Design', 'Web Design', 'Development', 'Launch'] as const;
+export const STAGES = ['Kickoff', 'Brand Design', 'Copy', 'Web Design', 'Development', 'Launch', 'Handover'] as const;
 export type TemplateStage = (typeof STAGES)[number];
 
 export const WHO = ['ActiveSet', 'Client', 'Together'] as const;
@@ -53,34 +53,48 @@ export interface TemplateStep {
   who: TemplateWho;
 }
 
+/**
+ * Every step, word for word as the SOPs in the Checklist Creator label them
+ * (`scripts/seed-service-sops.ts`, and the agency start and close in
+ * `src/lib/sop-templates.ts`). A sheet step with the same name as a checklist
+ * step moves when the team ticks the checklist, so keep the two in step: rename
+ * one, rename the other.
+ */
 export const PROCESS_STEPS: TemplateStep[] = [
   { stage: 'Kickoff', step: 'Kickoff call', who: 'Together' },
-  { stage: 'Kickoff', step: 'Brief & questionnaire', who: 'Client' },
-  { stage: 'Kickoff', step: 'Brand assets, logins & access', who: 'Client' },
+  { stage: 'Kickoff', step: 'Slack channel & project setup', who: 'ActiveSet' },
+
+  { stage: 'Brand Design', step: 'Brand questionnaire & assets', who: 'Client' },
+  { stage: 'Brand Design', step: 'Brand discovery workshop', who: 'Together' },
+  { stage: 'Brand Design', step: 'Moodboarding', who: 'ActiveSet' },
+  { stage: 'Brand Design', step: 'Feedback on moodboard', who: 'Client' },
+  { stage: 'Brand Design', step: 'Colours, type & visual direction', who: 'ActiveSet' },
+  { stage: 'Brand Design', step: 'Direction approved', who: 'Client' },
+  { stage: 'Brand Design', step: 'Logo & identity concepts', who: 'ActiveSet' },
+  { stage: 'Brand Design', step: 'Feedback on logo & identity', who: 'Client' },
+  { stage: 'Brand Design', step: 'Logo & identity revisions', who: 'ActiveSet' },
+  { stage: 'Brand Design', step: 'Brand identity approved', who: 'Client' },
+  { stage: 'Brand Design', step: 'Brand book & files', who: 'ActiveSet' },
+  { stage: 'Brand Design', step: 'Brand book review', who: 'Together' },
 
   { stage: 'Copy', step: 'Sitemap & messaging', who: 'ActiveSet' },
+  { stage: 'Copy', step: 'Messaging approved', who: 'Client' },
   { stage: 'Copy', step: 'Copy draft', who: 'ActiveSet' },
   { stage: 'Copy', step: 'Feedback on copy', who: 'Client' },
   { stage: 'Copy', step: 'Copy revisions', who: 'ActiveSet' },
   { stage: 'Copy', step: 'Copy approved', who: 'Client' },
 
-  { stage: 'Brand Design', step: 'Brand discovery workshop', who: 'Together' },
-  { stage: 'Brand Design', step: 'Moodboarding', who: 'ActiveSet' },
-  { stage: 'Brand Design', step: 'Feedback on moodboard', who: 'Client' },
-  { stage: 'Brand Design', step: 'Colours & typography locked', who: 'ActiveSet' },
-  { stage: 'Brand Design', step: 'Logo concepts', who: 'ActiveSet' },
-  { stage: 'Brand Design', step: 'Feedback on logo', who: 'Client' },
-  { stage: 'Brand Design', step: 'Brand book & files', who: 'ActiveSet' },
-  { stage: 'Brand Design', step: 'Brand approved', who: 'Client' },
-
+  { stage: 'Web Design', step: 'References, assets & sitemap', who: 'Client' },
   { stage: 'Web Design', step: 'Wireframes', who: 'ActiveSet' },
   { stage: 'Web Design', step: 'Feedback on wireframes', who: 'Client' },
   { stage: 'Web Design', step: 'Homepage design', who: 'ActiveSet' },
   { stage: 'Web Design', step: 'Feedback on homepage', who: 'Client' },
   { stage: 'Web Design', step: 'Inner pages design', who: 'ActiveSet' },
   { stage: 'Web Design', step: 'Feedback on inner pages', who: 'Client' },
+  { stage: 'Web Design', step: 'Mobile designs & hand-off', who: 'ActiveSet' },
   { stage: 'Web Design', step: 'Designs approved', who: 'Client' },
 
+  { stage: 'Development', step: 'Fonts, logins & tracking codes', who: 'Client' },
   { stage: 'Development', step: 'Webflow setup & style guide', who: 'ActiveSet' },
   { stage: 'Development', step: 'Pages built for desktop & mobile', who: 'ActiveSet' },
   { stage: 'Development', step: 'CMS, forms & integrations', who: 'ActiveSet' },
@@ -88,10 +102,11 @@ export const PROCESS_STEPS: TemplateStep[] = [
   { stage: 'Development', step: 'Review on staging', who: 'Client' },
   { stage: 'Development', step: 'Fixes from your review', who: 'ActiveSet' },
 
-  { stage: 'Launch', step: 'Domain & DNS access', who: 'Client' },
   { stage: 'Launch', step: 'Go live', who: 'ActiveSet' },
-  { stage: 'Launch', step: 'Handover & walkthrough videos', who: 'ActiveSet' },
-  { stage: 'Launch', step: 'Final sign-off', who: 'Client' },
+
+  { stage: 'Handover', step: 'Walkthrough videos & handover docs', who: 'ActiveSet' },
+  { stage: 'Handover', step: 'Final sign-off', who: 'Client' },
+  { stage: 'Handover', step: 'Support after launch', who: 'Together' },
 ];
 
 /** Overview: label in column A, value in column B. The reader looks for these labels. */
@@ -104,8 +119,8 @@ export const OVERVIEW_LINKS = ['Figma', 'Staging site', 'Shared folder', 'Slack 
 export const OVERVIEW_HELP = [
   'How this sheet works',
   '1. Process is the client’s view of the project: one row per step, in order. Delete the stages this project does not include.',
-  '2. Keep Status and Date current. Done + the date it was done; otherwise the date it is planned for.',
-  '3. When you send something for review, mark your step Done and set the client’s next step to “Waiting on client”.',
+  '2. Most steps move by themselves: tick the Checklist in the app, and a step with the same name here is done on the client’s page. Keep Status and Date for anything the checklist does not cover.',
+  '3. When you send something for review, set that item In progress on the Checklist (or this row to “Waiting on client”): the client’s page then says it is waiting on them.',
   '4. Pages is for website projects: one row per page. Delete the tab for a brand-only project.',
   '5. What we need lists everything we are waiting on from the client. Mark each one Received when it arrives.',
   '6. Add any tabs you need for your own work. The client portal only reads the four tabs here.',

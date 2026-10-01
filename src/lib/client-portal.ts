@@ -6,7 +6,8 @@ import { buildClientPortalView } from '@/modules/client-portal/domain/client-por
 import type { ClientPortalView } from '@/modules/client-portal/domain/client-portal.types';
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
 import { snapshotOf } from '@/lib/project-sheet';
-import type { Project, ProjectChecklist, ProjectMeeting, ProjectTimeline, Task } from '@/types';
+import { AGENCY_CLOSE, AGENCY_START, SOP_TEMPLATES } from '@/lib/sop-templates';
+import type { Project, ProjectChecklist, ProjectMeeting, ProjectTimeline, SOPTemplate, Task } from '@/types';
 
 /**
  * Server-side loader for the portal page: token → project (and its client plan)
@@ -58,6 +59,34 @@ function toTimeline(projectId: string, data: Record<string, unknown> | undefined
   };
 }
 
+/**
+ * The SOPs the checklists were made from, for the client-step labels a
+ * checklist made before SOPs carried them does not have itself. Best effort: a
+ * failed read costs those labels, never the client's page.
+ */
+async function loadSourceTemplates(checklists: ProjectChecklist[]): Promise<Pick<SOPTemplate, 'id' | 'service' | 'sections'>[]> {
+  const ids = [
+    ...new Set(
+      checklists.flatMap((c) => (c.templateIds?.length ? c.templateIds : c.templateId ? [c.templateId] : [])),
+    ),
+  ].filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length < 200);
+  const builtIn = SOP_TEMPLATES.filter((t) => ids.includes(t.id));
+  const custom = ids.filter((id) => !builtIn.some((t) => t.id === id)).slice(0, 10);
+  if (custom.length === 0) return builtIn;
+  try {
+    const snaps = await adminDb.getAll(...custom.map((id) => adminDb.collection(COLLECTIONS.SOP_TEMPLATES).doc(id)));
+    const found = snaps
+      .filter((snap) => snap.exists)
+      .map((snap) => {
+        const data = snap.data() as Partial<SOPTemplate>;
+        return { id: snap.id, service: data.service, sections: Array.isArray(data.sections) ? data.sections : [] };
+      });
+    return [...builtIn, ...found];
+  } catch {
+    return builtIn;
+  }
+}
+
 function toTask(id: string, data: Record<string, unknown>): Task {
   return {
     ...(data as unknown as Task),
@@ -94,8 +123,8 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
       .limit(500)
       .get(),
     // The checklist the client's tracker follows, and where the stage awaiting
-    // sign-off is found. None of its steps reach the client: the projection
-    // takes a percentage and one section title, nothing else.
+    // sign-off is found. Of its steps, only the ones its SOP labels for the
+    // client reach the client, by that label: never an item title or a note.
     adminDb
       .collection(COLLECTIONS.PROJECT_CHECKLISTS)
       .where('projectId', '==', projectId)
@@ -125,9 +154,19 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
 
   const meetings = meetingSnap.docs.map((d) => ({ ...(d.data() as ProjectMeeting), id: d.id }));
   const sheet = snapshotOf(sheetSnap.exists ? (sheetSnap.data() as ProjectSheetRecord) : null);
+  const templates = await loadSourceTemplates(checklists);
 
   return {
-    view: buildClientPortalView({ project, timeline, tasks, checklists, meetings, sheet }),
+    view: buildClientPortalView({
+      project,
+      timeline,
+      tasks,
+      checklists,
+      meetings,
+      sheet,
+      templates,
+      agency: [AGENCY_START, AGENCY_CLOSE],
+    }),
     projectId,
     tokenHash,
   };

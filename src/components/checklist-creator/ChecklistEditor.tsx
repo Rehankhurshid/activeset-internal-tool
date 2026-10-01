@@ -8,9 +8,12 @@ import {
     ChecklistItemLink,
     ChecklistItemField,
     ChecklistItemTemplate,
+    ClientStepWho,
+    ServiceId,
     StageRole,
 } from '@/types';
 import { checklistService } from '@/services/ChecklistService';
+import { SERVICE_LABELS, SERVICE_ORDER } from '@/lib/engagements';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -68,6 +71,14 @@ import { CSS } from '@dnd-kit/utilities';
 /** A Select cannot hold an empty value, so "no role" and "no signal" need sentinels. */
 const NO_ROLE = 'none';
 const NO_CHECK = 'none';
+const NO_SERVICE = 'none';
+
+/** Whose step it is, as the client reads it. Unset is ours. */
+const WHO_OPTIONS: { value: ClientStepWho; label: string }[] = [
+    { value: 'activeset', label: 'Ours' },
+    { value: 'client', label: 'The client’s' },
+    { value: 'together', label: 'Together' },
+];
 
 /** What each field type is called on screen, and what it is for. */
 const FIELD_TYPE_OPTIONS: { value: ChecklistItemField['type']; label: string }[] = [
@@ -133,6 +144,8 @@ type EditableTemplate = {
     name: string;
     description: string;
     icon: string;
+    /** The service this SOP delivers, which is how a new project finds it. */
+    service?: ServiceId;
     sections: EditableSection[];
 };
 
@@ -154,6 +167,10 @@ const stripUid = (sections: EditableSection[]): SOPTemplateSection[] =>
         // also the migration: an old tag comes in through `roleOf` and goes out
         // as the role of the same name.
         role: roleOf(s),
+        // What the client sees of this section. Blank means internal.
+        clientStage: s.clientStage?.trim() || undefined,
+        clientStep: s.clientStep?.trim() || undefined,
+        clientWho: s.clientStep?.trim() ? s.clientWho : undefined,
         items: s.items.map((it, iIdx) => ({
             title: it.title,
             emoji: it.emoji,
@@ -176,6 +193,9 @@ const stripUid = (sections: EditableSection[]): SOPTemplateSection[] =>
             // hand the next client this one's dates and links.
             completedAt: it.completedAt,
             completedBy: it.completedBy,
+            clientStep: it.clientStep?.trim() || undefined,
+            clientWho: it.clientStep?.trim() ? it.clientWho : undefined,
+            clientHidden: it.clientHidden || undefined,
             order: iIdx,
         })),
     }));
@@ -211,6 +231,7 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                 name: initialTemplate.name,
                 description: initialTemplate.description || '',
                 icon: initialTemplate.icon || '📝',
+                service: initialTemplate.service,
                 sections: toEditable(initialTemplate.sections),
             });
         } else {
@@ -227,6 +248,7 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                 name: template.name,
                 description: template.description,
                 icon: template.icon,
+                service: template.service,
                 sections: stripUid(template.sections),
             } as SOPTemplate);
             setMarkdown(md);
@@ -236,6 +258,7 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                 name: parsed.name || template.name,
                 description: parsed.description ?? template.description,
                 icon: parsed.icon || template.icon,
+                service: parsed.service,
                 sections: toEditable(parsed.sections),
             });
         }
@@ -291,6 +314,7 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                 name: parsed.name || template.name,
                 description: parsed.description ?? template.description,
                 icon: parsed.icon || template.icon,
+                service: parsed.service,
                 sections: toEditable(parsed.sections),
             };
             setTemplate(payload);
@@ -309,6 +333,8 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                     name: payload.name,
                     description: payload.description || '',
                     icon: payload.icon || '📝',
+                    // Sent even when cleared, so untagging reaches Firestore.
+                    service: payload.service,
                     sections,
                 });
                 toast.success('Template updated!');
@@ -318,6 +344,7 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                     name: payload.name || 'Untitled Template',
                     description: payload.description || '',
                     icon: payload.icon || '📝',
+                    service: payload.service,
                     sections,
                 };
                 await checklistService.saveSOPTemplate(fullTemplate);
@@ -519,6 +546,37 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                         placeholder="Brief description of this checklist..."
                     />
                 </div>
+                <div className="col-span-2 space-y-2">
+                    <Label htmlFor="sop-service">Service</Label>
+                    {/*
+                      The tag a new project finds this SOP by: pick "Brand +
+                      Web + Development" and the checklist is the SOPs tagged
+                      with those three, in that order.
+                    */}
+                    <Select
+                        value={template.service ?? NO_SERVICE}
+                        onValueChange={(value) =>
+                            setTemplate({ ...template, service: value === NO_SERVICE ? undefined : (value as ServiceId) })
+                        }
+                    >
+                        <SelectTrigger id="sop-service" className="w-full sm:w-72">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={NO_SERVICE}>Not one of our services</SelectItem>
+                            {SERVICE_ORDER.map((id) => (
+                                <SelectItem key={id} value={id}>
+                                    {SERVICE_LABELS[id]}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                        {template.service
+                            ? `New projects that include ${SERVICE_LABELS[template.service]} get this checklist, and the client sees its steps under “${SERVICE_LABELS[template.service]}”.`
+                            : 'Tag the service this SOP delivers, and new projects that buy it get this checklist.'}
+                    </p>
+                </div>
             </div>
 
             {/* Visual / Markdown tabs */}
@@ -560,6 +618,7 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                                         key={section._uid}
                                         section={section}
                                         sIndex={sIndex}
+                                        serviceLabel={template.service ? SERVICE_LABELS[template.service] : undefined}
                                         sensors={sensors}
                                         onUpdateSection={updateSection}
                                         onRemoveSection={removeSection}
@@ -591,6 +650,10 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                                     Edit raw Markdown — <code>##</code> for a section, <code>- [ ]</code> for an item.
                                     Under a section heading, <code>&gt; Role: kickoff | pages | client_review | launch</code>{' '}
                                     says what Delivery does at that stage; leave it out for an ordinary one.
+                                    What the client sees goes there too: <code>&gt; Client step: Moodboarding</code>,{' '}
+                                    <code>&gt; Whose step: client | together</code>, and{' '}
+                                    <code>&gt; Client stage: Launch</code> to file it under another heading. Under the
+                                    description, <code>&gt; Service: Web Design</code> tags the SOP.
                                 </p>
                                 <p>
                                     Everything on an item is a <code>Key: value</code> sub-bullet:{' '}
@@ -614,7 +677,10 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
                                     <code>💬 Message label:</code> for the button,{' '}
                                     <code>💬 Message:</code> repeated once per line of the message, and{' '}
                                     <code>💬 Option: Weekly</code> per choice, the first being the
-                                    recommendation. What a project <em>recorded</em> is never written here.
+                                    recommendation. An item that is a step of its own for the client takes{' '}
+                                    <code>👁️ Client step: Feedback on moodboard</code> and{' '}
+                                    <code>👁️ Whose step: client</code>; one to keep off their page,{' '}
+                                    <code>🙈 Hidden from client: yes</code>. What a project <em>recorded</em> is never written here.
                                 </p>
                                 <p>Switch to <strong>Visual</strong> to preview, drag-reorder, or save.</p>
                             </div>
@@ -650,6 +716,8 @@ export function ChecklistEditor({ initialTemplate, onSaved, onBack }: ChecklistE
 interface SortableSectionCardProps {
     section: EditableSection;
     sIndex: number;
+    /** The client's stage heading when the section names none. */
+    serviceLabel?: string;
     sensors: ReturnType<typeof useSensors>;
     onUpdateSection: (i: number, u: Partial<EditableSection>) => void;
     onRemoveSection: (i: number) => void;
@@ -662,6 +730,7 @@ interface SortableSectionCardProps {
 function SortableSectionCard({
     section,
     sIndex,
+    serviceLabel,
     sensors,
     onUpdateSection,
     onRemoveSection,
@@ -756,6 +825,48 @@ function SortableSectionCard({
                                 ))}
                             </SelectContent>
                         </Select>
+                    </div>
+
+                    {/*
+                      What the client sees of this section: one step on their
+                      page, done when every item here is. Blank keeps it internal.
+                    */}
+                    <div className="ml-8 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-muted-foreground">Client sees</span>
+                        <Input
+                            value={section.clientStep ?? ''}
+                            onChange={(e) => onUpdateSection(sIndex, { clientStep: e.target.value || undefined })}
+                            placeholder="Nothing: internal"
+                            aria-label="The step the client sees for this section"
+                            className="h-7 w-56 text-xs"
+                        />
+                        {section.clientStep?.trim() && (
+                            <Select
+                                value={section.clientWho ?? 'activeset'}
+                                onValueChange={(value) =>
+                                    onUpdateSection(sIndex, { clientWho: value === 'activeset' ? undefined : (value as ClientStepWho) })
+                                }
+                            >
+                                <SelectTrigger className="h-7 w-32 text-xs" aria-label="Whose step it is">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {WHO_OPTIONS.map((option) => (
+                                        <SelectItem key={option.value} value={option.value} className="text-xs">
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                        <span className="text-muted-foreground">under</span>
+                        <Input
+                            value={section.clientStage ?? ''}
+                            onChange={(e) => onUpdateSection(sIndex, { clientStage: e.target.value || undefined })}
+                            placeholder={serviceLabel ?? 'The service'}
+                            aria-label="The stage heading the client sees it under"
+                            className="h-7 w-36 text-xs"
+                        />
                     </div>
 
                     <div className="pl-4 border-l-2 border-muted ml-6 space-y-3">
@@ -885,6 +996,8 @@ function SortableItemRow({
         item.dueDate ? `due ${item.dueDate}` : null,
         item.autoCheck ? 'scan' : null,
         item.blocking ? 'blocking' : null,
+        item.clientStep ? `client: ${item.clientStep}` : null,
+        item.clientHidden ? 'hidden from client' : null,
     ].filter(Boolean) as string[];
 
     return (
@@ -1244,6 +1357,64 @@ function SortableItemRow({
                         />
                         Blocking — this stage cannot close until it is settled
                     </label>
+
+                    {/*
+                      An item can be a step of its own on the client's page —
+                      "Feedback on moodboard" inside the moodboard section — or be
+                      kept off it while the rest of its section shows.
+                    */}
+                    <div className="space-y-1">
+                        <Label className="text-xs">A step of its own for the client</Label>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Input
+                                value={item.clientStep ?? ''}
+                                onChange={(e) =>
+                                    onUpdateItem(sIndex, iIndex, {
+                                        clientStep: e.target.value || undefined,
+                                        clientHidden: e.target.value ? undefined : item.clientHidden,
+                                    })
+                                }
+                                placeholder="e.g. Feedback on moodboard"
+                                className="h-7 w-64 text-xs"
+                            />
+                            {item.clientStep?.trim() && (
+                                <Select
+                                    value={item.clientWho ?? 'activeset'}
+                                    onValueChange={(value) =>
+                                        onUpdateItem(sIndex, iIndex, {
+                                            clientWho: value === 'activeset' ? undefined : (value as ClientStepWho),
+                                        })
+                                    }
+                                >
+                                    <SelectTrigger className="h-7 w-32 text-xs" aria-label="Whose step it is">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {WHO_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value} className="text-xs">
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                            A client&apos;s step reads “Waiting on you” to them while this item is In progress: set it when you send
+                            the thing, and tick it when they reply.
+                        </p>
+                    </div>
+                    {!item.clientStep?.trim() && (
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Checkbox
+                                checked={!!item.clientHidden}
+                                onCheckedChange={(checked) =>
+                                    onUpdateItem(sIndex, iIndex, { clientHidden: checked === true ? true : undefined })
+                                }
+                            />
+                            Internal — leave it out of the step the client sees for this section
+                        </label>
+                    )}
                 </div>
             )}
         </div>

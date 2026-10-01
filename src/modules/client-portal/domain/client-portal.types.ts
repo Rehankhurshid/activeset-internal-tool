@@ -188,6 +188,14 @@ export interface PortalFactsView {
   targetLaunchText?: string;
 }
 
+
+export type PortalPlanSource = 'sheet' | 'checklist' | 'timeline' | 'plan';
+
+/** Steps in order, with who does each and when: the sheet's Process, or the checklist's. */
+export function showsProcess(source: PortalPlanSource | undefined): boolean {
+  return source === 'sheet' || source === 'checklist';
+}
+
 /**
  * The ONLY payload the client portal page receives. Built by
  * `buildClientPortalView`; every field is an explicit allow-list decision.
@@ -214,11 +222,12 @@ export interface ClientPortalView {
    */
   lastUpdateAt?: string;
   /**
-   * Where the stages come from: the project sheet's Timeline tab, the app's
-   * Timeline tab (phases with milestones), or the plan drafted from the
-   * checklist. Decides the page's wording.
+   * Where the stages come from: the project sheet's Process tab, the checklist
+   * (its steps labelled for the client), the app's Timeline tab (phases with
+   * milestones), or the plan drafted from the checklist. Decides the page's
+   * wording, and whether it shows the numbered process.
    */
-  planSource: 'sheet' | 'timeline' | 'plan';
+  planSource: PortalPlanSource;
   /** Headline facts from the project sheet's Overview. */
   facts?: PortalFactsView;
   /** The plan, in order. Empty until the team has one. */

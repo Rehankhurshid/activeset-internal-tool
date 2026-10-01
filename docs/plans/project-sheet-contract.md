@@ -171,3 +171,14 @@ All share the five core tabs. Modules differ:
   address; a sheet the app created would not need this.
 - The portal's Delivery page grid (`projects/{id}/pages`) is not yet a source
   for "The work" when no sheet is bound.
+
+
+## 2026-10-01: the Checklist drives progress, engagements pick the SOPs
+
+Rehan's answers after seeing the Checklist and the four engagement types side by side:
+
+1. **Where the team marks progress: the Checklist in the app.** Ticking it moves the client's page. A sheet's Process step with the same name as a checklist step follows it (whichever is further along wins), and the sheet keeps what only it has: the order, the link and the note for the client. Steps a project names its own way (Different AI's sheet is one) keep moving only in the sheet, and the Client tab lists them.
+2. **Missing SOPs: drafted for review.** Web Design and Copy had no SOP; both now exist in the Checklist Creator as drafts, tagged with their service.
+3. **Engagements: picked in the New project dialog.** Development only, Web Design only, Web Design + Development, Brand + Web + Development, with Copy as an add-on. The checklist is the SOPs tagged with those services, in working order, between the agency's start and close.
+
+What the client sees of an SOP is labelled on the SOP itself (a section's "Client sees", an item's own client step), so the master sheet's 40 Process steps are worded exactly as those labels (`PROCESS_STEPS` in `project-sheet.template.ts`; the master was rebuilt in place). See [client-portal.md](../modules/client-portal.md) and [delivery.md](../modules/delivery.md) for the code.

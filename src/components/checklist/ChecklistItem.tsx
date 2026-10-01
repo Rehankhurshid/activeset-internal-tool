@@ -185,6 +185,23 @@ export function ChecklistItemRow({
                         </HoverCard>
                     )}
 
+                    {item.clientStep && (
+                        <span
+                            className={cn(
+                                'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md',
+                                item.clientWho === 'client' && item.status === 'in_progress'
+                                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                                    : 'bg-primary/10 text-primary',
+                            )}
+                            title={
+                                item.clientWho === 'client'
+                                    ? 'The client sees this as their step. Set it In progress when you send it: their page says “Waiting on you” until you tick it.'
+                                    : 'The client sees this as a step of its own.'
+                            }
+                        >
+                            Client sees: {item.clientStep}
+                        </span>
+                    )}
                     {item.assignee && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-md">
                             <UserPlus className="h-2.5 w-2.5" />

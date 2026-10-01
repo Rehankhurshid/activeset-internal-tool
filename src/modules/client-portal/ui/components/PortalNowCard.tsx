@@ -1,6 +1,6 @@
 import { CircleCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ClientPortalView, PortalStageView } from '../../domain/client-portal.types';
+import { showsProcess, type ClientPortalView, type PortalStageView } from '../../domain/client-portal.types';
 import { PortalStageDetail } from './PortalStageDetail';
 import { formatDay, formatRelativeDay, formatStageDates } from './portal-format';
 import { PortalSectionHeading } from './PortalSectionHeading';
@@ -61,8 +61,8 @@ export function PortalNowCard({ view, now }: PortalNowCardProps) {
   const relative = formatRelativeDay(view.lastUpdateAt, now);
   const dates = current ? formatStageDates(current.startDate, current.dueDate, now) : '';
 
-  // With the project sheet, the full step list sits in "The process" below; here, only the step we are on.
-  const sheetMode = view.planSource === 'sheet';
+  // With the process (from the sheet or the checklist), the full step list sits in "The process" below; here, only the step we are on.
+  const sheetMode = showsProcess(view.planSource);
   const steps = current?.steps ?? [];
   const nowIndex = steps.findIndex((step) => step.state !== 'done');
   const nowStep = nowIndex >= 0 ? steps[nowIndex] : undefined;

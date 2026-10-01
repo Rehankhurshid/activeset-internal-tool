@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { SERVICE_LABELS } from '@/lib/engagements';
 import { Plus, MoreVertical, Pencil, Copy, Trash2, Lock, FileDown, FileText, ClipboardCopy } from 'lucide-react';
 import { downloadAsPDF, downloadAsMarkdown, copyAsMarkdown } from '@/lib/template-export';
 import { toast } from 'sonner';
@@ -230,6 +231,11 @@ function TemplateCard({ template, onEdit, onDuplicate, onDelete }: TemplateCardP
                     <Badge variant="outline" className="text-[10px]">
                         {itemCount} item{itemCount !== 1 ? 's' : ''}
                     </Badge>
+                    {template.service && SERVICE_LABELS[template.service] && (
+                        <Badge variant="secondary" className="text-[10px]" title="New projects that buy this service get this checklist">
+                            {SERVICE_LABELS[template.service]}
+                        </Badge>
+                    )}
                 </div>
             </CardContent>
         </Card>

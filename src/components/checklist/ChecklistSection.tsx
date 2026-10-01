@@ -167,6 +167,14 @@ export function ChecklistSectionBlock({
                                             {ROLE_LABELS[role]}
                                         </span>
                                     )}
+                                    {section.clientStep && (
+                                        <span
+                                            className="hidden flex-shrink-0 truncate rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary sm:inline"
+                                            title="Ticking these items moves this step on the client's page"
+                                        >
+                                            Client sees: {section.clientStep}
+                                        </span>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -193,6 +201,23 @@ export function ChecklistSectionBlock({
                         {/* Edit Controls */}
                         {isEditing ? (
                             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                {/* What the client sees of this section on this project. Blank keeps it internal. */}
+                                <input
+                                    className="h-7 w-44 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+                                    defaultValue={section.clientStep ?? ''}
+                                    placeholder="Client sees… (internal)"
+                                    aria-label="The step the client sees for this section"
+                                    title="The step this section is on the client's page. Blank keeps it internal."
+                                    onBlur={(e) => {
+                                        const value = e.target.value.trim();
+                                        if (value !== (section.clientStep ?? '')) {
+                                            onUpdateSection?.({
+                                                clientStep: value || undefined,
+                                                clientWho: value ? section.clientWho : undefined,
+                                            });
+                                        }
+                                    }}
+                                />
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button

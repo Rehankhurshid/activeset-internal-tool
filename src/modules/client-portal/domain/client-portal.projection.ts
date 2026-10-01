@@ -5,6 +5,8 @@ import type {
   ProjectChecklist,
   ProjectMeeting,
   ProjectTimeline,
+  SOPTemplate,
+  SOPTemplateSection,
   StageRole,
   Task,
 } from '@/types';
@@ -19,8 +21,9 @@ import {
   safeHttpUrl,
   type ResolvedStage,
 } from './client-plan';
-import { resolveTimelinePlan, stageForDate, timelineStages, type TimelineStep } from './client-timeline';
-import { sheetAsks, sheetChanges, sheetFacts, sheetFiles, sheetReadiness, sheetStageSources, sheetWork } from './project-sheet.portal';
+import { resolveTimelinePlan, stageForDate, type TimelineStep } from './client-timeline';
+import { portalStageSources } from './portal-sources';
+import { sheetAsks, sheetChanges, sheetFacts, sheetFiles, sheetReadiness, sheetWork } from './project-sheet.portal';
 import type { ProjectSheetSnapshot } from './project-sheet.types';
 import type {
   ClientPortalView,
@@ -59,6 +62,13 @@ export interface BuildClientPortalViewInput {
    * `project-sheet.portal.ts` builds from it ever reaches the view.
    */
   sheet?: ProjectSheetSnapshot | null;
+  /**
+   * Optional. The SOPs the checklists were made from, and the agency's own
+   * start and close, for the client-step labels of checklists made before SOPs
+   * carried them. Only those labels are read from them.
+   */
+  templates?: Pick<SOPTemplate, 'id' | 'service' | 'sections'>[];
+  agency?: Omit<SOPTemplateSection, 'order'>[];
   now?: Date;
 }
 
@@ -263,25 +273,35 @@ function toPortalReview(
  *
  * This is the allow-list: nothing reaches the portal page that is not built
  * here, field by field. Internal status/tags, billing, tokens, emails (other
- * than the agency contact), checklist steps, milestone notes/assignees, task
- * descriptions, audits, images and invoices are all deliberately absent. From
- * the checklist the client gets a percentage and one section title (the stage
- * they are asked to approve), never a step.
+ * than the agency contact), checklist item titles and notes, milestone
+ * notes/assignees, task descriptions, audits, images and invoices are all
+ * deliberately absent. From the checklist the client gets a percentage, one
+ * section title (the stage they are asked to approve), and the steps its SOP
+ * labels for them, by that label and the day each was finished: never an item.
  */
 export function buildClientPortalView(input: BuildClientPortalViewInput): ClientPortalView {
-  const { project, timeline, tasks = [], checklists = [], meetings = [], sheet = null, now = new Date() } = input;
+  const { project, timeline, tasks = [], checklists = [], meetings = [], sheet = null, templates, agency, now = new Date() } = input;
   const settings = project.clientPortal;
   const facing = project.clientFacing ?? {};
   const status = normalizeClientStatus(facing.status);
 
-  // The project sheet's Timeline first, unless the team chose the app's and it
-  // has something to show; then the Timeline tab; then the plan.
-  const appSources = timelineStages(timeline, project.clientTimeline);
-  const sheetSources = sheet ? sheetStageSources(sheet.data.timeline) : [];
-  const fromSheet = sheetSources.length > 0 && !(sheet?.stagesFrom === 'app' && appSources.length > 0);
-  const fromTimeline = !fromSheet && appSources.length > 0;
-  const timelineSources = fromSheet ? sheetSources : appSources;
-  const byPhase = fromSheet || fromTimeline;
+  // The project sheet's Process first (moved along by the checklist), unless
+  // the team chose the app's Timeline; then a checklist that says what the
+  // client sees; then the Timeline tab; then the plan. See portal-sources.ts.
+  const picked = portalStageSources({
+    checklists,
+    templates,
+    agency,
+    sheetTimeline: sheet?.data.timeline,
+    stagesFrom: sheet?.stagesFrom,
+    timeline,
+    timelineSettings: project.clientTimeline,
+  });
+  const fromSheet = picked.kind === 'sheet';
+  const fromChecklist = picked.kind === 'checklist';
+  const fromTimeline = picked.kind === 'timeline';
+  const timelineSources = picked.sources;
+  const byPhase = picked.kind !== null;
 
   // Otherwise the saved plan; failing that, what a portal shared before plans
   // existed was already showing, so the client's page does not empty out.
@@ -339,6 +359,8 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
       saved?.updatedAt,
       // A tick on the checklist moves the tracker, so it is news to the client too.
       !byPhase && resolved && planTracksChecklist(resolved) ? latestChecklistChange(checklists) : undefined,
+      // So is a step the checklist moved, on a page whose steps follow it.
+      fromChecklist || (fromSheet && picked.followed > 0) ? latestChecklistChange(checklists) : undefined,
       // So is a milestone moving on the Timeline, a file added to a phase, or a call shared.
       fromTimeline ? isoOf(timeline?.updatedAt) : undefined,
       byPhase ? project.clientTimeline?.updatedAt : undefined,
@@ -346,7 +368,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
       sheet?.changedAt,
       ...sharedMeetings.map((m) => m.decidedAt),
     ]),
-    planSource: fromSheet ? 'sheet' : fromTimeline ? 'timeline' : 'plan',
+    planSource: picked.kind ?? 'plan',
     facts: sheet ? sheetFacts(sheet.data.overview) : undefined,
     stages,
     currentStageIndex,
