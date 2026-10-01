@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChecklistItem, ChecklistSection, ProjectChecklist } from '@/types';
 import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
-import { developmentWord, managedSheetContent, pageWord } from './project-sheet.content';
+import { developmentWord, managedSheetContent, pageWord, seoToFix, sheetChecks } from './project-sheet.content';
 
 let seq = 0;
 const item = (title: string, extra: Partial<ChecklistItem> = {}): ChecklistItem => ({ id: `i${++seq}`, title, status: 'not_started', order: seq, ...extra });
@@ -153,5 +153,45 @@ describe('page words', () => {
     assert.equal(developmentWord('completed', 'not_required'), 'Done');
     assert.equal(developmentWord('not_required', 'not_required'), 'Not needed');
     assert.equal(developmentWord('in_review', 'completed'), 'Waiting on client');
+  });
+});
+
+describe('the Checklist tab', () => {
+  const qa = section('Step 6: QA Checklist', [
+    item('\u{1F3C1} Check every page has a title and meta description', { status: 'completed', completedAt: '2026-10-02T09:00:00Z' }),
+    item('Review class naming', { clientHidden: true }),
+    item('Test every form', { status: 'in_progress', dueDate: '2026-10-15' }),
+  ]);
+  const build = section('Step 3: Page Development', [item('Build the navbar')]);
+
+  it('lists the steps of sections marked on the SOP, by title, without hidden ones or emoji', () => {
+    const rows = sheetChecks([checklist([build, qa])], [{ id: 't', service: 'development', sections: [{ title: 'Step 6: QA Checklist', items: [], order: 0, onProjectSheet: true }] }]);
+    assert.deepEqual(rows, [
+      { section: 'QA Checklist', check: 'Check every page has a title and meta description', status: 'Done', date: '2026-10-02' },
+      { section: 'QA Checklist', check: 'Test every form', status: 'In progress', date: '2026-10-15' },
+    ]);
+  });
+
+  it('reads the mark on the checklist itself too', () => {
+    assert.equal(sheetChecks([checklist([{ ...build, onProjectSheet: true }])]).length, 1);
+  });
+});
+
+describe('the SEO tab', () => {
+  it('says what to fix in plain words', () => {
+    assert.equal(seoToFix({ url: 'https://a.co', title: 'Home', description: 'Short', schemaTypes: [], imagesWithoutAlt: 2, h1Count: 0 }),
+      'lengthen the description (70+); add an OG image; set a canonical; add schema; add an H1; alt text on 2 images');
+  });
+
+  it('writes each page with lengths, schema and the day it was checked', () => {
+    const content = managedSheetContent({
+      project,
+      checklists: [],
+      seo: [{ url: 'https://a.co/', title: 'A good title', description: 'x'.repeat(120), ogImage: 'https://cdn/og.jpg', canonical: 'https://a.co/', schemaTypes: ['Organization', 'WebPage'], imagesWithoutAlt: 0, h1Count: 1, checkedAt: '2026-10-01T00:30:00Z' }],
+    });
+    assert.deepEqual(content.seo[0], {
+      page: 'https://a.co/', title: 'A good title', titleLength: 12, description: 'x'.repeat(120), descriptionLength: 120,
+      ogImage: 'https://cdn/og.jpg', canonical: 'https://a.co/', schema: 'Organization, WebPage', imagesWithoutAlt: 0, toFix: 'Nothing', checked: '2026-10-01',
+    });
   });
 });

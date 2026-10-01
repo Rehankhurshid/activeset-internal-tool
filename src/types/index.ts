@@ -844,6 +844,11 @@ export interface ChecklistSection {
    * Design". Set from the SOP's service when the checklist is made.
    */
   clientStage?: string;
+  /**
+   * List this section's steps on the project sheet's Checklist tab (QA, SEO,
+   * pre-launch), each with its status. Hidden items stay off it.
+   */
+  onProjectSheet?: boolean;
 }
 
 // Full project checklist
@@ -884,6 +889,8 @@ export interface SOPTemplateSection {
   clientWho?: ClientStepWho;
   /** See `ChecklistSection.clientStage`. Unset means the template's service. */
   clientStage?: string;
+  /** See `ChecklistSection.onProjectSheet`. */
+  onProjectSheet?: boolean;
 }
 
 // SOP template definition (for the template selector)

@@ -171,6 +171,7 @@ const stripUid = (sections: EditableSection[]): SOPTemplateSection[] =>
         clientStage: s.clientStage?.trim() || undefined,
         clientStep: s.clientStep?.trim() || undefined,
         clientWho: s.clientStep?.trim() ? s.clientWho : undefined,
+        onProjectSheet: s.onProjectSheet || undefined,
         items: s.items.map((it, iIdx) => ({
             title: it.title,
             emoji: it.emoji,
@@ -867,6 +868,13 @@ function SortableSectionCard({
                             aria-label="The stage heading the client sees it under"
                             className="h-7 w-36 text-xs"
                         />
+                        <label className="ml-2 flex items-center gap-1.5 text-muted-foreground">
+                            <Checkbox
+                                checked={!!section.onProjectSheet}
+                                onCheckedChange={(checked) => onUpdateSection(sIndex, { onProjectSheet: checked === true ? true : undefined })}
+                            />
+                            List its steps on the project sheet
+                        </label>
                     </div>
 
                     <div className="pl-4 border-l-2 border-muted ml-6 space-y-3">

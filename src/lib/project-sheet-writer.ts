@@ -16,8 +16,10 @@ import {
 } from '@/lib/google-api';
 import { ProjectSheetError, serviceAccountEmail } from '@/lib/project-sheet';
 import {
+  MANAGED_CHECKS_HEADER,
   MANAGED_HELP,
   MANAGED_INPUTS_HEADER,
+  MANAGED_SEO_HEADER,
   MANAGED_OVERVIEW_FIELDS,
   MANAGED_PAGES_HEADER,
   MANAGED_PROCESS_HEADER,
@@ -26,6 +28,7 @@ import {
   managedSheetContent,
   type ManagedSheetContent,
   type SheetPageInput,
+  type SheetSeoInput,
 } from '@/modules/client-portal/domain/project-sheet.content';
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
 import type { Project, ProjectChecklist, Task } from '@/types';
@@ -224,6 +227,7 @@ async function layOut(spreadsheetId: string): Promise<void> {
     { title: MANAGED_TABS.process, colour: '#7C3AED', cols: MANAGED_PROCESS_HEADER.length + 1, frozen: 1 },
     { title: MANAGED_TABS.pages, colour: '#0284C7', cols: MANAGED_PAGES_HEADER.length, frozen: 1 },
     { title: MANAGED_TABS.inputs, colour: '#D97706', cols: MANAGED_INPUTS_HEADER.length, frozen: 1 },
+    ...EXTRA_TABS,
   ];
   const added = await batchUpdateSpreadsheet(spreadsheetId, [
     ...tabs.map((t, index) => ({
@@ -243,6 +247,7 @@ async function layOut(spreadsheetId: string): Promise<void> {
     .filter((p): p is { sheetId: number; title: string } => !!p);
   const id = (title: string) => ids.find((p) => p.title === title)!.sheetId;
   const [OV, PR, PG, IN] = [id(MANAGED_TABS.overview), id(MANAGED_TABS.process), id(MANAGED_TABS.pages), id(MANAGED_TABS.inputs)];
+  const [CK, SE] = [id(MANAGED_TABS.checks), id(MANAGED_TABS.seo)];
   const all = (sheet: number, c0: number, c1: number) => range(sheet, 1, ROWS, c0, c1);
   const fields = MANAGED_OVERVIEW_FIELDS.length;
 
@@ -324,7 +329,109 @@ async function layOut(spreadsheetId: string): Promise<void> {
     ...chips(all(IN, 2, 3), STATUS_COLOURS),
 
     ...[OV, PR, PG, IN].map((sheet, i) => kept(sheet, Object.values(MANAGED_TABS)[i])),
+    ...formatChecks(CK),
+    ...formatSeo(SE),
   ]);
+}
+
+/**
+ * Bumped when a tab is added after sheets already exist: a sheet laid out
+ * under an older version gets the missing tabs on its next write.
+ * 2 (2026-10-01): Checklist and SEO.
+ */
+export const LAYOUT_VERSION = 2;
+
+/** The tabs added after the first four, and how each is laid out. */
+const EXTRA_TABS = [
+  { title: MANAGED_TABS.checks, colour: '#059669', cols: MANAGED_CHECKS_HEADER.length, frozen: 1 },
+  { title: MANAGED_TABS.seo, colour: '#DB2777', cols: MANAGED_SEO_HEADER.length, frozen: 1 },
+];
+
+/** Checklist: Section · Check · Status · Date, QA and launch checks from the project's checklist. */
+function formatChecks(CK: number) {
+  const all = (c0: number, c1: number) => range(CK, 1, ROWS, c0, c1);
+  return [
+    base(CK, 4),
+    ...header(CK, 4),
+    ...widths(CK, [200, 620, 160, 130]),
+    lines(CK, 1, ROWS, 0, 4),
+    text(all(0, 1), font(DISPLAY, 10, C.muted, { bold: true }), { wrapStrategy: 'CLIP' }),
+    text(all(1, 2), font(BODY, 11, C.ink), { wrapStrategy: 'CLIP' }),
+    text(all(2, 3), font(DISPLAY, 10, C.muted, { bold: true }), { horizontalAlignment: 'CENTER' }),
+    centre(range(CK, 0, 1, 2, 3)),
+    text(all(3, 4), font(BODY, 10, C.muted)),
+    dates(all(3, 4)),
+    rule(range(CK, 1, ROWS, 0, 4), formula('=$C2="Done"'), { textFormat: { foregroundColorStyle: { rgbColor: hex(C.faint) } } }),
+    ...chips(all(2, 3), { ...STATUS_COLOURS, 'Not needed': { bg: '#F1F5F9', fg: '#94A3B8' } }),
+    kept(CK, MANAGED_TABS.checks),
+  ];
+}
+
+/** SEO: each scanned page's tags, lengths, schema and what to fix. */
+function formatSeo(SE: number) {
+  const all = (c0: number, c1: number) => range(SE, 1, ROWS, c0, c1);
+  return [
+    base(SE, MANAGED_SEO_HEADER.length),
+    ...header(SE, MANAGED_SEO_HEADER.length),
+    ...widths(SE, [260, 300, 70, 420, 90, 200, 220, 170, 90, 320, 110]),
+    lines(SE, 1, ROWS, 0, MANAGED_SEO_HEADER.length),
+    text(all(0, MANAGED_SEO_HEADER.length), font(BODY, 10, C.body), { wrapStrategy: 'CLIP' }),
+    text(all(0, 1), font(BODY, 10, C.link, { underline: true }), { wrapStrategy: 'CLIP' }),
+    text(all(1, 2), font(DISPLAY, 10, C.ink, { bold: true }), { wrapStrategy: 'CLIP' }),
+    text(all(5, 7), font(BODY, 9, C.link, { underline: true }), { wrapStrategy: 'CLIP' }),
+    centre(all(2, 3)),
+    centre(all(4, 5)),
+    centre(all(8, 9)),
+    text(all(9, 10), font(BODY, 10, '#9A3412'), { wrapStrategy: 'CLIP' }),
+    text(all(10, 11), font(BODY, 10, C.muted)),
+    dates(all(10, 11)),
+    // Lengths outside what search results show, and missing alt text, in red.
+    rule(all(2, 3), formula('=AND(ISNUMBER($C2),$C2>60)'), { textFormat: { foregroundColorStyle: { rgbColor: hex('#B91C1C') }, bold: true } }),
+    rule(all(4, 5), formula('=AND(ISNUMBER($E2),OR($E2>160,$E2<70))'), { textFormat: { foregroundColorStyle: { rgbColor: hex('#B91C1C') }, bold: true } }),
+    rule(all(8, 9), formula('=AND(ISNUMBER($I2),$I2>0)'), { textFormat: { foregroundColorStyle: { rgbColor: hex('#B91C1C') }, bold: true } }),
+    rule(all(9, 10), textEq('Nothing'), { textFormat: { foregroundColorStyle: { rgbColor: hex('#15803D') }, bold: true } }),
+    kept(SE, MANAGED_TABS.seo),
+  ];
+}
+
+/**
+ * Brings a sheet laid out by an older version up to date: adds the tabs it is
+ * missing and restyles the Overview's help lines, which grew with them.
+ */
+async function upgradeLayout(spreadsheetId: string): Promise<void> {
+  const meta = await getSpreadsheetMeta(spreadsheetId);
+  const have = new Set(meta.tabs.map((t) => t.title));
+  const missing = EXTRA_TABS.filter((t) => !have.has(t.title));
+  const overview = meta.tabs.find((t) => t.title === MANAGED_TABS.overview);
+  const requests: Record<string, unknown>[] = [];
+  if (missing.length) {
+    const added = await batchUpdateSpreadsheet(
+      spreadsheetId,
+      missing.map((t) => ({
+        addSheet: {
+          properties: {
+            title: t.title,
+            tabColorStyle: { rgbColor: hex(t.colour) },
+            gridProperties: { rowCount: ROWS, columnCount: t.cols, frozenRowCount: t.frozen, hideGridlines: true },
+          },
+        },
+      })),
+    );
+    for (const reply of added.replies ?? []) {
+      const props = (reply as { addSheet?: { properties?: { sheetId: number; title: string } } }).addSheet?.properties;
+      if (props?.title === MANAGED_TABS.checks) requests.push(...formatChecks(props.sheetId));
+      if (props?.title === MANAGED_TABS.seo) requests.push(...formatSeo(props.sheetId));
+    }
+  }
+  if (overview?.sheetId !== undefined) {
+    const OV = overview.sheetId;
+    requests.push(
+      text(range(OV, FIELD_ROW + 1, FIELD_ROW + MANAGED_HELP.length, 3, 4), font(BODY, 10, '#334155')),
+      fill(range(OV, FIELD_ROW, FIELD_ROW + MANAGED_HELP.length, 3, 4), '#F5F3FF'),
+      { autoResizeDimensions: { dimensions: { sheetId: OV, dimension: 'ROWS', startIndex: FIELD_ROW, endIndex: FIELD_ROW + MANAGED_HELP.length } } },
+    );
+  }
+  if (requests.length) await batchUpdateSpreadsheet(spreadsheetId, requests);
 }
 
 /** A tab's rows padded to its full height, so a shorter list leaves nothing behind. */
@@ -374,6 +481,21 @@ async function writeValues(spreadsheetId: string, content: ManagedSheetContent, 
       tab: MANAGED_TABS.inputs,
       rows: padded([[...MANAGED_INPUTS_HEADER], ...content.inputs.map((r) => [r.item, r.neededBy, r.status])], MANAGED_INPUTS_HEADER.length, ROWS),
     },
+    {
+      tab: MANAGED_TABS.checks,
+      rows: padded([[...MANAGED_CHECKS_HEADER], ...content.checks.map((r) => [r.section, r.check, r.status, r.date])], MANAGED_CHECKS_HEADER.length, ROWS),
+    },
+    {
+      tab: MANAGED_TABS.seo,
+      rows: padded(
+        [
+          [...MANAGED_SEO_HEADER],
+          ...content.seo.map((r) => [r.page, r.title, r.titleLength, r.description, r.descriptionLength, r.ogImage, r.canonical, r.schema, r.imagesWithoutAlt, r.toFix, r.checked]),
+        ],
+        MANAGED_SEO_HEADER.length,
+        ROWS,
+      ),
+    },
   ]);
 }
 
@@ -383,11 +505,12 @@ export async function contentFor(projectId: string): Promise<{ project: Project;
   const projectSnap = await db.collection(COLLECTIONS.PROJECTS).doc(projectId).get();
   if (!projectSnap.exists) throw new ProjectSheetError(404, 'Project not found.');
   const project = { ...(projectSnap.data() as Project), id: projectId };
-  const [checklistSnap, pageSnap, askSnap, timelineSnap] = await Promise.all([
+  const [checklistSnap, pageSnap, askSnap, timelineSnap, auditSnap] = await Promise.all([
     db.collection(COLLECTIONS.PROJECT_CHECKLISTS).where('projectId', '==', projectId).limit(20).get(),
     db.collection(COLLECTIONS.PROJECTS).doc(projectId).collection(COLLECTIONS.PROJECT_PAGES).limit(500).get(),
     db.collection(COLLECTIONS.TASKS).where('projectId', '==', projectId).where('needsClientInput', '==', true).limit(500).get(),
     db.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
+    db.collection(COLLECTIONS.PROJECTS).doc(projectId).collection('link_audits').limit(500).get(),
   ]);
   const checklists = checklistSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as ProjectChecklist);
   const templates = await loadSourceTemplates(checklists);
@@ -399,8 +522,48 @@ export async function contentFor(projectId: string): Promise<{ project: Project;
     timeline: toTimeline(projectId, timelineSnap.exists ? (timelineSnap.data() as Record<string, unknown>) : undefined),
     pages: pageSnap.docs.map((d) => d.data() as SheetPageInput),
     asks: askSnap.docs.map((d) => d.data() as Task),
+    seo: seoInputs(project, auditSnap.docs.map((d) => ({ id: d.id, data: d.data() }))),
   });
   return { project, content };
+}
+
+/** Tools the team links to, never pages of the site itself. */
+const TOOL_HOSTS = /(^|\.)(figma\.com|markup\.io|google\.com|notion\.so|loom\.com|clickup\.com|slack\.com|fathom\.video)$/i;
+
+/**
+ * Each of the site's pages as its last scan read it, in the project's link
+ * order. Scans cover the links the app knows, which for a site still being
+ * built is usually the old live site: the URL and the Checked date say which.
+ */
+function seoInputs(project: Project, audits: { id: string; data: Record<string, unknown> }[]): SheetSeoInput[] {
+  const byLink = new Map(audits.map((a) => [a.id, a.data]));
+  const rows: SheetSeoInput[] = [];
+  for (const link of [...(project.links ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+    let host = '';
+    try {
+      host = new URL(link.url).hostname;
+    } catch {
+      continue;
+    }
+    if (TOOL_HOSTS.test(host)) continue;
+    const audit = byLink.get(link.id) as
+      | { lastRun?: string; categories?: Record<string, Record<string, unknown> | undefined> }
+      | undefined;
+    const c = audit?.categories;
+    if (!c?.seo) continue;
+    rows.push({
+      url: link.url,
+      title: c.seo.title as string | undefined,
+      description: c.seo.metaDescription as string | undefined,
+      ogImage: c.openGraph?.image as string | undefined,
+      canonical: c.metaTags?.canonicalUrl as string | undefined,
+      schemaTypes: (c.schema?.schemaTypes as string[] | undefined) ?? [],
+      imagesWithoutAlt: c.seo.imagesWithoutAlt as number | undefined,
+      h1Count: c.headingStructure?.h1Count as number | undefined,
+      checkedAt: audit?.lastRun,
+    });
+  }
+  return rows;
 }
 
 const hashOf = (content: ManagedSheetContent) => createHash('sha256').update(JSON.stringify(content)).digest('hex');
@@ -431,6 +594,7 @@ export async function createManagedSheet(projectId: string, by: string): Promise
     boundAt: new Date().toISOString(),
     boundBy: by,
     managed: true,
+    layoutVersion: LAYOUT_VERSION,
   };
   // `set`, not merge: a hand-kept sheet's snapshot and report go with its binding.
   await recordRef(projectId).set(record);
@@ -449,6 +613,11 @@ export async function writeManagedSheet(projectId: string, options: { force?: bo
   if (!options.force && hash === record.writtenHash) return record;
   const at = new Date();
   try {
+    if ((record.layoutVersion ?? 1) < LAYOUT_VERSION) {
+      await upgradeLayout(record.spreadsheetId);
+      await ref.update({ layoutVersion: LAYOUT_VERSION });
+      record.layoutVersion = LAYOUT_VERSION;
+    }
     await writeValues(record.spreadsheetId, content, at);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

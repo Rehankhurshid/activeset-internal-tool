@@ -428,6 +428,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 6: Integrations & Custom Code',
+                onProjectSheet: true,
                 clientStep: 'CMS, forms & integrations',
                 emoji: '🔧',
                 items: makeItems([
@@ -441,6 +442,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 7: QA & Pre-Launch Checklist',
+                onProjectSheet: true,
                 clientStep: 'QA on every device',
                 emoji: '🧪',
                 role: 'launch',
@@ -468,6 +470,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Step 9: Launch',
+                onProjectSheet: true,
                 clientStage: 'Launch',
                 clientStep: 'Go live',
                 emoji: '🚀',

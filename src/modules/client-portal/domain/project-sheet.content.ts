@@ -25,11 +25,27 @@ export const MANAGED_TABS = {
   process: 'Process',
   pages: 'Pages',
   inputs: 'What we need',
+  checks: 'Checklist',
+  seo: 'SEO',
 } as const;
 
 export const MANAGED_PROCESS_HEADER = ['#', 'Stage', 'Step', 'Who', 'Status', 'Date'] as const;
 export const MANAGED_PAGES_HEADER = ['Page', 'Copy', 'Design', 'Development', 'Link'] as const;
 export const MANAGED_INPUTS_HEADER = ['Item', 'Needed by', 'Status'] as const;
+export const MANAGED_CHECKS_HEADER = ['Section', 'Check', 'Status', 'Date'] as const;
+export const MANAGED_SEO_HEADER = [
+  'Page',
+  'SEO title',
+  'Title length',
+  'Meta description',
+  'Description length',
+  'OG image',
+  'Canonical',
+  'Schema',
+  'Images without alt',
+  'To fix',
+  'Checked',
+] as const;
 export const MANAGED_OVERVIEW_FIELDS = ['Client', 'Project', 'Services', 'Kickoff', 'Target launch', 'Project lead'] as const;
 
 /** How the sheet explains itself, beside the Overview. */
@@ -39,7 +55,8 @@ export const MANAGED_HELP = [
   '2. Process is every step of the project, in order. Done shows the day it was done; otherwise the day it is planned for.',
   '3. Pages shows where each page is: copy, design and development.',
   '4. What we need is everything we are waiting on from you, and what has arrived.',
-  '5. Edits made here are replaced at the next update, so tell your ActiveSet lead instead.',
+  '5. Checklist is our QA, SEO and launch checks; SEO is what each page tells search engines and AI answers, as of the date shown.',
+  '6. Edits made here are replaced at the next update, so tell your ActiveSet lead instead.',
 ] as const;
 
 /** At most this many key links: the Overview's look is laid out for them once. */
@@ -54,6 +71,35 @@ export interface ManagedSheetContent {
   process: { stage: string; step: string; who: string; status: string; date: string; now?: boolean }[];
   pages: { page: string; copy: string; design: string; development: string; link: string }[];
   inputs: { item: string; neededBy: string; status: string }[];
+  /** The steps of the checklist's sections marked for the sheet: QA, SEO, pre-launch. */
+  checks: { section: string; check: string; status: string; date: string }[];
+  /** Each scanned page, as search engines and AI answers read it. */
+  seo: {
+    page: string;
+    title: string;
+    titleLength: number | '';
+    description: string;
+    descriptionLength: number | '';
+    ogImage: string;
+    canonical: string;
+    schema: string;
+    imagesWithoutAlt: number | '';
+    toFix: string;
+    checked: string;
+  }[];
+}
+
+/** One page's last scan, as much as the SEO tab reads of it. */
+export interface SheetSeoInput {
+  url: string;
+  title?: string;
+  description?: string;
+  ogImage?: string;
+  canonical?: string;
+  schemaTypes?: string[];
+  imagesWithoutAlt?: number;
+  h1Count?: number;
+  checkedAt?: string;
 }
 
 /** The page tracker's rows, as much as the sheet reads of them. */
@@ -75,6 +121,8 @@ export interface ManagedSheetInput {
   pages?: readonly SheetPageInput[];
   /** Tasks flagged for the client. Only `needsClientInput` ones are read. */
   asks?: readonly Pick<Task, 'title' | 'dueDate' | 'status' | 'needsClientInput' | 'order'>[];
+  /** The last scan of each of the site's pages, in the order to list them. */
+  seo?: readonly SheetSeoInput[];
 }
 
 const WHO: Record<ClientStepWho | 'none', string> = { activeset: 'ActiveSet', client: 'Client', together: 'Together', none: 'ActiveSet' };
@@ -126,6 +174,77 @@ function ourLead(checklists: ManagedSheetInput['checklists']): string {
     }
   }
   return '';
+}
+
+const CHECK_WORDS: Record<string, string> = { completed: 'Done', in_progress: 'In progress', skipped: 'Not needed' };
+const dayOf = (iso: string | undefined) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10) : '');
+/** A step's title without the emoji a template starts it with. */
+const plain = (title: string) => title.replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '').trim();
+
+/**
+ * The steps of every section marked for the sheet. A checklist made before its
+ * SOP marked the section borrows the mark by section title, as client labels are.
+ */
+export function sheetChecks(
+  checklists: ManagedSheetInput['checklists'],
+  templates: ManagedSheetInput['templates'] = [],
+): ManagedSheetContent['checks'] {
+  const marked = new Set(
+    (templates ?? []).flatMap((t) => t.sections.filter((s) => s.onProjectSheet).map((s) => s.title.trim().toLowerCase())),
+  );
+  return checklists.flatMap((checklist) =>
+    [...(checklist.sections ?? [])]
+      .filter((section) => section.onProjectSheet || marked.has(section.title.trim().toLowerCase()))
+      .flatMap((section) =>
+        [...(section.items ?? [])]
+          .filter((item) => !item.clientHidden)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .map((item) => ({
+            section: plain(section.title).replace(/^step \d+:\s*/i, ''),
+            check: plain(item.title),
+            status: CHECK_WORDS[item.status ?? ''] ?? 'Not started',
+            date: item.status === 'completed' ? dayOf(item.completedAt) : dayOf(item.dueDate),
+          })),
+      ),
+  );
+}
+
+/** What a page's tags need, in plain words; empty when nothing does. */
+export function seoToFix(page: SheetSeoInput): string {
+  const fixes: string[] = [];
+  const title = page.title?.trim() ?? '';
+  const description = page.description?.trim() ?? '';
+  if (!title) fixes.push('add an SEO title');
+  else if (title.length > 60) fixes.push('shorten the title (60 max)');
+  if (!description) fixes.push('add a meta description');
+  else if (description.length > 160) fixes.push('shorten the description (160 max)');
+  else if (description.length < 70) fixes.push('lengthen the description (70+)');
+  if (!page.ogImage) fixes.push('add an OG image');
+  if (!page.canonical) fixes.push('set a canonical');
+  if (!page.schemaTypes?.length) fixes.push('add schema');
+  if (page.h1Count !== undefined && page.h1Count !== 1) fixes.push(page.h1Count === 0 ? 'add an H1' : 'keep one H1');
+  if ((page.imagesWithoutAlt ?? 0) > 0) fixes.push(`alt text on ${page.imagesWithoutAlt} image${page.imagesWithoutAlt === 1 ? '' : 's'}`);
+  return fixes.join('; ');
+}
+
+function seoRows(pages: readonly SheetSeoInput[] = []): ManagedSheetContent['seo'] {
+  return pages.map((page) => {
+    const title = page.title?.trim() ?? '';
+    const description = page.description?.trim() ?? '';
+    return {
+      page: page.url,
+      title,
+      titleLength: title ? title.length : '',
+      description,
+      descriptionLength: description ? description.length : '',
+      ogImage: page.ogImage ?? '',
+      canonical: page.canonical ?? '',
+      schema: (page.schemaTypes ?? []).join(', '),
+      imagesWithoutAlt: page.imagesWithoutAlt ?? '',
+      toFix: seoToFix(page) || 'Nothing',
+      checked: dayOf(page.checkedAt),
+    };
+  });
 }
 
 export function managedSheetContent(input: ManagedSheetInput): ManagedSheetContent {
@@ -205,5 +324,7 @@ export function managedSheetContent(input: ManagedSheetInput): ManagedSheetConte
     process: rows,
     pages,
     inputs,
+    checks: sheetChecks(input.checklists, input.templates),
+    seo: seoRows(input.seo),
   };
 }

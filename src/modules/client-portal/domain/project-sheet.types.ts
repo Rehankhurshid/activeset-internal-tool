@@ -266,6 +266,8 @@ export interface ProjectSheetRecord {
    * checklist, and the sheet is a view of it for whoever prefers a sheet.
    */
   managed?: boolean;
+  /** The layout an app-kept sheet was last brought up to (see LAYOUT_VERSION in project-sheet-writer). */
+  layoutVersion?: number;
   /** Managed sheets: when the app last wrote it, what it wrote, and the last failure. */
   writtenAt?: string;
   writtenHash?: string;
