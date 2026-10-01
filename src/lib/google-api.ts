@@ -187,7 +187,17 @@ export async function getDriveFolder(folderId: string): Promise<DriveFolder> {
     DRIVE_SCOPES,
   );
   if (file.mimeType !== 'application/vnd.google-apps.folder') throw new GoogleApiError(400, `"${file.name}" is a file, not a folder.`);
-  return { id: file.id, name: file.name, driveId: file.driveId, canAddChildren: file.capabilities?.canAddChildren === true };
+  // A Shared Drive's top folder is called "Drive" here; its real name is the drive's.
+  let name = file.name;
+  if (file.driveId && file.driveId === file.id) {
+    const drive = await googleFetch<{ name: string }>(
+      `https://www.googleapis.com/drive/v3/drives/${encodeURIComponent(file.driveId)}?fields=name`,
+      {},
+      DRIVE_SCOPES,
+    );
+    name = drive.name || name;
+  }
+  return { id: file.id, name, driveId: file.driveId, canAddChildren: file.capabilities?.canAddChildren === true };
 }
 
 /** A new, empty spreadsheet in a Shared Drive folder. */
