@@ -52,7 +52,7 @@ export const MANAGED_OVERVIEW_FIELDS = ['Client', 'Project', 'Services', 'Kickof
 export const MANAGED_HELP = [
   'About this sheet',
   '1. ActiveSet keeps this sheet up to date from the project itself: every step, page and request, as it happens.',
-  '2. Process is every step of the project, in order. Done shows the day it was done; otherwise the day it is planned for.',
+  '2. Process is every step of the project, in order. Done shows the day it was done; otherwise the day it is planned for. Link opens what the step is about.',
   '3. Pages shows where each page is: copy, design and development.',
   '4. What we need is everything we are waiting on from you, and what has arrived.',
   '5. Checklist is our QA, SEO and launch checks; SEO is what each page tells search engines and AI answers, as of the date shown.',
@@ -68,7 +68,7 @@ export interface ManagedSheetContent {
   overview: Record<(typeof MANAGED_OVERVIEW_FIELDS)[number], string>;
   links: { name: string; url: string }[];
   /** `now` marks the step the project is on, as the client's page decides it. */
-  process: { stage: string; step: string; who: string; status: string; date: string; now?: boolean }[];
+  process: { stage: string; step: string; who: string; status: string; date: string; link: string; now?: boolean }[];
   pages: { page: string; copy: string; design: string; development: string; link: string }[];
   inputs: { item: string; neededBy: string; status: string }[];
   /** The steps of the checklist's sections marked for the sheet: QA, SEO, pre-launch. */
@@ -153,10 +153,18 @@ export function developmentWord(desktop: string | undefined, mobile: string | un
   return 'Not started';
 }
 
-/** Links worth showing the client: the ones the team added, never the pages the app found on its own. */
-function keyLinks(project: ManagedSheetInput['project']): { name: string; url: string }[] {
-  return (project.links ?? [])
+/** The team's own tools: their links open nothing for a client, or open too much. */
+const INTERNAL_LINK = /^https?:\/\/([a-z0-9-]+\.)*(clickup\.com|slack\.com)(\/|$)|^https?:\/\/(www\.)?fathom\.video\/calls\//i;
+
+/**
+ * Links worth showing the client, on the sheet and on their page: the ones the
+ * team added, never the pages the app found on its own, nor the team's own
+ * tools (ClickUp, Slack, Fathom's team links).
+ */
+export function clientKeyLinks(links: Project['links'] | undefined): { name: string; url: string }[] {
+  return (links ?? [])
     .filter((l) => l && l.source !== 'auto' && typeof l.url === 'string' && /^https?:\/\//i.test(l.url.trim()))
+    .filter((l) => !INTERNAL_LINK.test(l.url.trim()))
     // The old tracker link is what this sheet replaces.
     .filter((l) => !/^project tracker$/i.test(l.title.trim()))
     .slice(0, MAX_LINKS)
@@ -275,6 +283,7 @@ export function managedSheetContent(input: ManagedSheetInput): ManagedSheetConte
         who: WHO[step.owner === 'client' ? 'client' : step.owner === 'both' ? 'together' : 'none'],
         status: step.state === 'done' ? 'Done' : step.waiting ? 'Waiting on client' : step.state === 'current' ? 'In progress' : 'Not started',
         date: step.endDate ?? step.startDate ?? '',
+        link: step.url ?? '',
       };
       if (step === nowStep) row.now = true;
       return row;
@@ -320,7 +329,7 @@ export function managedSheetContent(input: ManagedSheetInput): ManagedSheetConte
       'Target launch': launch?.date ?? '',
       'Project lead': project.reviewOwnerEmail || ourLead(input.checklists),
     },
-    links: keyLinks(project),
+    links: clientKeyLinks(project.links),
     process: rows,
     pages,
     inputs,

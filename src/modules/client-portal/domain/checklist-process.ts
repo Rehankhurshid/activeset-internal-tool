@@ -119,7 +119,23 @@ interface Bucket {
   title: string;
   stage: string;
   who?: ClientStepWho;
-  items: { status?: ChecklistItem['status']; doneOn?: string; dueDate?: string }[];
+  items: { status?: ChecklistItem['status']; doneOn?: string; dueDate?: string; links: { label: string; url: string }[] }[];
+}
+
+/**
+ * The links recorded on an item that are the client's to open: `url` fields
+ * marked `forClient`, on the item or, for a checklist made before the mark, on
+ * the SOP item it came from.
+ */
+function clientLinks(
+  item: Partial<Pick<ChecklistItem, 'fields' | 'values'>>,
+  source: Partial<Pick<ChecklistItem, 'fields'>> | undefined,
+): { label: string; url: string }[] {
+  const marked = new Set((source?.fields ?? []).filter((f) => f.forClient).map((f) => f.id));
+  return (item.fields ?? [])
+    .filter((f) => f.type === 'url' && (f.forClient || marked.has(f.id)))
+    .map((f) => ({ label: f.label, url: item.values?.[f.id]?.trim() ?? '' }))
+    .filter((l) => /^https?:\/\/\S+$/i.test(l.url));
 }
 
 /**
@@ -160,6 +176,12 @@ function stepFrom(bucket: Bucket): TimelineStep | null {
       .sort()
       .pop();
     if (due) step.endDate = due;
+  }
+  // The step's link: the latest one recorded on its items (the later item is the later work).
+  const link = bucket.items.flatMap((i) => i.links).pop();
+  if (link) {
+    step.url = link.url;
+    step.urlLabel = link.label;
   }
   const owner = ownerOf(bucket.who);
   if (owner) step.owner = owner;
@@ -216,6 +238,7 @@ export function checklistProcess(
           status: item.status,
           doneOn: item.status === 'completed' ? doneOn(item) : undefined,
           dueDate: item.dueDate,
+          links: clientLinks(item, source),
         });
       }
     }

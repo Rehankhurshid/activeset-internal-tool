@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChecklistItem, ChecklistSection, ProjectChecklist } from '@/types';
 import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
-import { developmentWord, managedSheetContent, pageWord, seoToFix, sheetChecks } from './project-sheet.content';
+import { clientKeyLinks, developmentWord, managedSheetContent, pageWord, seoToFix, sheetChecks } from './project-sheet.content';
 
 let seq = 0;
 const item = (title: string, extra: Partial<ChecklistItem> = {}): ChecklistItem => ({ id: `i${++seq}`, title, status: 'not_started', order: seq, ...extra });
@@ -193,5 +193,17 @@ describe('the SEO tab', () => {
       page: 'https://a.co/', title: 'A good title', titleLength: 12, description: 'x'.repeat(120), descriptionLength: 120,
       ogImage: 'https://cdn/og.jpg', canonical: 'https://a.co/', schema: 'Organization, WebPage', imagesWithoutAlt: 0, toFix: 'Nothing', checked: '2026-10-01',
     });
+  });
+});
+
+describe('key links', () => {
+  it('leaves out the team’s own tools', () => {
+    const links = [
+      { id: 'a', title: 'Sitemap', url: 'https://docs.google.com/spreadsheets/d/1', order: 0 },
+      { id: 'b', title: 'ClickUp', url: 'https://app.clickup.com/43227923/v/li/1', order: 1 },
+      { id: 'c', title: 'Kickoff', url: 'https://fathom.video/calls/829019006', order: 2 },
+      { id: 'd', title: 'Recording', url: 'https://fathom.video/share/abc', order: 3 },
+    ];
+    assert.deepEqual(clientKeyLinks(links).map((l) => l.name), ['Sitemap', 'Recording']);
   });
 });

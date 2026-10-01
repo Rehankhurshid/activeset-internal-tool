@@ -224,8 +224,8 @@ async function layOut(spreadsheetId: string): Promise<void> {
   const meta = await getSpreadsheetMeta(spreadsheetId);
   const tabs = [
     { title: MANAGED_TABS.overview, colour: '#475569', cols: 4, frozen: 0 },
-    // One hidden column more: the app marks the step the project is on there.
-    { title: MANAGED_TABS.process, colour: '#7C3AED', cols: MANAGED_PROCESS_HEADER.length + 1, frozen: 1 },
+    // Two columns more: a hidden one where the app marks the step the project is on, then the step's link.
+    { title: MANAGED_TABS.process, colour: '#7C3AED', cols: MANAGED_PROCESS_HEADER.length + 2, frozen: 1 },
     { title: MANAGED_TABS.pages, colour: '#0284C7', cols: MANAGED_PAGES_HEADER.length, frozen: 1 },
     { title: MANAGED_TABS.inputs, colour: '#D97706', cols: MANAGED_INPUTS_HEADER.length, frozen: 1 },
     ...EXTRA_TABS,
@@ -297,6 +297,7 @@ async function layOut(spreadsheetId: string): Promise<void> {
       rule(all(PR, 1, 2), textEq(stage), { backgroundColorStyle: { rgbColor: hex(c.bg) }, textFormat: { foregroundColorStyle: { rgbColor: hex(c.fg) }, bold: true } }),
     ),
     ...chips(all(PR, 4, 5), STATUS_COLOURS),
+    ...formatProcessLink(PR),
 
     // Pages: Page · Copy · Design · Development · Link.
     base(PG, 5),
@@ -338,15 +339,38 @@ async function layOut(spreadsheetId: string): Promise<void> {
 /**
  * Bumped when a tab is added after sheets already exist: a sheet laid out
  * under an older version gets the missing tabs on its next write.
- * 2 (2026-10-01): Checklist and SEO.
+ * 2 (2026-10-01): Checklist and SEO. 3 (same day): a Link column on Process.
  */
-export const LAYOUT_VERSION = 2;
+export const LAYOUT_VERSION = 3;
 
 /** The tabs added after the first four, and how each is laid out. */
 const EXTRA_TABS = [
   { title: MANAGED_TABS.checks, colour: '#059669', cols: MANAGED_CHECKS_HEADER.length, frozen: 1 },
   { title: MANAGED_TABS.seo, colour: '#DB2777', cols: MANAGED_SEO_HEADER.length, frozen: 1 },
 ];
+
+/** Process column H: the step's link (the moodboard, the sitemap), after the hidden "now" column. */
+function formatProcessLink(PR: number) {
+  return [
+    {
+      repeatCell: {
+        range: range(PR, 0, 1, 7, 8),
+        cell: {
+          userEnteredFormat: {
+            backgroundColorStyle: { rgbColor: hex(C.ink) },
+            textFormat: font(DISPLAY, 10, C.white, { bold: true }),
+            verticalAlignment: 'MIDDLE',
+            padding: { top: 8, bottom: 8, left: 10, right: 10 },
+          },
+        },
+        fields: 'userEnteredFormat(backgroundColorStyle,textFormat,verticalAlignment,padding)',
+      },
+    },
+    ...widths(PR, [48, 150, 440, 120, 180, 130, 20, 280]).slice(7),
+    { repeatCell: { range: range(PR, 1, ROWS, 7, 8), cell: { userEnteredFormat: { textFormat: font(BODY, 10, C.link, { underline: true }), verticalAlignment: 'MIDDLE', wrapStrategy: 'CLIP', padding: { top: 6, bottom: 6, left: 10, right: 10 } } }, fields: 'userEnteredFormat(textFormat,verticalAlignment,wrapStrategy,padding)' } },
+    lines(PR, 1, ROWS, 7, 8),
+  ];
+}
 
 /** Checklist: Section · Check · Status · Date, QA and launch checks from the project's checklist. */
 function formatChecks(CK: number) {
@@ -404,7 +428,14 @@ async function upgradeLayout(spreadsheetId: string): Promise<void> {
   const have = new Set(meta.tabs.map((t) => t.title));
   const missing = EXTRA_TABS.filter((t) => !have.has(t.title));
   const overview = meta.tabs.find((t) => t.title === MANAGED_TABS.overview);
+  const process = meta.tabs.find((t) => t.title === MANAGED_TABS.process);
   const requests: Record<string, unknown>[] = [];
+  if (process?.sheetId !== undefined) {
+    requests.push(
+      { updateSheetProperties: { properties: { sheetId: process.sheetId, gridProperties: { columnCount: MANAGED_PROCESS_HEADER.length + 2 } }, fields: 'gridProperties.columnCount' } },
+      ...formatProcessLink(process.sheetId),
+    );
+  }
   if (missing.length) {
     const added = await batchUpdateSpreadsheet(
       spreadsheetId,
@@ -465,8 +496,8 @@ async function writeValues(spreadsheetId: string, content: ManagedSheetContent, 
     {
       tab: MANAGED_TABS.process,
       rows: padded(
-        [[...MANAGED_PROCESS_HEADER, ''], ...content.process.map((s, i) => [i + 1, s.stage, s.step, s.who, s.status, s.date, s.now ? 'now' : ''])],
-        MANAGED_PROCESS_HEADER.length + 1,
+        [[...MANAGED_PROCESS_HEADER, '', 'Link'], ...content.process.map((s, i) => [i + 1, s.stage, s.step, s.who, s.status, s.date, s.now ? 'now' : '', s.link])],
+        MANAGED_PROCESS_HEADER.length + 2,
         ROWS,
       ),
     },

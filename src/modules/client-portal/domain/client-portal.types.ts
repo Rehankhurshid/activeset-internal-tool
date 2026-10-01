@@ -52,6 +52,8 @@ export interface PortalStepView {
   waiting?: boolean;
   /** What to look at for this step (the moodboard, the staging site). Always http(s). */
   url?: string;
+  /** The link's name ("Moodboard"), when known; otherwise the page says "Open". */
+  urlLabel?: string;
   /** One line the team wrote for the client ("Note for client" column). */
   note?: string;
 }

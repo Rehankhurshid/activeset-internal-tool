@@ -376,3 +376,35 @@ describe('buildClientPortalView with a labelled checklist', () => {
     assert.equal(feedback?.waiting, true);
   });
 });
+
+describe('links on steps', () => {
+  const moodboards = (fields: ChecklistItem['fields'], values: Record<string, string>) =>
+    checklist([
+      section('Art direction', [
+        item('Create the moodboards', { ...done('2026-09-30'), fields, values }),
+        item('Present them', { status: 'in_progress', clientStep: 'Feedback on moodboards', clientWho: 'client' }),
+      ], { clientStage: 'Web Design', clientStep: 'Moodboarding' }),
+    ]);
+
+  it('puts a link marked for the client on its step, named by its field', () => {
+    const [stage] = checklistProcess([moodboards([{ id: 'moodboard', label: 'Moodboard', type: 'url', forClient: true }], { moodboard: 'https://figma.com/x' })]);
+    assert.deepEqual(stage.steps.map((s) => [s.title, s.url, s.urlLabel]), [
+      ['Moodboarding', 'https://figma.com/x', 'Moodboard'],
+      ['Feedback on moodboards', undefined, undefined],
+    ]);
+  });
+
+  it('keeps links that are not marked for the client, and anything that is not a link, off the page', () => {
+    const [stage] = checklistProcess([moodboards([{ id: 'recording', label: 'Recording', type: 'url' }, { id: 'notes', label: 'Notes', type: 'url', forClient: true }], { recording: 'https://fathom.video/calls/1', notes: 'see Slack' })]);
+    assert.equal(stage.steps[0].url, undefined);
+  });
+
+  it('borrows the mark from the SOP for a checklist made before it existed', () => {
+    const sop: Pick<SOPTemplate, 'id' | 'service' | 'sections'> = {
+      id: 'sop_brand', service: 'web_design',
+      sections: [{ title: 'Art direction', order: 0, items: [{ title: 'Create the moodboards', status: 'not_started', order: 0, fields: [{ id: 'moodboard', label: 'Moodboard', type: 'url', forClient: true }] }] }],
+    };
+    const [stage] = checklistProcess([moodboards([{ id: 'moodboard', label: 'Moodboard', type: 'url' }], { moodboard: 'https://figma.com/x' })], { templates: [sop] });
+    assert.equal(stage.steps[0].url, 'https://figma.com/x');
+  });
+});

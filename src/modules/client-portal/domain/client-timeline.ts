@@ -39,8 +39,13 @@ export interface TimelineStep {
   owner?: 'client' | 'both';
   /** Only from the project sheet: the step is in the client's hands ("Waiting on client"). */
   waiting?: boolean;
-  /** Only from the project sheet: the thing to look at for this step. Always http(s). */
+  /**
+   * The thing to look at for this step. Always http(s). From the project
+   * sheet's Link column, or a checklist link field marked `forClient`.
+   */
   url?: string;
+  /** What `url` is ("Moodboard", "Sitemap"), when the checklist names it. */
+  urlLabel?: string;
   /** Only from the project sheet's "Note for client" column. */
   note?: string;
 }

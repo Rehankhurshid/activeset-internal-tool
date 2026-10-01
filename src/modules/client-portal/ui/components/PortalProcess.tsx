@@ -120,7 +120,7 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
                           >
-                            {step.waiting ? 'Open to review' : 'Open'}
+                            {step.urlLabel ?? (step.waiting ? 'Open to review' : 'Open')}
                             <ExternalLink aria-hidden="true" className="h-3 w-3" />
                           </a>
                         )}

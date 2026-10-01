@@ -164,7 +164,7 @@ export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
             title: 'Share the project tracker with the client',
             emoji: '\u{1F4CA}',
             howTo: 'Create the project sheet from the Project sheet card (Client tab, or the Pages stage): the app makes it and keeps it up to date from the checklist, the pages and the requests, and fills in the link below. Share it with the client as a viewer; edits made in the sheet are replaced at the next update.',
-            fields: [{ id: 'tracker', label: 'Tracker sheet', type: 'url', projectLink: { title: 'Project Tracker' } }],
+            fields: [{ id: 'tracker', label: 'Project sheet', type: 'url', projectLink: { title: 'Project Tracker' }, forClient: true }],
             template: {
                 label: 'Copy the message',
                 body: 'Here is your project sheet. It shows every step of the project and where we are, each page and how far along it is, and what we still need from you. It updates by itself as we work, so you can check progress any time without waiting for a call.\n\nIt is read-only on your side. If something looks wrong, say so in Slack and we will fix it at source.',
@@ -199,14 +199,14 @@ export const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
             title: 'Record the walkthrough videos',
             emoji: '\u{1F3AC}',
             howTo: 'How to edit it, how to publish it, and anything custom we built. Short and separate beats one long recording nobody scrubs through. This is what stops the support questions six months from now.',
-            fields: [{ id: 'videos', label: 'Video links', type: 'url', placeholder: 'Loom folder or playlist', expected: true, projectLink: { title: 'Walkthrough videos' } }],
+            fields: [{ id: 'videos', label: 'Video links', type: 'url', placeholder: 'Loom folder or playlist', expected: true, projectLink: { title: 'Walkthrough videos' }, forClient: true }],
         },
         {
             title: 'Hand over the documentation and the video links',
             emoji: '\u{1F4E6}',
             howTo: 'In one place they will still be able to find next year, and sent by email rather than only Slack \u2014 Slack history is the first thing to disappear when someone leaves.',
             fields: [
-                { id: 'handover_doc', label: 'Handover doc', type: 'url', projectLink: { title: 'Handover doc' } },
+                { id: 'handover_doc', label: 'Handover doc', type: 'url', projectLink: { title: 'Handover doc' }, forClient: true },
                 { id: 'sent_on', label: 'Sent on', type: 'date' },
             ],
             template: {
@@ -464,7 +464,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 emoji: '\u{1F91D}',
                 role: 'client_review',
                 items: makeItems([
-                    { title: 'Share the staging and MarkUp links for feedback', emoji: '\u{1F517}', clientStep: 'Review on staging', clientWho: 'client' },
+                    { title: 'Share the staging and MarkUp links for feedback', emoji: '\u{1F517}', clientStep: 'Review on staging', clientWho: 'client', fields: [{ id: 'staging', label: 'Staging site', type: 'url', projectLink: { title: 'Staging', matches: ['Staging Website URL', 'Staging link'] }, forClient: true }] },
                     { title: 'Work through the MarkUp comments', emoji: '\u{1F4AC}' },
                 ]),
             },

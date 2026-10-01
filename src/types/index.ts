@@ -732,6 +732,12 @@ export interface ChecklistItemField {
    * than duplicated). Only for `url` fields.
    */
   projectLink?: { title: string; matches?: string[] };
+  /**
+   * A link recorded here is the client's to open: it shows on the step this
+   * item belongs to, on their page and the project sheet, named by `label`
+   * (the moodboard, the sitemap, the staging site). Only for `url` fields.
+   */
+  forClient?: boolean;
 }
 
 /**
