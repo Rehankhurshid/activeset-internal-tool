@@ -33,7 +33,7 @@ npm run -s checklist -- create "<project id>" <SOP id> <SOP id> --write
 | Source | How | Good for |
 | --- | --- | --- |
 | Fathom calls already filed under the project | `checklist -- context` (summaries, dates, share links) | kickoff held on, recording link, decisions, agreed process, deadlines |
-| Fathom, not yet filed | Fathom MCP `search_meetings` (needs `query` and `recorded_by`) | calls the hourly sync missed. Its `get_meeting_summary` / `get_meeting_transcript` reject string ids here; use the app's copy instead |
+| Fathom, not yet filed | Fathom MCP `search_meetings` (needs `query` and `recorded_by`) or `list_meetings` (`created_after`) | calls the hourly sync missed (impromptu calls have no invitees, so they never sync). Its `get_meeting_summary` / `get_meeting_transcript` reject string ids here: open the call's share link (`fathom.video/share/…`, ask the user for it) in the built-in browser, no sign-in needed; `get_page_text` gives the summary, the Transcript tab the full transcript |
 | Client Slack channel | Slack MCP `slack_search_channels` (client name), `slack_read_channel`, `slack_read_thread` | channel name, who joined (= invited), approvals ("let's go with Direction A"), assets received, review links, who leads |
 | Gmail | `search_threads` | welcome email sent on, approvals in writing, handover sent on |
 | Calendar | `search_events` | recurring sync (cadence, invite link), scheduled kickoff |
