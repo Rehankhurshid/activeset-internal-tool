@@ -110,8 +110,28 @@ never shown). Date is the day a step was done, else the day it is planned for.
 Who is ActiveSet, Client or Together. Header rows are protected with a warning,
 because the reader finds columns by those words.
 
-The older shapes (Different AI's eight tabs, the 2024 template) still read, so
-nothing already bound breaks; new projects start from the master.
+Look (Rehan: "very nice, good colour coded, Funnel Sans and Display"): Funnel
+Display for headers, labels and stage names, Funnel Sans for everything else;
+a dark header row, no gridlines, thin row lines; one colour per stage (Kickoff
+slate, Copy pink, Brand Design violet, Web Design sky, Development indigo,
+Launch orange), one per status (Not started grey, In progress blue, Waiting on
+client amber, Done green, Skipped struck through), client steps in amber and
+"Together" in violet. Process rows carry three states: done rows fade, rows
+waiting on the client glow amber, the step the project is on is bold on indigo.
+On What we need, an input still Waiting after its date turns red.
+
+`npm run sheet:template -- <sheet>` builds the template into an empty sheet;
+`--rebuild` restyles a sheet that holds only the four tabs (the master) at the
+same link; `--content <file.json>` builds a real project's sheet from its rows.
+
+Different AI moved to the format on 2026-10-01 ("Different AI · Project
+Sheet", bound on its Client tab): Kickoff, Development and Launch only (the
+client's designer supplies design and copy), Lottie dropped, its pages and
+client inputs carried over, the kickoff call marked Done on 8 Sep from Fathom.
+Every other status is still as the old sheet had it (Not started / Waiting).
+
+The older shapes (Different AI's old eight tabs, the 2024 template) still read,
+so nothing already bound breaks; new projects start from the master.
 
 ## Use cases (superseded by the format above)
 

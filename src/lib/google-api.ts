@@ -158,6 +158,11 @@ function quoteTab(title: string): string {
   return `'${title.replace(/'/g, "''")}'`;
 }
 
+/** A raw `spreadsheets.get` with a field mask, for the template builder. */
+export async function getSpreadsheetFields<T>(spreadsheetId: string, fields: string): Promise<T> {
+  return googleFetch<T>(`${SHEETS_API}/${encodeURIComponent(spreadsheetId)}?fields=${encodeURIComponent(fields)}`);
+}
+
 /** Raw `spreadsheets.batchUpdate`, for the template builder: formatting, validation, tabs. */
 export async function batchUpdateSpreadsheet(spreadsheetId: string, requests: unknown[]): Promise<{ replies?: Record<string, unknown>[] }> {
   return googleFetch(`${SHEETS_API}/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
