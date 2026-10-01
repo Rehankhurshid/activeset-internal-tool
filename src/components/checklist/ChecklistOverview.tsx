@@ -51,6 +51,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SERVICE_LABELS, SERVICE_ORDER, isServiceId, templatesByService } from '@/lib/engagements';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ui/alert-dialog-confirm';
 
@@ -96,7 +97,9 @@ export function ChecklistOverview({
 
                 // Load templates (static + custom)
                 const tpls = await checklistService.getSOPTemplates();
-                setTemplates(tpls);
+                // By service in working order, the team's own SOP first, as on the SOPs page.
+                const byService = templatesByService(tpls);
+                setTemplates([...SERVICE_ORDER.flatMap((s) => byService[s]), ...tpls.filter((t) => !isServiceId(t.service))]);
 
                 return unsub;
             } catch (error) {
@@ -329,7 +332,7 @@ export function ChecklistOverview({
                             <DialogHeader>
                                 <DialogTitle>Choose SOP Templates</DialogTitle>
                                 <DialogDescription>
-                                    Select one or more templates to merge into a single project checklist.
+                                    Pick every service this project includes. They are merged in working order (Brand Design → Copy → Web Design → Development), and the kickoff and handover are added once per project.
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-3 mt-4 max-h-[60vh] overflow-y-auto">
@@ -356,7 +359,7 @@ export function ChecklistOverview({
                                                         {template.description}
                                                     </p>
                                                     <p className="text-[10px] text-muted-foreground mt-1 font-mono">
-                                                        {template.sections.length} sections ·{' '}
+                                                        {template.service ? `${SERVICE_LABELS[template.service]} · ` : ''}{template.sections.length} sections ·{' '}
                                                         {template.sections.reduce((a, s) => a + s.items.length, 0)} items
                                                     </p>
                                                 </div>
@@ -552,7 +555,7 @@ export function ChecklistOverview({
                                         <DialogHeader>
                                             <DialogTitle>Choose SOP Templates</DialogTitle>
                                             <DialogDescription>
-                                                Select one or more templates to merge into a single project checklist.
+                                                Pick every service this project includes. They are merged in working order (Brand Design → Copy → Web Design → Development), and the kickoff and handover are added once per project.
                                             </DialogDescription>
                                         </DialogHeader>
                                         <div className="space-y-3 mt-4 max-h-[60vh] overflow-y-auto">
@@ -579,7 +582,7 @@ export function ChecklistOverview({
                                                                     {template.description}
                                                                 </p>
                                                                 <p className="text-[10px] text-muted-foreground mt-1 font-mono">
-                                                                    {template.sections.length} sections ·{' '}
+                                                                    {template.service ? `${SERVICE_LABELS[template.service]} · ` : ''}{template.sections.length} sections ·{' '}
                                                                     {template.sections.reduce((a, s) => a + s.items.length, 0)} items
                                                                 </p>
                                                             </div>

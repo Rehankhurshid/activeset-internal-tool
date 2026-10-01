@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { agencyBasicsFor, basicsGap, sectionsWithBasics } from './delivery.basics';
+import { agencyBasicsFor, basicsGap, checklistSectionsFor, sectionsWithBasics } from './delivery.basics';
 import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
-import type { ChecklistSection, ProjectChecklist } from '@/types';
+import type { ChecklistSection, ProjectChecklist, SOPTemplate } from '@/types';
 
 function section(title: string, order: number, titles: string[]): ChecklistSection {
   return {
@@ -282,5 +282,54 @@ describe('what the standard steps actually carry', () => {
       const ids = (step.fields ?? []).map((f) => f.id);
       assert.equal(new Set(ids).size, ids.length, `${step.title} repeats a field id`);
     }
+  });
+});
+
+
+describe('checklistSectionsFor: a checklist from several SOPs', () => {
+  const sop = (id: string, service: SOPTemplate['service'], titles: string[]): SOPTemplate => ({
+    id,
+    name: id,
+    description: '',
+    icon: '',
+    service,
+    sections: titles.map((title, order) => ({ title, order, items: [{ title: `${title} item`, status: 'not_started' as const, order: 0 }] })),
+  });
+  const copy = sop('copy', 'copy', ['Messaging & sitemap']);
+  const design = sop('design', 'web_design', ['Homepage design']);
+  const build = sop('build', 'development', ['Step 3: Page Development']);
+  const other = sop('other', undefined, ['Something else']);
+  let n = 0;
+  const newId = (prefix: 'sec' | 'item') => `${prefix}_${++n}`;
+
+  it('puts Copy, Web Design and Development in working order, whatever order they were picked in', () => {
+    const { templates, sections } = checklistSectionsFor([build, other, copy, design], { newId });
+    assert.deepEqual(templates.map((t) => t.id), ['copy', 'design', 'build', 'other']);
+    assert.deepEqual(
+      sections.map((s) => s.title),
+      [AGENCY_START.title, 'Messaging & sitemap', 'Homepage design', 'Step 3: Page Development', 'Something else', AGENCY_CLOSE.title],
+    );
+    assert.deepEqual(sections.map((s) => s.order), [0, 1, 2, 3, 4, 5]);
+  });
+
+  it('files each section under its service for the client', () => {
+    const { sections } = checklistSectionsFor([design, copy], { newId });
+    const stage = (title: string) => sections.find((s) => s.title === title)?.clientStage;
+    assert.equal(stage('Messaging & sitemap'), 'Copy');
+    assert.equal(stage('Homepage design'), 'Web Design');
+  });
+
+  it('adds the kickoff and the sign-off once per project, not with every checklist', () => {
+    const first = checklistSectionsFor([design, build], { newId });
+    const later = checklistSectionsFor([copy], { newId, existing: [{ sections: first.sections }] });
+    assert.deepEqual(later.sections.map((s) => s.title), ['Messaging & sitemap']);
+    assert.equal(later.sections[0].order, 0);
+  });
+
+  it('copies, never shares: new ids for every section and item', () => {
+    const { sections } = checklistSectionsFor([copy], { newId });
+    const ids = sections.flatMap((s) => [s.id, ...s.items.map((i) => i.id)]);
+    assert.equal(new Set(ids).size, ids.length);
+    assert.equal(copy.sections[0].items[0].status, 'not_started');
   });
 });

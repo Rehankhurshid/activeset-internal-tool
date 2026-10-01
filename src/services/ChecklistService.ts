@@ -23,13 +23,12 @@ import {
 } from '@/types';
 import { COLLECTIONS } from '@/lib/constants';
 import { getTemplateById, getDefaultTemplate, SOP_TEMPLATES } from '@/lib/sop-templates';
-import { SERVICE_LABELS, isServiceId } from '@/lib/engagements';
 import { DatabaseError, logError } from '@/lib/errors';
 // The one place a service reaches into a module: the diff between a project's
 // checklist and its template is delivery's own idea of what counts as process.
 import { applyImprovements, type Improvement } from '@/modules/delivery/domain/delivery.feedback';
 import {
-    agencyBasicsFor,
+    checklistSectionsFor,
     sectionsWithBasics,
     type MissingBasic,
 } from '@/modules/delivery/domain/delivery.basics';
@@ -54,33 +53,6 @@ function stripUndefined<T>(obj: T): T {
         ) as T;
     }
     return obj;
-}
-
-/**
- * Instantiate a template into concrete ChecklistSections with unique IDs.
- *
- * Copying field by field is what makes a project's checklist its own — it can be
- * edited afterwards without touching the template. The cost is that a field
- * forgotten here is silently dropped on the way in, which is exactly what used
- * to happen to every note, assignee and reference link an author wrote: the
- * template carried them and the project never saw them. Spreading the item and
- * then replacing the id keeps new fields working by default, so the next one
- * added to `ChecklistItem` does not have to be remembered here.
- */
-function instantiateTemplate(template: SOPTemplate): ChecklistSection[] {
-    // The heading the client sees these sections' steps under: the service the
-    // SOP delivers, unless a section names its own ("Launch" inside the build).
-    // Fixed here, so retagging the SOP later moves nothing on a live project.
-    const stage = isServiceId(template.service) ? SERVICE_LABELS[template.service] : undefined;
-    return template.sections.map((section) => stripUndefined({
-        ...section,
-        clientStage: section.clientStage || stage,
-        id: `sec_${generateId()}`,
-        items: section.items.map((item) => stripUndefined({
-            ...item,
-            id: `item_${generateId()}`,
-        })),
-    }));
 }
 
 /**
@@ -137,23 +109,15 @@ export const checklistService = {
 
             if (templates.length === 0) throw new DatabaseError(`No valid templates found for IDs: ${tIds.join(', ')}`);
 
-            // Merge sections from all templates
-            const merged: ChecklistSection[] = [];
-            templates.forEach(t => {
-                const newSections = instantiateTemplate(t);
-                // Adjust order to append sequentially
-                newSections.forEach((s) => {
-                    s.order = merged.length;
-                    merged.push(s);
-                });
+            // In working order, each section's client stage set, and the agency's
+            // start and close once per project. See `checklistSectionsFor`.
+            const existing = await this.getChecklistsForProject(projectId).catch(() => [] as ProjectChecklist[]);
+            const built = checklistSectionsFor(templates, {
+                existing,
+                newId: (prefix) => `${prefix}_${generateId()}`,
             });
-
-            // How the agency runs any engagement — Slack, the welcome email, the
-            // cadence, the walkthrough — wrapped around whatever the template
-            // says. Applied here rather than baked into the templates, because
-            // most real projects run from a template somebody wrote in the
-            // Checklist Creator, and those would otherwise get none of it.
-            const mergedSections = agencyBasicsFor(merged);
+            templates.splice(0, templates.length, ...built.templates);
+            const mergedSections = stripUndefined(built.sections);
 
             // Use the name of the first template (or a combined name)
             const templateName = templates.map(t => t.name).join(' + ');

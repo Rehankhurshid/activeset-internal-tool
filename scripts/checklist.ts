@@ -34,12 +34,11 @@ import { randomUUID } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
-import { SERVICE_LABELS, isServiceId } from '@/lib/engagements';
 import { AGENCY_CLOSE, AGENCY_START, getTemplateById } from '@/lib/sop-templates';
 import { buildClientPortalView } from '@/modules/client-portal/domain/client-portal.projection';
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
 import { snapshotOf } from '@/lib/project-sheet';
-import { agencyBasicsFor } from '@/modules/delivery/domain/delivery.basics';
+import { checklistSectionsFor } from '@/modules/delivery/domain/delivery.basics';
 import type { ChecklistItem, ChecklistItemStatus, ChecklistSection, Project, ProjectChecklist, ProjectMeeting, ProjectTimeline, SOPTemplate } from '@/types';
 
 const WRITE = process.argv.includes('--write');
@@ -172,23 +171,13 @@ async function create(ref: string, templateIds: string[]) {
   if (templateIds.length === 0) throw new Error('Name at least one SOP id.');
   const project = await findProject(ref);
   const existing = await loadChecklists(project.id);
-  const templates = await Promise.all(templateIds.map(loadTemplate));
-  const merged: ChecklistSection[] = [];
-  for (const template of templates) {
-    const stage = isServiceId(template.service) ? SERVICE_LABELS[template.service] : undefined;
-    for (const section of template.sections) {
-      merged.push(
-        strip({
-          ...section,
-          clientStage: section.clientStage || stage,
-          id: `sec_${randomUUID().slice(0, 12)}`,
-          order: merged.length,
-          items: section.items.map((item) => ({ ...item, id: `item_${randomUUID().slice(0, 12)}` })),
-        }) as ChecklistSection,
-      );
-    }
-  }
-  const sections = strip(agencyBasicsFor(merged));
+  const loaded = await Promise.all(templateIds.map(loadTemplate));
+  // The same sections the app's createChecklist makes, from the same function.
+  const { templates, sections: built } = checklistSectionsFor(loaded, {
+    existing,
+    newId: (prefix) => `${prefix}_${randomUUID().slice(0, 12)}`,
+  });
+  const sections = strip(built);
   const name = templates.map((t) => t.name).join(' + ');
   console.log(`${project.name}: ${WRITE ? 'creating' : 'would create'} "${name}" (${sections.length} sections)`);
   if (existing.length) console.log(`  note: it already has ${existing.map((c) => `"${c.templateName}"`).join(', ')}`);

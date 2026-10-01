@@ -1,5 +1,6 @@
 import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
-import type { ChecklistItem, ChecklistSection, ProjectChecklist, SOPTemplateItem } from '@/types';
+import { SERVICE_LABELS, SERVICE_ORDER, isServiceId } from '@/lib/engagements';
+import type { ChecklistItem, ChecklistSection, ProjectChecklist, SOPTemplate, SOPTemplateItem } from '@/types';
 
 /**
  * Putting the agency's own routine onto a project that does not have it.
@@ -240,4 +241,52 @@ export function agencyBasicsFor(sections: ChecklistSection[]): ChecklistSection[
   return [...(start ? [start] : []), ...sections, ...(close ? [close] : [])].map(
     (section, order) => ({ ...section, order }),
   );
+}
+
+
+// --- A new checklist from SOPs ------------------------------------------------
+
+/**
+ * The sections of a new checklist made from these SOPs, as the app and the
+ * agent's script both make it.
+ *
+ * - In working order (Brand Design, Copy, Web Design, Development), whatever
+ *   order they were picked in; an SOP with no service goes after them.
+ * - Each section carries the stage the client sees it under: its own, else
+ *   the SOP's service. Fixed here, so retagging the SOP later moves nothing.
+ * - The agency's start and close around them, once per project: a checklist
+ *   added to a project that already has them does not bring a second kickoff
+ *   call or a second sign-off.
+ * - Ids come from `newId`, deep copies of the SOP, so the checklist can change
+ *   without touching the SOP.
+ */
+export function checklistSectionsFor(
+  templates: readonly SOPTemplate[],
+  options: { existing?: readonly Pick<ProjectChecklist, 'sections'>[]; newId: (prefix: 'sec' | 'item') => string },
+): { templates: SOPTemplate[]; sections: ChecklistSection[] } {
+  const rank = (t: SOPTemplate) => (isServiceId(t.service) ? SERVICE_ORDER.indexOf(t.service) : SERVICE_ORDER.length);
+  const ordered = [...templates].sort((a, b) => rank(a) - rank(b));
+
+  const merged: ChecklistSection[] = [];
+  for (const template of ordered) {
+    const stage = isServiceId(template.service) ? SERVICE_LABELS[template.service] : undefined;
+    for (const section of template.sections) {
+      merged.push({
+        ...section,
+        clientStage: section.clientStage || stage,
+        id: options.newId('sec'),
+        order: merged.length,
+        items: section.items.map((item) => ({ ...item, id: options.newId('item') })),
+      } as ChecklistSection);
+    }
+  }
+
+  const existing = options.existing ?? [];
+  const has = (title: string) => existing.some((c) => (c.sections ?? []).some((s) => s.title === title));
+  const skip = new Set([has(AGENCY_START.title) ? AGENCY_START.title : '', has(AGENCY_CLOSE.title) ? AGENCY_CLOSE.title : '']);
+  const fromTemplates = new Set(merged.map((s) => s.id));
+  const sections = agencyBasicsFor(merged)
+    .filter((s) => fromTemplates.has(s.id) || !skip.has(s.title))
+    .map((s, order) => ({ ...s, order }));
+  return { templates: ordered, sections };
 }
