@@ -256,6 +256,17 @@ export const checklistService = {
 
             const ref = doc(db, CHECKLISTS_COLLECTION, checklistId);
             await updateDoc(ref, { sections: stripUndefined(sections), updatedAt: Timestamp.now() });
+
+            // A tick moves the client's page, so it is the client hearing from
+            // us: it keeps a portal off "Client updates due" now that nobody
+            // marks one updated by hand. Best effort, and never `updatedAt`, so
+            // project lists sorted by it do not reshuffle on every tick.
+            if (checklist.projectId) {
+                updateDoc(doc(db, COLLECTIONS.PROJECTS, checklist.projectId), {
+                    'clientFacing.lastUpdateAt': new Date().toISOString(),
+                    ...(userEmail ? { 'clientFacing.lastUpdateBy': userEmail.trim().toLowerCase() } : {}),
+                }).catch(() => {});
+            }
         } catch (error) {
             logError(error, 'updateItemStatus');
             if (error instanceof DatabaseError) throw error;

@@ -40,8 +40,10 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
   const withSteps = stages.filter((s) => (s.steps?.length ?? 0) > 0);
   if (withSteps.length === 0) return null;
 
-  // The step the project is on: the first one not done, in order.
-  const nowId = withSteps.flatMap((s) => s.steps ?? []).find((step) => step.state !== 'done')?.id;
+  // The step the project is on: the first one not done in the stage it is in.
+  // A step left open in an earlier stage stays open, but is not where we are.
+  const currentStage = withSteps.find((s) => s.state === 'current');
+  const nowId = (currentStage?.steps ?? []).find((step) => step.state !== 'done')?.id;
   let number = 0;
 
   return (
@@ -66,7 +68,7 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
               >
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{stage.title}</h3>
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  {stage.state === 'done' ? 'Done' : `${done} of ${steps.length} done`}
+                  {done === steps.length ? 'Done' : `${done} of ${steps.length} done`}
                   {dates ? ` · ${dates}` : ''}
                 </span>
               </header>

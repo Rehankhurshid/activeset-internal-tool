@@ -311,11 +311,14 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
       ? null
       : legacyClientPlan({ timeline, links: project.links, currentPhaseId: facing.currentPhaseId });
   const plan = saved ?? legacy?.plan ?? null;
+  // The stage follows its source. A stage pinned by hand is no longer honoured
+  // (Rehan, 2026-10-01: the checklist manages it); Delivered still shows every
+  // stage done, and an old portal keeps the phase it was showing.
   const resolved = byPhase
-    ? resolveTimelinePlan(timelineSources, { currentStageId: facing.currentStageId, status })
+    ? resolveTimelinePlan(timelineSources, { status })
     : plan
       ? resolveClientPlan(plan, checklists, {
-          currentStageId: saved ? facing.currentStageId : legacy?.currentStageId,
+          currentStageId: saved ? undefined : legacy?.currentStageId,
           status,
         })
       : null;

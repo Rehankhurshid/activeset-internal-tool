@@ -11,8 +11,9 @@ import type { SheetStagesFrom, SheetTimeline } from './project-sheet.types';
  * 1. The project sheet's Process (or Timeline) tab, unless the team chose the
  *    app's Timeline instead. Its steps move with the checklist where they share
  *    a name with a checklist step.
- * 2. The checklist, when it was made from SOPs that say what the client sees
- *    (every project made with an engagement since 2026-10-01).
+ * 2. The checklist, when its SOP says what the client sees: labels on the
+ *    checklist itself, or borrowed from the SOP it was made from (Rehan,
+ *    2026-10-01: the stage is the checklist's to manage, not ours by hand).
  * 3. The Timeline tab, when it has milestones.
  * 4. Otherwise nothing here, and the client plan drives the page.
  */
@@ -43,11 +44,7 @@ export interface PortalSources {
 
 export function portalStageSources(input: PortalSourcesInput): PortalSources {
   const checklists = input.checklists ?? [];
-  const own = checklistProcess(checklists);
-  const process =
-    input.templates?.length || input.agency?.length
-      ? checklistProcess(checklists, { templates: input.templates, agency: input.agency })
-      : own;
+  const process = checklistProcess(checklists, { templates: input.templates, agency: input.agency });
   const app = timelineStages(input.timeline, input.timelineSettings);
   const sheetRaw = sheetStageSources(input.sheetTimeline);
   const followedSheet = process.length > 0 ? followChecklist(sheetRaw, process) : { sources: sheetRaw, followed: 0, unmatched: [] };
@@ -56,7 +53,7 @@ export function portalStageSources(input: PortalSourcesInput): PortalSources {
   if (fromSheet) {
     return { kind: 'sheet', sources: followedSheet.sources, process, followed: followedSheet.followed, unmatched: followedSheet.unmatched };
   }
-  if (own.length > 0) return { kind: 'checklist', sources: own, process, followed: 0, unmatched: [] };
+  if (process.length > 0) return { kind: 'checklist', sources: process, process, followed: 0, unmatched: [] };
   if (app.length > 0) return { kind: 'timeline', sources: app, process, followed: 0, unmatched: [] };
   return { kind: null, sources: [], process, followed: 0, unmatched: [] };
 }

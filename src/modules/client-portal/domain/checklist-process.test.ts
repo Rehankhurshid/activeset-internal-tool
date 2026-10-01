@@ -302,11 +302,16 @@ describe('portalStageSources', () => {
     assert.equal(picked.kind, 'checklist');
   });
 
-  it('does not switch an older project over on labels borrowed from its SOP', () => {
+  it('lets an older checklist drive too, on labels borrowed from its SOP', () => {
     const legacy = checklist([section('Start: client setup', [item('Schedule the kickoff call', done('2026-09-02'))])]);
     const picked = portalStageSources({ checklists: [legacy], agency: [AGENCY_START, AGENCY_CLOSE], timeline });
-    assert.equal(picked.kind, 'timeline');
-    assert.equal(picked.process.length, 1, 'the borrowed labels are still there to move a sheet');
+    assert.equal(picked.kind, 'checklist');
+    assert.deepEqual(picked.sources[0].steps.map((s) => s.title), ['Kickoff call']);
+  });
+
+  it('keeps the Timeline for a checklist nothing labels', () => {
+    const plain = checklist([section('Step 1', [item('Do a thing', done('2026-09-02'))])]);
+    assert.equal(portalStageSources({ checklists: [plain], timeline }).kind, 'timeline');
   });
 
   it('falls through to the plan when nothing else has stages', () => {

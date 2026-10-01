@@ -40,11 +40,33 @@ describe('timelineStages', () => {
 });
 
 describe('resolveTimelinePlan', () => {
-  it('puts the project in the earliest phase with a milestone not done', () => {
+  it('puts the project in the furthest phase where work has started', () => {
     const resolved = resolveTimelinePlan(timelineStages(timeline(), undefined));
-    assert.equal(resolved.currentIndex, 0);
-    assert.equal(resolved.stages[0].percent, 50);
+    // Build's staging is under way, so the project is in Build although Design has an inner page left.
+    assert.equal(resolved.currentIndex, 1);
+    assert.equal(resolved.stages[0].state, 'done');
     assert.deepEqual(resolved.stages[0].tracking, { done: 1, total: 2, open: 1 });
+  });
+
+  it('moves to the next phase once the furthest started one is finished, and starts at the first', () => {
+    const step = (id: string, state: 'done' | 'current' | 'upcoming') => ({ id, title: id, state });
+    const stage = (id: string) => ({ id, title: id, deliverables: [], files: [] });
+    const finished = [
+      { stage: stage('a'), steps: [step('a1', 'done'), step('a2', 'upcoming')] },
+      { stage: stage('b'), steps: [step('b1', 'done')] },
+      { stage: stage('c'), steps: [step('c1', 'upcoming')] },
+    ];
+    assert.equal(resolveTimelinePlan(finished).currentIndex, 2);
+    const fresh = [
+      { stage: stage('a'), steps: [step('a1', 'upcoming')] },
+      { stage: stage('b'), steps: [step('b1', 'upcoming')] },
+    ];
+    assert.equal(resolveTimelinePlan(fresh).currentIndex, 0);
+    const leftovers = [
+      { stage: stage('a'), steps: [step('a1', 'upcoming')] },
+      { stage: stage('b'), steps: [step('b1', 'done')] },
+    ];
+    assert.equal(resolveTimelinePlan(leftovers).currentIndex, 0);
   });
 
   it('honours a pin, the complete marker and Delivered', () => {
@@ -52,7 +74,7 @@ describe('resolveTimelinePlan', () => {
     assert.equal(resolveTimelinePlan(sources, { currentStageId: 'b' }).currentIndex, 1);
     assert.equal(resolveTimelinePlan(sources, { currentStageId: '__complete__' }).currentIndex, -1);
     assert.equal(resolveTimelinePlan(sources, { status: 'delivered' }).currentIndex, -1);
-    assert.equal(resolveTimelinePlan(sources, { currentStageId: 'not-a-phase' }).currentIndex, 0);
+    assert.equal(resolveTimelinePlan(sources, { currentStageId: 'not-a-phase' }).currentIndex, 1, 'an unknown pin follows the steps');
   });
 });
 

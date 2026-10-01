@@ -153,14 +153,16 @@ describe('buildClientPortalView', () => {
     assert.deepEqual(view.stages[1].deliverables, ['Homepage design', 'Inner pages']);
   });
 
-  it('honours the stage the team pinned, and shows everything done once delivered', () => {
+  it('follows the checklist even where an old pin says otherwise, and shows everything done once delivered', () => {
+    // Since 2026-10-01 the checklist manages the stage; a pin left from before is ignored.
     const pinned = buildClientPortalView({
       project: withPlan({ clientFacing: { currentStageId: 'stg_build' } }),
       timeline: null,
       checklists: [sopChecklist()],
     });
-    assert.equal(pinned.currentStageIndex, 2);
-    assert.equal(pinned.stages[2].percent, 0);
+    const following = buildClientPortalView({ project: withPlan(), timeline: null, checklists: [sopChecklist()] });
+    assert.equal(pinned.currentStageIndex, following.currentStageIndex);
+    assert.notEqual(pinned.currentStageIndex, 2);
 
     const delivered = buildClientPortalView({
       project: withPlan({ clientFacing: { status: 'delivered', currentStageId: 'stg_design' } }),
@@ -348,9 +350,9 @@ describe('the review the client is asked to sign off', () => {
         view.stages.map((s) => s.steps?.map((step) => `${step.title}:${step.state}`)),
         [['Kickoff:done'], ['Wireframes:current'], ['Internal QA:upcoming', 'Staging review:current']],
       );
-      assert.equal(view.currentStageIndex, 1, 'the earliest phase with a milestone not done');
+      assert.equal(view.currentStageIndex, 2, 'the furthest phase where work has started');
       assert.deepEqual([view.stages[2].startDate, view.stages[2].dueDate], ['2026-09-20', '2026-09-28']);
-      assert.equal(view.stages[1].percent, 0);
+      assert.equal(view.stages[2].percent, 0);
       assert.deepEqual(view.stages[1].files.map((f) => f.title), ['Homepage in Figma'], 'web links only');
       assert.deepEqual(view.files.map((f) => f.title), ['Brand guidelines'], 'the timeline’s project files, not the plan’s');
     });
@@ -365,12 +367,13 @@ describe('the review the client is asked to sign off', () => {
       assert.equal(JSON.stringify(view).includes('Internal QA'), false);
     });
 
-    it('lets the team pin a phase, and Delivered still wins', () => {
+    it('ignores an old pin, and Delivered still wins', () => {
       const pinned = buildClientPortalView({
         project: withTimeline({ clientFacing: { currentStageId: 'ph_build' } }),
         timeline: timeline(),
       });
-      assert.equal(pinned.currentStageIndex, 2);
+      const following = buildClientPortalView({ project: withTimeline(), timeline: timeline() });
+      assert.equal(pinned.currentStageIndex, following.currentStageIndex);
       const delivered = buildClientPortalView({
         project: withTimeline({ clientFacing: { status: 'delivered' } }),
         timeline: timeline(),

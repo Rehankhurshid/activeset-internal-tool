@@ -20,14 +20,7 @@ import { useAssignees } from '@/hooks/useAssignees';
 import { todayIso } from '@/lib/review-status';
 import { AGENCY_CLOSE, AGENCY_START, SOP_TEMPLATES } from '@/lib/sop-templates';
 import { ENGAGEMENTS, SERVICE_LABELS, orderServices, pickServiceTemplates } from '@/lib/engagements';
-import {
-  CLIENT_STAGE_DEFAULTS,
-  MASTER_TEMPLATE_COPY_URL,
-  checklistProcess,
-  draftClientPlan,
-  planStageKinds,
-  type PlanSection,
-} from '@/modules/client-portal';
+import { MASTER_TEMPLATE_COPY_URL, checklistProcess, draftClientPlan, type PlanSection } from '@/modules/client-portal';
 import { checklistService } from '@/services/ChecklistService';
 import { cn } from '@/lib/utils';
 import {
@@ -112,7 +105,6 @@ export function NewProjectDialog({ open, onOpenChange, userId, userEmail, client
   const [engagement, setEngagement] = useState<string>(NONE);
   const [lead, setLead] = useState(userEmail);
   const [contacts, setContacts] = useState('');
-  const [makePlan, setMakePlan] = useState(true);
   const [creating, setCreating] = useState(false);
 
   // Custom templates live in Firestore; the built-ins are there from the start
@@ -144,7 +136,6 @@ export function NewProjectDialog({ open, onOpenChange, userId, userEmail, client
     setEngagement(NONE);
     setLead(userEmail);
     setContacts('');
-    setMakePlan(true);
   }, [open, userEmail]);
 
   const engagementPicked = ENGAGEMENTS.find((e) => e.id === engagementId);
@@ -165,15 +156,11 @@ export function NewProjectDialog({ open, onOpenChange, userId, userEmail, client
     [engagementPicked, picks, template],
   );
   const process = useMemo(() => (engagementPicked ? processPreview(chosenTemplates) : []), [engagementPicked, chosenTemplates]);
-  const stagePreview = useMemo(
-    () => planStageKinds(sectionsFor(chosenTemplates)).map((kind) => CLIENT_STAGE_DEFAULTS[kind].title),
-    [chosenTemplates],
-  );
   const leads = useMemo(
     () => Array.from(new Set([userEmail, ...assignees].map((e) => e.trim().toLowerCase()).filter(Boolean))).sort(),
     [assignees, userEmail],
   );
-  const backwards = Boolean(startDate && endDate && endDate < startDate);
+  const backwards = !engagementPicked && Boolean(startDate && endDate && endDate < startDate);
   const canCreate = name.trim().length > 0 && !backwards && !creating;
 
   const create = async () => {
@@ -187,13 +174,15 @@ export function NewProjectDialog({ open, onOpenChange, userId, userEmail, client
         reviewOwnerEmail: lead,
         contactEmails: splitEmails(contacts),
         services: services.length ? services : undefined,
-        clientPlan: makePlan
-          ? draftClientPlan(sectionsFor(chosenTemplates), {
+        // An engagement's checklist says what the client sees, so its page needs
+        // no plan. Anything else gets a dated plan its checklist moves along.
+        clientPlan: engagementPicked
+          ? undefined
+          : draftClientPlan(sectionsFor(chosenTemplates), {
               startDate: startDate || undefined,
               endDate: endDate || undefined,
               templateId: chosenTemplates[0]?.id,
-            })
-          : undefined,
+            }),
       });
 
       if (chosenTemplates.length) {
@@ -223,7 +212,7 @@ export function NewProjectDialog({ open, onOpenChange, userId, userEmail, client
         <DialogHeader>
           <DialogTitle>New project</DialogTitle>
           <DialogDescription>
-            Set it up once: the checklist, the plan the client sees, and who leads it. Only the name is required.
+            What we&apos;re doing for them, who leads it, and who it is for. Only the name is required.
           </DialogDescription>
         </DialogHeader>
 
@@ -390,17 +379,22 @@ export function NewProjectDialog({ open, onOpenChange, userId, userEmail, client
             )}
           </fieldset>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-project-start">Start date</Label>
-              <Input id="new-project-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="new-project-end">Target end date</Label>
-              <Input id="new-project-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-            </div>
-          </div>
-          {backwards && <p className="-mt-2 text-xs text-destructive">The end date is before the start.</p>}
+          {/* Dates only for what is not one of our engagements: they date the plan such a project gets. */}
+          {!engagementPicked && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-project-start">Start date</Label>
+                  <Input id="new-project-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-project-end">Target end date</Label>
+                  <Input id="new-project-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                </div>
+              </div>
+              {backwards && <p className="-mt-2 text-xs text-destructive">The end date is before the start.</p>}
+            </>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -448,18 +442,6 @@ export function NewProjectDialog({ open, onOpenChange, userId, userEmail, client
             <p className="text-xs text-muted-foreground">Who the client dashboard is for. Nothing is sent.</p>
           </div>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
-            <Checkbox checked={makePlan} onCheckedChange={(v) => setMakePlan(v === true)} className="mt-0.5" />
-            <span className="space-y-1">
-              <span className="block text-sm font-medium">Set up the client dashboard</span>
-              <span className="block text-xs text-muted-foreground">
-                {engagementPicked && process.length > 0
-                  ? 'The process above, from the checklist, with a dated plan behind it'
-                  : stagePreview.join(' → ') + ', dated from the start date'}
-                {endDate ? ' to the target end date' : ''}. Edit it any time in the Client tab.
-              </span>
-            </span>
-          </label>
         </form>
 
         <DialogFooter>

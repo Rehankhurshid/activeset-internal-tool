@@ -141,9 +141,13 @@ export interface ResolveTimelineOptions {
 }
 
 /**
- * Every phase's state and progress, and which phase the project is in: the
- * earliest one with a milestone not yet done, as the Delivery tab picks a
- * stage. Delivered and the team's pin win, as they do for a plan.
+ * Every phase's state and progress, and which phase the project is in.
+ *
+ * The furthest phase where work has started, while it has anything left;
+ * else the next one with something to do. Not the earliest unfinished phase:
+ * one housekeeping item nobody ticked in Kickoff must not keep a client
+ * looking at "Kickoff" while their moodboard is done (DreamTeam, 2026-10-01).
+ * Delivered and the complete marker win; a pin only where one is passed.
  */
 export function resolveTimelinePlan(
   sources: TimelineStageSource[],
@@ -167,7 +171,17 @@ export function resolveTimelinePlan(
     currentIndex = sources.findIndex((s) => s.stage.id === pinned);
     source = 'team';
   } else {
-    currentIndex = tracking.findIndex((t) => t.open > 0);
+    let furthest = -1;
+    sources.forEach(({ steps }, index) => {
+      if (steps.some((s) => s.state !== 'upcoming')) furthest = index;
+    });
+    if (furthest >= 0 && tracking[furthest].open > 0) {
+      currentIndex = furthest;
+    } else {
+      currentIndex = tracking.findIndex((t, index) => index > furthest && t.open > 0);
+      // Only leftovers behind the furthest phase: that is where the work is.
+      if (currentIndex < 0) currentIndex = tracking.findIndex((t) => t.open > 0);
+    }
     source = 'checklist';
   }
 

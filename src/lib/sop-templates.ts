@@ -492,12 +492,17 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
     },
     {
         id: 'branding_v1',
+        // What the client sees of it is labelled per section and item: the
+        // steps their page shows, moved along by this checklist's ticks.
+        service: 'brand',
         name: 'Brand Evolution',
         description: 'Complete SOP for brand evolution — from kickoff questionnaire through research, moodboards, stylescapes, logo, collateral to brand book handover.',
         icon: '🎨',
         sections: numbered([
             {
                 title: 'Input & Requirements',
+                clientStep: 'Brand questionnaire & assets',
+                clientWho: 'client',
                 emoji: '📥',
                 role: 'kickoff',
                 items: makeItems([
@@ -514,6 +519,8 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Phase 1: Pre-Production — Discovery & Research',
+                clientStep: 'Brand discovery workshop',
+                clientWho: 'together',
                 emoji: '🔍',
                 items: makeItems([
                     { title: 'Kickoff call with client and key stakeholders', emoji: '📅' },
@@ -527,6 +534,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Phase 2: Pre-Production — Competitive Analysis',
+                clientStep: 'Competitor research',
                 emoji: '📊',
                 items: makeItems([
                     { title: 'Get list of competitors from client', emoji: '📋' },
@@ -540,6 +548,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
             },
             {
                 title: 'Phase 3: Production — Moodboarding',
+                clientStep: 'Moodboarding',
                 emoji: '🖼️',
                 items: makeItems([
                     { title: 'Collect visual references from the internet based on research findings', emoji: '🌐' },
@@ -548,11 +557,12 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                     { title: 'Include proposed color palettes per direction', emoji: '🌈' },
                     { title: 'Include suggested primary and secondary typefaces per direction', emoji: '✒️' },
                     { title: 'Include example use cases relevant to the client (web, product, collateral)', emoji: '📱' },
-                    { title: 'Present moodboard directions to client — get sign-off on chosen direction', emoji: '🤝' },
+                    { title: 'Present moodboard directions to client — get sign-off on chosen direction', emoji: '🤝', clientStep: 'Feedback on moodboard', clientWho: 'client' },
                 ]),
             },
             {
                 title: 'Phase 4: Production — Stylescape',
+                clientStep: 'Stylescape',
                 emoji: '🖌️',
                 items: makeItems([
                     { title: 'Create custom-made stylescape based on approved moodboard direction', emoji: '🎨' },
@@ -562,24 +572,26 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                     { title: 'Design brand pattern system that internal team can scale (swap colors, create new variations easily)', emoji: '🔲' },
                     { title: 'Create icon set aligned to brand style', emoji: '🔣' },
                     { title: 'Show social media templates and marketing collateral examples', emoji: '📱' },
-                    { title: 'Present stylescape to client — gather feedback and iterate', emoji: '📢' },
+                    { title: 'Present stylescape to client — gather feedback and iterate', emoji: '📢', clientStep: 'Feedback on stylescape', clientWho: 'client' },
                 ]),
             },
             {
                 title: 'Phase 5: Production — Logo & Collateral Design',
+                clientStep: 'Logo & identity concepts',
                 emoji: '✏️',
                 items: makeItems([
                     { title: 'Design multiple logo concepts (wordmark, icon, combined, monogram)', emoji: '🔄' },
-                    { title: 'Present logo options to client — get sign-off', emoji: '🤝' },
+                    { title: 'Present logo options to client — get sign-off', emoji: '🤝', clientStep: 'Feedback on logo & identity', clientWho: 'client' },
                     { title: 'Design stationery kit: letterhead, business card, envelope', emoji: '💼' },
                     { title: 'Design PowerPoint / presentation template', emoji: '📊' },
                     { title: 'Design any industry-specific collaterals (e.g., pharma rep materials, quotation templates)', emoji: '🏥' },
                     { title: 'Test logo and collateral across contexts (web, print, social, favicon)', emoji: '🧪' },
-                    { title: 'Start website design with placeholder images — mark image needs in Figma for client', emoji: '🌐' },
+                    { title: 'Start website design with placeholder images — mark image needs in Figma for client', emoji: '🌐', clientHidden: true },
                 ]),
             },
             {
                 title: 'Phase 6: Post-Production — Brand Book & Handover',
+                clientStep: 'Brand book & files',
                 emoji: '📦',
                 role: 'client_review',
                 items: makeItems([
@@ -592,7 +604,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                     { title: 'Include: tone of voice and messaging direction', emoji: '🗣️' },
                     { title: 'Export all logo formats (SVG, PNG, EPS — light/dark/color variations)', emoji: '📤' },
                     { title: 'Export scalable design system files so internal team can create new assets independently', emoji: '📂' },
-                    { title: 'Final brand book review with client', emoji: '🤝' },
+                    { title: 'Final brand book review with client', emoji: '🤝', clientStep: 'Brand book review', clientWho: 'together' },
                     { title: 'Deliver complete brand kit (Google Drive package)', emoji: '🚀' },
                 ]),
             },
