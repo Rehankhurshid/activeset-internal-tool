@@ -199,7 +199,7 @@ export function ClientPanel(props: ClientPanelProps) {
 
   const source =
     picked.kind === 'checklist'
-      ? 'From the checklist: each step moves as you tick its items. Set a client’s step In progress when you send it, and their page says it is waiting on them.'
+      ? 'From the checklist: each step moves as you tick its items. Press “Sent · waiting on them” on a client’s step when it goes out, and their page says it is waiting on them.'
       : picked.kind === 'sheet'
         ? picked.process.length === 0
           ? 'From the project sheet’s Process tab.'

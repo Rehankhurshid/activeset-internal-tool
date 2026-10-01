@@ -14,19 +14,7 @@ import {
     DropdownMenuTrigger,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import {
-    Circle,
-    CircleDot,
-    CheckCircle2,
-    SkipForward,
-    StickyNote,
-    MoreHorizontal,
-    UserPlus,
-    Clock,
-    Link as LinkIcon,
-    Info,
-    Trash2,
-} from 'lucide-react';
+import { Circle, CircleDot, CheckCircle2, SkipForward, StickyNote, MoreHorizontal, UserPlus, Clock, Link as LinkIcon, Info, Trash2, Send } from 'lucide-react';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { cn } from '@/lib/utils';
 
@@ -44,35 +32,30 @@ const STATUS_CONFIG: Record<ChecklistItemStatus, {
     color: string;
     bgColor: string;
     label: string;
-    next: ChecklistItemStatus;
 }> = {
     not_started: {
         icon: Circle,
         color: 'text-muted-foreground/60',
         bgColor: '',
         label: 'Not Started',
-        next: 'in_progress',
     },
     in_progress: {
         icon: CircleDot,
         color: 'text-blue-400',
         bgColor: 'bg-blue-500/5',
         label: 'In Progress',
-        next: 'completed',
     },
     completed: {
         icon: CheckCircle2,
         color: 'text-emerald-400',
         bgColor: 'bg-emerald-500/5',
         label: 'Completed',
-        next: 'not_started',
     },
     skipped: {
         icon: SkipForward,
         color: 'text-amber-400',
         bgColor: 'bg-amber-500/5',
         label: 'Skipped',
-        next: 'not_started',
     },
 };
 
@@ -91,9 +74,12 @@ export function ChecklistItemRow({
     const [notesDraft, setNotesDraft] = React.useState(item.notes ?? '');
     const [assigneeDraft, setAssigneeDraft] = React.useState(item.assignee ?? '');
 
+    // One click is done, one more is undone; a skipped step comes back. In
+    // progress is set on purpose (the menu, or "Sent" on a client's step),
+    // never a stop on the way to done.
     const handleToggle = () => {
         if (readOnly) return;
-        onStatusChange(config.next);
+        onStatusChange(item.status === 'completed' || item.status === 'skipped' ? 'not_started' : 'completed');
     };
 
     const handleSaveNotes = () => {
@@ -134,7 +120,13 @@ export function ChecklistItemRow({
                     </TooltipTrigger>
                     <TooltipContent side="left">
                         <p className="text-xs">
-                            {readOnly ? config.label : `Click: ${config.label} → ${STATUS_CONFIG[config.next].label}`}
+                            {readOnly
+                                ? config.label
+                                : item.status === 'completed'
+                                    ? 'Done. Click to undo.'
+                                    : item.status === 'skipped'
+                                        ? 'Skipped. Click to bring it back.'
+                                        : 'Click when it is done.'}
                         </p>
                     </TooltipContent>
                 </Tooltip>
@@ -195,12 +187,23 @@ export function ChecklistItemRow({
                             )}
                             title={
                                 item.clientWho === 'client'
-                                    ? 'The client sees this as their step. Set it In progress when you send it: their page says “Waiting on you” until you tick it.'
+                                    ? 'The client sees this as their step. Press “Sent · waiting on them” when it goes out: their page says “Waiting on you” until you tick it.'
                                     : 'The client sees this as a step of its own.'
                             }
                         >
                             Client sees: {item.clientStep}
                         </span>
+                    )}
+                    {item.clientStep && item.clientWho === 'client' && item.status === 'not_started' && !readOnly && (
+                        <button
+                            type="button"
+                            onClick={() => onStatusChange('in_progress')}
+                            className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                            title="Their page will say it is waiting on them until you tick it"
+                        >
+                            <Send className="h-2.5 w-2.5" aria-hidden="true" />
+                            Sent · waiting on them
+                        </button>
                     )}
                     {item.assignee && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-md">

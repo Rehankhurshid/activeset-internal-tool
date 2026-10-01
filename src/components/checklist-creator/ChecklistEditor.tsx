@@ -1400,8 +1400,8 @@ function SortableItemRow({
                             )}
                         </div>
                         <p className="text-[11px] text-muted-foreground">
-                            A client&apos;s step reads “Waiting on you” to them while this item is In progress: set it when you send
-                            the thing, and tick it when they reply.
+                            On the checklist, a client&apos;s step gets a “Sent · waiting on them” button: press it when you send
+                            the thing, and their page says “Waiting on you” until you tick it.
                         </p>
                     </div>
                     {!item.clientStep?.trim() && (

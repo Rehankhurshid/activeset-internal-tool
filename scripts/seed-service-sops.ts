@@ -120,7 +120,7 @@ const TAGGINGS: Tagging[] = [
 // --- The two drafts ----------------------------------------------------------
 
 const WHEN_SENT =
-  'Mark this In progress when you send it: the client’s page then reads “Waiting on you”. Tick it when their feedback is in.';
+  'Press “Sent · waiting on them” when you send it: the client’s page then reads “Waiting on you”. Tick it when their feedback is in.';
 
 type DraftItem = Omit<SOPTemplateItem, 'status' | 'order'>;
 type DraftSection = Omit<SOPTemplateSection, 'order' | 'items'> & { items: DraftItem[] };
@@ -220,7 +220,7 @@ const WEB_DESIGN = draft(
           blocking: true,
           clientStep: 'Designs approved',
           clientWho: 'client',
-          howTo: 'In writing, from whoever signs off. Mark it In progress when you ask, so their page shows it is waiting on them.',
+          howTo: 'In writing, from whoever signs off. Press “Sent · waiting on them” when you ask, so their page shows it is waiting on them.',
           fields: [{ id: 'approved_on', label: 'Approved on', type: 'date', expected: true }],
         },
         { title: 'Hand over the Figma file, or brief the developers', emoji: '🤝' },
@@ -272,7 +272,7 @@ const COPY = draft(
           blocking: true,
           clientStep: 'Copy approved',
           clientWho: 'client',
-          howTo: 'Mark it In progress when you ask, so their page shows it is waiting on them.',
+          howTo: 'Press “Sent · waiting on them” when you ask, so their page shows it is waiting on them.',
         },
       ],
     },

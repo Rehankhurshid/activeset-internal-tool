@@ -1,22 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import {
-  CalendarClock,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  CircleDot,
-  Copy,
-  ExternalLink,
-  Link as LinkIcon,
-  ListChecks,
-  MessageSquareQuote,
-  MoreHorizontal,
-  SkipForward,
-  TriangleAlert,
-} from 'lucide-react';
+import { CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Circle, CircleDot, Copy, ExternalLink, Link as LinkIcon, ListChecks, MessageSquareQuote, MoreHorizontal, SkipForward, TriangleAlert, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,36 +36,31 @@ import { copyText } from './copy-text';
  * writes to the same item the Checklist tab writes to.
  */
 
-/** Status vocabulary, icons and cycle order, as the Checklist tab uses them. */
-const STATUS_CONFIG: Record<
-  ChecklistItemStatus,
-  { label: string; icon: typeof Circle; color: string; next: ChecklistItemStatus }
-> = {
-  not_started: {
-    label: 'Not started',
-    icon: Circle,
-    color: 'text-muted-foreground/60',
-    next: 'in_progress',
-  },
-  in_progress: {
-    label: 'In progress',
-    icon: CircleDot,
-    color: 'text-blue-500 dark:text-blue-400',
-    next: 'completed',
-  },
-  completed: {
-    label: 'Completed',
-    icon: CheckCircle2,
-    color: 'text-emerald-600 dark:text-emerald-400',
-    next: 'not_started',
-  },
-  skipped: {
-    label: 'Skipped',
-    icon: SkipForward,
-    color: 'text-amber-600 dark:text-amber-400',
-    next: 'not_started',
-  },
+/** Status vocabulary and icons, as the Checklist tab uses them. */
+const STATUS_CONFIG: Record<ChecklistItemStatus, { label: string; icon: typeof Circle; color: string }> = {
+  not_started: { label: 'Not started', icon: Circle, color: 'text-muted-foreground/60' },
+  in_progress: { label: 'In progress', icon: CircleDot, color: 'text-blue-500 dark:text-blue-400' },
+  completed: { label: 'Completed', icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400' },
+  skipped: { label: 'Skipped', icon: SkipForward, color: 'text-amber-600 dark:text-amber-400' },
 };
+
+/**
+ * What one click on the circle does: it is a checkbox. Done in one click,
+ * undone in one more; a skipped step comes back. In progress is not a stop on
+ * the way to done (Rehan, 2026-10-01: "instead of click and click to mark
+ * complete"): it is set on purpose, from the menu, or on a client's step with
+ * "Sent · waiting on them".
+ */
+function clickedStatus(status: ChecklistItemStatus): ChecklistItemStatus {
+  return status === 'completed' || status === 'skipped' ? 'not_started' : 'completed';
+}
+
+function clickHint(status: ChecklistItemStatus): string {
+  if (status === 'completed') return 'Done. Click to undo.';
+  if (status === 'skipped') return 'Skipped. Click to bring it back.';
+  if (status === 'in_progress') return 'In progress. Click when it is done.';
+  return 'Click when it is done.';
+}
 
 const STATUS_ORDER: ChecklistItemStatus[] = ['not_started', 'in_progress', 'completed', 'skipped'];
 
@@ -385,8 +365,10 @@ function StageChecklistRow({
           <button
             type="button"
             disabled={disabled}
+            role="checkbox"
+            aria-checked={status === 'completed'}
             aria-label={`${item.title} — ${config.label}`}
-            onClick={() => onChange(config.next)}
+            onClick={() => onChange(clickedStatus(status))}
             className={cn(
               'mt-0.5 shrink-0 rounded-sm transition-transform',
               'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
@@ -398,9 +380,7 @@ function StageChecklistRow({
           </button>
         </TooltipTrigger>
         <TooltipContent side="left">
-          {disabled
-            ? config.label
-            : `${config.label} → ${STATUS_CONFIG[config.next].label}. Use the menu for the rest.`}
+          {disabled ? config.label : clickHint(status)}
         </TooltipContent>
       </Tooltip>
 
@@ -446,7 +426,7 @@ function StageChecklistRow({
               variant="outline"
               title={
                 item.clientWho === 'client'
-                  ? 'The client sees this as their step. Set it In progress when you send it: their page says “Waiting on you” until you tick it.'
+                  ? 'The client sees this as their step. Press “Sent · waiting on them” when it goes out: their page says “Waiting on you” until you tick it.'
                   : 'The client sees this as a step of its own.'
               }
               className={cn(
@@ -459,6 +439,21 @@ function StageChecklistRow({
               Client sees: {item.clientStep}
               {item.clientWho === 'client' && status === 'in_progress' ? ' · waiting on them' : ''}
             </Badge>
+          )}
+          {/* The one place In progress matters: their page says it is waiting
+              on them. One click when it goes out; the circle when they answer. */}
+          {item.clientStep && item.clientWho === 'client' && status === 'not_started' && !disabled && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-5 gap-1 px-1.5 text-[10px] font-normal"
+              onClick={() => onChange('in_progress')}
+              title="Their page will say it is waiting on them until you tick it"
+            >
+              <Send className="h-2.5 w-2.5" aria-hidden="true" />
+              Sent · waiting on them
+            </Button>
           )}
           {status === 'skipped' && (
             <Badge
