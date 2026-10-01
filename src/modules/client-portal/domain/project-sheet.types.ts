@@ -72,6 +72,10 @@ export interface SheetMilestone {
   owner?: SheetOwner;
   start?: SheetDate;
   end?: SheetDate;
+  /** The thing to look at for this step (the moodboard, the staging site). Always http(s). */
+  link?: string;
+  /** From a column headed for the client ("Note for client") only. */
+  note?: string;
 }
 
 export interface SheetPhase {

@@ -1,6 +1,6 @@
 # Project sheet contract
 
-> Status: phases 1–3 built (2026-10-01). Phases 4 and 5 not started.
+> Status: phases 1–3 built (2026-10-01); the four-tab ActiveSet format and its master sheet replaced the seven use-case templates the same day.
 > Strategy page with the interactive sheet explorer and portal preview:
 > https://claude.ai/artifact/DH5gt8xGfV1ipKkapAzsRL
 
@@ -77,7 +77,44 @@ values, read, portal), `src/lib/project-sheet.ts` (bind, sync),
 `src/lib/google-api.ts` (`getSpreadsheetMeta`, `readTabsWithLinks`). See
 `docs/modules/client-portal.md` → "Project sheet".
 
-## Use cases (for phase 5's master templates)
+## The ActiveSet project sheet (format, 2026-10-01)
+
+Rehan, after seeing the Different AI sheet on the portal: "The sheet is too
+complicated. Leave the Lottie part. Our whole stuff is Copy, Brand Design, Web
+Design, Development … the client should be able to understand which part of
+the process we are in. 1. Kickoff call – Done – [date]. 2. Moodboarding – Done –
+[date]. 3. Awaiting feedback on moodboard."
+
+So there is one format, four tabs, defined in
+`src/modules/client-portal/domain/project-sheet.template.ts` and built into the
+master sheet in Drive by `npm run sheet:template -- <empty sheet>`
+([master](https://docs.google.com/spreadsheets/d/1y8FEHRfGVYhPraBx0mP-0NN9aCLvVpM-yKFJsms8ZYc/edit),
+copy it with File → Make a copy or the link on the Client tab):
+
+| Tab | Columns | Portal |
+| --- | --- | --- |
+| Overview | Client, Project, Services, Kickoff date, Target launch, Project lead; KEY LINKS (Figma, Staging site, Shared folder, Slack channel); "How this sheet works" | Header facts and files |
+| Process | # · Stage · Step · Who · Status · Date · Link · Note for client | "Where we are" (Right now / Then) and "The process": one numbered list, stage by stage |
+| Pages | Page · Copy · Design · Development · Link · Team notes | "The work" |
+| What we need | Item · Why we need it · Needed by · Status · Link | "What we need from you" |
+
+Process holds 33 standard steps in six stages: Kickoff, Copy, Brand Design,
+Web Design, Development, Launch. They come from the "Site Branding" and
+"Figma to Webflow" SOPs and eight live project timelines. Our steps alternate
+with the client's ("Moodboarding", then "Feedback on moodboard"). A project
+deletes the stages it does not buy.
+
+Statuses are dropdowns: Not started, In progress, **Waiting on client** (the
+client's turn: the portal says "Waiting on you"), Done, Skipped (out of scope,
+never shown). Date is the day a step was done, else the day it is planned for.
+Who is ActiveSet, Client or Together. Header rows are protected with a warning,
+because the reader finds columns by those words.
+
+The older shapes (Different AI's eight tabs, the 2024 template) still read, so
+nothing already bound breaks; new projects start from the master.
+
+## Use cases (superseded by the format above)
+
 
 All share the five core tabs. Modules differ:
 

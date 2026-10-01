@@ -4,7 +4,7 @@ import { buildClientPortalView } from './client-portal.projection';
 import { CLIENT_PORTAL_VIEW_KEYS } from './client-portal.types';
 import { readProjectSheet } from './project-sheet.read';
 import { sheetStageSources } from './project-sheet.portal';
-import { DIFFERENT_AI, TODAY, WEBFLOW_TEMPLATE } from './project-sheet.fixtures';
+import { ACTIVESET_SHEET, DIFFERENT_AI, TODAY, WEBFLOW_TEMPLATE } from './project-sheet.fixtures';
 import type { ProjectSheetSnapshot } from './project-sheet.types';
 import type { Project, ProjectTimeline, Task } from '@/types';
 
@@ -137,7 +137,7 @@ describe('buildClientPortalView with a project sheet', () => {
     const check = (obj: object, keys: string[], where: string) => {
       for (const key of Object.keys(obj)) assert.ok(keys.includes(key), `unexpected key on ${where}: ${key}`);
     };
-    for (const stage of v.stages) for (const step of stage.steps ?? []) check(step, ['id', 'title', 'state', 'startDate', 'endDate', 'owner'], 'a milestone');
+    for (const stage of v.stages) for (const step of stage.steps ?? []) check(step, ['id', 'title', 'state', 'startDate', 'endDate', 'owner', 'waiting', 'url', 'note'], 'a milestone');
     for (const ask of v.asks) check(ask, ['id', 'title', 'dueDate', 'dueText', 'why', 'group', 'owner', 'url', 'kind', 'progress'], 'an ask');
     for (const stream of v.work ?? []) {
       check(stream, ['id', 'title', 'tracks', 'items'], 'a workstream');
@@ -166,6 +166,22 @@ describe('buildClientPortalView with a project sheet', () => {
       ],
     }).map((s) => s.stage.id);
     assert.equal(new Set(ids).size, 4, `ids collided: ${ids.join(', ')}`);
+  });
+
+  it('shows the ActiveSet sheet as a process: where we are, and what waits on the client', () => {
+    const v = view({ data: readProjectSheet(ACTIVESET_SHEET, { today: TODAY }).data, url: 'https://docs.google.com/spreadsheets/d/x/edit' });
+    assert.equal(v.planSource, 'sheet');
+    assert.deepEqual(v.stages.map((s) => [s.title, s.state]), [
+      ['Kickoff', 'done'], ['Brand Design', 'current'], ['Web Design', 'upcoming'], ['Development', 'upcoming'], ['Launch', 'upcoming'],
+    ]);
+    const brand = v.stages[1].steps!;
+    assert.equal(brand.some((s) => s.title === 'Logo concepts'), false, 'a skipped step is out of scope and hidden');
+    const feedback = brand.find((s) => s.title === 'Feedback on moodboard')!;
+    assert.deepEqual(
+      { state: feedback.state, waiting: feedback.waiting, url: feedback.url, note: feedback.note, endDate: feedback.endDate },
+      { state: 'current', waiting: true, url: 'https://www.figma.com/board/moodboard', note: 'Two directions: pick one, or mix them', endDate: '2026-09-12' },
+    );
+    assert.equal(brand.find((s) => s.title === 'Moodboarding')!.waiting, undefined);
   });
 
   it('changes nothing for a project without a sheet', () => {

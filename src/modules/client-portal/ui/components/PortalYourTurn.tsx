@@ -25,8 +25,10 @@ export function PortalYourTurn({ view, now }: PortalYourTurnProps) {
   const review = (view.work ?? []).reduce((n, w) => n + w.items.filter((i) => i.states.includes('in_review')).length, 0);
   const proposed = (view.changes ?? []).filter((c) => c.state === 'proposed').length;
   const approval = view.review && !view.review.approvedAt ? 1 : 0;
+  const waitingSteps = view.stages.reduce((n, s) => n + (s.steps ?? []).filter((step) => step.waiting && step.state !== 'done').length, 0);
 
   const items: Item[] = [
+    { href: '#portal-process-heading', count: waitingSteps, label: waitingSteps === 1 ? 'step waiting on your feedback' : 'steps waiting on your feedback' },
     { href: '#portal-asks-heading', count: overdue, label: overdue === 1 ? 'thing we needed is overdue' : 'things we needed are overdue', urgent: true },
     { href: '#portal-asks-heading', count: open, label: open === 1 ? 'thing we need from you' : 'things we need from you' },
     { href: '#portal-work-heading', count: review, label: review === 1 ? 'item ready for your review' : 'items ready for your review' },

@@ -8,6 +8,7 @@ import { PortalFiles } from '../components/PortalFiles';
 import { PortalFooter } from '../components/PortalFooter';
 import { PortalHeader } from '../components/PortalHeader';
 import { PortalNowCard } from '../components/PortalNowCard';
+import { PortalProcess } from '../components/PortalProcess';
 import { PortalReview } from '../components/PortalReview';
 import { PortalStages } from '../components/PortalStages';
 import { TrackPortalView } from '../components/TrackPortalView';
@@ -57,9 +58,11 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         />
         <PortalNowCard view={view} now={now} />
         <PortalYourTurn view={view} now={now} />
+        {/* From the project sheet, the whole process as one numbered list, right under where we are. */}
+        {view.planSource === 'sheet' && <PortalProcess stages={view.stages} now={now} />}
         {view.asks.length > 0 && <PortalAsks asks={view.asks} received={view.asksReceived} now={now} />}
         {view.work && <PortalWork work={view.work} generatedAt={view.generatedAt} />}
-        <PortalStages stages={view.stages} now={now} planSource={view.planSource} />
+        {view.planSource !== 'sheet' && <PortalStages stages={view.stages} now={now} planSource={view.planSource} />}
         <PortalReadiness readiness={view.readiness} />
         <PortalChanges changes={view.changes} now={now} />
         <PortalFiles files={view.files} websiteUrl={view.websiteUrl} />

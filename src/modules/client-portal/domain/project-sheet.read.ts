@@ -410,10 +410,17 @@ function readTimelineTable(table: Table, tab: string, ctx: Context, into: Map<st
     };
     const owner = readOwner(text(row.cells, cols.get('owner')));
     if (owner) milestone.owner = owner;
-    const start = date(text(row.cells, cols.get('start')), ctx);
-    const end = date(text(row.cells, cols.get('end')), ctx);
+    // A single Date column (the Process tab) is both: the day it was done, or is planned for.
+    const single = date(text(row.cells, cols.get('date')), ctx);
+    const start = date(text(row.cells, cols.get('start')), ctx) ?? single;
+    const end = date(text(row.cells, cols.get('end')), ctx) ?? single;
     if (start) milestone.start = start;
     if (end) milestone.end = end;
+    const linkCol = table.header.links[0];
+    const link = linkCol !== undefined ? linkOf(row.cells[linkCol]) : row.cells[cols.get('title')!]?.link ? linkOf(row.cells[cols.get('title')!]) : undefined;
+    if (link) milestone.link = link;
+    const note = text(row.cells, cols.get('note'));
+    if (note) milestone.note = cleanText(note, 200);
     target.milestones.push(milestone);
     count++;
   }

@@ -24,10 +24,11 @@ words('not_started', ['', 'not started', 'not yet started', 'queued', 'to do', '
 // Reviews inside the team (QA, a developer's own review) are still our work in progress: only a
 // review that waits on the client may say "Ready for your review" on their page.
 words('in_progress', ['in progress', 'wip', 'working', 'working on it', 'ongoing', 'started', 'in development', 'in design', 'building', 'doing', 'active', 'progress', 'in production', 'in development review', 'in design review', 'dev review', 'design review', 'internal review', 'qa', 'in qa', 'testing']);
-words('in_review', ['ready for review', 'to be reviewed', 'in review', 'review', 'awaiting review', 'for review', 'needs review', 'client review', 'awaiting client review', 'shared for review', 'sent for review', 'with client']);
+// Anything waiting on the client is their turn: "Waiting on client" is the Process tab's word for it.
+words('in_review', ['ready for review', 'to be reviewed', 'in review', 'review', 'awaiting review', 'for review', 'needs review', 'client review', 'awaiting client review', 'shared for review', 'sent for review', 'with client', 'waiting on client', 'waiting for client', 'awaiting client', 'awaiting feedback', 'waiting for feedback', 'awaiting approval', 'waiting for approval', 'waiting on you']);
 words('changes', ['changes requested', 'changes', 'change requested', 'feedback', 'feedback received', 'revisions', 'revision', 'revise', 'rework', 'needs changes']);
 words('done', ['done', 'completed', 'complete', 'approved', 'signed off', 'live', 'received', 'yes', 'true', '✅', '✓', '✔', 'published', 'delivered', 'finished', 'passed', 'ok', 'tested', 'closed', 'resolved', 'confirmed', 'shipped']);
-words('blocked', ['blocked', 'on hold', 'hold', 'waiting', 'stuck', 'client dependency', 'deferred', 'paused', 'waiting on client', 'dependency']);
+words('blocked', ['blocked', 'on hold', 'hold', 'waiting', 'stuck', 'client dependency', 'deferred', 'paused', 'dependency']);
 words('not_needed', ['n/a', 'na', 'n/r', 'nr', 'not applicable', 'not required', 'none', 'skip', 'skipped', '-', '—', 'not needed', 'dropped', 'out of scope', 'cancelled', 'canceled']);
 
 /** Loose fallbacks, tried in this order, for words with extra text ("Completed ✅", "In review (Arth)"). */
@@ -36,7 +37,7 @@ const LOOSE: [RegExp, WorkState][] = [
   // "Not received", "Not done", "Not started yet", "Yet to start": a negation is never progress.
   [/^(not|no|yet to|never)\b/, 'not_started'],
   [/internal|development review|design review|dev review|\bqa\b|testing/, 'in_progress'],
-  [/review|with client/, 'in_review'],
+  [/review|with client|(awaiting|waiting (on|for)) (client|you|feedback|approval|sign-?off)/, 'in_review'],
   [/change|feedback|revis|rework/, 'changes'],
   [/block|stuck|hold|waiting|depend|defer|pause/, 'blocked'],
   [/complete|\bdone\b|approved|signed|\blive\b|received|deliver|publish|✅|✓/, 'done'],
@@ -88,7 +89,7 @@ export function readOwner(raw: string | undefined): SheetOwner | undefined {
   if (!word) return undefined;
   const client = /\b(client|you|customer)\b/.test(word);
   const team = /\b(activeset|team|agency|us|we)\b/.test(word) || /[+&,/]| and /.test(word);
-  if (word === 'both' || (client && team)) return 'both';
+  if (/^(both|together|joint|all)$/.test(word) || (client && team)) return 'both';
   if (client) return 'client';
   return 'team';
 }

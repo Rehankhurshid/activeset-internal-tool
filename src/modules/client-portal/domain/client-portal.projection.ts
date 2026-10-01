@@ -106,6 +106,9 @@ function toStep(step: TimelineStep): PortalStepView {
   if (step.startDate) view.startDate = step.startDate;
   if (step.endDate) view.endDate = step.endDate;
   if (step.owner) view.owner = step.owner;
+  if (step.waiting) view.waiting = true;
+  if (step.url) view.url = step.url;
+  if (step.note) view.note = step.note;
   return view;
 }
 

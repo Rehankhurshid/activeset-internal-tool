@@ -158,6 +158,29 @@ function quoteTab(title: string): string {
   return `'${title.replace(/'/g, "''")}'`;
 }
 
+/** Raw `spreadsheets.batchUpdate`, for the template builder: formatting, validation, tabs. */
+export async function batchUpdateSpreadsheet(spreadsheetId: string, requests: unknown[]): Promise<{ replies?: Record<string, unknown>[] }> {
+  return googleFetch(`${SHEETS_API}/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ requests }),
+  });
+}
+
+/** Writes several ranges at once. `USER_ENTERED` lets Sheets read "3 Sep 2026" as a date. */
+export async function writeRanges(
+  spreadsheetId: string,
+  data: { tab: string; start?: string; rows: (string | number)[][] }[],
+  input: 'RAW' | 'USER_ENTERED' = 'USER_ENTERED',
+): Promise<void> {
+  await googleFetch(`${SHEETS_API}/${encodeURIComponent(spreadsheetId)}/values:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({
+      valueInputOption: input,
+      data: data.map((d) => ({ range: `${quoteTab(d.tab)}!${d.start ?? 'A1'}`, values: d.rows })),
+    }),
+  });
+}
+
 /** Adds an empty tab to a sheet the app can edit. */
 export async function addTab(spreadsheetId: string, title: string, frozenRows = 1): Promise<void> {
   await googleFetch(`${SHEETS_API}/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
@@ -223,6 +246,8 @@ export async function shareSpreadsheetByLink(spreadsheetId: string): Promise<voi
 }
 
 export interface SpreadsheetTab {
+  /** Google's numeric id for the tab, used by batch updates. */
+  sheetId?: number;
   title: string;
   /** `GRID` for a normal tab; `OBJECT` for a sheet holding only a chart, which has no cells to read. */
   type: string;
@@ -244,9 +269,9 @@ export async function getSpreadsheetMeta(spreadsheetId: string): Promise<Spreads
     spreadsheetId?: string;
     spreadsheetUrl?: string;
     properties?: { title?: string; locale?: string };
-    sheets?: { properties?: { title?: string; sheetType?: string } }[];
+    sheets?: { properties?: { sheetId?: number; title?: string; sheetType?: string } }[];
   }>(
-    `${SHEETS_API}/${encodeURIComponent(spreadsheetId)}?fields=${encodeURIComponent('spreadsheetId,spreadsheetUrl,properties(title,locale),sheets.properties(title,sheetType)')}`,
+    `${SHEETS_API}/${encodeURIComponent(spreadsheetId)}?fields=${encodeURIComponent('spreadsheetId,spreadsheetUrl,properties(title,locale),sheets.properties(sheetId,title,sheetType)')}`,
   );
   return {
     spreadsheetId: body.spreadsheetId ?? spreadsheetId,
@@ -254,7 +279,7 @@ export async function getSpreadsheetMeta(spreadsheetId: string): Promise<Spreads
     url: body.spreadsheetUrl ?? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
     locale: body.properties?.locale,
     tabs: (body.sheets ?? [])
-      .map((s) => ({ title: s.properties?.title ?? '', type: s.properties?.sheetType ?? 'GRID' }))
+      .map((s) => ({ sheetId: s.properties?.sheetId, title: s.properties?.title ?? '', type: s.properties?.sheetType ?? 'GRID' }))
       .filter((t) => t.title),
   };
 }

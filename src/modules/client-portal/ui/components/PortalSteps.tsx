@@ -42,10 +42,20 @@ export function PortalSteps({ steps, now }: { steps: PortalStepView[]; now: Date
                 )}
                 <span className="sr-only">, {STATE_WORD[step.state]}</span>
               </span>
+              {step.note && <span className="mt-0.5 block text-xs text-muted-foreground">{step.note}</span>}
+              {step.url && (
+                <a href={step.url} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-block text-xs font-medium text-foreground underline-offset-2 hover:underline">
+                  Open
+                </a>
+              )}
             </span>
             <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">
               {dates}
-              {step.state === 'current' && <span className="block font-medium text-foreground">In progress</span>}
+              {step.state === 'current' && (
+                <span className={cn('block font-medium', step.waiting ? 'text-amber-800' : 'text-foreground')}>
+                  {step.waiting ? 'Waiting on you' : 'In progress'}
+                </span>
+              )}
             </span>
           </li>
         );

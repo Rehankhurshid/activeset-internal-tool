@@ -48,6 +48,12 @@ export interface PortalStepView {
   endDate?: string;
   /** From the project sheet's Owner column, as a role: never a person's name. */
   owner?: PortalStepOwner;
+  /** The step is in the client's hands: their feedback, approval or files are what it waits for. */
+  waiting?: boolean;
+  /** What to look at for this step (the moodboard, the staging site). Always http(s). */
+  url?: string;
+  /** One line the team wrote for the client ("Note for client" column). */
+  note?: string;
 }
 
 /**

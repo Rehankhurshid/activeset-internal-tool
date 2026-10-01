@@ -1,4 +1,5 @@
 import type { SheetCell, SheetGrid, SheetTabInput } from './project-sheet.types';
+import { INPUTS_HEADER, INPUT_ROWS, OVERVIEW_LINKS, PAGES_HEADER, processRows } from './project-sheet.template';
 
 /**
  * Grids transcribed from real ActiveSet trackers (layout, headers, section
@@ -238,4 +239,54 @@ export const LAUNCH_PLAN: SheetTabInput[] = [
     ['D02', 'Confirm Day 1 and calendar launch date', 'Use relative Day 15 until chosen', '', 'Both', 'Day 1', ''],
   ]),
   tab('Pooja review', [['ACTIVESET', 'POOJA · COPY REVIEW'], ['x', 'y']]),
+];
+
+// --- The ActiveSet project sheet (Oct 2026): the four-tab format, mid brand stage ------
+
+/** Statuses and dates as a team would fill them, keyed by step title. */
+const PROGRESS: Record<string, [string, string, string?, string?]> = {
+  'Kickoff call': ['Done', '3 Sep 2026'],
+  'Brief & questionnaire': ['Done', '5 Sep 2026'],
+  'Brand assets, logins & access': ['Done', '6 Sep 2026'],
+  'Brand discovery workshop': ['Done', '8 Sep 2026'],
+  Moodboarding: ['Done', '10 Sep 2026', 'https://www.figma.com/board/moodboard'],
+  'Feedback on moodboard': ['Waiting on client', '12 Sep 2026', 'https://www.figma.com/board/moodboard', 'Two directions: pick one, or mix them'],
+  'Colours & typography locked': ['Not started', '15 Sep 2026'],
+};
+
+export const ACTIVESET_SHEET: SheetTabInput[] = [
+  tab('Overview', [
+    ['Client', 'Northwind'],
+    ['Project', 'Brand and website'],
+    ['Services', 'Brand Design, Web Design, Development'],
+    ['Kickoff date', '3 Sep 2026'],
+    ['Target launch', '30 Oct 2026'],
+    ['Project lead', 'Rehan'],
+    [],
+    ['KEY LINKS'],
+    ...OVERVIEW_LINKS.map((name): Cell[] => (name === 'Figma' ? [name, 'https://www.figma.com/design/northwind'] : [name, ''])),
+  ]),
+  tab(
+    'Process',
+    processRows()
+      // This project does not include copy.
+      .filter((row) => row[1] !== 'Copy')
+      .map((row, i): Cell[] => {
+        if (i === 0) return row;
+        const [status, when, link, note] = PROGRESS[row[2]] ?? ['Not started', ''];
+        return [row[0], row[1], row[2], row[3], status, when, link ?? '', note ?? ''];
+      })
+      // A step the team dropped for this client.
+      .map((row): Cell[] => (row[2] === 'Brand discovery workshop' ? row : row[2] === 'Logo concepts' ? [...row.slice(0, 4), 'Skipped', ...row.slice(5)] : row)),
+  ),
+  tab('Pages', [
+    [...PAGES_HEADER],
+    ['Home', 'Done', 'In progress', 'Not started', '', 'SECRET-NOTE'],
+    ['About', 'Done', 'Not started', 'Not started', '', ''],
+  ]),
+  tab('What we need', [
+    [...INPUTS_HEADER],
+    ...INPUT_ROWS.map((r, i): Cell[] => [r.item, r.why, i < 2 ? '6 Sep 2026' : '20 Sep 2026', i < 2 ? 'Received' : 'Waiting', '']),
+  ]),
+  tab('Team scratch', [['anything', 'the team likes']]),
 ];

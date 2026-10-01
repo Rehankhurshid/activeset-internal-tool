@@ -36,7 +36,7 @@ export function languageOf(title: string): string | undefined {
 /** Tab names per kind, tried in this order. Matched against the normalised name, with and without a language suffix. */
 const TAB_NAMES: [SheetKind, RegExp][] = [
   ['overview', /^(overview|project overview|start here|summary|project summary|dashboard)$/],
-  ['timeline', /^(timeline|project timeline|schedule|project schedule|roadmap|phases|project plan|plan)$/],
+  ['timeline', /^(process|project process|our process|steps|timeline|project timeline|schedule|project schedule|roadmap|phases|project plan|plan)$/],
   ['inputs', /^(client inputs?|inputs?|inputs? (and|&) dependencies|client inputs? (and|&) dependencies|dependencies|client dependencies|decisions|client decisions|what we need|what we need from you|asks|client asks)$/],
   ['changes', /^(change ?log|change requests?|changes|scope changes|crs?)$/],
   ['launch', /^(launch checklist|qa (and|&) launch( checklist)?|pre-?launch( checklist)?|launch qa|project global checklist|global checklist|go-?live checklist)$/],
@@ -142,11 +142,16 @@ export const FIELDS: Record<Exclude<SheetKind, 'overview'>, FieldSpec[]> = {
     { field: 'owner', pattern: /^(owner|who|responsible|by|owner \/ who)$/ },
     { field: 'start', pattern: /^(start|starts|start date|from|begins|begin)$/ },
     { field: 'end', pattern: /^(end|ends|end date|due|due date|to|deadline|finish|target date)$/ },
+    // The Process tab's single date: the day a step was done, or is planned for.
+    { field: 'date', pattern: /^(date|done on|date done|planned date|when)$/ },
     { field: 'status', pattern: /^(status|state|progress)$/ },
+    { field: 'link', pattern: LINK_HEADER },
+    // Only a column that says it is for the client: a plain "Notes" column stays with the team.
+    { field: 'note', pattern: /^(note for client|notes for client|client note|client notes|for the client|note to client)$/ },
   ],
   inputs: [
     { field: 'title', required: true, pattern: /^(input|inputs|input needed.*|item|what we need.*|decision|decisions|request|asset|dependency|ask|needed|requirement)$/ },
-    { field: 'why', pattern: /^(why|why it matters|purpose|reason|starting point.*|context|used for|what it unlocks)$/ },
+    { field: 'why', pattern: /^(why|why it matters|why we need it|purpose|reason|starting point.*|context|used for|what it unlocks)$/ },
     { field: 'neededBy', pattern: /^(needed by.*|due|due date|deadline|by when|needed on)$/ },
     { field: 'status', pattern: /^(status|state)$/ },
     { field: 'received', pattern: /^(received|received on|date received|your decision|decision made|answer|agreed)$/ },

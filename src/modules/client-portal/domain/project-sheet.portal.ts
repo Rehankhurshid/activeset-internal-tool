@@ -25,7 +25,7 @@ import { slug, uniqueIds } from './project-sheet.values';
  * ("Phase 1 – Design" and "Phase 1 - Design").
  */
 export function sheetStageIds(timeline: SheetTimeline | undefined): Map<string, string> {
-  const phases = (timeline?.phases ?? []).filter((p) => p.milestones.length > 0);
+  const phases = (timeline?.phases ?? []).filter((p) => p.milestones.some((m) => m.state !== 'not_needed'));
   const ids = uniqueIds(phases, (p) => `sheet-${slug(p.key)}`);
   return new Map(phases.map((p, i) => [p.key, ids[i]]));
 }
@@ -43,29 +43,35 @@ function stepStateOf(state: WorkState): TimelineStep['state'] {
  */
 export function sheetStageSources(timeline: SheetTimeline | undefined): TimelineStageSource[] {
   if (!timeline) return [];
-  const ids = sheetStageIds(timeline);
-  return timeline.phases
-    .filter((phase) => phase.milestones.length > 0)
-    .map((phase) => {
-      // The milestones' own dates first; else the phase's, from the Overview.
-      const starts = phase.milestones.map((m) => m.start?.iso).filter(isIsoDay).sort();
-      const ends = phase.milestones.map((m) => m.end?.iso ?? m.start?.iso).filter(isIsoDay).sort();
-      if (starts.length === 0 && isIsoDay(phase.start?.iso)) starts.push(phase.start.iso);
-      if (ends.length === 0 && isIsoDay(phase.end?.iso)) ends.push(phase.end.iso);
-      const stage: ClientPlanStage = { id: ids.get(phase.key)!, title: phase.title, deliverables: [], files: [] };
-      if (starts.length) stage.startDate = starts[0];
-      if (ends.length) stage.dueDate = ends[ends.length - 1];
-      return {
-        stage,
-        steps: phase.milestones.map((m) => {
-          const step: TimelineStep = { id: m.id, title: m.title, state: stepStateOf(m.state) };
-          if (m.start?.iso) step.startDate = m.start.iso;
-          if (m.end?.iso) step.endDate = m.end.iso;
-          if (m.owner === 'client' || m.owner === 'both') step.owner = m.owner;
-          return step;
-        }),
-      };
-    });
+  // A skipped step is out of scope: the client never sees it, and a stage of nothing but skipped steps goes too.
+  const phases = timeline.phases
+    .map((phase) => ({ ...phase, milestones: phase.milestones.filter((m) => m.state !== 'not_needed') }))
+    .filter((phase) => phase.milestones.length > 0);
+  const ids = sheetStageIds({ phases });
+  return phases.map((phase) => {
+    // The milestones' own dates first; else the phase's, from the Overview.
+    const starts = phase.milestones.map((m) => m.start?.iso).filter(isIsoDay).sort();
+    const ends = phase.milestones.map((m) => m.end?.iso ?? m.start?.iso).filter(isIsoDay).sort();
+    if (starts.length === 0 && isIsoDay(phase.start?.iso)) starts.push(phase.start.iso);
+    if (ends.length === 0 && isIsoDay(phase.end?.iso)) ends.push(phase.end.iso);
+    const stage: ClientPlanStage = { id: ids.get(phase.key)!, title: phase.title, deliverables: [], files: [] };
+    if (starts.length) stage.startDate = starts[0];
+    if (ends.length) stage.dueDate = ends[ends.length - 1];
+    return {
+      stage,
+      steps: phase.milestones.map((m) => {
+        const step: TimelineStep = { id: m.id, title: m.title, state: stepStateOf(m.state) };
+        if (m.start?.iso) step.startDate = m.start.iso;
+        if (m.end?.iso) step.endDate = m.end.iso;
+        if (m.owner === 'client' || m.owner === 'both') step.owner = m.owner;
+        // Their turn: waiting on their feedback, or a step of theirs under way.
+        if (m.state === 'in_review' || (m.owner === 'client' && (m.state === 'in_progress' || m.state === 'blocked'))) step.waiting = true;
+        if (m.link) step.url = m.link;
+        if (m.note) step.note = m.note;
+        return step;
+      }),
+    };
+  });
 }
 
 export function sheetFacts(overview: SheetOverview | undefined): PortalFactsView | undefined {

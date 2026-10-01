@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { MASTER_TEMPLATE_COPY_URL } from '../../domain/project-sheet.template';
 import type { ProjectSheetData, SheetStagesFrom, SheetTabReport, SheetTabRole } from '../../domain/project-sheet.types';
 import {
   clientPortalRepository,
@@ -248,6 +249,15 @@ export function ProjectSheetCard({ projectId, sheetState, hasAppTimeline }: Proj
           Bind the project&apos;s Google Sheet and the client&apos;s page reads it: stages from its Timeline tab, progress from its
           trackers, asks from Client Inputs and any <span className="font-mono text-xs">[Fill this]</span> tab, changes from its
           Change Log. The team keeps working in the sheet; tabs the app doesn&apos;t know are left alone.
+        </p>
+        <p className="text-sm">
+          New project?{' '}
+          <a href={MASTER_TEMPLATE_COPY_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline underline-offset-2">
+            Make a copy of the master template
+          </a>
+          <span className="text-muted-foreground">
+            : Overview, Process, Pages and What we need. Delete the stages the project doesn&apos;t include.
+          </span>
         </p>
         {shareLine}
         <div className="flex flex-col gap-2 sm:flex-row">

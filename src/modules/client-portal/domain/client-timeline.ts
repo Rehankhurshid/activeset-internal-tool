@@ -37,6 +37,12 @@ export interface TimelineStep {
   endDate?: string;
   /** Only from the project sheet, whose Owner column says when a step is the client's. */
   owner?: 'client' | 'both';
+  /** Only from the project sheet: the step is in the client's hands ("Waiting on client"). */
+  waiting?: boolean;
+  /** Only from the project sheet: the thing to look at for this step. Always http(s). */
+  url?: string;
+  /** Only from the project sheet's "Note for client" column. */
+  note?: string;
 }
 
 /** One phase with the milestones the client sees in it. */

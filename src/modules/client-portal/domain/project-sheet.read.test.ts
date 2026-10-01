@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { kindFromName, languageOf, planTabs } from './project-sheet.contract';
 import { readProjectSheet, workItemState } from './project-sheet.read';
 import { readChangeState, readDate, readOwner, readStatus } from './project-sheet.values';
-import { DIFFERENT_AI, LAUNCH_PLAN, REVPACK, TODAY, WEBFLOW_TEMPLATE, tab } from './project-sheet.fixtures';
+import { ACTIVESET_SHEET, DIFFERENT_AI, LAUNCH_PLAN, REVPACK, TODAY, WEBFLOW_TEMPLATE, tab } from './project-sheet.fixtures';
+import { PROCESS_STATUSES, PAGE_STATUSES, INPUT_STATUSES, WHO } from './project-sheet.template';
 
 const roles = (titles: string[]) => Object.fromEntries(planTabs(titles).map((p) => [p.title, p.role]));
 
@@ -103,6 +104,50 @@ describe('cell values', () => {
     assert.equal(readChangeState('Sent for approval'), 'proposed');
     assert.equal(readChangeState('In progress'), 'approved');
     assert.equal(readChangeState('Not approved'), 'declined');
+  });
+});
+
+describe('readProjectSheet: the ActiveSet project sheet', () => {
+  const { data, report } = readProjectSheet(ACTIVESET_SHEET, { today: TODAY });
+
+  it('reads the four tabs and leaves the team’s own tabs alone', () => {
+    assert.deepEqual(report.tabs.map((t) => [t.title, t.role]), [
+      ['Overview', 'overview'], ['Process', 'timeline'], ['Pages', 'tracker'], ['What we need', 'inputs'], ['Team scratch', 'ignored'],
+    ]);
+    assert.deepEqual(report.unknownStatuses, []);
+  });
+
+  it('reads Process as stages in order, one date per step, with whose turn it is', () => {
+    const phases = data.timeline!.phases;
+    assert.deepEqual(phases.map((p) => p.title), ['Kickoff', 'Brand Design', 'Web Design', 'Development', 'Launch']);
+    const [kickoff, brand] = phases;
+    assert.deepEqual(kickoff.milestones.map((m) => [m.title, m.state, m.owner, m.end?.iso]), [
+      ['Kickoff call', 'done', 'both', '2026-09-03'],
+      ['Brief & questionnaire', 'done', 'client', '2026-09-05'],
+      ['Brand assets, logins & access', 'done', 'client', '2026-09-06'],
+    ]);
+    const feedback = brand.milestones.find((m) => m.title === 'Feedback on moodboard')!;
+    assert.equal(feedback.state, 'in_review', '"Waiting on client" is the client’s turn');
+    assert.equal(feedback.link, 'https://www.figma.com/board/moodboard');
+    assert.equal(feedback.note, 'Two directions: pick one, or mix them');
+    assert.equal(brand.milestones.find((m) => m.title === 'Logo concepts')!.state, 'not_needed');
+  });
+
+  it('reads the Overview, Pages and What we need tabs', () => {
+    assert.equal(data.overview!.engagement, 'Brand Design, Web Design, Development');
+    assert.deepEqual(data.overview!.targetLaunch, { iso: '2026-10-30' });
+    assert.deepEqual(data.overview!.links, [{ title: 'Figma', url: 'https://www.figma.com/design/northwind' }]);
+    assert.deepEqual(data.workstreams[0].tracks.map((t) => t.label), ['Copy', 'Design', 'Development']);
+    assert.equal(JSON.stringify(data.workstreams).includes('SECRET'), false, 'team notes stay in the sheet');
+    assert.deepEqual(data.inputs.map((i) => i.state), ['received', 'received', 'pending', 'pending', 'pending', 'pending']);
+    assert.equal(data.inputs[2].why, 'Needed before pages are designed');
+  });
+
+  it('knows every dropdown word the template offers', () => {
+    for (const word of [...PROCESS_STATUSES, ...PAGE_STATUSES, ...INPUT_STATUSES]) {
+      assert.equal(readStatus(word).unknown, false, word);
+    }
+    assert.deepEqual(WHO.map((w) => readOwner(w)), ['team', 'client', 'both']);
   });
 });
 

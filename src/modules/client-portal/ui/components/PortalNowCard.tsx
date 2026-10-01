@@ -61,6 +61,13 @@ export function PortalNowCard({ view, now }: PortalNowCardProps) {
   const relative = formatRelativeDay(view.lastUpdateAt, now);
   const dates = current ? formatStageDates(current.startDate, current.dueDate, now) : '';
 
+  // With the project sheet, the full step list sits in "The process" below; here, only the step we are on.
+  const sheetMode = view.planSource === 'sheet';
+  const steps = current?.steps ?? [];
+  const nowIndex = steps.findIndex((step) => step.state !== 'done');
+  const nowStep = nowIndex >= 0 ? steps[nowIndex] : undefined;
+  const nextStep = nowIndex >= 0 ? steps[nowIndex + 1] : undefined;
+
   const trackLabel = current
     ? `Stage ${currentStageIndex! + 1} of ${stages.length}: ${current.title}${
         current.percent !== undefined ? `, ${current.percent}% done` : ''
@@ -98,6 +105,18 @@ export function PortalNowCard({ view, now }: PortalNowCardProps) {
             )}
           </div>
           <StageTrack stages={stages} label={trackLabel} />
+          {sheetMode && nowStep && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border bg-background px-4 py-3">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Right now</span>
+              <span className="text-sm font-medium text-foreground">{nowStep.title}</span>
+              {nowStep.waiting ? (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Waiting on you</span>
+              ) : (
+                <span className="text-xs text-muted-foreground">In progress with ActiveSet</span>
+              )}
+              {nextStep && <span className="basis-full text-xs text-muted-foreground">Then: {nextStep.title}</span>}
+            </div>
+          )}
           {(dates || next) && (
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               {dates && <p>{dates}</p>}
@@ -129,9 +148,9 @@ export function PortalNowCard({ view, now }: PortalNowCardProps) {
       )}
 
       {current &&
-        (current.steps?.length || current.meetings?.length || current.files.length > 0) && (
+        ((!sheetMode && current.steps?.length) || current.meetings?.length || current.files.length > 0) && (
           <div className="mt-6 border-t border-border pt-5">
-            <PortalStageDetail stage={current} now={now} />
+            <PortalStageDetail stage={sheetMode ? { ...current, steps: undefined } : current} now={now} />
           </div>
         )}
     </section>
