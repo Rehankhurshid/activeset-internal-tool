@@ -81,6 +81,18 @@ still missing and who could answer it, and anything wrong you found on the way
 Writes to anything outside the app (MarkUp, Slack, email, the client's sheet)
 need the user's yes first.
 
+## Metrics
+
+The project sheet's Metrics Tracker is the monthly numbers (GA4, Search Console,
+PageSpeed, CrUX, the AI retrieval re-test). Never copy illustrative or
+placeholder values; only numbers read from the source for that month.
+
+```bash
+npm run -s metrics -- show "DreamTeam"                    # keys and the table
+npm run -s metrics -- init "DreamTeam" 2026-09 --write    # the default metrics, baseline month
+npm run -s metrics -- set "DreamTeam" sessions 2026-10 1500 --source "GA4, 1-31 Oct" --write
+```
+
 ## MarkUp
 
 `MARKUP_API_KEY` is in `.env.local` (workspace "ActiveSet", one folder per client).

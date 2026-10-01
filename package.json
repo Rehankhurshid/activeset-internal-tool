@@ -20,6 +20,7 @@
     "sheet:template": "tsx --tsconfig scripts/tsconfig.server-scripts.json scripts/build-project-sheet-template.ts",
     "checklist": "tsx --tsconfig scripts/tsconfig.server-scripts.json scripts/checklist.ts",
     "markup": "tsx --tsconfig scripts/tsconfig.server-scripts.json scripts/markup.ts",
+    "metrics": "tsx --tsconfig scripts/tsconfig.server-scripts.json scripts/metrics.ts",
     "contract:create": "tsx scripts/create-contract.ts",
     "contract:template": "tsx scripts/create-contract.ts template",
     "contract:instructions": "tsx scripts/create-contract.ts instructions",

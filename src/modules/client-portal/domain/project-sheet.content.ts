@@ -3,6 +3,7 @@ import { normalizeClientStatus } from '@/types';
 import { servicesName, orderServices, isServiceId } from '@/lib/engagements';
 import { resolveTimelinePlan } from './client-timeline';
 import { portalStageSources } from './portal-sources';
+import { sheetMetrics, type ProjectMetric, type SheetMetrics } from './project-metrics';
 
 /**
  * What the app writes into a project's sheet, from what the app knows.
@@ -27,6 +28,7 @@ export const MANAGED_TABS = {
   inputs: 'What we need',
   checks: 'Checklist',
   seo: 'Page SEO',
+  metrics: 'Metrics Tracker',
 } as const;
 
 export const MANAGED_PROCESS_HEADER = ['#', 'Stage', 'Step', 'Who', 'Status', 'Date'] as const;
@@ -78,6 +80,8 @@ export interface ManagedSheetContent {
    * its deliverables numbered with owner, priority, status, week and notes.
    */
   boards: SheetBoard[];
+  /** The Metrics Tracker: baseline and the five months after it. Null when the project tracks none. */
+  metrics: SheetMetrics | null;
   /** The Overview's roll-up: one line per band. */
   plan: { area: string; tab: string; deliverables: number; p0: number; done: number; progress: number }[];
   /** Each scanned page, as search engines and AI answers read it. */
@@ -144,6 +148,8 @@ export interface ManagedSheetInput {
   asks?: readonly Pick<Task, 'title' | 'dueDate' | 'status' | 'needsClientInput' | 'order'>[];
   /** The last scan of each of the site's pages, in the order to list them. */
   seo?: readonly SheetSeoInput[];
+  /** `projects/{id}/metrics`. */
+  metrics?: readonly ProjectMetric[];
 }
 
 const WHO: Record<ClientStepWho | 'none', string> = { activeset: 'ActiveSet', client: 'Client', together: 'Together', none: 'ActiveSet' };
@@ -406,6 +412,7 @@ export function managedSheetContent(input: ManagedSheetInput): ManagedSheetConte
     inputs,
     boards,
     plan: sheetPlan(boards),
+    metrics: sheetMetrics(input.metrics ?? []),
     seo: seoRows(input.seo),
   };
 }

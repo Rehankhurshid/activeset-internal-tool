@@ -32,6 +32,7 @@ import {
   type SheetSeoInput,
 } from '@/modules/client-portal/domain/project-sheet.content';
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
+import type { ProjectMetric, SheetMetrics } from '@/modules/client-portal/domain/project-metrics';
 import type { ChecklistSection, Project, ProjectChecklist, ProjectLink, Task } from '@/types';
 import { linksFromValues, mergeProjectLinks, type WantedLink } from '@/lib/checklist-links';
 
@@ -711,18 +712,112 @@ async function writeBoards(spreadsheetId: string, boards: SheetBoard[]): Promise
   await batchUpdateSpreadsheet(spreadsheetId, formats);
 }
 
+// --- Metrics Tracker --------------------------------------------------------------
+
+/** Columns A (margin) to J: Metric · Source · baseline and five months · Change. */
+const METRIC_WIDTHS = [24, 300, 160, 110, 90, 90, 90, 90, 90, 160];
+
+/** Draws the Metrics Tracker tab, adding it after the deliverables tabs the first time. */
+async function writeMetrics(spreadsheetId: string, metrics: SheetMetrics): Promise<void> {
+  const meta = await getSpreadsheetMeta(spreadsheetId);
+  let sheetId = meta.tabs.find((t) => t.title === MANAGED_TABS.metrics)?.sheetId;
+  if (sheetId === undefined) {
+    const seoIndex = meta.tabs.findIndex((t) => t.title === MANAGED_TABS.seo);
+    const added = await batchUpdateSpreadsheet(spreadsheetId, [
+      {
+        addSheet: {
+          properties: {
+            title: MANAGED_TABS.metrics,
+            ...(seoIndex >= 0 ? { index: seoIndex } : {}),
+            tabColorStyle: { rgbColor: hex('#0F766E') },
+            gridProperties: { rowCount: 60, columnCount: METRIC_WIDTHS.length, hideGridlines: true },
+          },
+        },
+      },
+    ]);
+    sheetId = (added.replies?.[0] as { addSheet?: { properties?: { sheetId: number } } } | undefined)?.addSheet?.properties?.sheetId;
+    if (sheetId === undefined) return;
+    await batchUpdateSpreadsheet(spreadsheetId, [kept(sheetId, MANAGED_TABS.metrics)]);
+  }
+  const cols = METRIC_WIDTHS.length;
+  const blank = (): (string | number)[] => Array.from({ length: cols }, () => '');
+  const title = blank();
+  title[1] = 'METRICS TRACKER';
+  const summary = blank();
+  summary[1] = 'Reported monthly by ActiveSet, each value from the source named. Change is from the baseline to the latest month with a value.';
+  const rows: (string | number)[][] = [
+    blank(),
+    title,
+    summary,
+    blank(),
+    // Leading apostrophes keep "Oct 26" a label and "+38%" a change, not a date and a number.
+    ['', ...metrics.header.map((h) => `'${h}`)],
+    ...metrics.rows.map((r) => ['', r.metric, r.source, ...r.values, r.change ? `'${r.change}` : '']),
+  ];
+  const rowCount = Math.max(60, rows.length + 10);
+  const first = 5;
+  const formats: Record<string, unknown>[] = [
+    { updateSheetProperties: { properties: { sheetId, gridProperties: { rowCount, columnCount: cols } }, fields: 'gridProperties.rowCount,gridProperties.columnCount' } },
+    { unmergeCells: { range: range(sheetId, 0, rowCount, 0, cols) } },
+    {
+      repeatCell: {
+        range: range(sheetId, 0, rowCount, 0, cols),
+        cell: { userEnteredFormat: { backgroundColorStyle: { rgbColor: hex(C.white) }, textFormat: font(BODY, 11, C.body), verticalAlignment: 'MIDDLE', padding: { top: 6, bottom: 6, left: 8, right: 8 } } },
+        fields: 'userEnteredFormat',
+      },
+    },
+    rowHeight(sheetId, 0, rowCount, 34),
+    ...widths(sheetId, METRIC_WIDTHS),
+    rowHeight(sheetId, 0, 1, 14),
+    rowHeight(sheetId, 3, 4, 14),
+    { mergeCells: { range: range(sheetId, 1, 2, 1, cols), mergeType: 'MERGE_ALL' } },
+    { mergeCells: { range: range(sheetId, 2, 3, 1, cols), mergeType: 'MERGE_ALL' } },
+    fill(range(sheetId, 1, 3, 0, cols), BAND.bg),
+    text(range(sheetId, 1, 2, 1, cols), font(DISPLAY, 22, BAND.fg, { bold: true }), { verticalAlignment: 'BOTTOM' }),
+    text(range(sheetId, 2, 3, 1, cols), font(BODY, 11, BAND.sub), { verticalAlignment: 'TOP' }),
+    rowHeight(sheetId, 1, 2, 64),
+    text(range(sheetId, 4, 5, 1, cols), font(DISPLAY, 11, BAND.label, { bold: true })),
+    centre(range(sheetId, 4, 5, 3, cols)),
+    {
+      updateBorders: {
+        range: range(sheetId, 4, 5, 1, cols),
+        top: { style: 'SOLID_MEDIUM', colorStyle: { rgbColor: hex(BAND.label) } },
+        bottom: { style: 'SOLID_THICK', colorStyle: { rgbColor: hex(C.line) } },
+      },
+    },
+    rowHeight(sheetId, 4, 5, 40),
+  ];
+  if (metrics.rows.length) {
+    const last = first + metrics.rows.length;
+    formats.push(
+      text(range(sheetId, first, last, 1, 2), font(BODY, 11, C.ink)),
+      text(range(sheetId, first, last, 2, 3), font(BODY, 10, C.muted)),
+      centre(range(sheetId, first, last, 3, cols)),
+      fill(range(sheetId, first, last, 3, 4), C.panel),
+      { updateBorders: { range: range(sheetId, first, last, 1, cols), innerHorizontal: { style: 'DOTTED', colorStyle: { rgbColor: hex(C.line) } }, bottom: { style: 'DOTTED', colorStyle: { rgbColor: hex(C.line) } } } },
+    );
+    metrics.rows.forEach((r, i) => {
+      if (r.better === undefined) return;
+      formats.push(text(range(sheetId!, first + i, first + i + 1, cols - 1, cols), font(DISPLAY, 11, r.better ? '#15803D' : '#B91C1C', { bold: true }), { horizontalAlignment: 'CENTER' }));
+    });
+  }
+  await writeRanges(spreadsheetId, [{ tab: MANAGED_TABS.metrics, rows: padded(rows, cols, rowCount) }]);
+  await batchUpdateSpreadsheet(spreadsheetId, formats);
+}
+
 // --- What goes in ----------------------------------------------------------------
 
 export async function contentFor(projectId: string): Promise<{ project: Project; content: ManagedSheetContent }> {
   const projectSnap = await db.collection(COLLECTIONS.PROJECTS).doc(projectId).get();
   if (!projectSnap.exists) throw new ProjectSheetError(404, 'Project not found.');
   const project = { ...(projectSnap.data() as Project), id: projectId };
-  const [checklistSnap, pageSnap, askSnap, timelineSnap, auditSnap] = await Promise.all([
+  const [checklistSnap, pageSnap, askSnap, timelineSnap, auditSnap, metricSnap] = await Promise.all([
     db.collection(COLLECTIONS.PROJECT_CHECKLISTS).where('projectId', '==', projectId).limit(20).get(),
     db.collection(COLLECTIONS.PROJECTS).doc(projectId).collection(COLLECTIONS.PROJECT_PAGES).limit(500).get(),
     db.collection(COLLECTIONS.TASKS).where('projectId', '==', projectId).where('needsClientInput', '==', true).limit(500).get(),
     db.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
     db.collection(COLLECTIONS.PROJECTS).doc(projectId).collection('link_audits').limit(500).get(),
+    db.collection(COLLECTIONS.PROJECTS).doc(projectId).collection('metrics').limit(100).get(),
   ]);
   const checklists = checklistSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as unknown as ProjectChecklist);
   const templates = await loadSourceTemplates(checklists);
@@ -735,6 +830,7 @@ export async function contentFor(projectId: string): Promise<{ project: Project;
     pages: pageSnap.docs.map((d) => d.data() as SheetPageInput),
     asks: askSnap.docs.map((d) => d.data() as Task),
     seo: seoInputs(project, auditSnap.docs.map((d) => ({ id: d.id, data: d.data() }))),
+    metrics: metricSnap.docs.map((d) => ({ ...(d.data() as ProjectMetric), key: d.id })),
   });
   return { project, content };
 }
@@ -863,6 +959,7 @@ export async function writeManagedSheet(projectId: string, options: { force?: bo
     }
     await writeValues(record.spreadsheetId, content, at);
     await writeBoards(record.spreadsheetId, content.boards);
+    if (content.metrics) await writeMetrics(record.spreadsheetId, content.metrics);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await ref.update({ writeError: { message, configuration: error instanceof GoogleApiError && error.configuration, at: at.toISOString() } });
