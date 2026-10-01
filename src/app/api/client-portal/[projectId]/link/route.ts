@@ -104,7 +104,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
       }
     }
 
-    const issued = await issuePortalToken({ projectId, createdBy: caller.email });
+    const project = (await db.collection(COLLECTIONS.PROJECTS).doc(projectId).get()).data() as
+      | { name?: string; client?: string; clientPortal?: { brandName?: string } }
+      | undefined;
+    const name = project?.clientPortal?.brandName?.trim() || project?.client?.trim() || project?.name;
+    const issued = await issuePortalToken({ projectId, createdBy: caller.email, name });
     return NextResponse.json(stateFrom(true, issued.record, issued.token));
   } catch (err) {
     if (err instanceof ApiAuthError) return apiAuthErrorResponse(err);

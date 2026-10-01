@@ -3,12 +3,14 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEq
 import * as admin from 'firebase-admin';
 import { db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
+import { isPortalTokenShape, portalToken } from '@/lib/portal-link-format';
 
 /**
  * Client portal capability tokens.
  *
  * A portal link is `/portal/<token>`; the token is the only credential. Tokens
- * are minted here (256 bits, base64url) and stored in the admin-only
+ * are minted here (the client's name plus a 12-character random key since
+ * 2026-10-01, see portal-link-format.ts; 256 bits of base64url before) and stored in the admin-only
  * `client_portal_tokens` collection under their SHA-256 hash. The raw token is
  * NOT persisted: when CLIENT_PORTAL_TOKEN_KEY is configured it is stored
  * AES-256-GCM encrypted so the Client tab can re-show the link; without the key
@@ -23,8 +25,6 @@ import { COLLECTIONS } from '@/lib/constants';
  * rejection performs the same reads and fails the same way.
  */
 
-const TOKEN_BYTES = 32;
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const KEY_ENV = 'CLIENT_PORTAL_TOKEN_KEY';
 
 export interface ClientPortalTokenRecord {
@@ -59,7 +59,7 @@ function projectRef(projectId: string) {
 }
 
 export function isWellFormedPortalToken(token: unknown): token is string {
-  return typeof token === 'string' && TOKEN_PATTERN.test(token);
+  return isPortalTokenShape(token);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,10 +131,12 @@ export interface IssuedPortalToken {
 export async function issuePortalToken(params: {
   projectId: string;
   createdBy: string;
+  /** The client's name, for the readable part of the link. */
+  name?: string;
   label?: string;
   expiresAt?: string;
 }): Promise<IssuedPortalToken> {
-  const token = randomBytes(TOKEN_BYTES).toString('base64url');
+  const token = portalToken(params.name, (n) => randomBytes(n));
   const tokenHash = hashPortalToken(token);
   const now = new Date().toISOString();
   const record: ClientPortalTokenRecord = {
