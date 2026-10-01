@@ -31,7 +31,8 @@ import {
   type SheetSeoInput,
 } from '@/modules/client-portal/domain/project-sheet.content';
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
-import type { Project, ProjectChecklist, Task } from '@/types';
+import type { ChecklistSection, Project, ProjectChecklist, ProjectLink, Task } from '@/types';
+import { linksFromValues, mergeProjectLinks, type WantedLink } from '@/lib/checklist-links';
 
 /**
  * The project sheet the app creates and keeps (Rehan, 2026-10-01).
@@ -598,9 +599,40 @@ export async function createManagedSheet(projectId: string, by: string): Promise
   };
   // `set`, not merge: a hand-kept sheet's snapshot and report go with its binding.
   await recordRef(projectId).set(record);
+  await recordOnChecklist(projectId, file.url);
   // The kickoff email links the client's sheet from here.
   await db.collection(COLLECTIONS.PROJECTS).doc(projectId).update({ 'delivery.trackerSheetUrl': file.url });
   return writeManagedSheet(projectId, { force: true });
+}
+
+/**
+ * The checklist's "Share the project tracker" step records the sheet the app
+ * made (Rehan, 2026-10-01: why is this not filled automatically), and so does
+ * the project's "Project Tracker" link, as when the team records it by hand.
+ * The step is not ticked: sharing it with the client is still the team's to do.
+ */
+export async function recordOnChecklist(projectId: string, url: string): Promise<void> {
+  const snap = await db.collection(COLLECTIONS.PROJECT_CHECKLISTS).where('projectId', '==', projectId).limit(20).get();
+  const wanted: WantedLink[] = [];
+  for (const doc of snap.docs) {
+    const sections = (doc.get('sections') ?? []) as ChecklistSection[];
+    let changed = false;
+    for (const section of sections) {
+      for (const item of section.items ?? []) {
+        if (!(item.fields ?? []).some((f) => f.id === 'tracker') || item.values?.tracker === url) continue;
+        item.values = { ...(item.values ?? {}), tracker: url };
+        wanted.push(...linksFromValues(item.fields, { tracker: url }));
+        changed = true;
+      }
+    }
+    if (changed) await doc.ref.update({ sections: JSON.parse(JSON.stringify(sections)), updatedAt: FieldValue.serverTimestamp() });
+  }
+  if (wanted.length) {
+    const projectRef = db.collection(COLLECTIONS.PROJECTS).doc(projectId);
+    const links = ((await projectRef.get()).get('links') ?? []) as ProjectLink[];
+    const merged = mergeProjectLinks(links, wanted, () => `link_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`);
+    if (merged.changed.length) await projectRef.update({ links: JSON.parse(JSON.stringify(merged.links)) });
+  }
 }
 
 /** Writes the sheet if anything in it changed since the last write (or always, with `force`). */

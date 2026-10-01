@@ -163,11 +163,11 @@ export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
         {
             title: 'Share the project tracker with the client',
             emoji: '\u{1F4CA}',
-            howTo: 'Generate it from the Pages stage rather than making a sheet by hand \u2014 a hand-kept page list drifts from the real site within a sprint. Share it read-only; it is a view of the app, and edits there are overwritten on the next sync.',
+            howTo: 'Create the project sheet from the Project sheet card (Client tab, or the Pages stage): the app makes it and keeps it up to date from the checklist, the pages and the requests, and fills in the link below. Share it with the client as a viewer; edits made in the sheet are replaced at the next update.',
             fields: [{ id: 'tracker', label: 'Tracker sheet', type: 'url', projectLink: { title: 'Project Tracker' } }],
             template: {
                 label: 'Copy the message',
-                body: 'Here is the project tracker. It shows every page we are building and where each one has got to, and it updates as we work \u2014 so you can check progress any time without waiting for a call.\n\nIt is read-only on your side. If something looks wrong, say so in Slack and we will fix it at source.',
+                body: 'Here is your project sheet. It shows every step of the project and where we are, each page and how far along it is, and what we still need from you. It updates by itself as we work, so you can check progress any time without waiting for a call.\n\nIt is read-only on your side. If something looks wrong, say so in Slack and we will fix it at source.',
             },
         },
         {
