@@ -23,6 +23,8 @@ import {
 } from '@/types';
 import { COLLECTIONS } from '@/lib/constants';
 import { requestProjectSheetWrite } from '@/lib/project-sheet-trigger';
+import { linksFromValues } from '@/lib/checklist-links';
+import { projectsService } from '@/services/database';
 import { getTemplateById, getDefaultTemplate, SOP_TEMPLATES } from '@/lib/sop-templates';
 import { DatabaseError, logError } from '@/lib/errors';
 // The one place a service reaches into a module: the diff between a project's
@@ -325,12 +327,14 @@ export const checklistService = {
             const checklist = await this.getChecklist(checklistId);
             if (!checklist) throw new DatabaseError('Checklist not found');
 
+            let fields: ChecklistItem['fields'];
             const sections = checklist.sections.map((section) => {
                 if (section.id !== sectionId) return section;
                 return {
                     ...section,
                     items: section.items.map((item) => {
                         if (item.id !== itemId) return item;
+                        fields = item.fields;
                         const merged = { ...(item.values ?? {}), ...values };
                         for (const key of Object.keys(merged)) {
                             if (!merged[key]) delete merged[key];
@@ -342,6 +346,14 @@ export const checklistService = {
 
             const ref = doc(db, CHECKLISTS_COLLECTION, checklistId);
             await updateDoc(ref, { sections: stripUndefined(sections), updatedAt: Timestamp.now() });
+
+            // A MarkUp folder or tracker recorded here belongs on the project's
+            // Links too. Best effort: the value is saved either way.
+            try {
+                await projectsService.keepChecklistLinks(checklist.projectId, linksFromValues(fields, values));
+            } catch (linkError) {
+                logError(linkError, 'updateChecklistItemValues: project links');
+            }
         } catch (error) {
             logError(error, 'updateChecklistItemValues');
             if (error instanceof DatabaseError) throw error;

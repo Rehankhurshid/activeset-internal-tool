@@ -45,6 +45,7 @@ import {
 import { DatabaseError, logError } from '@/lib/errors';
 import { orderServices } from '@/lib/engagements';
 import { requestProjectSheetWrite } from '@/lib/project-sheet-trigger';
+import { mergeProjectLinks, type WantedLink } from '@/lib/checklist-links';
 import { COLLECTIONS } from '@/lib/constants';
 import { compactAuditResult } from '@/lib/scan-utils';
 
@@ -906,6 +907,20 @@ export const projectsService = {
       links: stripUndefined(strippedLinks),
       updatedAt: Timestamp.now(),
     });
+  },
+
+  /**
+   * Keeps links recorded on the checklist (the MarkUp folder, the tracker) on
+   * the project's Links: fills the matching link, else adds one. See
+   * checklist-links.ts.
+   */
+  async keepChecklistLinks(projectId: string, wanted: readonly WantedLink[]): Promise<void> {
+    if (wanted.length === 0) return;
+    const project = await this.getProject(projectId);
+    if (!project) return;
+    const { links, changed } = mergeProjectLinks(project.links ?? [], wanted, generateLinkId);
+    if (changed.length === 0) return;
+    await this.updateProjectLinks(projectId, links, { changedLinkIds: changed });
   },
 
   // Add a new link to a project

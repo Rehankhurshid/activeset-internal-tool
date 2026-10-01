@@ -158,13 +158,13 @@ export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
             clientHidden: true,
             emoji: '\u2611\uFE0F',
             howTo: 'Use the \u2699\uFE0F One Click Setup so the list matches this SOP. Then link it on the project so the two do not drift.',
-            fields: [{ id: 'clickup', label: 'ClickUp list', type: 'url' }],
+            fields: [{ id: 'clickup', label: 'ClickUp list', type: 'url', projectLink: { title: 'ClickUp' } }],
         },
         {
             title: 'Share the project tracker with the client',
             emoji: '\u{1F4CA}',
             howTo: 'Generate it from the Pages stage rather than making a sheet by hand \u2014 a hand-kept page list drifts from the real site within a sprint. Share it read-only; it is a view of the app, and edits there are overwritten on the next sync.',
-            fields: [{ id: 'tracker', label: 'Tracker sheet', type: 'url' }],
+            fields: [{ id: 'tracker', label: 'Tracker sheet', type: 'url', projectLink: { title: 'Project Tracker' } }],
             template: {
                 label: 'Copy the message',
                 body: 'Here is the project tracker. It shows every page we are building and where each one has got to, and it updates as we work \u2014 so you can check progress any time without waiting for a call.\n\nIt is read-only on your side. If something looks wrong, say so in Slack and we will fix it at source.',
@@ -176,7 +176,7 @@ export const AGENCY_START: Omit<SOPTemplateSection, 'order'> = {
             emoji: '\u{1F4DD}',
             howTo: 'Where the client leaves feedback on staging, pinned to the thing they mean. It saves the round of "the button on the third section" that costs half a day.',
             links: [{ label: 'MarkUp', url: 'https://www.markup.io/' }],
-            fields: [{ id: 'markup', label: 'MarkUp folder', type: 'url' }],
+            fields: [{ id: 'markup', label: 'MarkUp folder', type: 'url', projectLink: { title: 'MarkUp', matches: ['Feedback URL', 'MarkUp folder', 'Feedback'] } }],
         },
         {
             title: 'Hold the internal kickoff',
@@ -199,14 +199,14 @@ export const AGENCY_CLOSE: Omit<SOPTemplateSection, 'order'> = {
             title: 'Record the walkthrough videos',
             emoji: '\u{1F3AC}',
             howTo: 'How to edit it, how to publish it, and anything custom we built. Short and separate beats one long recording nobody scrubs through. This is what stops the support questions six months from now.',
-            fields: [{ id: 'videos', label: 'Video links', type: 'url', placeholder: 'Loom folder or playlist', expected: true }],
+            fields: [{ id: 'videos', label: 'Video links', type: 'url', placeholder: 'Loom folder or playlist', expected: true, projectLink: { title: 'Walkthrough videos' } }],
         },
         {
             title: 'Hand over the documentation and the video links',
             emoji: '\u{1F4E6}',
             howTo: 'In one place they will still be able to find next year, and sent by email rather than only Slack \u2014 Slack history is the first thing to disappear when someone leaves.',
             fields: [
-                { id: 'handover_doc', label: 'Handover doc', type: 'url' },
+                { id: 'handover_doc', label: 'Handover doc', type: 'url', projectLink: { title: 'Handover doc' } },
                 { id: 'sent_on', label: 'Sent on', type: 'date' },
             ],
             template: {

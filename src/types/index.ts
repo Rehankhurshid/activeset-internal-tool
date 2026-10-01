@@ -726,6 +726,12 @@ export interface ChecklistItemField {
   placeholder?: string;
   /** Flagged as missing when the step is ticked without it. Never blocks the tick. */
   expected?: boolean;
+  /**
+   * A link recorded here is also kept on the project's Links, under `title`
+   * (an existing link named `title` or one of `matches` is updated rather
+   * than duplicated). Only for `url` fields.
+   */
+  projectLink?: { title: string; matches?: string[] };
 }
 
 /**

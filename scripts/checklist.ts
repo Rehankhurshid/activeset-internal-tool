@@ -41,7 +41,8 @@ import { buildClientPortalView } from '@/modules/client-portal/domain/client-por
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
 import { snapshotOf } from '@/lib/project-sheet';
 import { checklistSectionsFor } from '@/modules/delivery/domain/delivery.basics';
-import type { ChecklistItem, ChecklistItemStatus, ChecklistSection, Project, ProjectChecklist, ProjectMeeting, ProjectTimeline, SOPTemplate } from '@/types';
+import { linksFromValues, mergeProjectLinks, type WantedLink } from '@/lib/checklist-links';
+import type { ChecklistItem, ChecklistItemStatus, ChecklistSection, Project, ProjectChecklist, ProjectLink, ProjectMeeting, ProjectTimeline, SOPTemplate } from '@/types';
 
 const WRITE = process.argv.includes('--write');
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
@@ -238,6 +239,7 @@ async function apply(file: string) {
   const checklists = await loadChecklists(project.id);
   const touched = new Set<Loaded>();
   let changes = 0;
+  const wantedLinks: WantedLink[] = [];
 
   for (const update of plan.updates) {
     if (!update.source?.trim()) throw new Error(`"${update.item}": every update needs a source.`);
@@ -282,6 +284,11 @@ async function apply(file: string) {
       }
       lines.push(`${field}: ${JSON.stringify(current)} → ${JSON.stringify(value)}`);
       item.values = { ...(item.values ?? {}), [field]: value };
+      // What the app does when the team records it: tagged links go on the project too.
+      for (const link of linksFromValues(item.fields, { [field]: value })) {
+        lines.push(`project link "${link.title}" → ${link.url}`);
+        wantedLinks.push(link);
+      }
     }
 
     const applied = lines.filter((l) => !l.includes(' kept as ') && !l.startsWith('status stays'));
@@ -299,6 +306,12 @@ async function apply(file: string) {
   if (!WRITE || touched.size === 0) return;
   for (const checklist of touched) {
     await checklist.ref.update({ sections: strip(checklist.sections), updatedAt: Timestamp.now() });
+  }
+  if (wantedLinks.length) {
+    const projectRef = db.collection(COLLECTIONS.PROJECTS).doc(project.id);
+    const current = ((await projectRef.get()).get('links') ?? []) as ProjectLink[];
+    const merged = mergeProjectLinks(current, wantedLinks, () => `link_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`);
+    if (merged.changed.length) await projectRef.update({ links: strip(merged.links), updatedAt: Timestamp.now() });
   }
   // What a tick in the app does: the client's page counts as updated.
   await db.collection(COLLECTIONS.PROJECTS).doc(project.id).update({
