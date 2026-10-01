@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
-import { deliveryRepository } from '../../infrastructure/delivery.repository';
+import { TrackerSheetError, deliveryRepository } from '../../infrastructure/delivery.repository';
 
 interface TrackerSheetCardProps {
   project: Pick<Project, 'id' | 'delivery'>;
@@ -36,11 +36,13 @@ function formatWhen(iso: string | undefined): string {
 }
 
 /**
- * The client's Google Sheet.
+ * The "Project Tracker" tab of the project's Google Sheet.
  *
- * The app owns the page data and this writes it out; nobody edits the sheet.
- * That is the only arrangement that survives an automatically discovered page
- * list, and it is why there is a Sync button rather than a two-way toggle.
+ * The app owns the page list and writes that one tab from it; the rest of the
+ * sheet is the team's. Google gives the app's service account no Drive
+ * storage, so the app cannot create a spreadsheet: the first write goes into
+ * the project sheet bound on the Client tab, or into a sheet the team picks
+ * here and shares with the app as an Editor.
  */
 export function TrackerSheetCard({ project, pageCount }: TrackerSheetCardProps) {
   const delivery = project.delivery;
@@ -55,26 +57,54 @@ export function TrackerSheetCard({ project, pageCount }: TrackerSheetCardProps) 
   const [importUrl, setImportUrl] = useState('');
   const [preview, setPreview] = useState<{ rows: { title: string }[]; duplicates: number } | null>(null);
 
-  const handleSync = async () => {
+  // Picking the sheet to write into: opened when the app has none, or cannot write to the one it has.
+  const [pickOpen, setPickOpen] = useState(false);
+  const [pickUrl, setPickUrl] = useState('');
+  const [pickProblem, setPickProblem] = useState<string | null>(null);
+  const [serviceEmail, setServiceEmail] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleSync = async (sheetUrl?: string) => {
     setBusy('sync');
     setConfigHint(null);
     try {
-      const result = await deliveryRepository.syncSheet(project.id);
+      const result = await deliveryRepository.syncSheet(project.id, sheetUrl);
       setUrl(result.spreadsheetUrl);
       setSyncedAt(result.syncedAt);
+      setPickOpen(false);
+      setPickUrl('');
+      setPickProblem(null);
+      const pagesWord = `${result.rows} ${result.rows === 1 ? 'page' : 'pages'}`;
       toast.success(
-        result.created
-          ? 'Tracker sheet created'
-          : `Tracker sheet updated — ${result.rows} ${result.rows === 1 ? 'page' : 'pages'}`,
+        result.created ? `Added a "Project Tracker" tab to ${result.sheetTitle || 'the sheet'}` : `Tracker updated: ${pagesWord}`,
+        result.created ? { description: `${pagesWord} written. The other tabs were not touched.` } : undefined,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update the tracker sheet';
+      if (err instanceof TrackerSheetError && err.code && ['needs_sheet', 'read_only', 'no_access'].includes(err.code)) {
+        // Something the team fixes in Google Sheets: say exactly what, beside where they paste the link.
+        setServiceEmail(err.serviceAccountEmail ?? null);
+        setPickProblem(err.code === 'needs_sheet' ? null : message);
+        setPickOpen(true);
+        return;
+      }
       // A setup problem has a fix the reader can act on, so keep it on screen
       // rather than in a toast that vanishes.
       if (/enable|not configured|service account/i.test(message)) setConfigHint(message);
       toast.error(message);
     } finally {
       setBusy(null);
+    }
+  };
+
+  const copyServiceEmail = async () => {
+    if (!serviceEmail) return;
+    try {
+      await navigator.clipboard.writeText(serviceEmail);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error('Could not copy. Select the address instead.');
     }
   };
 
@@ -137,14 +167,14 @@ export function TrackerSheetCard({ project, pageCount }: TrackerSheetCardProps) 
           </Button>
         ) : (
           <p className="text-sm text-muted-foreground">
-            No tracker sheet yet. Generating one writes {pageCount} {pageCount === 1 ? 'page' : 'pages'} into a
-            Google Sheet you can share with the client.
+            No tracker sheet yet. The app writes {pageCount} {pageCount === 1 ? 'page' : 'pages'} into a “Project
+            Tracker” tab of the project&apos;s Google Sheet.
           </p>
         )}
 
         <Button size="sm" className="h-8 text-xs" onClick={() => void handleSync()} disabled={busy !== null}>
           {busy === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          {url ? 'Sync now' : 'Generate sheet'}
+          {url ? 'Sync now' : 'Write to a sheet'}
         </Button>
 
         {url && (
@@ -173,9 +203,65 @@ export function TrackerSheetCard({ project, pageCount }: TrackerSheetCardProps) 
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        The app owns the page list; the sheet is written from it.{' '}
-        {syncedAt ? `Last synced ${formatWhen(syncedAt)}.` : 'Edits made in the sheet are overwritten on the next sync.'}
+        The app owns the page list and writes only the “Project Tracker” tab; the other tabs are never touched.{' '}
+        {syncedAt ? `Last synced ${formatWhen(syncedAt)}.` : 'Edits made in that tab are overwritten on the next sync.'}
       </p>
+
+      <Dialog open={pickOpen} onOpenChange={setPickOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Which sheet should the tracker go in?</DialogTitle>
+            <DialogDescription>
+              Google doesn&apos;t let the app create spreadsheets of its own, so it writes a “Project Tracker” tab into a sheet
+              your team owns: the project&apos;s sheet, or a new empty one from your Drive.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pickProblem && (
+            <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              {pickProblem}
+            </p>
+          )}
+
+          <ol className="list-decimal space-y-2 pl-4 text-xs text-muted-foreground">
+            <li>
+              <span>Share the sheet as an </span>
+              <span className="font-medium text-foreground">Editor</span>
+              <span> with</span>
+              {serviceEmail ? (
+                <span className="mt-1 flex flex-wrap items-center gap-2">
+                  <code className="select-all break-all rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                    {serviceEmail}
+                  </code>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => void copyServiceEmail()}>
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+                </span>
+              ) : (
+                <span> the app&apos;s service account.</span>
+              )}
+            </li>
+            <li>Paste its link below.</li>
+          </ol>
+
+          <Input
+            placeholder="https://docs.google.com/spreadsheets/d/…"
+            value={pickUrl}
+            onChange={(e) => setPickUrl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && pickUrl.trim() && void handleSync(pickUrl.trim())}
+          />
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setPickOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={() => void handleSync(pickUrl.trim() || undefined)} disabled={busy === 'sync'}>
+              {busy === 'sync' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {pickUrl.trim() ? `Write ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}` : 'Try again'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {configHint && (
         <p className={cn('rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs', 'text-amber-700 dark:text-amber-300')}>

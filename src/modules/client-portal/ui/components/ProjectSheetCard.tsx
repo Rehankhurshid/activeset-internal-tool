@@ -219,7 +219,7 @@ export function ProjectSheetCard({ projectId, sheetState, hasAppTimeline }: Proj
   const { sheet, serviceAccountEmail } = state;
   const shareLine = serviceAccountEmail ? (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border px-3 py-2 text-xs">
-      <span className="text-muted-foreground">Share the sheet as a Viewer with</span>
+      <span className="text-muted-foreground">Share the sheet as a Viewer (an Editor if the Delivery tab should write its tracker tab into it) with</span>
       <code className="select-all break-all rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">{serviceAccountEmail}</code>
       <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => copyEmail(serviceAccountEmail)}>
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}

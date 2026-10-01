@@ -7,6 +7,7 @@ import {
   shareTrackerSheet,
   syncTrackerSheet,
 } from '@/lib/delivery-sheet-sync';
+import { serviceAccountEmail } from '@/lib/project-sheet';
 
 export const runtime = 'nodejs';
 // Writing a few hundred rows to Sheets is comfortably slower than a normal
@@ -18,7 +19,7 @@ export const maxDuration = 60;
  * read an existing one in.
  *
  * POST /api/delivery/[projectId]/sheet
- *   { action: 'sync' }                              → create on first call, then overwrite
+ *   { action: 'sync', sheetUrl? }                   → write the Project Tracker tab (sheetUrl picks the sheet)
  *   { action: 'share', email }                      → grant read access
  *   { action: 'preview-import', sheetUrl, tab? }    → read a sheet, change nothing
  *   { action: 'import', sheetUrl, tab? }            → read it and apply
@@ -38,7 +39,15 @@ function errorResponse(err: unknown): NextResponse {
   if (err instanceof GoogleApiError) {
     // `configuration` marks the failures a person can fix without a deploy,
     // so the UI can show the instruction rather than a stack trace.
-    return NextResponse.json({ error: err.message, configuration: err.configuration }, { status: err.status });
+    // With a code, the UI can ask for a sheet or say who to share it with.
+    return NextResponse.json(
+      {
+        error: err.message,
+        configuration: err.configuration,
+        ...(err.code ? { code: err.code, serviceAccountEmail: serviceAccountEmail() } : {}),
+      },
+      { status: err.status },
+    );
   }
   console.error('[delivery/sheet] failed:', err);
   return NextResponse.json({ error: 'The tracker sheet could not be updated' }, { status: 500 });
@@ -52,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
 
     switch (body.action) {
       case 'sync':
-        return NextResponse.json(await syncTrackerSheet(projectId));
+        return NextResponse.json(await syncTrackerSheet(projectId, body.sheetUrl?.trim() || undefined));
 
       case 'share': {
         const email = body.email?.trim();

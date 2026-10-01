@@ -116,6 +116,21 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): T {
  * on. A `configuration` error means the fix is in the Google Cloud console, not
  * in this app, so it is surfaced verbatim rather than flattened to "failed".
  */
+/**
+ * A tracker sheet failure the card can act on: `needs_sheet` (no sheet to
+ * write into yet), `read_only` / `no_access` (share it with the app as an
+ * Editor), with the address to share it with.
+ */
+export class TrackerSheetError extends DatabaseError {
+  constructor(
+    message: string,
+    public code?: string,
+    public serviceAccountEmail?: string,
+  ) {
+    super(message);
+  }
+}
+
 async function sheetAction<T>(
   projectId: string,
   body: Record<string, unknown>,
@@ -126,8 +141,10 @@ async function sheetAction<T>(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  const parsed = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new DatabaseError(parsed?.error || `${fallback} (${res.status})`);
+  const parsed = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string; serviceAccountEmail?: string };
+  if (!res.ok) {
+    throw new TrackerSheetError(parsed?.error || `${fallback} (${res.status})`, parsed?.code, parsed?.serviceAccountEmail ?? undefined);
+  }
   return parsed;
 }
 
@@ -459,13 +476,18 @@ export const deliveryRepository = {
   // credentials are the server's service account and must never reach a
   // browser. The app owns the page data; the sheet is a view of it.
 
-  async syncSheet(projectId: string): Promise<{
+  /** Writes the Project Tracker tab. `sheetUrl` picks the sheet the first time. */
+  async syncSheet(
+    projectId: string,
+    sheetUrl?: string,
+  ): Promise<{
     spreadsheetUrl: string;
+    sheetTitle: string;
     rows: number;
     created: boolean;
     syncedAt: string;
   }> {
-    return sheetAction(projectId, { action: 'sync' }, 'Failed to update the tracker sheet');
+    return sheetAction(projectId, { action: 'sync', ...(sheetUrl ? { sheetUrl } : {}) }, 'Failed to update the tracker sheet');
   },
 
   async shareSheet(projectId: string, email: string): Promise<void> {

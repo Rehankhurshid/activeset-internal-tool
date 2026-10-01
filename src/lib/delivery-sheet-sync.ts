@@ -4,12 +4,15 @@ import { db, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
 import {
   GoogleApiError,
-  createSpreadsheet,
+  addTab,
+  getSpreadsheetMeta,
   listTabs,
+  parseSpreadsheetId,
   readGrid,
   shareSpreadsheet,
   writeGrid,
 } from '@/lib/google-api';
+import { getProjectSheetRecord, serviceAccountEmail } from '@/lib/project-sheet';
 import { getStack } from '@/modules/delivery/domain/stacks';
 import {
   TRACKER_TAB_TITLE,
@@ -20,13 +23,14 @@ import {
 import type { ProjectPage, StackId } from '@/modules/delivery/domain/delivery.types';
 
 /**
- * Keeps the client's tracker sheet in step with the pages in the app.
+ * Keeps the "Project Tracker" tab of the project's sheet in step with the pages
+ * in the app.
  *
- * The app owns the data and the sheet is a view of it, which is the only
- * arrangement that works when the page list is discovered automatically: a
- * hand-maintained list drifts from the site within a sprint. Nobody edits the
- * generated sheet; the importer exists only to seed a project that started life
- * in a spreadsheet.
+ * The app owns the page list and that one tab is written from it; every other
+ * tab is the team's (docs/plans/project-sheet-contract.md). The sheet itself is
+ * the team's too: Google gives service accounts no Drive storage, so the app
+ * cannot create a spreadsheet and writes into one the team owns and has shared
+ * with it as an Editor.
  */
 
 interface ProjectRecord {
@@ -57,17 +61,38 @@ async function loadPages(projectId: string): Promise<ProjectPage[]> {
 export interface SheetSyncResult {
   spreadsheetId: string;
   spreadsheetUrl: string;
+  /** The sheet's title, so the team sees where the pages went. */
+  sheetTitle: string;
   rows: number;
   syncedAt: string;
+  /** True when the Project Tracker tab was added by this sync. */
   created: boolean;
 }
 
+function editorHint(): string {
+  const email = serviceAccountEmail();
+  return email ? `Share it with ${email} as an Editor` : "Share it with the app's service account as an Editor";
+}
+
+/** Google's 403/404 on someone else's sheet, as the thing to do about it. */
+function accessError(error: unknown, title: string | null): GoogleApiError {
+  if (error instanceof GoogleApiError && (error.status === 403 || error.status === 404) && !error.configuration) {
+    return title
+      ? new GoogleApiError(403, `The app can read "${title}" but can't write to it. ${editorHint()}, then try again.`, false, 'read_only')
+      : new GoogleApiError(404, `The app can't open that sheet. ${editorHint()}, then try again.`, false, 'no_access');
+  }
+  return error instanceof GoogleApiError ? error : new GoogleApiError(500, error instanceof Error ? error.message : 'The tracker sheet could not be updated');
+}
+
 /**
- * Writes the current page list to the project's sheet, creating it on first
- * use. Safe to call repeatedly; the tab is replaced wholesale so a page removed
- * in the app disappears from the client's view rather than lingering.
+ * Writes the current page list to the "Project Tracker" tab, adding the tab if
+ * the sheet has none. The sheet is, in order: the one the team just picked,
+ * the one this project already writes to, or the project sheet bound on the
+ * Client tab. With none of those, it asks for one (`needs_sheet`). The tab is
+ * replaced wholesale, so a page removed in the app disappears from the
+ * client's view rather than lingering.
  */
-export async function syncTrackerSheet(projectId: string): Promise<SheetSyncResult> {
+export async function syncTrackerSheet(projectId: string, sheetInput?: string): Promise<SheetSyncResult> {
   if (!hasFirebaseAdminCredentials) {
     throw new GoogleApiError(503, 'Server is not configured', true);
   }
@@ -78,40 +103,48 @@ export async function syncTrackerSheet(projectId: string): Promise<SheetSyncResu
   const rows = buildTrackerRows(stack, pages);
   const grid = { title: TRACKER_TAB_TITLE, rows, frozenRows: 1 };
 
-  let spreadsheetId = project.delivery?.trackerSheetId;
-  let spreadsheetUrl = project.delivery?.trackerSheetUrl;
-  let created = false;
-
+  const picked = sheetInput ? parseSpreadsheetId(sheetInput) : null;
+  if (sheetInput && !picked) throw new GoogleApiError(400, 'That does not look like a Google Sheets link.');
+  const spreadsheetId =
+    picked ?? project.delivery?.trackerSheetId ?? (await getProjectSheetRecord(projectId))?.spreadsheetId ?? null;
   if (!spreadsheetId) {
-    const label = [project.client?.trim(), project.name?.trim()].filter(Boolean).join(' – ') || 'Website';
-    const sheet = await createSpreadsheet(`${label} · Website Project Tracker`, grid);
-    spreadsheetId = sheet.spreadsheetId;
-    spreadsheetUrl = sheet.spreadsheetUrl;
-    created = true;
-  } else {
-    // The tab can go missing if someone renamed or deleted it in the sheet.
-    // Recreating the whole document would orphan the link the client holds, so
-    // fail loudly and let a person decide.
-    const tabs = await listTabs(spreadsheetId);
-    if (!tabs.includes(TRACKER_TAB_TITLE)) {
-      throw new GoogleApiError(
-        409,
-        `The sheet no longer has a "${TRACKER_TAB_TITLE}" tab. Rename it back, or disconnect the sheet to generate a fresh one.`,
-      );
+    throw new GoogleApiError(
+      409,
+      `Google doesn't let the app create spreadsheets of its own, so it writes into one your team owns. Pick the sheet: ${editorHint().toLowerCase()} and paste its link.`,
+      false,
+      'needs_sheet',
+    );
+  }
+
+  let meta;
+  try {
+    meta = await getSpreadsheetMeta(spreadsheetId);
+  } catch (error) {
+    throw accessError(error, null);
+  }
+
+  let created = false;
+  try {
+    // A renamed or deleted tab is simply added back: the sheet is the team's, so its link stays the same.
+    if (!meta.tabs.some((t) => t.title === TRACKER_TAB_TITLE)) {
+      await addTab(spreadsheetId, TRACKER_TAB_TITLE, 1);
+      created = true;
     }
     await writeGrid(spreadsheetId, grid);
+  } catch (error) {
+    throw accessError(error, meta.title || 'this sheet');
   }
 
   const syncedAt = new Date().toISOString();
   await projectRef(projectId).set(
     {
-      delivery: { trackerSheetId: spreadsheetId, trackerSheetUrl: spreadsheetUrl, trackerSyncedAt: syncedAt },
+      delivery: { trackerSheetId: spreadsheetId, trackerSheetUrl: meta.url, trackerSyncedAt: syncedAt },
       updatedAt: admin.firestore.Timestamp.now(),
     },
     { merge: true },
   );
 
-  return { spreadsheetId: spreadsheetId!, spreadsheetUrl: spreadsheetUrl!, rows: rows.length - 1, syncedAt, created };
+  return { spreadsheetId, spreadsheetUrl: meta.url, sheetTitle: meta.title, rows: rows.length - 1, syncedAt, created };
 }
 
 /** Gives someone read access to the generated sheet. */

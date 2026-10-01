@@ -34,6 +34,8 @@ export class GoogleApiError extends Error {
     message: string,
     /** True when the fix is a configuration change rather than a code change. */
     public configuration = false,
+    /** A machine-readable reason the UI can act on, e.g. `needs_sheet`, `read_only`. */
+    public code?: string,
   ) {
     super(message);
     this.name = 'GoogleApiError';
@@ -144,23 +146,26 @@ export interface SheetGrid {
   frozenRows?: number;
 }
 
-export async function createSpreadsheet(title: string, grid: SheetGrid): Promise<{ spreadsheetId: string; spreadsheetUrl: string }> {
-  const created = await googleFetch<{ spreadsheetId: string; spreadsheetUrl: string }>(SHEETS_API, {
+/*
+ * There is no createSpreadsheet here on purpose. Google gives service accounts
+ * no Drive storage (this app's reports a quota of 0), so a spreadsheet the app
+ * creates is refused with "The caller does not have permission". The app writes
+ * into sheets the team owns and has shared with it as an Editor.
+ */
+
+/** A tab title as an A1 range prefix: quoted, with quotes doubled. */
+function quoteTab(title: string): string {
+  return `'${title.replace(/'/g, "''")}'`;
+}
+
+/** Adds an empty tab to a sheet the app can edit. */
+export async function addTab(spreadsheetId: string, title: string, frozenRows = 1): Promise<void> {
+  await googleFetch(`${SHEETS_API}/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({
-      properties: { title },
-      sheets: [
-        {
-          properties: {
-            title: grid.title,
-            gridProperties: { frozenRowCount: grid.frozenRows ?? 1 },
-          },
-        },
-      ],
+      requests: [{ addSheet: { properties: { title, gridProperties: { frozenRowCount: frozenRows } } } }],
     }),
   });
-  await writeGrid(created.spreadsheetId, grid);
-  return created;
 }
 
 /**
@@ -170,16 +175,16 @@ export async function createSpreadsheet(title: string, grid: SheetGrid): Promise
  * rows behind, and a client reading a stale row is worse than a missing one.
  */
 export async function writeGrid(spreadsheetId: string, grid: SheetGrid): Promise<void> {
-  const range = `${encodeURIComponent(grid.title)}!A1:ZZ10000`;
-  await googleFetch(`${SHEETS_API}/${spreadsheetId}/values/${range}:clear`, { method: 'POST', body: '{}' });
-  await googleFetch(
-    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(grid.title)}!A1?valueInputOption=RAW`,
-    { method: 'PUT', body: JSON.stringify({ values: grid.rows }) },
-  );
+  const tab = encodeURIComponent(quoteTab(grid.title));
+  await googleFetch(`${SHEETS_API}/${encodeURIComponent(spreadsheetId)}/values/${tab}!A1:ZZ10000:clear`, { method: 'POST', body: '{}' });
+  await googleFetch(`${SHEETS_API}/${encodeURIComponent(spreadsheetId)}/values/${tab}!A1?valueInputOption=RAW`, {
+    method: 'PUT',
+    body: JSON.stringify({ values: grid.rows }),
+  });
 }
 
 export async function readGrid(spreadsheetId: string, tabTitle?: string): Promise<string[][]> {
-  const range = tabTitle ? `${encodeURIComponent(tabTitle)}!A1:ZZ10000` : 'A1:ZZ10000';
+  const range = tabTitle ? `${encodeURIComponent(quoteTab(tabTitle))}!A1:ZZ10000` : 'A1:ZZ10000';
   const body = await googleFetch<{ values?: string[][] }>(`${SHEETS_API}/${spreadsheetId}/values/${range}`);
   return body.values ?? [];
 }
@@ -263,10 +268,6 @@ export interface LinkedCell {
 /** How much of each tab the project sheet reader looks at. Far beyond any tracker in Drive today. */
 const PROJECT_SHEET_RANGE = 'A1:AD800';
 
-/** A tab title as an A1 range prefix: quoted, with quotes doubled. */
-function quoteTab(title: string): string {
-  return `'${title.replace(/'/g, "''")}'`;
-}
 
 /**
  * Several tabs in one request, as displayed (dates and statuses as the team
