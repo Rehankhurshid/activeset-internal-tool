@@ -1,14 +1,14 @@
 ---
 module: tools-and-extensions
-title: Tools, Extensions and Side Apps (Invoices/Refrens, Chrome extensions, Internal Tools, Raycast, Screenshot Runner)
-keywords: [invoices, refrens, invoice slots, payment template, import from proposal, generate invoice from tasks, ad-hoc billing, adhoc, billing, ProjectBillingButton, refrens-sync, skydo, refrens-skydo-bridge, invoice bridge, chrome extension, extension pairing, pair with this browser, extension_tokens, webflow settings auditor, webflow team tracker, internal tools, raycast, RAYCAST_API_TOKEN, x-raycast-token, screenshot runner, captures, capture_runs, upload-captures, @activeset/capture, npx @activeset/capture, local-capture, blog-item-generation, well-known workflow]
+title: Tools, Extensions and Side Apps (Invoices/Refrens, Chrome extensions, Internal Tools, Raycast, menu bar app, Screenshot Runner)
+keywords: [menu bar, menubar, ActiveSet Bar, macOS app, invoices, refrens, invoice slots, payment template, import from proposal, generate invoice from tasks, ad-hoc billing, adhoc, billing, ProjectBillingButton, refrens-sync, skydo, refrens-skydo-bridge, invoice bridge, chrome extension, extension pairing, pair with this browser, extension_tokens, webflow settings auditor, webflow team tracker, internal tools, raycast, RAYCAST_API_TOKEN, x-raycast-token, screenshot runner, captures, capture_runs, upload-captures, @activeset/capture, npx @activeset/capture, local-capture, blog-item-generation, well-known workflow]
 entry_points: [/modules/internal-tools, /modules/refrens-settings, /modules/project-links/[id]?tab=invoices, /modules/screenshot-runner, /captures/[runId]]
-code_roots: [src/modules/invoices, src/modules/internal-tools, src/modules/screenshot-runner, src/app/api/refrens, src/app/api/extension, src/app/api/raycast, src/app/api/upload-captures, src/app/api/capture-runs, extensions/refrens-skydo-bridge, chrome-extension, webflow-team-tracker-1.0.6, apps/raycast, packages/activeset-capture, src/local-capture]
+code_roots: [src/lib/raycast-summary.ts, src/modules/invoices, src/modules/internal-tools, src/modules/screenshot-runner, src/app/api/refrens, src/app/api/extension, src/app/api/raycast, src/app/api/upload-captures, src/app/api/capture-runs, extensions/refrens-skydo-bridge, chrome-extension, webflow-team-tracker-1.0.6, apps/raycast, apps/menubar, packages/activeset-capture, src/local-capture]
 last_verified: 2026-09-23 @ a00f91e
 ---
 # Tools, Extensions and Side Apps
 
-> A grab-bag of the pieces that sit beside the main project dashboard. **Invoices** is an admin-only tab on each project (plus a settings page) that mirrors Refrens invoices into Firestore as planned "slots", syncs their status daily and can create a Refrens invoice from billable ad-hoc tasks. **Chrome extensions** (Refrens → Skydo bridge, Webflow Settings Auditor, Webflow Team Tracker) are shipped as zips from the **Internal Tools** page (`/modules/internal-tools`), which also pairs the first two with the signed-in person via per-person tokens. The **Raycast** app (`apps/raycast`) is a private Raycast extension that talks to a `/api/raycast/*` facade. The **Screenshot Runner** (`/modules/screenshot-runner`) builds a command for the `@activeset/capture` npm CLI, which captures locally with Puppeteer and can upload results to a public share page at `/captures/[runId]`.
+> A grab-bag of the pieces that sit beside the main project dashboard. **Invoices** is an admin-only tab on each project (plus a settings page) that mirrors Refrens invoices into Firestore as planned "slots", syncs their status daily and can create a Refrens invoice from billable ad-hoc tasks. **Chrome extensions** (Refrens → Skydo bridge, Webflow Settings Auditor, Webflow Team Tracker) are shipped as zips from the **Internal Tools** page (`/modules/internal-tools`), which also pairs the first two with the signed-in person via per-person tokens. The **Raycast** app (`apps/raycast`) is a private Raycast extension that talks to a `/api/raycast/*` facade; **ActiveSet Bar** (`apps/menubar`) is a native macOS menu bar app that reads the same facade to open any project, tab or link. The **Screenshot Runner** (`/modules/screenshot-runner`) builds a command for the `@activeset/capture` npm CLI, which captures locally with Puppeteer and can upload results to a public share page at `/captures/[runId]`.
 
 ## Sub-areas
 
@@ -18,6 +18,7 @@ last_verified: 2026-09-23 @ a00f91e
 | 2 | Chrome extensions and pairing | [src/lib/extension-tokens.ts](../../src/lib/extension-tokens.ts), [src/lib/extension-registry.ts](../../src/lib/extension-registry.ts), [src/app/api/extension](../../src/app/api/extension/), [extensions/refrens-skydo-bridge](../../extensions/refrens-skydo-bridge/), [chrome-extension](../../chrome-extension/), [webflow-team-tracker-1.0.6](../../webflow-team-tracker-1.0.6/) | Team members (bridge needs the `invoices` module) |
 | 3 | Internal Tools page | [src/modules/internal-tools](../../src/modules/internal-tools/) | Every signed-in team member |
 | 4 | Raycast app | [apps/raycast](../../apps/raycast/), [src/app/api/raycast](../../src/app/api/raycast/), [src/lib/raycast-auth.ts](../../src/lib/raycast-auth.ts), [src/lib/raycast-projects.ts](../../src/lib/raycast-projects.ts) | Team members with the shared token |
+| 4b | ActiveSet Bar (macOS menu bar) | [apps/menubar](../../apps/menubar/) (Swift, reads `GET /api/raycast/projects?includeLinks=true`) | Team members with the shared token |
 | 5 | Screenshot Runner and captures | [src/modules/screenshot-runner](../../src/modules/screenshot-runner/), [packages/activeset-capture](../../packages/activeset-capture/), [src/app/api/upload-captures/route.ts](../../src/app/api/upload-captures/route.ts), [src/app/captures/[runId]](../../src/app/captures/[runId]/) | Team (runner page), anyone with a link (share page) |
 | 6 | Misc repo-root leftovers | [blog-item-generation](../../blog-item-generation/), a handful of `scripts/`, [skills-lock.json](../../skills-lock.json), `src/app/.well-known/workflow` | See the Misc table under Code map |
 
@@ -44,6 +45,7 @@ last_verified: 2026-09-23 @ a00f91e
 | Change Raycast auth | [raycast-auth.ts](../../src/lib/raycast-auth.ts) `requireRaycastCaller` |
 | Change what Raycast reads/writes in Firestore | [raycast-projects.ts](../../src/lib/raycast-projects.ts) |
 | Change a Raycast command | [apps/raycast/src](../../apps/raycast/src/) (`manage-projects.tsx`, `create-task.tsx`, `open-project-link.tsx`, `running-scans.tsx`, HTTP in `api.ts`) |
+| Change what the menu bar app lists or how it ranks results | [apps/menubar/Sources/ActiveSetBar/Store.swift](../../apps/menubar/Sources/ActiveSetBar/Store.swift) (`projectTabs`, `appPages`, `projectItems`, `score`); what it knows about a project: [raycast-summary.ts](../../src/lib/raycast-summary.ts) |
 | Change the Screenshot Runner command builder | [ScreenshotRunnerScreen.tsx](../../src/modules/screenshot-runner/ui/screens/ScreenshotRunnerScreen.tsx) `cliCommand`, `terminalBlock`, `uploadCommand` |
 | Change the capture engine that ships to npm | [packages/activeset-capture/src/core/engine.ts](../../packages/activeset-capture/src/core/engine.ts) |
 | Change the upload protocol / signature check | Server [upload-captures/route.ts](../../src/app/api/upload-captures/route.ts); client [capture-upload.ts](../../packages/activeset-capture/src/bin/capture-upload.ts); signing [signing.ts](../../packages/activeset-capture/src/core/signing.ts) |
@@ -103,7 +105,7 @@ Also accepting the Webflow Settings Auditor's token (owned by other module docs)
 | Method | Path | File | Auth | Purpose |
 |---|---|---|---|---|
 | GET | `/api/raycast/me` | [me/route.ts](../../src/app/api/raycast/me/route.ts) | Raycast | Connection check / who am I |
-| GET | `/api/raycast/projects?includeLinks=true` | [projects/route.ts](../../src/app/api/raycast/projects/route.ts) | Raycast | All projects, serialized |
+| GET | `/api/raycast/projects?includeLinks=true&summary=true` | [projects/route.ts](../../src/app/api/raycast/projects/route.ts) | Raycast | All projects, serialized. `summary=true` adds a `summary` per project from [raycast-summary.ts](../../src/lib/raycast-summary.ts): the client page's current stage (via `buildClientPortalView`), asks, checklist progress and next 3 steps, next Timeline milestone, open tasks (counts + top 8), project sheet URL, owner/assignees/services. Four collection-wide reads plus custom SOPs; a summary failure is logged and the list still returns. `maxDuration` 60 |
 | POST | `/api/raycast/projects` | same | Raycast | Create project |
 | GET, PATCH, DELETE | `/api/raycast/projects/[projectId]` | [[projectId]/route.ts](../../src/app/api/raycast/projects/[projectId]/route.ts) | Raycast + project exists | Read / edit (name, client, status, tags, sitemapUrl) / delete project doc |
 | POST | `/api/raycast/projects/[projectId]/review` `{reviewed}` | [review/route.ts](../../src/app/api/raycast/projects/[projectId]/review/route.ts) | same | Mark reviewed today (streak) or clear |
@@ -188,6 +190,14 @@ Copies of the team tracker: [webflow-team-tracker-1.0.6](../../webflow-team-trac
 - `manage-projects.tsx`, `project-components.tsx` (project detail/actions/forms), `create-task.tsx` (5-line wrapper), `open-project-link.tsx`, `running-scans.tsx`, `types.ts` in [apps/raycast/src](../../apps/raycast/src/).
 - [src/lib/raycast-auth.ts](../../src/lib/raycast-auth.ts): `requireRaycastCaller`, `requireRaycastProjectAccess`.
 - [src/lib/raycast-projects.ts](../../src/lib/raycast-projects.ts) (server-only, firebase-admin): project load/serialize (merges `projects/{id}/link_audits`), create/update/delete, link array writes (`writeRaycastProjectLinks` strips audit results), `setRaycastProjectReviewed` (uses `nextStreak` from `review-status`), task load/create/update/delete with enum validation.
+
+### 4b. ActiveSet Bar (macOS menu bar)
+
+- [apps/menubar](../../apps/menubar/): SwiftPM executable, macOS 14+, bundled into `ActiveSet Bar.app` (`LSUIElement`, ad-hoc signed) by [build.sh](../../apps/menubar/build.sh) (`--install` copies to `~/Applications`). Not part of the Next build.
+- Read-only: only calls `GET /api/raycast/projects?includeLinks=true&summary=true` with `x-raycast-token` and `x-activeset-user-email`. Rows show the client page stage and badges (client status, asks, overdue, open tasks); a detail pane shows the selected project's summary. Open tasks and the next checklist steps are results too. Caches the response in `~/Library/Application Support/ActiveSetBar/projects.json`; the token lives in `token` beside it (0600).
+- Builds URLs itself: `/modules/project-links/{id}?tab=…` (tab list copied from `ProjectDetailScreen.tsx`, keep in step), app pages from `nav-items.tsx`, and the Webflow Designer `https://{short}.design.webflow.com` when `webflowConfig.customDomain` is a `*.webflow.io` host. Manual links always show; `source: 'auto'` links (scanned pages) only when filtering inside one project.
+- Hotkey ⌃⌥A (Carbon `RegisterEventHotKey`) and ⌘1–⌘9 (first nine tabs of the selected project), set in [main.swift](../../apps/menubar/Sources/ActiveSetBar/main.swift). Registers itself as a login item (`SMAppService.mainApp`) on first launch; the Settings toggle turns that off.
+- Favicons for links come from `https://www.google.com/s2/favicons` (the hostname only).
 
 ### 5. Screenshot Runner and captures
 
@@ -327,4 +337,5 @@ No tests for `RefrensService`, the invoice repository, `payment-templates`, `tas
 | [docs/features/screenshot-runner.md](../features/screenshot-runner.md) | Partially stale: references `install-local-capture.sh` / `.ps1` (not in the repo), says default concurrency 3 (package default is 6) and "local-only, does not auto-sync" (there is now `--upload` and `/captures/[runId]`) |
 | [docs/features/capture-package-publish.md](../features/capture-package-publish.md) | Accurate on the workflow (`capture-v*` tag, `NPM_TOKEN`); the example tag `capture-v0.1.0` and the `/workspace/...` path are dated |
 | [apps/raycast/README.md](../../apps/raycast/README.md) | Accurate |
+| [apps/menubar/README.md](../../apps/menubar/README.md) | Accurate |
 | [packages/activeset-capture/README.md](../../packages/activeset-capture/README.md) | Partially stale: says "Output is local files only" and omits the `upload` command and `--sitemap` |
