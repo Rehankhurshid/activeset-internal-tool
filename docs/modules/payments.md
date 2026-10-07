@@ -65,7 +65,7 @@ No composite indexes: lists sort in memory (a few dozen rows a month).
 
 | Schedule (UTC) | Path | What |
 |---|---|---|
-| `30 4,12 * * *` (10:00 and 18:00 IST) | `/api/cron/fold-sync` | Refresh the account list; read credits on ticked accounts since `lastSuccessfulSyncAt − 7 days` (first run: 60 days); drop `< minAmount` and split children; store unseen ones with auto-assign or a suggestion; email them (not on a backfill) |
+| `30 4,12 * * *` (10:00 and 18:00 IST) | `/api/cron/fold-sync` | Refresh the account list; read credits on ticked accounts since `lastSuccessfulSyncAt − 7 days` (60 days while nothing is stored yet); drop `< minAmount` and split children; store unseen ones with auto-assign or a suggestion; email them (not on a backfill) |
 
 ## Configuration
 
@@ -90,6 +90,7 @@ No env vars of its own. Uses `NEXT_PUBLIC_BASE_URL` (OAuth redirect URI and emai
 - **Fold's own categories are unreliable for this.** A Skydo client payout was marked "Self Transfer" (excluded from cash flow). So nothing is filtered on category or `excluded_from_cash_flow`, only on `minAmount`. Refunds and interest above the minimum show up and are ignored by hand.
 - **The callback has no Firebase auth** (it is a browser redirect). It is bound to the admin who started it by the 24-byte `state` in `fold_pending`, which is single-use and lasts 15 minutes, plus PKCE.
 - Linking a payment to an invoice does **not** change the invoice's status. Refrens stays the source of truth (see tools-and-extensions).
+- **Fold sends `type` upper-case (`CREDIT`).** The first production sync on 2026-10-07 kept nothing because the filter compared with `'credit'`. It is now case-insensitive. A sync backfills 60 days until at least one payment is stored, so a sync that kept nothing does not skip history. `lastSync.fetched` is what Fold returned, before filtering.
 - Fold refreshes bank data roughly daily, so more than two syncs a day buys nothing.
 
 ## Tests

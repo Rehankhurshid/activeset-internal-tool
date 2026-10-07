@@ -82,7 +82,11 @@ export function FoldConnectionCard({ status, onStatus, onSynced }: FoldConnectio
       const res = await fetchAuthed('/api/payments/sync', { method: 'POST' });
       const data = await res.json();
       if (!res.ok || data.ok === false) throw new Error(data.error ?? `Sync failed (${res.status})`);
-      toast.success(data.created ? `${data.created} new ${data.created === 1 ? 'payment' : 'payments'}` : 'Up to date');
+      toast.success(
+        data.created
+          ? `${data.created} new ${data.created === 1 ? 'payment' : 'payments'}`
+          : `Up to date (${data.fetched ?? 0} credits checked)`
+      );
       onSynced();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Sync failed');

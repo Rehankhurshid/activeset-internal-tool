@@ -92,6 +92,11 @@ export async function existingPaymentIds(ids: string[]): Promise<Set<string>> {
   return found;
 }
 
+export async function hasAnyPayment(): Promise<boolean> {
+  const snap = await paymentsCol().limit(1).get();
+  return !snap.empty;
+}
+
 export async function createPayments(payments: IncomingPayment[]): Promise<void> {
   for (let i = 0; i < payments.length; i += 400) {
     const batch = adminDb.batch();

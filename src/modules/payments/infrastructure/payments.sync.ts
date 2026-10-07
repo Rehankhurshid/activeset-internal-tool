@@ -15,6 +15,7 @@ import {
 import {
   createPayments,
   existingPaymentIds,
+  hasAnyPayment,
   listInvoiceRefs,
   listPayerRules,
   listProjectRefs,
@@ -60,18 +61,23 @@ export async function syncIncomingPayments(): Promise<FoldSyncSummary> {
       return summary;
     }
 
-    const isBackfill = !settings.lastSuccessfulSyncAt;
+    // Backfill until something has actually been stored, so a sync that kept
+    // nothing (e.g. before the filter fix of 2026-10-07) does not skip history.
+    const isBackfill = !settings.lastSuccessfulSyncAt || !(await hasAnyPayment());
     const start = isBackfill
       ? daysAgo(BACKFILL_DAYS)
       : daysAgo(OVERLAP_DAYS, new Date(settings.lastSuccessfulSyncAt as string));
-    const credits = (await fetchFoldCredits(selected, isoDay(start), session)).filter(
+    const raw = await fetchFoldCredits(selected, isoDay(start), session);
+    summary.fetched = raw.length;
+    // Fold was asked for credits only; `type` is checked case-insensitively
+    // because Fold sends it upper-case.
+    const credits = raw.filter(
       (t: FoldTransactionRaw) =>
-        t.type === 'credit' &&
+        (!t.type || t.type.toLowerCase() === 'credit') &&
         t.split_type !== 'CHILD' &&
         selected.includes(t.account_id) &&
-        t.amount >= settings.minAmount
-    );
-    summary.fetched = credits.length;
+        Math.abs(t.amount) >= settings.minAmount
+    ).map((t) => ({ ...t, amount: Math.abs(t.amount) }));
 
     const seen = await existingPaymentIds(credits.map((t) => t.id));
     const fresh = credits.filter((t) => !seen.has(t.id));
