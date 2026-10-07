@@ -5,7 +5,9 @@
  * Vercel deployment URL, and local runs to localhost.
  */
 export function getBaseUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_BASE_URL || process.env.APP_BASE_URL;
+  // Trimmed: the production value was saved with a trailing newline, which
+  // breaks exact-match uses such as the Fold OAuth redirect URI.
+  const explicit = (process.env.NEXT_PUBLIC_BASE_URL || process.env.APP_BASE_URL)?.trim();
   if (explicit) return explicit.replace(/\/+$/, '');
   if (process.env.VERCEL_ENV === 'production') return 'https://app.activeset.co';
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
