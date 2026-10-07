@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Ban, Check, Pencil, RotateCcw, Sparkles } from 'lucide-react';
+import { Ban, Check, CircleCheck, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/modules/auth-access';
 import { AppNavigation } from '@/shared/ui';
@@ -24,6 +24,7 @@ import type {
 } from '../../domain/payments.types';
 import { AssignPaymentDialog, invoiceLabel } from '../components/AssignPaymentDialog';
 import { FoldConnectionCard } from '../components/FoldConnectionCard';
+import { RecordInRefrensDialog } from '../components/RecordInRefrensDialog';
 import { formatDay, formatMoney } from '../lib/format';
 
 type Filter = PaymentStatus | 'all';
@@ -51,6 +52,7 @@ export function PaymentsScreen() {
   const [data, setData] = useState<PaymentsData | null>(null);
   const [filter, setFilter] = useState<Filter>('unassigned');
   const [assigning, setAssigning] = useState<IncomingPayment | null>(null);
+  const [recording, setRecording] = useState<IncomingPayment | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -242,6 +244,11 @@ export function PaymentsScreen() {
                                 {project.name}
                               </Link>
                               {p.autoAssigned && <Badge variant="outline" className="ml-2">auto</Badge>}
+                              {p.refrensPaymentId && (
+                                <Badge variant="secondary" className="ml-2">
+                                  <CircleCheck className="mr-1 h-3 w-3" /> In Refrens
+                                </Badge>
+                              )}
                               {invoice && <div className="text-xs text-muted-foreground">{invoiceLabel(invoice)}</div>}
                             </div>
                           ) : suggested ? (
@@ -264,8 +271,13 @@ export function PaymentsScreen() {
                                 <Check className="mr-1 h-4 w-4" /> Confirm
                               </Button>
                             )}
-                            {p.status !== 'ignored' && (
-                              <Button size="sm" variant={suggested ? 'ghost' : 'outline'} onClick={() => setAssigning(p)}>
+                            {p.status === 'assigned' && !p.refrensPaymentId && (
+                              <Button size="sm" onClick={() => setRecording(p)}>
+                                <CircleCheck className="mr-1 h-4 w-4" /> Mark paid
+                              </Button>
+                            )}
+                            {p.status !== 'ignored' && !p.refrensPaymentId && (
+                              <Button size="sm" variant={suggested || p.status === 'assigned' ? 'ghost' : 'outline'} onClick={() => setAssigning(p)}>
                                 <Pencil className="mr-1 h-4 w-4" /> {p.status === 'assigned' || suggested ? 'Change' : 'Assign'}
                               </Button>
                             )}
@@ -274,7 +286,7 @@ export function PaymentsScreen() {
                                 <Ban className="h-4 w-4" />
                               </Button>
                             )}
-                            {p.status !== 'unassigned' && (
+                            {p.status !== 'unassigned' && !p.refrensPaymentId && (
                               <Button size="sm" variant="ghost" title="Back to To assign" onClick={() => patch(p, { action: 'unassign' }, 'Moved back')}>
                                 <RotateCcw className="h-4 w-4" />
                               </Button>
@@ -290,6 +302,13 @@ export function PaymentsScreen() {
           )}
         </CardContent>
       </Card>
+
+      <RecordInRefrensDialog
+        payment={recording}
+        invoices={data?.invoices ?? []}
+        onOpenChange={(open) => !open && setRecording(null)}
+        onDone={load}
+      />
 
       <AssignPaymentDialog
         payment={assigning}

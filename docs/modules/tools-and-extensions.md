@@ -144,7 +144,7 @@ Also accepting the Webflow Settings Auditor's token (owned by other module docs)
   - `LinkProposalDialog.tsx`: sets `project.proposalId` via `projectLinksRepository` (client SDK), reading proposals through `ProposalService`.
   - `GenerateFromTasksCard.tsx`: `useProjectTasks(projectId)` → billable, un-invoiced tasks; POST `/from-tasks` (optionally cloning bill-to from a past invoice) or `/link-tasks`.
 
-**Service** [src/services/RefrensService.ts](../../src/services/RefrensService.ts) (server-only): ES256 JWT mint + in-memory cache; `listInvoices`, `listAllInvoicesCached` (page 1, then parallel pages of 50, cap 500, 10-min TTL keyed on appId), `createInvoice`, `getInvoice`, extension passthroughs `queryInvoicesForExtension`, `getInvoiceRawForExtension`, `getRefrensUrlKey`; errors `RefrensApiError`, `RefrensNotConfiguredError`; `invalidateRefrensJwtCache`, `invalidateInvoiceListCache`.
+**Service** [src/services/RefrensService.ts](../../src/services/RefrensService.ts) (server-only): ES256 JWT mint + in-memory cache; `listInvoicePayments` and `recordInvoicePayment` (used by the Payments module's Mark paid, see [payments.md](./payments.md)); `listInvoices`, `listAllInvoicesCached` (page 1, then parallel pages of 50, cap 500, 10-min TTL keyed on appId), `createInvoice`, `getInvoice`, extension passthroughs `queryInvoicesForExtension`, `getInvoiceRawForExtension`, `getRefrensUrlKey`; errors `RefrensApiError`, `RefrensNotConfiguredError`; `invalidateRefrensJwtCache`, `invalidateInvoiceListCache`.
 
 **Other service/lib**
 - [src/services/appSecrets.ts](../../src/services/appSecrets.ts): `getRefrensCredentials`, `setRefrensCredentials`, `deleteRefrensCredentials`, `getRefrensConfigStatus` on `app_secrets/refrens`.

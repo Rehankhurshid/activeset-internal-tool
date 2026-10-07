@@ -41,7 +41,15 @@ function daysAgo(n: number, from = new Date()): Date {
  * nothing is fetched. The first sync is a backfill and sends no email.
  * Rows already stored are never touched, so a person's assignment stands.
  */
-export async function syncIncomingPayments(): Promise<FoldSyncSummary> {
+export interface SyncOptions {
+  /**
+   * Read further back than usual: a YYYY-MM-DD date, or 'all' for everything
+   * Fold has. Treated as a backfill, so it sends no email.
+   */
+  since?: string;
+}
+
+export async function syncIncomingPayments(options: SyncOptions = {}): Promise<FoldSyncSummary> {
   const at = new Date().toISOString();
   const summary: FoldSyncSummary = { at, ok: false, fetched: 0, created: 0, autoAssigned: 0, suggested: 0, emailed: 0, error: null };
 
@@ -63,11 +71,18 @@ export async function syncIncomingPayments(): Promise<FoldSyncSummary> {
 
     // Backfill until something has actually been stored, so a sync that kept
     // nothing (e.g. before the filter fix of 2026-10-07) does not skip history.
-    const isBackfill = !settings.lastSuccessfulSyncAt || !(await hasAnyPayment());
-    const start = isBackfill
-      ? daysAgo(BACKFILL_DAYS)
-      : daysAgo(OVERLAP_DAYS, new Date(settings.lastSuccessfulSyncAt as string));
-    const raw = await fetchFoldCredits(selected, isoDay(start), session);
+    const isBackfill = Boolean(options.since) || !settings.lastSuccessfulSyncAt || !(await hasAnyPayment());
+    const startDay =
+      options.since === 'all'
+        ? null
+        : options.since
+          ? options.since
+          : isoDay(
+              isBackfill
+                ? daysAgo(BACKFILL_DAYS)
+                : daysAgo(OVERLAP_DAYS, new Date(settings.lastSuccessfulSyncAt as string))
+            );
+    const raw = await fetchFoldCredits(selected, startDay, session, options.since ? 100 : 30);
     summary.fetched = raw.length;
     // Fold was asked for credits only; `type` is checked case-insensitively
     // because Fold sends it upper-case.
@@ -111,6 +126,9 @@ export async function syncIncomingPayments(): Promise<FoldSyncSummary> {
         suggestion: null,
         assignedBy: null,
         assignedAt: null,
+        refrensPaymentId: null,
+        refrensRecordedAt: null,
+        refrensRecordedBy: null,
         firstSeenAt: at,
         updatedAt: at,
       };

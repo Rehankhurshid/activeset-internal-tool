@@ -417,20 +417,24 @@ export async function fetchFoldAccounts(session = new FoldSession()): Promise<Fo
   }));
 }
 
-/** Every credit on these accounts since `startDate` (YYYY-MM-DD), all pages. */
+/**
+ * Every credit on these accounts since `startDate` (YYYY-MM-DD), or all of
+ * them when `startDate` is null, 100 per page.
+ */
 export async function fetchFoldCredits(
   accountIds: string[],
-  startDate: string,
-  session = new FoldSession()
+  startDate: string | null,
+  session = new FoldSession(),
+  maxPages = 30
 ): Promise<FoldTransactionRaw[]> {
   const out: FoldTransactionRaw[] = [];
   let cursor: string | null = null;
-  for (let page = 0; page < 30; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const res: { transactions: FoldTransactionRaw[] | null; next_cursor: string | null } = await session.callTool(
       'list_transactions',
       {
         type: 'credit',
-        start_date: startDate,
+        ...(startDate ? { start_date: startDate } : {}),
         account_ids: accountIds,
         limit: 100,
         sort_by: 'date',

@@ -1,14 +1,14 @@
 ---
 module: payments
 title: Payments (incoming client money from Fold)
-keywords: [payments, incoming payments, fold, fold.money, fold mcp, bank, credits, axis, skydo, payoneer, paypal, payer, payer rules, tds, money received, salman, finance, incoming_payments, payment_payers, app_secrets/fold, fold-sync]
+keywords: [mark paid, record payment, refrens payment, load older, full history,payments, incoming payments, fold, fold.money, fold mcp, bank, credits, axis, skydo, payoneer, paypal, payer, payer rules, tds, money received, salman, finance, incoming_payments, payment_payers, app_secrets/fold, fold-sync]
 entry_points: [/modules/payments, /modules/project-links/[id]?tab=invoices, /api/payments, /api/cron/fold-sync]
 code_roots: [src/modules/payments, src/app/api/payments, src/app/api/cron/fold-sync, src/app/modules/payments]
-last_verified: 2026-10-07 @ uncommitted
+last_verified: 2026-10-08
 ---
 # Payments
 
-> Credits on the business bank account, read from **Fold** (fold.money) through its remote MCP server at 10:00 and 18:00 IST, stored in `incoming_payments`, and tied to a client project. Remembered payers are assigned automatically; other credits get a suggestion (from the payer's name or the amount against open invoices) that an admin confirms. New credits are emailed to the people set on the page (Salman and Rehan by default). **Admins only** (`rehan@`, `salman@`, or the `admin` claim), at every layer.
+> Credits on the business bank account, read from **Fold** (fold.money) through its remote MCP server at 10:00 and 18:00 IST, stored in `incoming_payments`, and tied to a client project. Remembered payers are assigned automatically; other credits get a suggestion (from the payer's name or the amount against open invoices) that an admin confirms. New credits are emailed to the people set on the page (Salman and Rehan by default). **Mark paid** records a credit as a payment on its Refrens invoice (amount, TDS, charges), so Refrens marks the invoice PAID. **Load older** pulls 6 months, 12 months or everything Fold has. **Admins only** (`rehan@`, `salman@`, or the `admin` claim), at every layer.
 
 ## Where to find things (quick lookup)
 
@@ -18,6 +18,7 @@ last_verified: 2026-10-07 @ uncommitted
 | Add a payout service that pays for many clients (never remembered) | `VIA_PATTERNS` / `VIA_LABELS` in [payments.matching.ts](../../src/modules/payments/domain/payments.matching.ts), `PaymentVia` in [payments.types.ts](../../src/modules/payments/domain/payments.types.ts) |
 | Change the Fold OAuth flow, token refresh or which Fold tools may be called | [fold.client.ts](../../src/modules/payments/infrastructure/fold.client.ts) (`startFoldConnect`, `completeFoldConnect`, `getAccessToken`, `READ_ONLY_TOOLS`) |
 | Change what a sync reads, the backfill window or the email | [payments.sync.ts](../../src/modules/payments/infrastructure/payments.sync.ts); email `sendIncomingPaymentsEmail` in [NotificationService.ts](../../src/services/NotificationService.ts) |
+| Change what "Mark paid" records in Refrens (TDS, foreign currency, UTR) | [payments.refrens.ts](../../src/modules/payments/domain/payments.refrens.ts) (`draftRefrensPayment`, `outstandingOn`, `bankReference`); route [[id]/refrens/route.ts](../../src/app/api/payments/[id]/refrens/route.ts); Refrens calls `listInvoicePayments`, `recordInvoicePayment` in [RefrensService.ts](../../src/services/RefrensService.ts) |
 | Change the Payments page | [PaymentsScreen.tsx](../../src/modules/payments/ui/screens/PaymentsScreen.tsx), [FoldConnectionCard.tsx](../../src/modules/payments/ui/components/FoldConnectionCard.tsx), [AssignPaymentDialog.tsx](../../src/modules/payments/ui/components/AssignPaymentDialog.tsx) |
 | Change the card on a project's Invoices tab | [ProjectPaymentsCard.tsx](../../src/modules/payments/ui/components/ProjectPaymentsCard.tsx), mounted in [ProjectDetailScreen.tsx](../../src/modules/project-links/ui/screens/ProjectDetailScreen.tsx) |
 
@@ -35,7 +36,9 @@ last_verified: 2026-10-07 @ uncommitted
 | GET | `/api/payments` | [route.ts](../../src/app/api/payments/route.ts) | Admin | `{payments (latest 500), projects (id/name/client), invoices (lean, all statuses)}` |
 | GET | `/api/payments?projectId=` | same | Admin | `{payments}` assigned to that project |
 | PATCH | `/api/payments/[id]` | [[id]/route.ts](../../src/app/api/payments/[id]/route.ts) | Admin | `assign` (projectId, invoiceId?, rememberPayer?), `ignore`, `unassign`. Remembering also assigns the payer's other unassigned rows; never for a `via` payer |
-| POST | `/api/payments/sync` | [sync/route.ts](../../src/app/api/payments/sync/route.ts) | Admin | Sync now; same as the cron |
+| POST | `/api/payments/sync` | [sync/route.ts](../../src/app/api/payments/sync/route.ts) | Admin | Sync now; same as the cron. `{since: 'YYYY-MM-DD' \| 'all'}` loads older history (up to 100 pages of 100, no email) |
+| GET | `/api/payments/[id]/refrens?invoiceId=` | [[id]/refrens/route.ts](../../src/app/api/payments/[id]/refrens/route.ts) | Admin | Reads the invoice and its payments from Refrens: total, outstanding, whether this credit is already on it, and a prefilled draft |
+| POST | `/api/payments/[id]/refrens` | same | Admin | **Writes to Refrens**: `POST /businesses/:urlKey/invoices/:id/payments` with amount, tds, transactionCharge, paymentMethod, paymentDate, refId (UTR), notes (carry the Fold id). Then re-syncs the `project_invoices` mirror and ties the credit to that project and invoice |
 | GET, PATCH, DELETE | `/api/payments/fold` | [fold/route.ts](../../src/app/api/payments/fold/route.ts) | Admin | Status (never tokens) / save `selectedAccountIds`, `minAmount`, `notifyEmails` / revoke and forget the grant |
 | POST | `/api/payments/fold/connect` | [connect/route.ts](../../src/app/api/payments/fold/connect/route.ts) | Admin | Registers an OAuth client for `${NEXT_PUBLIC_BASE_URL}/api/payments/fold/callback`, returns `{authorizeUrl}` |
 | GET | `/api/payments/fold/callback` | [callback/route.ts](../../src/app/api/payments/fold/callback/route.ts) | `state` (see Gotchas) | Exchanges the code, stores tokens, lists accounts, redirects to `/modules/payments?fold=connected` or `?fold=error&reason=` |
@@ -45,6 +48,7 @@ last_verified: 2026-10-07 @ uncommitted
 
 - [domain/payments.types.ts](../../src/modules/payments/domain/payments.types.ts): `IncomingPayment`, `PaymentStatus`, `PaymentVia`, `PaymentSuggestion`, `PayerRule`, `FoldAccountSummary`, `FoldConnectionStatus`, `FoldSyncSummary`, `DEFAULT_MIN_AMOUNT` (₹1,000).
 - [domain/payments.matching.ts](../../src/modules/payments/domain/payments.matching.ts): pure, tested.
+- [domain/payments.refrens.ts](../../src/modules/payments/domain/payments.refrens.ts): pure, tested. What to record in Refrens: for an INR invoice, `amount` is what reached the bank and a shortfall of up to 11% of what is due becomes `tds`. A bigger shortfall is a part payment. A foreign-currency invoice gets the amount due in its own currency plus a warning, since there's no FX conversion.
 - [infrastructure/fold.client.ts](../../src/modules/payments/infrastructure/fold.client.ts) (server-only): OAuth, token lease, `FoldSession` (JSON-RPC over streamable HTTP), `fetchFoldAccounts`, `fetchFoldCredits`, settings and status on `app_secrets/fold`.
 - [infrastructure/payments.repository.ts](../../src/modules/payments/infrastructure/payments.repository.ts) (server-only): `incoming_payments`, `payment_payers`, lean project and invoice reads (invoices via `listAllInvoices`).
 - [infrastructure/payments.sync.ts](../../src/modules/payments/infrastructure/payments.sync.ts) (server-only): `syncIncomingPayments`.
@@ -53,7 +57,7 @@ last_verified: 2026-10-07 @ uncommitted
 
 ## Data model
 
-**`incoming_payments/{foldTransactionId}`** (server-only, default deny). Fields as `IncomingPayment`: `accountId`, `accountLabel`, `date` (bank time), `amount`, `currency`, `narration`, `merchantName`, `payerKey`, `payerName`, `via`, `channel`, `foldCategory`, `status` (`unassigned | assigned | ignored`), `projectId`, `invoiceId` (a `project_invoices` id, informational only), `autoAssigned`, `suggestion {projectId, invoiceId, reason, confidence}`, `assignedBy` (`'payer rule'` when automatic), `assignedAt`, `firstSeenAt`, `updatedAt`. Created once by the sync and never overwritten by it.
+**`incoming_payments/{foldTransactionId}`** (server-only, default deny). Fields as `IncomingPayment`: `accountId`, `accountLabel`, `date` (bank time), `amount`, `currency`, `narration`, `merchantName`, `payerKey`, `payerName`, `via`, `channel`, `foldCategory`, `status` (`unassigned | assigned | ignored`), `projectId`, `invoiceId` (a `project_invoices` id, informational only), `autoAssigned`, `suggestion {projectId, invoiceId, reason, confidence}`, `assignedBy` (`'payer rule'` when automatic), `assignedAt`, `refrensPaymentId` / `refrensRecordedAt` / `refrensRecordedBy` (set by Mark paid), `refrensLockUntil` (60-second hold while recording), `firstSeenAt`, `updatedAt`. Created once by the sync and never overwritten by it.
 
 **`payment_payers/{payerKey}`** (server-only): `{payerName, projectId, createdBy, createdAt}`. Written when someone assigns with "Remember". To forget a payer, delete the doc (no UI yet).
 
@@ -79,7 +83,8 @@ No env vars of its own. Uses `NEXT_PUBLIC_BASE_URL` (OAuth redirect URI and emai
 
 1. **Connect:** an admin presses Connect Fold → `POST /fold/connect` registers a client and stores `fold_pending` → browser goes to Fold → Fold redirects to `/fold/callback` → tokens saved, accounts listed → back on the page, the admin ticks the business account and saves → Sync now (the first sync is a 60-day backfill and sends no email).
 2. **Twice a day:** the cron syncs. A credit from a remembered payer is assigned straight away (and linked to an open invoice the amount fits). Otherwise the payer's name is compared with each project's `client`, `name` and invoice `billedToName`. If exactly one project matches, it is suggested. If none does, an amount that fits exactly one open INR invoice (exact, or 89–100% for TDS) is suggested.
-3. **Review:** Salman confirms a suggestion (which remembers the payer unless it is a payout service), or assigns or ignores the credit by hand.
+3. **Mark paid:** on an assigned credit, pick the Refrens invoice (preselected only when it is linked or the only open one), check the prefilled amount, TDS and UTR, and press Record. The invoice turns PAID in Refrens and on the Invoices tab once amount + TDS + charges cover it.
+4. **Review:** Salman confirms a suggestion (which remembers the payer unless it is a payout service), or assigns or ignores the credit by hand.
 
 ## Gotchas and invariants
 
@@ -89,13 +94,15 @@ No env vars of its own. Uses `NEXT_PUBLIC_BASE_URL` (OAuth redirect URI and emai
 - **Skydo and similar payout services** name themselves, not the client (`IMPS/P2A/…/SKYDOTEC/…`). They get `via`, `payerKey = via`, and are never remembered or name-matched. Foreign-currency invoices are never amount-matched (no FX).
 - **Fold's own categories are unreliable for this.** A Skydo client payout was marked "Self Transfer" (excluded from cash flow). So nothing is filtered on category or `excluded_from_cash_flow`, only on `minAmount`. Refunds and interest above the minimum show up and are ignored by hand.
 - **The callback has no Firebase auth** (it is a browser redirect). It is bound to the admin who started it by the 24-byte `state` in `fold_pending`, which is single-use and lasts 15 minutes, plus PKCE.
-- Linking a payment to an invoice does **not** change the invoice's status. Refrens stays the source of truth (see tools-and-extensions).
+- Assigning a payment to an invoice does **not** change the invoice's status. Only **Mark paid** does, by writing the payment into Refrens. The daily refrens-sync then agrees, because Refrens itself says PAID. Never set `status: PAID` on a `project_invoices` row directly: the next sync would revert it.
+- **Mark paid can't happen twice for one credit.** A Firestore hold (`claimRefrensRecording`) stops double clicks. Existing Refrens payments whose `refId` or notes match this credit are treated as already recorded and linked, not posted again. Once recorded, the credit can't be moved to another project, ignored or unassigned (409) until the payment is removed in Refrens.
+- The Refrens payments API is documented at refrens.com/api/docs/payment-updates. Whether Refrens flips the status on partial payments, and how it treats TDS, was not visible in the docs: the route re-reads the invoice after posting and shows whatever Refrens reports.
 - **Fold sends `type` upper-case (`CREDIT`).** The first production sync on 2026-10-07 kept nothing because the filter compared with `'credit'`. It is now case-insensitive. A sync backfills 60 days until at least one payment is stored, so a sync that kept nothing does not skip history. `lastSync.fetched` is what Fold returned, before filtering.
 - Fold refreshes bank data roughly daily, so more than two syncs a day buys nothing.
 
 ## Tests
 
-- `npm run test:domain` includes [payments.matching.test.ts](../../src/modules/payments/domain/payments.matching.test.ts) (17 cases: narration parsing, truncated names, TDS fits, auto vs suggest vs none, Skydo never remembered).
+- `npm run test:domain` includes [payments.matching.test.ts](../../src/modules/payments/domain/payments.matching.test.ts) (17 cases: narration parsing, truncated names, TDS fits, auto vs suggest vs none, Skydo never remembered) and [payments.refrens.test.ts](../../src/modules/payments/domain/payments.refrens.test.ts) (9 cases: UTR parsing, outstanding, TDS vs part payment, USD invoice via Skydo, UPI).
 - [tests/firestore.rules.test.ts](../../tests/firestore.rules.test.ts) asserts `incoming_payments`, `payment_payers` and `app_secrets` deny admin reads and writes from the client (`npm run test:rules`, needs Java).
 
 ## Related docs

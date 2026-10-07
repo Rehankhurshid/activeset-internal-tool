@@ -64,6 +64,11 @@ export interface IncomingPayment {
   assignedBy: string | null;
   assignedAt: string | null;
 
+  /** Set once this credit has been recorded as a payment on the Refrens invoice. */
+  refrensPaymentId: string | null;
+  refrensRecordedAt: string | null;
+  refrensRecordedBy: string | null;
+
   firstSeenAt: string;
   updatedAt: string;
 }
@@ -128,6 +133,8 @@ export interface PaymentInvoiceRef {
   currency: string | null;
   status: string;
   billedToName: string | null;
+  /** A Refrens invoice is attached, so a payment can be recorded on it. */
+  refrensMapped: boolean;
 }
 
 export const DEFAULT_MIN_AMOUNT = 1000;

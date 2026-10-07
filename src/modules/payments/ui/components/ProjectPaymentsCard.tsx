@@ -64,6 +64,7 @@ export function ProjectPaymentsCard({ projectId }: { projectId: string }) {
                 <span className="w-[100px] shrink-0 text-muted-foreground">{formatDay(p.date)}</span>
                 <span className="truncate">{p.payerName}</span>
                 {p.via && <Badge variant="secondary">via {VIA_LABELS[p.via]}</Badge>}
+                {p.refrensPaymentId && <Badge variant="outline">In Refrens</Badge>}
                 <span className="ml-auto font-medium tabular-nums">{formatMoney(p.amount, p.currency)}</span>
               </li>
             ))}

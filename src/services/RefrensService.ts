@@ -337,6 +337,54 @@ export async function getInvoice(invoiceId: string): Promise<RefrensInvoiceSumma
 }
 
 /* ------------------------------------------------------------------------- */
+/*  Payments on an invoice (Payments module: "Mark paid in Refrens")          */
+/* ------------------------------------------------------------------------- */
+
+export interface RefrensInvoicePayment {
+  _id?: string;
+  amount: number;
+  tds?: number;
+  transactionCharge?: number;
+  paymentDate?: string;
+  paymentMethod?: string;
+  notes?: string;
+  refId?: string;
+  isRemoved?: boolean;
+}
+
+export interface RecordInvoicePaymentInput {
+  amount: number;
+  paymentDate: string;
+  paymentMethod: 'ACCOUNT_TRANSFER' | 'CASH' | 'CHEQUE' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'DD' | 'UPI';
+  tds?: number;
+  transactionCharge?: number;
+  notes?: string;
+  refId?: string;
+}
+
+/** GET /businesses/:urlKey/invoices/:id/payments, without removed ones. */
+export async function listInvoicePayments(invoiceId: string): Promise<RefrensInvoicePayment[]> {
+  const creds = await loadCreds();
+  const path = `/businesses/${encodeURIComponent(creds.urlKey)}/invoices/${encodeURIComponent(invoiceId)}/payments`;
+  const raw = (await refrensFetch(creds, path)) as { payments?: RefrensInvoicePayment[] } | RefrensInvoicePayment[] | null;
+  const list = Array.isArray(raw) ? raw : raw?.payments ?? [];
+  return list.filter((p) => !p.isRemoved);
+}
+
+/**
+ * POST /businesses/:urlKey/invoices/:id/payments. A real write to the books:
+ * Refrens marks the invoice PAID once amount + tds + transactionCharge cover it.
+ */
+export async function recordInvoicePayment(
+  invoiceId: string,
+  input: RecordInvoicePaymentInput
+): Promise<RefrensInvoicePayment> {
+  const creds = await loadCreds();
+  const path = `/businesses/${encodeURIComponent(creds.urlKey)}/invoices/${encodeURIComponent(invoiceId)}/payments`;
+  return (await refrensFetch(creds, path, { method: 'POST', body: JSON.stringify(input) })) as RefrensInvoicePayment;
+}
+
+/* ------------------------------------------------------------------------- */
 /*  Constrained read-only passthrough, for the Chrome extension proxy         */
 /* ------------------------------------------------------------------------- */
 

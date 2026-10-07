@@ -1,7 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertCircle, Landmark, Loader2, Plug, RefreshCw, Unplug } from 'lucide-react';
+import { AlertCircle, ChevronDown, History, Landmark, Loader2, Plug, RefreshCw, Unplug } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -18,6 +25,12 @@ interface FoldConnectionCardProps {
   status: FoldConnectionStatus;
   onStatus: (status: FoldConnectionStatus) => void;
   onSynced: () => void;
+}
+
+function monthsAgo(n: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - n);
+  return d.toISOString().slice(0, 10);
 }
 
 export function FoldConnectionCard({ status, onStatus, onSynced }: FoldConnectionCardProps) {
@@ -76,10 +89,15 @@ export function FoldConnectionCard({ status, onStatus, onSynced }: FoldConnectio
     }
   };
 
-  const syncNow = async () => {
+  /** `since`: YYYY-MM-DD or 'all' to load older history (no email); omit for a normal sync. */
+  const syncNow = async (since?: string) => {
     setSyncing(true);
     try {
-      const res = await fetchAuthed('/api/payments/sync', { method: 'POST' });
+      const res = await fetchAuthed('/api/payments/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(since ? { since } : {}),
+      });
       const data = await res.json();
       if (!res.ok || data.ok === false) throw new Error(data.error ?? `Sync failed (${res.status})`);
       toast.success(
@@ -146,10 +164,23 @@ export function FoldConnectionCard({ status, onStatus, onSynced }: FoldConnectio
           </CardDescription>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={syncNow} disabled={syncing || status.needsReconnect}>
+          <Button size="sm" variant="outline" onClick={() => syncNow()} disabled={syncing || status.needsReconnect}>
             {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Sync now
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="ghost" disabled={syncing || status.needsReconnect}>
+                <History className="mr-2 h-4 w-4" /> Load older <ChevronDown className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">No email is sent for older payments</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => syncNow(monthsAgo(6))}>Last 6 months</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => syncNow(monthsAgo(12))}>Last 12 months</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => syncNow('all')}>Everything in Fold</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" variant="ghost" onClick={connect} disabled={connecting}>
             <Plug className="mr-2 h-4 w-4" /> Reconnect
           </Button>

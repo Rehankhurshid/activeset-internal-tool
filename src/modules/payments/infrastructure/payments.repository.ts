@@ -55,6 +55,9 @@ function hydrate(id: string, d: Record<string, unknown>): IncomingPayment {
     suggestion: (d.suggestion as IncomingPayment['suggestion']) ?? null,
     assignedBy: (d.assignedBy as string | null) ?? null,
     assignedAt: (d.assignedAt as string | null) ?? null,
+    refrensPaymentId: (d.refrensPaymentId as string | null) ?? null,
+    refrensRecordedAt: (d.refrensRecordedAt as string | null) ?? null,
+    refrensRecordedBy: (d.refrensRecordedBy as string | null) ?? null,
     firstSeenAt: String(d.firstSeenAt ?? ''),
     updatedAt: String(d.updatedAt ?? ''),
   };
@@ -137,6 +140,45 @@ export async function setPaymentStatus(id: string, status: 'ignored' | 'unassign
   });
 }
 
+/**
+ * Takes a 60-second hold on recording this credit in Refrens, so a double
+ * click or two admins cannot post the same payment twice. Returns false when
+ * it is already recorded or someone else holds it.
+ */
+export async function claimRefrensRecording(id: string): Promise<'ok' | 'recorded' | 'busy' | 'missing'> {
+  return adminDb.runTransaction(async (tx) => {
+    const ref = paymentsCol().doc(id);
+    const snap = await tx.get(ref);
+    if (!snap.exists) return 'missing';
+    const d = snap.data() ?? {};
+    if (d.refrensPaymentId) return 'recorded';
+    if (typeof d.refrensLockUntil === 'number' && d.refrensLockUntil > Date.now()) return 'busy';
+    tx.update(ref, { refrensLockUntil: Date.now() + 60_000 });
+    return 'ok';
+  });
+}
+
+export async function finishRefrensRecording(
+  id: string,
+  input: { refrensPaymentId: string; by: string; projectId: string; invoiceId: string }
+): Promise<void> {
+  const now = new Date().toISOString();
+  await paymentsCol().doc(id).update({
+    refrensPaymentId: input.refrensPaymentId,
+    refrensRecordedAt: now,
+    refrensRecordedBy: input.by,
+    refrensLockUntil: 0,
+    status: 'assigned',
+    projectId: input.projectId,
+    invoiceId: input.invoiceId,
+    updatedAt: now,
+  });
+}
+
+export async function releaseRefrensRecording(id: string): Promise<void> {
+  await paymentsCol().doc(id).update({ refrensLockUntil: 0 });
+}
+
 export async function listPayerRules(): Promise<Map<string, PayerRule>> {
   const snap = await payersCol().get();
   return new Map(snap.docs.map((d) => [d.id, { payerKey: d.id, ...(d.data() as Omit<PayerRule, 'payerKey'>) }]));
@@ -174,5 +216,6 @@ export async function listInvoiceRefs(): Promise<PaymentInvoiceRef[]> {
     currency: inv.currency ?? inv.expectedCurrency,
     status: inv.status,
     billedToName: inv.billedToName,
+    refrensMapped: Boolean(inv.refrensInvoiceId),
   }));
 }

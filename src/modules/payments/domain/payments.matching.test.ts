@@ -71,6 +71,7 @@ const inv = (over: Partial<PaymentInvoiceRef>): PaymentInvoiceRef => ({
   currency: 'INR',
   status: 'UNPAID',
   billedToName: null,
+  refrensMapped: true,
   ...over,
 });
 

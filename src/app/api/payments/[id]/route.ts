@@ -35,6 +35,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const body = (await req.json().catch(() => ({}))) as PatchBody;
     const payment = await getPayment(id);
     if (!payment) return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
+    if (payment.refrensPaymentId && !(body.action === 'assign' && body.projectId === payment.projectId)) {
+      return NextResponse.json(
+        { error: 'This payment is recorded on a Refrens invoice. Remove it in Refrens first, then change it here.' },
+        { status: 409 }
+      );
+    }
 
     if (body.action === 'ignore' || body.action === 'unassign') {
       await setPaymentStatus(id, body.action === 'ignore' ? 'ignored' : 'unassigned', caller.email);
