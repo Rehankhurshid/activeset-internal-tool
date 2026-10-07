@@ -101,6 +101,8 @@ API documentation is in `/docs/misc/`:
 | `projects/{id}/image_budget` | What each image weighs against the width the page displays it at, measured in a real browser by the worker (see docs/features/worker.md) |
 | `project_sheets` | Server-only. A project's Google Sheet: either one the app creates in the team's Shared Drive and keeps from the checklist, pages and asks (`managed: true`, written only), or a hand-kept one bound by the team and read into a snapshot (see docs/modules/client-portal.md, docs/plans/project-sheet-contract.md) |
 | `app_settings` | Server-only app-wide settings; `app_settings/project_sheets` is the Shared Drive the app creates project sheets in |
+| `incoming_payments` | Server-only, admin-only. Credits on the business bank account read from Fold twice a day, keyed by Fold transaction id, assigned to a project (see docs/modules/payments.md) |
+| `payment_payers` | Server-only. Payer → project, remembered when someone confirms a payment once |
 | `worker_jobs` | Queue for the always-on worker machine. The app queues, the worker claims and completes |
 | `workers` | One doc per worker machine, heartbeated so the app can show who is online |
 

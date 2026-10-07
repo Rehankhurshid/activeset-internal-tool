@@ -69,7 +69,7 @@ Tabs are defined in `tabOptions` in [ProjectDetailScreen.tsx](../../src/modules/
 | 7 | `images` "Image Library" | `ImageLibrary` ([ImageLibrary.tsx](../../src/modules/project-links/ui/components/ImageLibrary.tsx)) | none | project-links for the gallery; capture CLI / screenshot runner: [tools-and-extensions.md](./tools-and-extensions.md); alt text and image weight are NOT here: [worker-alt-text-images.md](./worker-alt-text-images.md) |
 | 8 | `checklist` "Checklist" | `ChecklistOverview` ([components/checklist](../../src/components/checklist/ChecklistOverview.tsx)) | `completed+skipped / total` items | [delivery.md](./delivery.md) (assumed owner of checklists/SOPs; no dedicated slug) |
 | 9 | `timeline` "Timeline" | `ProjectTimelineOverview` (`@/modules/timeline`) | milestone count (or phase count) | [delivery.md](./delivery.md) (assumed owner of timeline; no dedicated slug) |
-| 10 | `invoices` "Invoices" (admin only) | `InvoicesTab` (`@/modules/invoices`) | none | [tools-and-extensions.md](./tools-and-extensions.md) (Refrens) |
+| 10 | `invoices` "Invoices" (admin only) | `ProjectPaymentsCard` (`@/modules/payments`) above `InvoicesTab` (`@/modules/invoices`) | none | [payments.md](./payments.md) (bank payments from Fold), [tools-and-extensions.md](./tools-and-extensions.md) (Refrens) |
 
 ## API routes
 

@@ -36,6 +36,7 @@ If you change code covered by a doc, update that doc in the same change and bump
 | [proposal.md](./proposal.md) | Proposals and contracts: editor, AI draft/block (Vercel AI Gateway), templates, comments and history, public view and e-signature (`/view/[id]`), PDF generation, view tracking, contract CLI | `/modules/proposal`, `/view/[id]` | `src/app/modules/proposal`, `src/app/api/proposals`, `src/lib/proposal-ai` |
 | [clickup-tasks.md](./clickup-tasks.md) | Tasks tab (`tasks`, `requests`), AI parsing of pasted messages, ClickUp list binding, two-way sync and webhooks, refresh cron, Slack nag bot, ClickUp settings | `?tab=tasks`, `/modules/clickup-settings` | `src/components/tasks`, `src/lib/clickup*.ts`, `src/app/api/clickup` |
 | [tools-and-extensions.md](./tools-and-extensions.md) | **Invoices / Refrens** (admin tab, `project_invoices`, sync cron, Skydo bridge extension), Chrome extensions and pairing, Internal Tools page, Raycast app, **Screenshot Runner** and `@activeset/capture` package, `/captures/[runId]`, misc scripts | `/modules/internal-tools`, `/modules/screenshot-runner`, `/modules/refrens-settings`, `?tab=invoices`, `/captures/[runId]` | `src/modules/{invoices,internal-tools,screenshot-runner}`, `apps/raycast`, `extensions/`, `packages/activeset-capture` |
+| [payments.md](./payments.md) | **Payments**: client money reaching the business bank account, read from **Fold** twice a day, matched to projects (remembered payers, suggestions), admin-only page and a card on the Invoices tab | `/modules/payments`, `?tab=invoices` | `src/modules/payments`, `src/app/api/payments` |
 | [known-issues.md](./known-issues.md) | Bugs, security gaps, dead code and doc drift found while writing these docs (not fixed) | — | — |
 
 ## Lookup: URL → doc
@@ -49,7 +50,8 @@ If you change code covered by a doc, update that doc in the same change and bump
 | `?tab=client`, `/portal/[token]` | client-portal |
 | `?tab=tasks`, `/modules/clickup-settings` | clickup-tasks |
 | `?tab=webflow` | webflow (Images sub-tab drafting → worker-alt-text-images) |
-| `?tab=invoices`, `/modules/refrens-settings` | tools-and-extensions |
+| `?tab=invoices`, `/modules/refrens-settings` | tools-and-extensions (the Payments received card on it: payments) |
+| `/modules/payments` | payments |
 | `/modules/proposal`, `/view/[id]` | proposal |
 | `/modules/proposal/settings` | platform (Settings editors) and proposal (preset content) |
 | `/modules/checklist-creator` | delivery |
@@ -70,6 +72,7 @@ If you change code covered by a doc, update that doc in the same change and bump
 | `/api/portal/[token]/*`, `/api/client-portal/[projectId]/*` | client-portal |
 | `/api/proposals/*`, `/api/ai/proposal-*`, `/api/generate-pdf`, `/api/send-notification` | proposal |
 | `/api/clickup/*`, `/api/tasks/*` | clickup-tasks |
+| `/api/payments/*` | payments |
 | `/api/refrens/*`, `/api/extension/*`, `/api/raycast/*`, `/api/capture-runs`, `/api/upload-captures` | tools-and-extensions |
 | `/api/cron/*` | see the cron table below |
 
@@ -86,6 +89,7 @@ All crons are defined in [vercel.json](../../vercel.json) (times in UTC) and aut
 | `20 * * * *` | `/api/cron/auto-optimise` | worker-alt-text-images (queues `library_sweep` per project with `autoOptimiseImages.enabled`) |
 | `*/5 * * * *` | `/api/cron/scan-jobs` | site-audit (also drains the notification queue → site-monitoring) |
 | `0 9 * * *` | `/api/cron/refrens-sync` | tools-and-extensions |
+| `30 4,12 * * *` | `/api/cron/fold-sync` | payments |
 | `*/15 * * * *` | `/api/cron/clickup-refresh` | clickup-tasks |
 | `0 14,19 * * 1-5` | `/api/cron/nag-tasks` | clickup-tasks |
 | `0 22 * * 1-5` | `/api/cron/review-digest` | project-links |
@@ -110,6 +114,7 @@ Collection name constants live in [src/lib/constants.ts](../../src/lib/constants
 | `proposals`, `shared_proposals`, `proposal_comments`, `proposal_history`, `proposal_views`, `templates` | proposal |
 | `tasks`, `requests`, `app_secrets/clickup` | clickup-tasks |
 | `project_invoices`, `app_secrets/refrens`, `capture_runs` | tools-and-extensions |
+| `incoming_payments`, `payment_payers`, `app_secrets/fold`, `app_secrets/fold_pending` | payments |
 | `configurations`, `access_control` | platform |
 
 ## Lookup: common tasks → doc
@@ -128,6 +133,7 @@ Collection name constants live in [src/lib/constants.ts](../../src/lib/constants
 | Change proposal AI, PDF or signing | proposal |
 | Change ClickUp sync rules | clickup-tasks |
 | Change invoices, Raycast, Chrome extensions or screenshot capture | tools-and-extensions |
+| Change how bank payments are read from Fold or matched to projects | payments |
 | Add or rename an env var | env-vars (then the owning doc) |
 
 ## Repo-wide facts every agent should know

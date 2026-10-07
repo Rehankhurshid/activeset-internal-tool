@@ -1206,3 +1206,80 @@ export async function sendDeliveryDigestEmail(
   );
   return 'sent';
 }
+
+// ---------------------------------------------------------------------------
+// Incoming payments (Fold)
+// ---------------------------------------------------------------------------
+
+export interface IncomingPaymentsEmailRow {
+  date: string;
+  amount: number;
+  currency: string;
+  payerName: string;
+  /** Project it went to, or null when it waits for someone to assign it. */
+  projectName: string | null;
+  /** "Remembered payer", or the suggestion's reason, or null. */
+  note: string | null;
+}
+
+/**
+ * New credits on the business account since the last Fold sync, to the
+ * people set on the Payments page (Salman and Rehan by default). Amounts are
+ * private, so this never goes to NOTIFY_EMAIL.
+ */
+export async function sendIncomingPaymentsEmail(input: {
+  to: string[];
+  rows: IncomingPaymentsEmailRow[];
+  baseUrl: string;
+}): Promise<'sent' | 'skipped'> {
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword || !input.to.length || !input.rows.length) return 'skipped';
+
+  const money = (n: number, currency: string) =>
+    `${currency === 'INR' ? '₹' : `${currency} `}${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  const total = input.rows.reduce((sum, r) => sum + (r.currency === 'INR' ? r.amount : 0), 0);
+  const waiting = input.rows.filter((r) => !r.projectName).length;
+  const subject =
+    `${money(total, 'INR')} received · ${input.rows.length} ${input.rows.length === 1 ? 'payment' : 'payments'}` +
+    (waiting ? ` · ${waiting} to assign` : '');
+
+  const rows = input.rows
+    .map(
+      (r) => `
+        <tr>
+          <td style="padding:8px 0;border-bottom:1px solid #1e293b;">
+            <div style="color:#e2e8f0;font-size:14px;font-weight:600;">${escapeHtml(r.payerName)}</div>
+            <div style="font-size:12px;color:#94a3b8;margin-top:2px;">${escapeHtml(
+              [r.date.slice(0, 10), r.projectName ?? 'Not assigned yet', r.note].filter(Boolean).join(' · ')
+            )}</div>
+          </td>
+          <td style="padding:8px 0;border-bottom:1px solid #1e293b;text-align:right;white-space:nowrap;vertical-align:top;color:${
+            r.projectName ? '#4ade80' : '#fbbf24'
+          };font-size:14px;font-weight:600;">${money(r.amount, r.currency)}</td>
+        </tr>`
+    )
+    .join('');
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:8px;">
+      <div style="font-size:18px;font-weight:600;margin-bottom:16px;">${escapeHtml(subject)}</div>
+      <table style="width:100%;border-collapse:collapse;">${rows}</table>
+      <div style="margin-top:20px;">
+        <a href="${input.baseUrl}/modules/payments" style="display:inline-block;background:#3b82f6;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">Open Payments</a>
+      </div>
+    </div>
+  `;
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
+  });
+  await transporter.sendMail({
+    from: `"ActiveSet Payments" <${email.gmailUser}>`,
+    to: input.to.join(', '),
+    subject,
+    html,
+  });
+  console.log(`[notifications] Incoming payments email sent: ${input.rows.length} rows`);
+  return 'sent';
+}

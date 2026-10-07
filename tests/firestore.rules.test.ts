@@ -436,6 +436,31 @@ describe('firestore.rules', { timeout: 30_000 }, () => {
     });
   });
 
+  // Bank credits from Fold, the payers the team has confirmed, and the Fold
+  // OAuth tokens. Admins read them through /api/payments (firebase-admin);
+  // nobody, admins included, may touch them from the browser.
+  for (const collection of ['incoming_payments', 'payment_payers', 'app_secrets']) {
+    describe(`${collection} (not in rules, default deny)`, () => {
+      beforeEach(() => seed(collection, 'd1', { projectId: 'p1', amount: 100000 }));
+
+      it('denies the admin reading', async () => {
+        await assertFails(docRef(admin(), collection, 'd1').get());
+      });
+
+      it('denies the admin writing', async () => {
+        await assertFails(docRef(admin(), collection, 'd2').set({ projectId: 'p1' }));
+      });
+
+      it('denies an @activeset.co read', async () => {
+        await assertFails(docRef(team(), collection, 'd1').get());
+      });
+
+      it('denies a signed-out read', async () => {
+        await assertFails(docRef(signedOut(), collection, 'd1').get());
+      });
+    });
+  }
+
   // Portal opens live under projects/{id}/portal_views so the Client tab can
   // order by viewedAt without a composite index. Rules do not cascade into
   // subcollections, and this path is not matched anywhere, so it is deny-by-

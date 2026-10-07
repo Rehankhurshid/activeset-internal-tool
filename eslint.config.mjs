@@ -21,6 +21,7 @@ const modules = [
   "settings",
   "client-portal",
   "delivery",
+  "payments",
 ];
 
 const createModuleBoundaryRule = (moduleName) => {

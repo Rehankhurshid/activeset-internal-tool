@@ -49,6 +49,7 @@ const ImageLibrary = dynamic(() => import('../components/ImageLibrary').then(m =
 const ChecklistOverview = dynamic(() => import('@/components/checklist/ChecklistOverview').then(m => m.ChecklistOverview), { ssr: false, loading: TabLoader });
 const ProjectTimelineOverview = dynamic(() => import('@/modules/timeline').then(m => m.ProjectTimelineOverview), { ssr: false, loading: TabLoader });
 const InvoicesTab = dynamic(() => import('@/modules/invoices/ui/components/InvoicesTab').then(m => m.InvoicesTab), { ssr: false, loading: TabLoader });
+const ProjectPaymentsCard = dynamic(() => import('@/modules/payments').then(m => m.ProjectPaymentsCard), { ssr: false });
 const ClientPanel = dynamic(() => import('@/modules/client-portal').then(m => m.ClientPanel), { ssr: false, loading: TabLoader });
 const DeliveryTab = dynamic(() => import('@/modules/delivery').then(m => m.DeliveryTab), { ssr: false, loading: TabLoader });
 
@@ -701,7 +702,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     </TabsContent>
 
                     {isAdmin && (
-                        <TabsContent value="invoices" className="mt-4 sm:mt-6">
+                        <TabsContent value="invoices" className="mt-4 sm:mt-6 space-y-6">
+                            <ProjectPaymentsCard projectId={project.id} />
                             <InvoicesTab
                                 projectId={project.id}
                                 proposalId={project.proposalId}

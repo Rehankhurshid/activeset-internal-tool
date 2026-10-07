@@ -41,6 +41,13 @@ export const COLLECTIONS = {
   PROJECT_SHEETS: 'project_sheets',
   /** Server-only app settings (firebase-admin). `project_sheets`: the Shared Drive project sheets are created in. */
   APP_SETTINGS: 'app_settings',
+  // Server-only: credits on the business account read from Fold, keyed by the
+  // Fold transaction id (see docs/modules/payments.md). Admin-only; absent
+  // from firestore.rules on purpose (default deny) — firebase-admin only.
+  INCOMING_PAYMENTS: 'incoming_payments',
+  // Server-only: payment_payers/{payerKey} → projectId, the payers the team
+  // has confirmed once so later payments assign themselves. Default deny.
+  PAYMENT_PAYERS: 'payment_payers',
 } as const;
 
 // UI constants

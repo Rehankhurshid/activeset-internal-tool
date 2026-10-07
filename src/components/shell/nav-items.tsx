@@ -1,10 +1,11 @@
 'use client';
 
 import type { Icon } from '@phosphor-icons/react';
-import { Camera, FileText, FolderSimple, House, ListChecks, Wrench } from '@phosphor-icons/react';
+import { Bank, Camera, FileText, FolderSimple, House, ListChecks, Wrench } from '@phosphor-icons/react';
 import { useAuth, useModuleAccess } from '@/modules/auth-access';
 
-export type NavAccess = 'proposal' | 'project-links';
+/** `admin`: rehan@, salman@ or the `admin` claim only; there is no grant for it. */
+export type NavAccess = 'proposal' | 'project-links' | 'admin';
 
 export interface NavItem {
   href: string;
@@ -32,6 +33,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/modules/screenshot-runner', label: 'Screenshot Runner', description: 'Full-page captures for a list of URLs.', keys: 'g s', icon: Camera, access: 'project-links' },
   { href: '/modules/internal-tools', label: 'Internal Tools', description: 'Chrome extensions and setup instructions.', keys: 'g t', icon: Wrench },
   { href: '/modules/checklist-creator', label: 'Checklist Creator', description: 'SOP templates, generated or hand-built.', keys: 'g c', icon: ListChecks },
+  { href: '/modules/payments', label: 'Payments', description: 'Client money reaching the bank, from Fold.', keys: 'g m', icon: Bank, access: 'admin', hideWithoutAccess: true },
 ];
 
 export function isNavItemActive(item: Pick<NavItem, 'href' | 'exact'>, pathname: string | null): boolean {
@@ -48,6 +50,7 @@ export function useNavItems(): ResolvedNavItem[] {
   return NAV_ITEMS.map((item) => {
     const grant =
       item.access === 'proposal' ? proposal : item.access === 'project-links' ? projectLinks : null;
+    if (item.access === 'admin') return { ...item, hasAccess: isAdmin, loading: false };
     return {
       ...item,
       hasAccess: grant ? grant.hasAccess || isAdmin : true,

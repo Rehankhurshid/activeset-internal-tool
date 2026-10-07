@@ -68,7 +68,7 @@ Every cron route is owned by the module it serves; the scheduling is listed unde
 - [AppFrame.tsx](../../src/components/shell/AppFrame.tsx) — `AppFrame`: on `/` and `/modules/*` with a user, renders `AppRail` + `HintBar` and pads content; mounts `ShortcutHelp` + `CommandPalette` on app routes only (so `?` does nothing on `/portal`).
 - [AppRail.tsx](../../src/components/shell/AppRail.tsx) — `AppRail` (desktop-only icon rail), `RailItem` (registers the `g <key>` chord per nav item), `ThemeButton` (`mod+shift+l`), `UserMenu` (shortcuts, sign out).
 - [HintBar.tsx](../../src/components/shell/HintBar.tsx) — `HintBar`: bottom strip showing the last three shortcuts registered with `hint: true`, or the pending chord.
-- [nav-items.tsx](../../src/components/shell/nav-items.tsx) — `NAV_ITEMS` (single source for rail, mobile sheet, palette, Home), `useNavItems()` resolves grants, `isNavItemActive()`.
+- [nav-items.tsx](../../src/components/shell/nav-items.tsx) — `NAV_ITEMS` (single source for rail, mobile sheet, palette, Home), `useNavItems()` resolves grants, `isNavItemActive()` `access: 'admin'` (Payments) resolves to `isAdmin` and has no grant.
 - [index.ts](../../src/components/shell/index.ts) — barrel.
 - [AppProviders.tsx](../../src/components/AppProviders.tsx) — `AppProviders`: `ThemeProvider` (default dark, forced light on `/portal`) → `AuthProvider` → `ShortcutProvider` → `AppFrame` + sonner `Toaster`.
 - [CommandPalette.tsx](../../src/components/CommandPalette.tsx) — `CommandPalette`: `mod+k` / `/`, opened by the `commandk:open` window event; Go-to (nav items, plus ClickUp/Refrens settings for admins), Actions (new project, theme, shortcuts, sign out), live project search via `projectLinksRepository.subscribeToAllProjects` only while open.
@@ -177,6 +177,7 @@ Vercel crons from [vercel.json](../../vercel.json) (UTC). Every route listed cal
 | `20 * * * *` (hourly) | `/api/cron/auto-optimise` | [route.ts](../../src/app/api/cron/auto-optimise/route.ts) | GET | worker-alt-text-images |
 | `*/5 * * * *` (every 5 min) | `/api/cron/scan-jobs` | [route.ts](../../src/app/api/cron/scan-jobs/route.ts) | GET | site-audit |
 | `0 9 * * *` (09:00 daily) | `/api/cron/refrens-sync` | [route.ts](../../src/app/api/cron/refrens-sync/route.ts) | GET, POST | tools-and-extensions |
+| `30 4,12 * * *` (04:30, 12:30 = 10:00, 18:00 IST) | `/api/cron/fold-sync` | [route.ts](../../src/app/api/cron/fold-sync/route.ts) | GET, POST | payments |
 | `*/15 * * * *` (every 15 min) | `/api/cron/clickup-refresh` | [route.ts](../../src/app/api/cron/clickup-refresh/route.ts) | GET | clickup-tasks |
 | `0 14,19 * * 1-5` (14:00, 19:00 weekdays) | `/api/cron/nag-tasks` | [route.ts](../../src/app/api/cron/nag-tasks/route.ts) | GET | clickup-tasks |
 | `0 22 * * 1-5` (22:00 weekdays) | `/api/cron/review-digest` | [route.ts](../../src/app/api/cron/review-digest/route.ts) | GET | project-links |
