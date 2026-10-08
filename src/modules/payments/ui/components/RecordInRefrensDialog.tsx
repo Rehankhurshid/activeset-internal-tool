@@ -74,6 +74,7 @@ export function RecordInRefrensDialog({ payment, invoices, onOpenChange, onDone 
   const [invoiceId, setInvoiceId] = useState<string>('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [amount, setAmount] = useState('');
   const [tds, setTds] = useState('');
@@ -101,6 +102,7 @@ export function RecordInRefrensDialog({ payment, invoices, onOpenChange, onDone 
     let cancelled = false;
     setLoading(true);
     setPreview(null);
+    setLoadError(null);
     fetchAuthed(`/api/payments/${encodeURIComponent(payment.id)}/refrens?invoiceId=${encodeURIComponent(invoiceId)}`)
       .then(async (res) => {
         const data = await res.json();
@@ -115,7 +117,7 @@ export function RecordInRefrensDialog({ payment, invoices, onOpenChange, onDone 
         setDate(p.draft.paymentDate.slice(0, 10));
         setRefId(p.draft.refId);
       })
-      .catch((err) => !cancelled && toast.error(err instanceof Error ? err.message : 'Could not read the invoice from Refrens'))
+      .catch((err) => !cancelled && setLoadError(err instanceof Error ? err.message : 'Could not read the invoice from Refrens'))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -196,6 +198,23 @@ export function RecordInRefrensDialog({ payment, invoices, onOpenChange, onDone 
 
             {!invoiceId ? (
               <p className="text-sm text-muted-foreground">Pick the invoice this payment settles.</p>
+            ) : loadError ? (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  {loadError}
+                  {/signature|not connected|authenticat/i.test(loadError) && (
+                    <>
+                      {' '}
+                      The Refrens key needs reconnecting in{' '}
+                      <a href="/modules/refrens-settings" className="underline">
+                        Refrens settings
+                      </a>
+                      .
+                    </>
+                  )}
+                </AlertDescription>
+              </Alert>
             ) : loading || !preview ? (
               <Skeleton className="h-40 w-full" />
             ) : (
