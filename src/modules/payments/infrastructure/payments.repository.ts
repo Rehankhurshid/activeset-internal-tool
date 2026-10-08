@@ -175,6 +175,12 @@ export async function finishRefrensRecording(
   });
 }
 
+/** The credit already tied to this Refrens payment, if any. */
+export async function findPaymentByRefrensPaymentId(refrensPaymentId: string): Promise<IncomingPayment | null> {
+  const snap = await paymentsCol().where('refrensPaymentId', '==', refrensPaymentId).limit(1).get();
+  return snap.empty ? null : hydrate(snap.docs[0].id, snap.docs[0].data());
+}
+
 export async function releaseRefrensRecording(id: string): Promise<void> {
   await paymentsCol().doc(id).update({ refrensLockUntil: 0 });
 }

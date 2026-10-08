@@ -1,3 +1,5 @@
+import { namesMatch } from './payments.matching';
+
 /**
  * What to record in Refrens when a bank credit pays an invoice.
  *
@@ -111,4 +113,85 @@ export function draftRefrensPayment(input: {
           ? `This is more than the ${invoice.outstanding.toLocaleString('en-IN')} still due on the invoice.`
           : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Finding the invoice in Refrens
+// ---------------------------------------------------------------------------
+
+export interface RefrensOpenInvoice {
+  refrensInvoiceId: string;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  currency: string;
+  total: number;
+  /** What Refrens says is still due, in the invoice's currency. */
+  due: number;
+  /** The same in INR at the invoice-time rate (Refrens' BusinessCurrency.due). */
+  dueInr: number | null;
+  billedToName: string | null;
+  /**
+   * Already PAID in Refrens (entered by hand, usually). Then `due` holds what
+   * the payments on it settled, so the bank credit can be compared with it and
+   * linked without posting anything.
+   */
+  alreadyPaid?: boolean;
+  paidOn?: string | null;
+}
+
+export interface RankedRefrensInvoice extends RefrensOpenInvoice {
+  score: number;
+  reasons: string[];
+}
+
+/**
+ * Orders a project's candidate Refrens invoices for one bank credit. The bill-to
+ * name matching the client (or the payer) and the amount fitting both count.
+ * For a foreign-currency invoice the INR credit is compared with Refrens' INR
+ * equivalent, loosely (5% either way), since the rate moved and Skydo takes a fee.
+ */
+export function rankRefrensInvoices(
+  payment: { amount: number; currency: string; payerName: string; via: string | null },
+  project: { name: string; client: string | null },
+  invoices: readonly RefrensOpenInvoice[]
+): RankedRefrensInvoice[] {
+  const ranked = invoices.map((inv) => {
+    const reasons: string[] = [];
+    let score = 0;
+    if (namesMatch(inv.billedToName, project.client) || namesMatch(inv.billedToName, project.name)) {
+      score += 3;
+      reasons.push('Billed to this client');
+    } else if (!payment.via && namesMatch(inv.billedToName, payment.payerName)) {
+      score += 3;
+      reasons.push('Billed to the payer');
+    }
+    const sameCurrency = inv.currency.toUpperCase() === payment.currency.toUpperCase();
+    // A payout service (Skydo…) settles foreign-currency invoices only, so an
+    // INR amount that happens to fit an INR invoice means nothing.
+    if (sameCurrency && payment.via) {
+      // no amount signal
+    } else if (sameCurrency && inv.due > 0) {
+      const ratio = payment.amount / inv.due;
+      if (Math.abs(payment.amount - inv.due) <= 1) {
+        score += 3;
+        reasons.push('Exact amount');
+      } else if (ratio >= 0.89 && ratio < 1) {
+        score += 2;
+        reasons.push('Amount fits after TDS');
+      }
+    } else if (!sameCurrency && inv.dueInr && inv.dueInr > 0) {
+      const ratio = payment.amount / inv.dueInr;
+      if (ratio >= 0.95 && ratio <= 1.05) {
+        score += 2;
+        reasons.push('Close to the INR value');
+      }
+    }
+    return { ...inv, score, reasons };
+  });
+  return ranked.sort(
+    (a, b) =>
+      b.score - a.score ||
+      Number(Boolean(a.alreadyPaid)) - Number(Boolean(b.alreadyPaid)) ||
+      (b.invoiceDate ?? '').localeCompare(a.invoiceDate ?? '')
+  );
 }

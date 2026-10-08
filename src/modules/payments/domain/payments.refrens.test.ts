@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { bankReference, draftRefrensPayment, outstandingOn } from './payments.refrens';
+import { bankReference, draftRefrensPayment, outstandingOn, rankRefrensInvoices, type RefrensOpenInvoice } from './payments.refrens';
 
 const payment = (over: Partial<Parameters<typeof draftRefrensPayment>[0]['payment']> = {}) => ({
   id: 'fold-1',
@@ -75,5 +75,69 @@ describe('draftRefrensPayment', () => {
       invoice: { currency: 'INR', outstanding: 100000, invoiceNumber: null },
     });
     assert.equal(d.paymentMethod, 'UPI');
+  });
+});
+
+describe('rankRefrensInvoices', () => {
+  const open = (over: Partial<RefrensOpenInvoice>): RefrensOpenInvoice => ({
+    refrensInvoiceId: 'r1',
+    invoiceNumber: '2026-001',
+    invoiceDate: '2026-09-01',
+    currency: 'INR',
+    total: 148680,
+    due: 148680,
+    dueInr: 148680,
+    billedToName: 'Someone Else Pvt Ltd',
+    ...over,
+  });
+  const project = { name: 'Hyprix', client: 'Spaceport Technologies' };
+
+  it('puts the invoice billed to the client with the exact amount first', () => {
+    const ranked = rankRefrensInvoices(
+      { amount: 148680, currency: 'INR', payerName: 'SPACEPORT TECHNOLOGIES PRIV', via: null },
+      project,
+      [open({ refrensInvoiceId: 'other', due: 99000 }), open({ refrensInvoiceId: 'match', billedToName: 'Spaceport Technologies Private Limited' })]
+    );
+    assert.equal(ranked[0].refrensInvoiceId, 'match');
+    assert.equal(ranked[0].score, 6);
+    assert.deepEqual(ranked[0].reasons, ['Billed to this client', 'Exact amount']);
+  });
+
+  it('matches a Skydo INR payout to a USD invoice by its INR value, loosely', () => {
+    const ranked = rankRefrensInvoices(
+      { amount: 55345.1, currency: 'INR', payerName: 'Skydo', via: 'Skydo' },
+      { name: 'Muffins', client: null },
+      [open({ refrensInvoiceId: 'usd', currency: 'USD', total: 650, due: 650, dueInr: 56500, billedToName: 'Muffin Labs Inc' }), open({ refrensInvoiceId: 'inr', due: 30000 })]
+    );
+    assert.equal(ranked[0].refrensInvoiceId, 'usd');
+    assert.deepEqual(ranked[0].reasons, ['Billed to this client', 'Close to the INR value']);
+  });
+
+  it('never name-matches Skydo as the payer', () => {
+    const ranked = rankRefrensInvoices(
+      { amount: 1, currency: 'INR', payerName: 'Skydo', via: 'Skydo' },
+      { name: 'X', client: null },
+      [open({ billedToName: 'Skydo Technologies' })]
+    );
+    assert.equal(ranked[0].score, 0);
+  });
+
+  it('matches a credit that paid an invoice already marked paid, with 10% TDS on the total', () => {
+    const ranked = rankRefrensInvoices(
+      { amount: 148680, currency: 'INR', payerName: 'SPACEPORT TECHNOLOGIES PRIV', via: null },
+      { name: 'Hyprix', client: null },
+      [open({ refrensInvoiceId: 'paid', due: 165200, total: 165200, alreadyPaid: true, billedToName: 'Spaceport Technologies Pvt Ltd' })]
+    );
+    assert.equal(ranked[0].score, 5);
+    assert.deepEqual(ranked[0].reasons, ['Billed to the payer', 'Amount fits after TDS']);
+  });
+
+  it('does not amount-match a Skydo INR payout to an INR invoice', () => {
+    const ranked = rankRefrensInvoices(
+      { amount: 235298.45, currency: 'INR', payerName: 'Skydo', via: 'Skydo' },
+      { name: 'Muffins', client: null },
+      [open({ due: 247800 })]
+    );
+    assert.equal(ranked[0].score, 0);
   });
 });

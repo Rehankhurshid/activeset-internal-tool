@@ -161,6 +161,8 @@ export interface RefrensInvoiceSummary {
   };
   createdAt?: string;
   updatedAt?: string;
+  /** The invoice in the business's own currency (INR) at the invoice-time rate. */
+  BusinessCurrency?: { total?: number; paid?: number; due?: number };
 }
 
 interface RefrensListResponse {
@@ -360,6 +362,26 @@ export interface RecordInvoicePaymentInput {
   transactionCharge?: number;
   notes?: string;
   refId?: string;
+}
+
+/**
+ * Every UNPAID invoice, newest first (up to 200). No `$select`: asking
+ * Refrens for selected fields makes every row report status PAID
+ * (seen 2026-10-08).
+ */
+export async function listOpenInvoices(): Promise<RefrensInvoiceSummary[]> {
+  const creds = await loadCreds();
+  const out: RefrensInvoiceSummary[] = [];
+  for (let skip = 0; skip < 200; skip += 50) {
+    const params = new URLSearchParams({ $limit: '50', $skip: String(skip), status: 'UNPAID' });
+    params.set('$sort[invoiceDate]', '-1');
+    const path = `/businesses/${encodeURIComponent(creds.urlKey)}/invoices?${params.toString()}`;
+    const raw = (await refrensFetch(creds, path)) as RefrensListResponse | RefrensInvoiceSummary[] | null;
+    const rows = Array.isArray(raw) ? raw : raw?.data ?? [];
+    out.push(...rows.filter((r) => (r.status ?? '').toUpperCase() === 'UNPAID'));
+    if (rows.length < 50) break;
+  }
+  return out;
 }
 
 /** GET /businesses/:urlKey/invoices/:id/payments, without removed ones. */
