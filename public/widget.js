@@ -1101,21 +1101,456 @@
     }
   }
 
+  // ========================================
+  // Page-level styles + Webflow badge
+  // ========================================
+  // The widget itself lives in a shadow root, so the site's CSS can't reach it.
+  // These few rules have to sit on the page: the typo highlight, the issue
+  // outline, and hiding the "Made in Webflow" badge. Webflow re-appends the
+  // badge 500ms after load and on fullscreen changes, so CSS hides it and an
+  // observer removes it whenever it comes back.
+  function injectPageStyles() {
+    if (document.getElementById('plw-page-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'plw-page-styles';
+    style.textContent = `
+      html body .w-webflow-badge,
+      html body a.w-webflow-badge[href] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      ::highlight(plw-typo) {
+        text-decoration: underline wavy #ef4444;
+        text-decoration-thickness: 2px;
+        background-color: rgba(239, 68, 68, 0.15);
+        color: unset;
+      }
+      .plw-issue-highlight {
+        outline: 3px solid #f59e0b !important;
+        outline-offset: 2px !important;
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22) !important;
+        transition: outline-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      .plw-issue-highlight-focus { animation: plw-highlight-pulse 1.4s ease; }
+      @keyframes plw-highlight-pulse {
+        0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+        80% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  let webflowBadgeObserver = null;
+  function removeWebflowBadge() {
+    injectPageStyles();
+    const strip = () => document.querySelectorAll('.w-webflow-badge').forEach((node) => node.remove());
+    strip();
+    if (webflowBadgeObserver || !document.body) return;
+    webflowBadgeObserver = new MutationObserver(strip);
+    webflowBadgeObserver.observe(document.body, { childList: true });
+  }
+
+  // Runs as soon as the script loads, before the project is fetched, so the
+  // badge never flashes.
+  injectPageStyles();
+
+  // ========================================
+  // Widget UI helpers
+  // ========================================
+  const ICON_PATHS = {
+    close: '<path d="M18 6 6 18M6 6l12 12"/>',
+    external: '<path d="M7 17 17 7M8 7h9v9"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    chevronUp: '<path d="m18 15-6-6-6 6"/>',
+    chevronDown: '<path d="m6 9 6 6 6-6"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>',
+    minimize: '<path d="M5 12h14"/>',
+    listCheck: '<path d="m3 7 2 2 4-4"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/>',
+  };
+
+  function icon(name, size = 16, strokeWidth = 2) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
+  }
+
+  function escapeHtml(value) {
+    return ContentQualityAuditor.escapeHtml(value);
+  }
+
+  // Only let real destinations through; a javascript: URL in a link title
+  // field must not become a clickable link on a client's site.
+  function safeUrl(url) {
+    try {
+      const parsed = new URL(String(url || ''), window.location.href);
+      return ['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol) ? parsed.href : '#';
+    } catch (e) {
+      return '#';
+    }
+  }
+
+  function normalizeForCompare(url) {
+    try {
+      const parsed = new URL(url, window.location.href);
+      return `${parsed.hostname.replace(/^www\./, '')}${parsed.pathname.replace(/\/+$/, '')}`;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  const LINK_KINDS = [
+    { test: (h) => /(^|\.)figma\.com$/.test(h), tint: '#a259ff' },
+    { test: (h) => /(^|\.)webflow\.(io|com)$/.test(h), tint: '#5b6cff' },
+    { test: (h) => /(^|\.)framer\.(website|com|app|ai)$/.test(h), tint: '#3b9eff' },
+    { test: (h, p) => h === 'docs.google.com' && p.startsWith('/spreadsheets'), tint: '#22a565' },
+    { test: (h, p) => h === 'docs.google.com' && p.startsWith('/presentation'), tint: '#f4b400' },
+    { test: (h) => h === 'docs.google.com', tint: '#4c8bf5' },
+    { test: (h) => h === 'drive.google.com', tint: '#f4b400' },
+    { test: (h) => /(^|\.)notion\.(so|site)$/.test(h), tint: '#a1a1aa' },
+    { test: (h) => /(^|\.)loom\.com$/.test(h), tint: '#7b6cff' },
+    { test: (h) => /(^|\.)clickup\.com$/.test(h), tint: '#8b7bff' },
+    { test: (h) => /(^|\.)miro\.com$/.test(h), tint: '#f5c518' },
+    { test: (h) => /(^|\.)slack\.com$/.test(h), tint: '#e0457b' },
+  ];
+
+  function describeLink(url) {
+    let host = '';
+    let path = '';
+    try {
+      const parsed = new URL(url, window.location.href);
+      host = parsed.hostname.replace(/^www\./, '');
+      path = parsed.pathname.replace(/\/+$/, '');
+    } catch (e) { /* not a URL */ }
+    const kind = LINK_KINDS.find((k) => k.test(host, path));
+    return {
+      host,
+      display: host ? `${host}${path && path.length < 40 ? path : ''}` : String(url || ''),
+      tint: kind ? kind.tint : '#a1a1aa',
+    };
+  }
+
+  function siteLabel(hostname) {
+    if (hostname.endsWith('.webflow.io')) return 'Staging';
+    if (hostname.endsWith('.framer.website')) return 'Preview';
+    if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) return 'Local';
+    return 'Site';
+  }
+
+  function readSession(key) {
+    try { return window.sessionStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  function writeSession(key, value) {
+    try { window.sessionStorage.setItem(key, value); } catch (e) { /* storage blocked */ }
+  }
+
+  function ringMarkup(size) {
+    return `
+      <span class="ring" data-ring data-tone="loading" style="--size:${size}px">
+        <svg viewBox="0 0 36 36" aria-hidden="true">
+          <circle class="ring-track" cx="18" cy="18" r="15.9155"/>
+          <circle class="ring-arc" data-ring-arc cx="18" cy="18" r="15.9155" pathLength="100" stroke-dasharray="0 100"/>
+        </svg>
+        <span class="ring-score" data-ring-score>–</span>
+      </span>`;
+  }
+
+  function scoreTone(result) {
+    if (!result.canDeploy) return 'bad';
+    if (result.overallScore >= 90) return 'good';
+    if (result.overallScore >= 50) return 'warn';
+    return 'bad';
+  }
+
+  const WIDGET_STYLES = `
+    :host { all: initial; }
+    .plw {
+      --bg: #0c0c0e; --bg-2: #151518; --bg-3: #1e1e22;
+      --line: rgba(255,255,255,.07); --line-2: rgba(255,255,255,.13);
+      --text: #f4f4f5; --muted: #a1a1aa; --faint: #71717a;
+      --good: #22c55e; --warn: #f59e0b; --bad: #ef4444; --info: #60a5fa;
+      --shadow: 0 24px 64px -16px rgba(0,0,0,.6), 0 8px 24px -8px rgba(0,0,0,.45);
+      --display: 'Funnel Display', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-family: 'Funnel Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 14px; line-height: 1.4; color: var(--text);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    .plw[data-theme="light"] {
+      --bg: #ffffff; --bg-2: #f5f5f6; --bg-3: #ebebee;
+      --line: rgba(0,0,0,.07); --line-2: rgba(0,0,0,.12);
+      --text: #18181b; --muted: #52525b; --faint: #8a8a93;
+      --shadow: 0 24px 64px -16px rgba(0,0,0,.2), 0 8px 24px -8px rgba(0,0,0,.12);
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    button { font: inherit; color: inherit; margin: 0; }
+    a { color: inherit; }
+    [hidden] { display: none !important; }
+
+    /* Launcher */
+    .launcher {
+      position: fixed; right: 20px; bottom: 20px;
+      display: inline-flex; align-items: center; gap: 10px;
+      height: 46px; padding: 0 14px 0 9px; max-width: calc(100vw - 40px);
+      border-radius: 999px; border: 1px solid var(--line-2);
+      background: var(--bg); color: var(--text); box-shadow: var(--shadow);
+      cursor: pointer; user-select: none;
+      transition: transform .2s cubic-bezier(.2,.8,.2,1), padding .2s, width .2s, border-color .2s;
+    }
+    .launcher:hover { transform: translateY(-1px); border-color: rgba(255,255,255,.2); }
+    .plw[data-theme="light"] .launcher:hover { border-color: rgba(0,0,0,.2); }
+    .launcher:active { transform: scale(.97); }
+    .launcher:focus-visible, .tab:focus-visible, .icon-btn:focus-visible, .link:focus-visible,
+    .cat-row:focus-visible, .btn:focus-visible, .text-btn:focus-visible {
+      outline: 2px solid var(--info); outline-offset: 2px;
+    }
+    .lead { display: inline-flex; }
+    .launcher-label {
+      font-family: var(--display); font-weight: 500; font-size: 14px; letter-spacing: -.005em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
+    }
+    .launcher-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      height: 22px; padding: 0 8px; border-radius: 999px;
+      background: var(--bg-3); color: var(--muted);
+      font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .launcher-chip svg { color: var(--good); }
+    .chev { display: inline-flex; color: var(--faint); transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+    .plw[data-open="true"] .chev { transform: rotate(180deg); }
+    .plw[data-minimized="true"] .launcher { width: 46px; padding: 0; justify-content: center; }
+    .plw[data-minimized="true"] .launcher > :not(.lead) { display: none; }
+    .plw[data-blocked="true"] .launcher { border-color: rgba(239,68,68,.6); animation: plw-pulse 2.2s infinite; }
+    .plw[data-pos="left"] .launcher { right: auto; left: 20px; }
+
+    .mark {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: inline-grid; place-items: center; flex-shrink: 0;
+      background: var(--bg-3); color: var(--text);
+      font-family: var(--display); font-weight: 600; font-size: 13px;
+    }
+    .mark.lg { width: 34px; height: 34px; border-radius: 10px; font-size: 15px; }
+
+    /* Score ring */
+    .ring { position: relative; width: var(--size); height: var(--size); display: inline-grid; place-items: center; flex-shrink: 0; --c: var(--faint); }
+    .ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+    .ring-track { fill: none; stroke: var(--line-2); stroke-width: 3.4; }
+    .ring-arc { fill: none; stroke: var(--c); stroke-width: 3.4; stroke-linecap: round; transition: stroke .3s; }
+    .ring-score {
+      position: relative; font-family: var(--display); font-weight: 600; line-height: 1;
+      font-size: calc(var(--size) * .38); font-variant-numeric: tabular-nums; color: var(--text);
+    }
+    .ring[data-tone="good"] { --c: var(--good); }
+    .ring[data-tone="warn"] { --c: var(--warn); }
+    .ring[data-tone="bad"] { --c: var(--bad); }
+    .ring[data-tone="loading"] { --c: var(--muted); }
+    .ring[data-tone="loading"] svg { animation: plw-spin 1s linear infinite; }
+    .ring[data-tone="loading"] .ring-arc { stroke-dasharray: 26 100; }
+    .ring[data-tone="loading"] .ring-score { opacity: .45; }
+
+    /* Panel */
+    .panel {
+      position: fixed; right: 20px; bottom: 78px;
+      width: 392px; max-width: calc(100vw - 24px);
+      /* Fixed height so the tabs don't jump when switching between short and long views */
+      height: min(560px, calc(100vh - 104px));
+      display: flex; flex-direction: column;
+      background: var(--bg); border: 1px solid var(--line-2); border-radius: 18px;
+      box-shadow: var(--shadow); overflow: hidden;
+      opacity: 0; visibility: hidden; transform: translateY(10px) scale(.98); transform-origin: bottom right;
+      transition: opacity .16s ease, transform .3s cubic-bezier(.16,1,.3,1), visibility 0s linear .3s;
+    }
+    .plw[data-open="true"] .panel {
+      opacity: 1; visibility: visible; transform: none;
+      transition: opacity .16s ease, transform .3s cubic-bezier(.16,1,.3,1), visibility 0s;
+    }
+    .plw[data-pos="left"] .panel { right: auto; left: 20px; transform-origin: bottom left; }
+
+    .head { display: flex; align-items: center; gap: 12px; padding: 16px 12px 14px 16px; }
+    .head-text { min-width: 0; flex: 1; }
+    .title {
+      font-family: var(--display); font-weight: 500; font-size: 16px; letter-spacing: -.01em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sub { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 12px; color: var(--faint); min-width: 0; }
+    .sub span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex-shrink: 0; box-shadow: 0 0 0 3px rgba(34,197,94,.18); }
+    .head-actions { display: flex; gap: 2px; flex-shrink: 0; }
+    .icon-btn {
+      width: 32px; height: 32px; border-radius: 9px; border: 0;
+      display: inline-grid; place-items: center; flex-shrink: 0;
+      background: transparent; color: var(--faint); cursor: pointer; text-decoration: none;
+      transition: background .15s, color .15s;
+    }
+    .icon-btn:hover { background: var(--bg-3); color: var(--text); }
+
+    .tabs { display: flex; gap: 2px; margin: 0 16px 14px; padding: 3px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--line); }
+    .tab {
+      flex: 1; min-width: 0; height: 32px; padding: 0 8px; border: 0; border-radius: 9px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;
+      transition: background .15s, color .15s, box-shadow .15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab[aria-selected="true"] { background: var(--bg-3); color: var(--text); box-shadow: inset 0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.2); }
+    .plw[data-theme="light"] .tab[aria-selected="true"] { background: var(--bg); }
+    .tab-count { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+    .tab-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--faint); }
+    .tab-dot[data-tone="good"] { background: var(--good); }
+    .tab-dot[data-tone="warn"] { background: var(--warn); }
+    .tab-dot[data-tone="bad"] { background: var(--bad); }
+
+    .views { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+    .view { display: none; padding: 8px; }
+    .view[data-active="true"] { display: block; }
+
+    .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 16px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); }
+    .foot strong { font-family: var(--display); font-weight: 500; color: var(--muted); }
+    .text-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--faint); font-size: 11.5px; cursor: pointer; }
+    .text-btn:hover { background: var(--bg-3); color: var(--text); }
+
+    /* Links */
+    .search { position: relative; margin: 4px 4px 6px; }
+    .search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; }
+    .search input {
+      width: 100%; height: 38px; padding: 0 12px 0 34px; border-radius: 10px;
+      border: 1px solid var(--line); background: var(--bg-2); color: var(--text);
+      font: inherit; font-size: 13.5px; outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    .search input::placeholder { color: var(--faint); }
+    .search input:focus { border-color: var(--line-2); box-shadow: 0 0 0 3px rgba(96,165,250,.22); }
+    .link-row { position: relative; display: flex; align-items: center; border-radius: 12px; transition: background .12s; }
+    .link-row:hover { background: var(--bg-2); }
+    .link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 12px; text-decoration: none; }
+    .fav {
+      width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+      display: inline-grid; place-items: center;
+      font-family: var(--display); font-weight: 600; font-size: 15px; text-transform: uppercase;
+      color: var(--tint); background: color-mix(in srgb, var(--tint) 15%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint) 24%, transparent);
+    }
+    .link-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+    .link-title { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 14px; font-weight: 500; color: var(--text); }
+    .link-title span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .link-url { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .here { flex-shrink: 0; font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; color: var(--good); background: rgba(34,197,94,.14); }
+    .row-actions { display: flex; align-items: center; gap: 2px; padding-right: 8px; opacity: 0; transition: opacity .15s; }
+    .link-row:hover .row-actions, .link-row:focus-within .row-actions { opacity: 1; }
+    .row-actions .icon-btn { width: 30px; height: 30px; }
+    .row-actions .icon-btn.is-done { color: var(--good); }
+    @media (hover: none) { .row-actions { opacity: 1; } }
+
+    .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 40px 24px; color: var(--muted); font-size: 13px; }
+    .empty-icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--bg-2); color: var(--faint); margin-bottom: 6px; }
+    .empty strong { color: var(--text); font-weight: 500; font-size: 14px; }
+
+    /* Checklist */
+    .cl-card { margin: 4px 4px 8px; padding: 16px; border-radius: 14px; background: var(--bg-2); border: 1px solid var(--line); }
+    .cl-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .cl-big { font-family: var(--display); font-weight: 500; font-size: 28px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .cl-big span { font-size: 15px; color: var(--faint); margin-left: 3px; }
+    .cl-pct { font-size: 12.5px; color: var(--muted); }
+    .bar { height: 6px; border-radius: 999px; background: var(--bg-3); overflow: hidden; }
+    .bar > span { display: block; height: 100%; border-radius: inherit; background: var(--good); transition: width .6s cubic-bezier(.16,1,.3,1); }
+    .cl-row { padding: 10px 12px; }
+    .cl-row-top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 7px; font-size: 13px; }
+    .cl-row-top span:first-child { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cl-row-top span:last-child { color: var(--faint); font-variant-numeric: tabular-nums; }
+    .cl-row .bar { height: 4px; }
+    .cl-more { display: flex; justify-content: center; padding: 6px 0 4px; }
+    .cl-frame { margin: 8px 4px 4px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #fff; }
+    .cl-frame iframe { display: block; width: 100%; height: 520px; border: 0; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+      border-radius: 9px; border: 1px solid var(--line-2); background: var(--bg-2); color: var(--text);
+      font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background .15s, border-color .15s;
+    }
+    .btn:hover { background: var(--bg-3); }
+    .btn.is-active { background: var(--warn); border-color: var(--warn); color: #111; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* Page check */
+    .check-summary { display: flex; align-items: center; gap: 14px; margin: 4px 4px 8px; padding: 14px; border-radius: 14px; background: var(--bg-2); border: 1px solid var(--line); }
+    .check-summary .head-text { flex: 1; }
+    .verdict { font-family: var(--display); font-weight: 500; font-size: 16px; letter-spacing: -.01em; }
+    .verdict-sub { margin-top: 2px; font-size: 12.5px; color: var(--muted); }
+    .checking { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 24px; color: var(--muted); font-size: 13px; }
+    .cat + .cat { margin-top: 2px; }
+    .cat-row {
+      width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 10px;
+      border: 0; border-radius: 12px; background: transparent; text-align: left; cursor: pointer; transition: background .12s;
+      --c: var(--faint);
+    }
+    .cat-row:hover { background: var(--bg-2); }
+    .cat-row[aria-disabled="true"] { cursor: default; }
+    .cat-row[aria-disabled="true"]:hover { background: transparent; }
+    .cat-row[data-tone="good"] { --c: var(--good); }
+    .cat-row[data-tone="warn"] { --c: var(--warn); }
+    .cat-row[data-tone="bad"] { --c: var(--bad); }
+    .cat-row[data-tone="info"] { --c: var(--info); }
+    .cat-dot { width: 8px; height: 8px; margin: 0 4px; border-radius: 50%; flex-shrink: 0; background: var(--c); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 18%, transparent); }
+    .cat-text { flex: 1; min-width: 0; }
+    .cat-name { display: block; font-size: 14px; font-weight: 500; }
+    .cat-hint { display: block; font-size: 12px; color: var(--faint); margin-top: 1px; }
+    .cat-status { font-size: 12.5px; font-weight: 500; color: var(--c); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .cat-chev { display: inline-flex; color: var(--faint); transition: transform .2s; }
+    .cat-row[aria-expanded="true"] .cat-chev { transform: rotate(180deg); }
+    .cat-details { padding: 2px 10px 12px 38px; }
+    .detail-item { font-size: 12.5px; color: var(--muted); padding: 5px 0; line-height: 1.45; word-break: break-word; }
+    .detail-item code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; color: var(--text); background: var(--bg-3); border-radius: 5px; padding: 1px 5px; }
+    .clickable-issue-item { cursor: pointer; border-radius: 8px; padding: 6px 8px; margin: 0 0 2px -8px; transition: background .12s; }
+    .clickable-issue-item:hover { background: var(--bg-2); }
+    .clickable-issue-item.is-focused { background: rgba(245,158,11,.18); }
+    .issue-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+    .tech-issue-group { margin: 6px 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-2); }
+    .tech-issue-group summary { list-style: none; cursor: pointer; padding: 10px 12px; font-size: 13px; font-weight: 500; color: var(--text); }
+    .tech-issue-group summary::-webkit-details-marker { display: none; }
+    .tech-issue-group[open] summary { border-bottom: 1px solid var(--line); }
+    .tech-issue-content { padding: 8px 12px 12px; }
+    .tech-issue-content .issue-actions { margin: 10px 0 0; }
+
+    @keyframes plw-spin { to { transform: rotate(270deg); } from { transform: rotate(-90deg); } }
+    @keyframes plw-pulse {
+      0% { box-shadow: var(--shadow), 0 0 0 0 rgba(239,68,68,.45); }
+      70% { box-shadow: var(--shadow), 0 0 0 10px rgba(239,68,68,0); }
+      100% { box-shadow: var(--shadow), 0 0 0 0 rgba(239,68,68,0); }
+    }
+
+    @media (max-width: 520px) {
+      .launcher { right: 12px; bottom: 12px; }
+      .plw[data-pos="left"] .launcher { left: 12px; }
+      .launcher-label { max-width: 120px; }
+      .panel, .plw[data-pos="left"] .panel { left: 8px; right: 8px; bottom: 68px; width: auto; max-width: none; height: min(560px, calc(100vh - 84px)); border-radius: 16px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; animation: none !important; }
+    }
+  `;
+
+  const CATEGORY_COPY = {
+    placeholders: { name: 'Placeholder text', hint: 'Lorem ipsum, TODO and other filler' },
+    spelling: { name: 'Spelling', hint: 'Possible typos in the page copy' },
+    seo: { name: 'SEO & meta', hint: 'Title, description, headings, alt text' },
+    technical: { name: 'Technical', hint: 'Links, image sizes and buttons' },
+  };
+
   // ProjectLinksWidget class
   class ProjectLinksWidget {
     constructor(container, config = {}) {
-      // Check for .webflow.io domain
       this.container =
         typeof container === "string"
           ? document.getElementById(container)
           : container;
-      
-       // Enforce specific config overrides
-      this.config = { 
-        ...defaultConfig, 
+
+      this.config = {
+        ...defaultConfig,
         ...config,
-        style: "dropdown", // Always dropdown
-        // position override removed
+        style: "dropdown",
       };
 
       // Domain Check
@@ -1126,13 +1561,10 @@
       const isAllowedDomain = this.config.showOnDomains && this.config.showOnDomains.some(d => hostname.includes(d));
 
       // Allow localhost, webflow, framer, or explicitly allowed domains
-      // Allow localhost, webflow, framer, or explicitly allowed domains
       if (!isWebflow && !isFramer && !isLocalhost && !isAllowedDomain) {
         console.warn("Project Links Widget: Domain not allowed", hostname);
-        return; 
+        return;
       }
-
-      console.log("Project Links Widget: Initializing on", hostname);
 
       if (!this.container) {
         console.error("ProjectLinksWidget: Container not found");
@@ -1141,43 +1573,52 @@
 
       this.container.setAttribute('data-plw-widget-root', 'true');
       this.activeHighlightGroupKey = null;
+      this.isOpen = false;
+      this.isMinimized = readSession('plw-minimized') === '1';
 
       this.init();
     }
 
     async init() {
-      loadFonts(); // Ensure fonts are loaded
-      this.checklistProgress = null; // Will be { completed, total }
+      loadFonts();
+      removeWebflowBadge();
+      this.project = {};
+      this.links = [];
+      this.checklistProgress = null;
       try {
         if (this.config.projectId) {
-          // Fetch project data and checklist progress in parallel
           const [data, clProgress] = await Promise.all([
             this.fetchProjectData(),
             this.fetchChecklistProgress().catch(() => null),
           ]);
-          this.links = data.links || [];
+          this.project = data || {};
+          this.links = this.project.links || [];
           this.checklistProgress = clProgress;
           // Per-project display flags (set from the Project Dashboard)
-          const disableAuditBadge = data.disableAuditBadge === true;
-          const disableDropdown = data.disableDropdown === true;
-          this.projectSpellcheckEnabled = data.enableSpellcheck !== false;
-          if (!disableAuditBadge) {
-            this.initContentAudit(); // Auto-run audit on load
-          }
-          if (!disableDropdown) {
-            this.render(data);
-          }
+          this.auditEnabled = this.project.disableAuditBadge !== true;
+          this.linksEnabled = this.project.disableDropdown !== true;
+          this.projectSpellcheckEnabled = this.project.enableSpellcheck !== false;
         } else if (this.config.initialLinks) {
-          this.links = this.config.initialLinks;
           // No project = no per-project flags; fall back to showing both
-          this.initContentAudit();
-          this.render({ links: this.config.initialLinks });
+          this.links = this.config.initialLinks;
+          this.auditEnabled = true;
+          this.linksEnabled = true;
         } else {
           console.warn("Project Links: No project ID provided");
+          return;
         }
       } catch (error) {
         console.error("Failed to load project data:", error);
+        return;
       }
+
+      this.checklistEnabled = Boolean(
+        this.config.projectId && this.checklistProgress && this.checklistProgress.total > 0
+      );
+      if (!this.linksEnabled && !this.auditEnabled) return;
+
+      this.mount();
+      if (this.auditEnabled) this.runStandaloneAudit();
     }
 
     async fetchProjectData() {
@@ -1196,531 +1637,396 @@
       return response.json();
     }
 
-    render(data) {
-      this.renderDropdown(data);
+    // Manual links only; sitemap links are for the audit, not for people.
+    getVisibleLinks() {
+      return (this.links || [])
+        .filter((link) => link && link.source !== 'auto' && link.url)
+        .slice()
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     }
 
-    initContentAudit() {
-       // Create Standalone Panel Container
-       const auditContainer = document.createElement('div');
-       auditContainer.id = 'plw-audit-container';
-       document.body.appendChild(auditContainer);
-       
-       const baseUrl = this.config.baseUrl || "https://app.activeset.co";
-       const iframeSrc = `${baseUrl}/embed?projectId=${encodeURIComponent(this.config.projectId || '')}&stagingUrl=${encodeURIComponent(this.config.stagingUrl || '')}&theme=${this.config.theme}&mode=qa`;
+    $(selector) {
+      return this.root.querySelector(selector);
+    }
 
-       // Inject Floating Badge + Panel HTML
-       auditContainer.innerHTML = `
-          <!-- Floating Score Badge -->
-          <div id="plw-audit-badge" class="audit-badge">
-             <div class="badge-ring">
-                <svg viewBox="0 0 36 36" class="circular-chart">
-                   <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                   <path id="plw-score-circle" class="circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                </svg>
-             </div>
-             <span id="plw-badge-score" class="badge-score">--</span>
+    $$(selector) {
+      return Array.from(this.root.querySelectorAll(selector));
+    }
+
+    mount() {
+      const host = this.container;
+      try {
+        this.root = host.shadowRoot || host.attachShadow({ mode: 'open' });
+      } catch (e) {
+        // Some elements can't host a shadow root; give it a div that can.
+        const inner = document.createElement('div');
+        inner.setAttribute('data-plw-widget-root', 'true');
+        host.appendChild(inner);
+        this.root = inner.attachShadow({ mode: 'open' });
+      }
+      host.style.cssText = 'position:fixed;z-index:2147483000;width:0;height:0;margin:0;padding:0;border:0;bottom:0;right:0;';
+
+      const links = this.getVisibleLinks();
+      const name = String(this.project.name || 'Project').trim() || 'Project';
+      const initial = escapeHtml(name.charAt(0).toUpperCase());
+      const hostname = window.location.hostname;
+      const progress = this.checklistProgress;
+
+      this.tabs = [];
+      if (this.linksEnabled) this.tabs.push({ id: 'links', label: 'Links', meta: `<span class="tab-count">${links.length}</span>` });
+      if (this.checklistEnabled && (this.linksEnabled || this.auditEnabled)) {
+        this.tabs.push({ id: 'checklist', label: 'Checklist', meta: `<span class="tab-count">${progress.completed}/${progress.total}</span>` });
+      }
+      if (this.auditEnabled) {
+        this.tabs.push({ id: 'check', label: 'Page check', meta: `<span class="tab-dot" data-check-dot></span><span class="tab-count" data-check-count></span>` });
+      }
+      const savedTab = readSession('plw-tab');
+      this.activeTab = this.tabs.some((t) => t.id === savedTab) ? savedTab : this.tabs[0].id;
+
+      const chip = this.checklistEnabled
+        ? `<span class="launcher-chip" title="Checklist progress">${icon('check', 12, 3)}${progress.completed}/${progress.total}</span>`
+        : this.linksEnabled
+          ? `<span class="launcher-chip">${links.length} ${links.length === 1 ? 'link' : 'links'}</span>`
+          : '';
+
+      const appUrl = this.config.projectId
+        ? `${this.config.baseUrl}/modules/project-links/${encodeURIComponent(this.config.projectId)}`
+        : '';
+
+      this.root.innerHTML = `
+        <style>${WIDGET_STYLES}</style>
+        <div class="plw" data-theme="${this.config.theme === 'light' ? 'light' : 'dark'}" data-pos="${this.config.position === 'bottom-left' ? 'left' : 'right'}" data-open="false" data-minimized="${this.isMinimized}">
+          <section class="panel" id="plw-panel" role="dialog" aria-label="${escapeHtml(name)}" aria-hidden="true">
+            <header class="head">
+              <span class="mark lg" aria-hidden="true">${initial}</span>
+              <div class="head-text">
+                <div class="title">${escapeHtml(name)}</div>
+                <div class="sub"><span class="live-dot"></span><span>${escapeHtml(siteLabel(hostname))} · ${escapeHtml(hostname)}</span></div>
+              </div>
+              <div class="head-actions">
+                ${appUrl ? `<a class="icon-btn" href="${escapeHtml(appUrl)}" target="_blank" rel="noopener noreferrer" title="Open in ActiveSet" aria-label="Open in ActiveSet">${icon('external', 16)}</a>` : ''}
+                <button type="button" class="icon-btn" data-action="close" title="Close (Esc)" aria-label="Close">${icon('close', 16)}</button>
+              </div>
+            </header>
+            <nav class="tabs" role="tablist" ${this.tabs.length < 2 ? 'hidden' : ''}>
+              ${this.tabs.map((tab) => `
+                <button type="button" class="tab" role="tab" id="plw-tab-${tab.id}" data-tab="${tab.id}" aria-controls="plw-view-${tab.id}" aria-selected="${tab.id === this.activeTab}" tabindex="${tab.id === this.activeTab ? 0 : -1}">
+                  <span>${tab.label}</span>${tab.meta}
+                </button>`).join('')}
+            </nav>
+            <div class="views">
+              ${this.linksEnabled ? `<div class="view" role="tabpanel" id="plw-view-links" data-view="links" aria-labelledby="plw-tab-links"></div>` : ''}
+              ${this.tabs.some((t) => t.id === 'checklist') ? `<div class="view" role="tabpanel" id="plw-view-checklist" data-view="checklist" aria-labelledby="plw-tab-checklist"></div>` : ''}
+              ${this.auditEnabled ? `<div class="view" role="tabpanel" id="plw-view-check" data-view="check" aria-labelledby="plw-tab-check"></div>` : ''}
+            </div>
+            <footer class="foot">
+              <span>Shared by <strong>ActiveSet</strong></span>
+              <button type="button" class="text-btn" data-action="minimize" title="Shrink the launcher to a small dot">${icon('minimize', 13)}Minimize</button>
+            </footer>
+          </section>
+          <button type="button" class="launcher" aria-expanded="false" aria-controls="plw-panel" aria-label="Open ${escapeHtml(name)} panel">
+            <span class="lead">${this.auditEnabled ? ringMarkup(28) : `<span class="mark">${initial}</span>`}</span>
+            <span class="launcher-label">${escapeHtml(name)}</span>
+            ${chip}
+            <span class="chev">${icon('chevronUp', 16)}</span>
+          </button>
+        </div>
+      `;
+
+      this.shell = this.$('.plw');
+      this.panel = this.$('.panel');
+      this.launcher = this.$('.launcher');
+
+      if (this.linksEnabled) this.renderLinks();
+      if (this.tabs.some((t) => t.id === 'checklist')) this.renderChecklist();
+      if (this.auditEnabled) this.renderChecking();
+      this.selectTab(this.activeTab, { focus: false });
+      this.bindShell();
+    }
+
+    bindShell() {
+      this.launcher.addEventListener('click', () => {
+        if (this.isMinimized) {
+          this.setMinimized(false);
+          this.setOpen(true);
+          return;
+        }
+        this.setOpen(!this.isOpen);
+      });
+
+      this.root.addEventListener('click', (event) => {
+        const actionEl = event.target.closest('[data-action]');
+        if (!actionEl) return;
+        const action = actionEl.getAttribute('data-action');
+        if (action === 'close') this.setOpen(false);
+        if (action === 'minimize') {
+          this.setOpen(false);
+          this.setMinimized(true);
+        }
+        if (action === 'rerun') this.runStandaloneAudit();
+        if (action === 'checklist-items') this.showChecklistItems(actionEl);
+      });
+
+      const tabButtons = this.$$('.tab');
+      tabButtons.forEach((tab, index) => {
+        tab.addEventListener('click', () => this.selectTab(tab.dataset.tab));
+        tab.addEventListener('keydown', (event) => {
+          if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+          event.preventDefault();
+          const step = event.key === 'ArrowRight' ? 1 : -1;
+          const next = tabButtons[(index + step + tabButtons.length) % tabButtons.length];
+          this.selectTab(next.dataset.tab);
+        });
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && this.isOpen) {
+          this.setOpen(false);
+          this.launcher.focus();
+        }
+      });
+    }
+
+    setOpen(open) {
+      this.isOpen = open;
+      this.shell.dataset.open = String(open);
+      this.panel.setAttribute('aria-hidden', String(!open));
+      this.launcher.setAttribute('aria-expanded', String(open));
+      if (open) {
+        const active = this.$(`.tab[data-tab="${this.activeTab}"]`);
+        setTimeout(() => {
+          const search = this.activeTab === 'links' ? this.$('.search input') : null;
+          if (search && window.matchMedia('(hover: hover)').matches) search.focus();
+          else if (active && this.tabs.length > 1) active.focus();
+        }, 60);
+      }
+    }
+
+    setMinimized(minimized) {
+      this.isMinimized = minimized;
+      this.shell.dataset.minimized = String(minimized);
+      writeSession('plw-minimized', minimized ? '1' : '0');
+    }
+
+    selectTab(tabId, options = {}) {
+      const { focus = true } = options;
+      this.activeTab = tabId;
+      writeSession('plw-tab', tabId);
+      this.$$('.tab').forEach((tab) => {
+        const selected = tab.dataset.tab === tabId;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        if (selected && focus) tab.focus();
+      });
+      this.$$('.view').forEach((view) => {
+        view.dataset.active = String(view.dataset.view === tabId);
+      });
+      const views = this.$('.views');
+      if (views) views.scrollTop = 0;
+    }
+
+    // ---------- Links ----------
+
+    renderLinks() {
+      const view = this.$('[data-view="links"]');
+      const links = this.getVisibleLinks();
+      const here = normalizeForCompare(window.location.href);
+
+      if (links.length === 0) {
+        view.innerHTML = `
+          <div class="empty">
+            <div class="empty-icon">${icon('link', 20)}</div>
+            <strong>No links yet</strong>
+            <span>Links to designs, docs and staging pages will show up here.</span>
+          </div>`;
+        return;
+      }
+
+      view.innerHTML = `
+        ${links.length > 6 ? `
+          <label class="search">
+            ${icon('search', 15)}
+            <input type="search" placeholder="Search ${links.length} links" aria-label="Search links" autocomplete="off" spellcheck="false" />
+          </label>` : ''}
+        <div class="link-list">
+          ${links.map((link) => {
+            const url = safeUrl(link.url);
+            const meta = describeLink(url);
+            const title = String(link.title || meta.host || 'Link');
+            const isHere = here && normalizeForCompare(url) === here;
+            return `
+              <div class="link-row" data-search="${escapeHtml(`${title} ${link.url}`.toLowerCase())}">
+                <a class="link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
+                  <span class="fav" style="--tint:${meta.tint}" aria-hidden="true">${escapeHtml(title.trim().charAt(0) || '•')}</span>
+                  <span class="link-text">
+                    <span class="link-title"><span>${escapeHtml(title)}</span>${isHere ? '<span class="here">You’re here</span>' : ''}</span>
+                    <span class="link-url">${escapeHtml(meta.display)}</span>
+                  </span>
+                </a>
+                <span class="row-actions">
+                  <button type="button" class="icon-btn" data-copy="${escapeHtml(url)}" title="Copy link" aria-label="Copy link to ${escapeHtml(title)}">${icon('copy', 15)}</button>
+                </span>
+              </div>`;
+          }).join('')}
+        </div>
+        <div class="empty" data-no-match hidden><strong>No matching links</strong><span>Try a different word.</span></div>
+      `;
+
+      const search = view.querySelector('.search input');
+      if (search) {
+        search.addEventListener('input', () => {
+          const query = search.value.trim().toLowerCase();
+          let shown = 0;
+          view.querySelectorAll('.link-row').forEach((row) => {
+            const match = !query || row.dataset.search.includes(query);
+            row.hidden = !match;
+            if (match) shown++;
+          });
+          view.querySelector('[data-no-match]').hidden = shown > 0;
+        });
+        search.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter') return;
+          const first = view.querySelector('.link-row:not([hidden]) .link');
+          if (first) first.click();
+        });
+      }
+
+      view.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-copy]');
+        if (!button) return;
+        event.preventDefault();
+        try {
+          await this.copyText(button.getAttribute('data-copy'));
+          button.innerHTML = icon('check', 15, 2.5);
+          button.classList.add('is-done');
+          button.setAttribute('title', 'Copied');
+          setTimeout(() => {
+            button.innerHTML = icon('copy', 15);
+            button.classList.remove('is-done');
+            button.setAttribute('title', 'Copy link');
+          }, 1600);
+        } catch (e) {
+          console.error('Failed to copy text: ', e);
+        }
+      });
+    }
+
+    async copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const input = document.createElement('textarea');
+      input.value = text;
+      input.style.position = 'fixed';
+      input.style.opacity = '0';
+      document.body.appendChild(input);
+      input.focus();
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+    }
+
+    // ---------- Checklist ----------
+
+    renderChecklist() {
+      const view = this.$('[data-view="checklist"]');
+      const { completed, total, checklists = [] } = this.checklistProgress;
+      const pct = (done, all) => (all > 0 ? Math.round((done / all) * 100) : 0);
+      const overall = pct(completed, total);
+
+      view.innerHTML = `
+        <div class="cl-card">
+          <div class="cl-top">
+            <div class="cl-big">${completed}<span>/ ${total}</span></div>
+            <div class="cl-pct">${overall === 100 ? 'All done' : `${overall}% complete`}</div>
           </div>
+          <div class="bar"><span style="width:${overall}%"></span></div>
+        </div>
+        ${checklists.length > 1 ? checklists.map((cl) => `
+          <div class="cl-row">
+            <div class="cl-row-top"><span>${escapeHtml(cl.name)}</span><span>${cl.completed}/${cl.total}</span></div>
+            <div class="bar"><span style="width:${pct(cl.completed, cl.total)}%"></span></div>
+          </div>`).join('') : ''}
+        <div class="cl-more">
+          <button type="button" class="btn" data-action="checklist-items">${icon('listCheck', 14)}See every item</button>
+        </div>
+        <div class="cl-frame" hidden></div>
+      `;
+    }
 
-          <!-- Slide-out Panel -->
-          <div id="plw-standalone-panel" class="standalone-panel">
-             <button id="plw-close-standalone" class="close-standalone-btn">&times;</button>
-             
-             <div class="panel-header">
-                <h3>Content Audit</h3>
-                <div class="panel-tabs">
-                    <button class="panel-tab active" data-tab="audit">Audit</button>
-                    <button class="panel-tab" data-tab="links">Project Links</button>
-                    <button class="panel-tab" data-tab="qa">Checklist</button>
-                </div>
-             </div>
+    // The item list is the app's own checklist page; load it only when asked.
+    showChecklistItems(button) {
+      const frame = this.$('.cl-frame');
+      if (!frame) return;
+      if (!frame.firstChild) {
+        const src = `${this.config.baseUrl}/embed?projectId=${encodeURIComponent(this.config.projectId || '')}&stagingUrl=${encodeURIComponent(this.config.stagingUrl || '')}&theme=${encodeURIComponent(this.config.theme)}&mode=checklist`;
+        frame.innerHTML = `<iframe src="${escapeHtml(src)}" title="Checklist items" loading="lazy"></iframe>`;
+      }
+      frame.hidden = false;
+      if (button && button.parentElement) button.parentElement.hidden = true;
+    }
 
-             <!-- Audit Tab Content -->
-             <div id="plw-panel-content" class="panel-content tab-content active" data-tab="audit">
-                <!-- Results go here -->
-             </div>
+    // ---------- Page check ----------
 
-             <!-- Project Links Tab Content (Iframe) -->
-             <div id="plw-links-content" class="panel-content tab-content" data-tab="links">
-                ${this.config.projectId
-                    ? `<iframe src="${this.config.baseUrl}/embed?projectId=${this.config.projectId || ''}&theme=${this.config.theme}&mode=links" style="width: 100%; height: 100%; border: none; min-height: 400px; display: block;"></iframe>`
-                    : `<div style="padding: 20px; color: #a1a1aa; text-align: center; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-                         <div style="margin-bottom: 8px;">No Project ID provided.</div>
-                         <div style="font-size: 11px; opacity: 0.7;">Add <code>data-project-id="..."</code> to your script tag.</div>
-                       </div>`
-                }
-             </div>
-
-             <!-- QA/Checklist Tab Content (Iframe) -->
-             <div id="plw-qa-content" class="panel-content tab-content" data-tab="qa">
-                ${(this.config.stagingUrl || this.config.projectId)
-                    ? `<iframe src="${this.config.baseUrl}/embed?projectId=${this.config.projectId || ''}&stagingUrl=${encodeURIComponent(this.config.stagingUrl || '')}&theme=${this.config.theme}&mode=checklist" style="width: 100%; height: 100%; border: none; min-height: 400px; display: block;"></iframe>`
-                    : `<div style="padding: 20px; color: #a1a1aa; text-align: center; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-                         <div style="margin-bottom: 8px;">No Project ID or Staging URL provided.</div>
-                         <div style="font-size: 11px; opacity: 0.7;">Add <code>data-project-id="..."</code> or <code>data-staging-url="..."</code> to your script tag.</div>
-                       </div>`
-                }
-             </div>
-          </div>
-          
-          <style>
-             #plw-audit-container {
-                font-family: 'Funnel Sans', sans-serif;
-                z-index: 10001;
-             }
-             
-             /* Tab Styles */
-             .panel-tabs {
-                 display: flex;
-                 gap: 16px;
-                 margin-top: 12px;
-                 border-bottom: 1px solid #27272a;
-             }
-             
-             .panel-tab {
-                 background: none;
-                 border: none;
-                 color: #71717a;
-                 padding: 8px 0;
-                 font-size: 13px;
-                 font-weight: 500;
-                 cursor: pointer;
-                 border-bottom: 2px solid transparent;
-                 transition: all 0.2s;
-             }
-             
-             .panel-tab:hover {
-                 color: #e4e4e7;
-             }
-             
-             .panel-tab.active {
-                 color: #fff;
-                 border-bottom-color: #fff;
-             }
-             
-             .tab-content {
-                 display: none;
-                 height: 100%;
-                 flex: 1 1 auto;
-                 min-height: 0;
-                 overflow-y: auto;
-                 overflow-x: hidden;
-                 -webkit-overflow-scrolling: touch;
-                 overscroll-behavior: contain;
-             }
-             
-             .tab-content.active {
-                 display: block;
-             }
-
-             ::highlight(plw-typo) {
-                text-decoration: underline wavy #ef4444;
-                text-decoration-thickness: 2px;
-                background-color: rgba(239, 68, 68, 0.15);
-                color: unset;
-             }
-             
-             /* Badge Styles */
-             .audit-badge {
-                position: fixed;
-                top: 50%;
-                right: 20px;
-                transform: translateY(-50%);
-                width: 56px;
-                height: 56px;
-                background: #09090b;
-                border: 1px solid #27272a;
-                border-radius: 50%;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                transition: all 0.2s ease;
-                z-index: 10002;
-                overflow: hidden;
-             }
-             
-             .audit-badge:hover {
-                transform: translateY(-50%) scale(1.05);
-                box-shadow: 0 6px 16px rgba(0,0,0,0.4);
-                border-color: #3f3f46;
-             }
-             
-             .badge-ring {
-                position: absolute;
-                width: 100%;
-                height: 100%;
-                top: 0;
-                left: 0;
-             }
-             
-             .circular-chart {
-                display: block;
-                margin: 0 auto;
-                max-width: 100%;
-                max-height: 100%;
-             }
-             
-             .circle-bg {
-                fill: none;
-                stroke: #27272a;
-                stroke-width: 2.5;
-             }
-             
-             .circle {
-                fill: none;
-                stroke-width: 3; /* Thicker stroke */
-                stroke-linecap: round;
-                transition: stroke 0.3s;
-             }
-
-             .badge-score {
-                font-family: 'Funnel Display', sans-serif;
-                font-weight: 700;
-                font-size: 16px;
-                color: #fff;
-                z-index: 1;
-             }
-             
-             .badge-score.is-animating {
-                will-change: filter, opacity, transform;
-             }
-
-             .audit-badge.is-loading .circular-chart {
-                animation: plw-badge-rotate 1s linear infinite;
-                transform-origin: 50% 50%;
-             }
-
-             .audit-badge.is-loading .circle {
-                stroke-dasharray: 22, 100 !important;
-                transition: none;
-             }
-
-             .audit-badge.is-loading .badge-score {
-                animation: plw-badge-score-pulse 1s ease-in-out infinite;
-                filter: blur(1.4px);
-                opacity: 0.72;
-             }
-
-             @keyframes plw-badge-rotate {
-                from { transform: rotate(0deg); }
-                to { transform: rotate(360deg); }
-             }
-
-             @keyframes plw-badge-score-pulse {
-                0% { opacity: 0.58; filter: blur(2px); }
-                50% { opacity: 0.92; filter: blur(0.6px); }
-                100% { opacity: 0.58; filter: blur(2px); }
-             }
-             
-             /* Panel Styles */
-             .standalone-panel {
-                position: fixed;
-                top: 50%;
-                right: 0; 
-                transform: translate(100%, -50%); /* Hidden by default */
-                width: 400px; /* Slightly wider */
-                height: 85vh;
-                max-height: 85vh;
-                background: #09090b;
-                border: 1px solid #27272a;
-                border-right: none;
-                border-radius: 12px 0 0 12px;
-                box-shadow: -10px 0 30px rgba(0,0,0,0.5);
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
-                z-index: 10001;
-                transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-             }
-             
-             .standalone-panel.open {
-                transform: translate(0, -50%);
-             }
-             
-             .panel-header {
-                padding: 16px 20px 0; /* Adjusted padding */
-                border-bottom: 1px solid #27272a;
-                background: #09090b;
-             }
-             
-             .panel-header h3 {
-                margin: 0;
-                font-size: 16px;
-                color: #fff;
-                font-family: 'Funnel Display', sans-serif;
-             }
-             
-             .panel-subtitle {
-                font-size: 12px;
-                color: #71717a;
-                display: none; /* Hide subtitle when tabs are active */
-             }
-             
-             .panel-content {
-                padding: 0;
-                min-height: 0;
-                overflow: auto;
-             }
-             
-             .close-standalone-btn {
-                position: absolute;
-                top: 12px;
-                right: 12px;
-                background: transparent;
-                border: none;
-                color: #71717a;
-                font-size: 20px;
-                cursor: pointer;
-                padding: 4px;
-                line-height: 1;
-                z-index: 10;
-             }
-             
-             .close-standalone-btn:hover { color: #fff; }
-             
-             /* Re-use existing category styles */
-             .category-list { border: none; border-radius: 0; }
-             .category-row { padding: 16px 20px; }
-             .category-row.toggleable { cursor: pointer; user-select: none; }
-             .category-row.toggleable:hover { background: #1f1f23; }
-             .category-row.toggleable:focus-visible { outline: 1px solid #3f3f46; outline-offset: -1px; }
-             .cat-expander { font-size: 11px; color: #a1a1aa; transition: transform 0.2s ease; margin-left: 4px; }
-             .category-row[aria-expanded="true"] .cat-expander { transform: rotate(180deg); }
-             .cat-details { background: #0c0c0c; }
-             .cat-details.collapsed { display: none; }
-             .detail-item code {
-                font-size: 12px;
-                color: #d4d4d8;
-                background: #18181b;
-                border: 1px solid #27272a;
-                border-radius: 4px;
-                padding: 1px 4px;
-             }
-             .tech-issue-group {
-                margin: 6px 0;
-                border: 1px solid #27272a;
-                border-radius: 6px;
-                overflow: hidden;
-                background: #111114;
-             }
-             .tech-issue-group summary {
-                list-style: none;
-                cursor: pointer;
-                padding: 10px 12px;
-                font-size: 13px;
-                font-weight: 500;
-                color: #e4e4e7;
-                line-height: 1.35;
-             }
-             .tech-issue-group summary::-webkit-details-marker { display: none; }
-             .tech-issue-group[open] summary { border-bottom: 1px solid #27272a; background: #17171b; }
-             .tech-issue-content { padding: 8px 12px 12px; }
-             .tech-issue-list .detail-item {
-                font-size: 12px;
-                color: #d4d4d8 !important;
-                word-break: break-word;
-             }
-             .tech-item-row {
-                display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: 8px;
-             }
-             .tech-issue-actions {
-                margin-top: 10px;
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-             }
-             .category-issue-actions {
-                margin: 0 0 10px;
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-             }
-             .clickable-issue-item {
-                cursor: pointer;
-                border-radius: 6px;
-                padding: 6px 8px;
-                margin: 0 0 2px -8px;
-                transition: background 0.15s ease;
-             }
-             .clickable-issue-item:hover {
-                background: #15151a;
-             }
-             .clickable-issue-item.is-focused {
-                background: rgba(245, 158, 11, 0.18);
-             }
-             .highlight-group-btn,
-             .copy-mcp-prompt-btn {
-                border: 1px solid #333;
-                background: #171717;
-                color: #f4f4f5;
-                font-size: 11px;
-                font-family: 'Funnel Sans', sans-serif;
-                padding: 6px 10px;
-                border-radius: 6px;
-                cursor: pointer;
-                transition: all 0.15s ease;
-                white-space: nowrap;
-             }
-             .highlight-group-btn:hover,
-             .copy-mcp-prompt-btn:hover { background: #222; border-color: #4a4a4f; }
-             .highlight-group-btn.is-active {
-                background: #f59e0b;
-                border-color: #f59e0b;
-                color: #111827;
-             }
-             .highlight-group-btn.is-active:hover {
-                background: #fbbf24;
-                border-color: #fbbf24;
-             }
-             .highlight-group-btn:disabled,
-             .copy-mcp-prompt-btn:disabled {
-                opacity: 0.45;
-                cursor: not-allowed;
-             }
-             .plw-issue-highlight {
-                outline: 3px solid #f59e0b !important;
-                outline-offset: 2px !important;
-                box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22) !important;
-                transition: outline-color 0.2s ease, box-shadow 0.2s ease;
-             }
-             .plw-issue-highlight-focus {
-                animation: plw-highlight-pulse 1.4s ease;
-             }
-             @keyframes plw-highlight-pulse {
-                0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
-                80% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
-                100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-             }
-             
-             /* Colors */
-             .stroke-green { stroke: #10b981; }
-             .stroke-yellow { stroke: #f59e0b; }
-             .stroke-red { stroke: #ef4444; }
-             
-             .score-blocked-badge {
-                 border-color: #ef4444 !important;
-                 box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
-                 animation: pulse-badge 2s infinite;
-             }
-             
-             @keyframes pulse-badge {
-                0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-                70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-                100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-             }
-          </style>
-       `;
-       
-       // Wire Events
-       const badge = document.getElementById('plw-audit-badge');
-       const panel = document.getElementById('plw-standalone-panel');
-       const closeBtn = document.getElementById('plw-close-standalone');
-       if (!badge || !panel || !closeBtn) return;
-       
-       badge.addEventListener('click', () => {
-          panel.classList.add('open');
-          // Hide badge when panel is open (optional, or move it)
-          badge.style.opacity = '0';
-          badge.style.pointerEvents = 'none';
-       });
-       
-       closeBtn.addEventListener('click', () => {
-          panel.classList.remove('open');
-          badge.style.opacity = '1';
-          badge.style.pointerEvents = 'auto';
-       });
-
-       // Tab Handling
-       const tabs = panel.querySelectorAll('.panel-tab');
-       tabs.forEach(tab => {
-           tab.addEventListener('click', () => {
-               // Deactivate all
-               tabs.forEach(t => t.classList.remove('active'));
-               panel.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-               
-               // Activate this
-               tab.classList.add('active');
-               const target = panel.querySelector(`.tab-content[data-tab="${tab.dataset.tab}"]`);
-               if(target) target.classList.add('active');
-           });
-       });
-       
-       // Run Initial Audit
-       this.runStandaloneAudit();
+    renderChecking() {
+      const view = this.$('[data-view="check"]');
+      if (!view) return;
+      view.innerHTML = `
+        <div class="checking">
+          ${ringMarkup(44)}
+          <span>Checking this page…</span>
+        </div>`;
     }
 
     setBadgeLoadingState(isLoading) {
-       const badge = document.getElementById('plw-audit-badge');
-       const badgeScore = document.getElementById('plw-badge-score');
-       const scoreCircle = document.getElementById('plw-score-circle');
-       if (!badge || !badgeScore || !scoreCircle) return;
-
-       if (isLoading) {
-          badge.classList.add('is-loading');
-          scoreCircle.classList.remove('stroke-green', 'stroke-yellow', 'stroke-red');
-          scoreCircle.classList.add('stroke-yellow');
-          scoreCircle.setAttribute('stroke-dasharray', '0, 100');
-          badgeScore.textContent = '--';
-          badgeScore.dataset.value = '0';
-          badgeScore.style.filter = '';
-          badgeScore.style.opacity = '';
-       } else {
-          badge.classList.remove('is-loading');
-       }
+      if (!this.root) return;
+      if (isLoading) {
+        if (this.badgeAnimationFrame) cancelAnimationFrame(this.badgeAnimationFrame);
+        this.$$('[data-ring]').forEach((ring) => { ring.dataset.tone = 'loading'; });
+        this.$$('[data-ring-score]').forEach((el) => { el.textContent = '–'; el.style.filter = ''; el.style.opacity = ''; });
+        this.$$('[data-ring-arc]').forEach((arc) => arc.setAttribute('stroke-dasharray', '0 100'));
+        const dot = this.$('[data-check-dot]');
+        const count = this.$('[data-check-count]');
+        if (dot) dot.removeAttribute('data-tone');
+        if (count) count.textContent = '';
+        if (this.shell) this.shell.dataset.blocked = 'false';
+      }
     }
 
-    animateBadgeToScore(targetScore) {
-       const badgeScore = document.getElementById('plw-badge-score');
-       const scoreCircle = document.getElementById('plw-score-circle');
-       if (!badgeScore || !scoreCircle) return;
+    animateBadgeToScore(targetScore, tone) {
+      const clampedTarget = Math.max(0, Math.min(100, Number(targetScore) || 0));
+      const duration = 1100;
+      const startTime = performance.now();
+      const rings = this.$$('[data-ring]');
+      const scores = this.$$('[data-ring-score]');
+      const arcs = this.$$('[data-ring-arc]');
+      rings.forEach((ring) => { ring.dataset.tone = tone; });
 
-       const clampedTarget = Math.max(0, Math.min(100, Number(targetScore) || 0));
-       const startScore = 0;
-       const duration = 1100;
-       const startTime = performance.now();
+      if (this.badgeAnimationFrame) cancelAnimationFrame(this.badgeAnimationFrame);
 
-       badgeScore.classList.add('is-animating');
-       badgeScore.dataset.value = String(startScore);
-       scoreCircle.setAttribute('stroke-dasharray', '0, 100');
-
-       if (this.badgeAnimationFrame) {
-          cancelAnimationFrame(this.badgeAnimationFrame);
-       }
-
-       const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-       const step = (now) => {
-          const progress = Math.min(1, (now - startTime) / duration);
-          const eased = easeOutCubic(progress);
-          const scoreValue = Math.round(startScore + ((clampedTarget - startScore) * eased));
-          const ringValue = startScore + ((clampedTarget - startScore) * eased);
-
-          badgeScore.textContent = String(scoreValue);
-          badgeScore.dataset.value = String(scoreValue);
-          badgeScore.style.filter = `blur(${(1 - progress) * 6}px)`;
-          badgeScore.style.opacity = `${0.5 + (progress * 0.5)}`;
-          scoreCircle.setAttribute('stroke-dasharray', `${ringValue.toFixed(2)}, 100`);
-
-          if (progress < 1) {
-             this.badgeAnimationFrame = requestAnimationFrame(step);
-             return;
-          }
-
-          badgeScore.style.filter = 'none';
-          badgeScore.style.opacity = '1';
-          badgeScore.classList.remove('is-animating');
+      const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+      const step = (now) => {
+        const progress = Math.min(1, (now - startTime) / duration);
+        const value = clampedTarget * easeOutCubic(progress);
+        scores.forEach((el) => {
+          el.textContent = String(Math.round(value));
+          el.style.filter = progress < 1 ? `blur(${(1 - progress) * 4}px)` : 'none';
+          el.style.opacity = String(0.5 + progress * 0.5);
+        });
+        arcs.forEach((arc) => arc.setAttribute('stroke-dasharray', `${value.toFixed(2)} 100`));
+        if (progress < 1) {
+          this.badgeAnimationFrame = requestAnimationFrame(step);
+        } else {
           this.badgeAnimationFrame = null;
-       };
-
-       this.badgeAnimationFrame = requestAnimationFrame(step);
+        }
+      };
+      this.badgeAnimationFrame = requestAnimationFrame(step);
     }
-    
+
     async runStandaloneAudit() {
        this.setBadgeLoadingState(true);
+       if (this.lastAuditResult) this.renderChecking();
        // Small delay to ensure DOM is ready
        setTimeout(async () => {
           try {
@@ -1749,14 +2055,14 @@
              const result = await ContentQualityAuditor.audit({ spellcheck: enableSpellcheck, spellcheckReason });
              ContentQualityAuditor.highlightTypos(result.categories.spelling.issues);
              this.renderStandaloneResults(result);
-             
+
              // 3. Sync Logic (Save to Dashboard)
              if (this.config.projectId) {
                   try {
                       await fetch(`${baseUrl}/api/save-audit`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ 
+                          body: JSON.stringify({
                               projectId: this.config.projectId,
                               url: window.location.href,
                               title: document.title,
@@ -1771,74 +2077,51 @@
 
           } catch (err) {
              console.error("Auto-Audit Failed:", err);
-             this.setBadgeLoadingState(false);
+             this.renderAuditError();
           }
        }, 500);
     }
-    
+
+    renderAuditError() {
+      const view = this.$('[data-view="check"]');
+      this.$$('[data-ring]').forEach((ring) => { ring.dataset.tone = 'bad'; });
+      this.$$('[data-ring-score]').forEach((el) => { el.textContent = '!'; });
+      if (!view) return;
+      view.innerHTML = `
+        <div class="empty">
+          <strong>Couldn’t check this page</strong>
+          <span>Something on the page stopped the check from finishing.</span>
+          <button type="button" class="btn" data-action="rerun" style="margin-top:8px">${icon('refresh', 14)}Try again</button>
+        </div>`;
+    }
+
     renderStandaloneResults(result) {
-       const badgeScore = document.getElementById('plw-badge-score');
-       const scoreCircle = document.getElementById('plw-score-circle');
-       const badge = document.getElementById('plw-audit-badge');
-       const content = document.getElementById('plw-panel-content');
-       
-       if(!badgeScore || !scoreCircle || !badge || !content) return;
+       const view = this.$('[data-view="check"]');
+       if (!view) return;
+       this.lastAuditResult = result;
        ContentQualityAuditor.clearIssueHighlights();
        this.activeHighlightGroupKey = null;
-       this.setBadgeLoadingState(false);
-       
-       // Color Logic
-       let colorClass = 'stroke-red';
-       if (result.overallScore >= 90) colorClass = 'stroke-green';
-       else if (result.overallScore >= 50) colorClass = 'stroke-yellow';
-       
-       // Blocked Logic
-       if (!result.canDeploy) {
-          colorClass = 'stroke-red'; // Force red
-          badge.classList.add('score-blocked-badge');
-       } else {
-          badge.classList.remove('score-blocked-badge');
-       }
-       
-       // Set Circle Stroke
-       scoreCircle.classList.remove('stroke-green', 'stroke-yellow', 'stroke-red');
-       scoreCircle.classList.add(colorClass);
 
-       // Animate number + ring on data load
-       this.animateBadgeToScore(result.overallScore);
-       
-       // 2. Render Panel Content
-       let html = `
-          <div style="padding: 20px; text-align: center; border-bottom: 1px solid #27272a;">
-             <div style="font-size: 32px; font-weight: 700; color: #fff; font-family: 'Funnel Display';">
-                ${result.overallScore}
-             </div>
-             <p style="margin: 4px 0 0; color: #a1a1aa; font-size: 13px;">${result.summary}</p>
-          </div>
-          
-          <div class="category-list" style="border: none;">
-       `;
-       
-       // Helper for category row
+       const tone = scoreTone(result);
        const esc = (value) => ContentQualityAuditor.escapeHtml(value);
-       const rowKey = (name) => `cat-${name.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`;
-       const renderRow = (icon, name, statusObj, detailsHtml = '') => {
-           let statusColor = statusObj.status === 'passed' ? '#10b981' : statusObj.status === 'warning' ? '#f59e0b' : statusObj.status === 'info' ? '#60a5fa' : '#ef4444';
-           let statusText = statusObj.status === 'passed' ? '✓ Passed' : statusObj.status === 'info' ? (statusObj.skippedReason ? 'Skipped' : 'Info') : 'Issues Found';
-           const hasDetails = Boolean(detailsHtml && detailsHtml.trim());
-           const key = rowKey(name);
-           
-           return `
-             <div class="category-row ${hasDetails ? 'toggleable' : ''}" ${hasDetails ? `role="button" tabindex="0" aria-expanded="false" data-toggle-target="${key}"` : ''}>
-               <span class="cat-icon">${icon}</span>
-               <span class="cat-name">${name}</span>
-               <span class="cat-status" style="color: ${statusColor}">${statusText}</span>
-               ${hasDetails ? `<span class="cat-expander">▾</span>` : ''}
-             </div>
-             ${hasDetails ? `<div class="cat-details collapsed" data-details-key="${key}" style="display: none;">${detailsHtml}</div>` : ''}
-           `;
-       };
+       const cats = result.categories;
+       const issueCount =
+         cats.placeholders.issues.length +
+         (cats.spelling.skippedReason || (cats.spelling.issues[0] && cats.spelling.issues[0].word === 'Service Unavailable') ? 0 : cats.spelling.issues.length) +
+         cats.seo.issues.length +
+         cats.technical.issues.length;
 
+       let verdict = 'Looks great';
+       if (!result.canDeploy) verdict = 'Placeholder text found';
+       else if (result.overallScore < 50) verdict = 'Needs attention';
+       else if (result.overallScore < 90) verdict = 'A few things to tidy';
+       const verdictSub = !result.canDeploy
+         ? 'Replace it before this page goes live.'
+         : issueCount === 0
+           ? 'Nothing to fix on this page.'
+           : `${issueCount} ${issueCount === 1 ? 'thing' : 'things'} to look at on this page.`;
+
+       // Detail renderers (same data as before, restyled)
        const renderInteractiveDetails = (groupKey, items, itemRenderer, maxVisible = 12) => {
          const detailItems = Array.isArray(items) ? items : [];
          if (detailItems.length === 0) return '';
@@ -1849,95 +2132,120 @@
          const encodedGroupIds = encodeURIComponent(groupIds.join(','));
 
          const actionButton = groupIds.length > 0
-           ? `<div class="category-issue-actions"><button type="button" class="highlight-group-btn" data-highlight-group="${esc(groupKey)}" data-highlight-ids="${encodedGroupIds}" aria-pressed="false">Highlight</button></div>`
+           ? `<div class="issue-actions"><button type="button" class="btn highlight-group-btn" data-highlight-group="${esc(groupKey)}" data-highlight-ids="${encodedGroupIds}" aria-pressed="false">Highlight on page</button></div>`
            : '';
 
          const listItems = visibleItems.map((item) => {
            const itemIds = item.elementId ? encodeURIComponent(item.elementId) : '';
            const className = itemIds ? 'detail-item clickable-issue-item' : 'detail-item';
-           const dataAttr = itemIds ? ` data-highlight-ids="${itemIds}"` : '';
-           return `<div class="${className}"${dataAttr}>• ${itemRenderer(item)}</div>`;
+           const dataAttr = itemIds ? ` data-highlight-ids="${itemIds}" title="Show on page"` : '';
+           return `<div class="${className}"${dataAttr}>${itemRenderer(item)}</div>`;
          }).join('');
 
          const moreLabel = hiddenCount > 0 ? `<div class="detail-item">+ ${hiddenCount} more</div>` : '';
          return `${actionButton}${listItems}${moreLabel}`;
        };
-       
+
+       const renderRow = (key, statusObj, detailsHtml) => {
+         const copy = CATEGORY_COPY[key];
+         const count = (statusObj.issues || []).length;
+         let rowTone = 'good';
+         let statusText = 'Passed';
+         if (statusObj.status === 'failed') { rowTone = 'bad'; statusText = `${count} found`; }
+         else if (statusObj.status === 'warning') { rowTone = 'warn'; statusText = `${count} ${count === 1 ? 'issue' : 'issues'}`; }
+         else if (statusObj.status === 'info') {
+           rowTone = 'info';
+           statusText = statusObj.skippedReason ? 'Skipped' : count > 0 ? `${count} to review` : 'Info';
+         }
+         const hasDetails = Boolean(detailsHtml && detailsHtml.trim());
+         return `
+           <div class="cat">
+             <button type="button" class="cat-row" data-tone="${rowTone}" ${hasDetails ? `aria-expanded="false" aria-controls="plw-cat-${key}"` : 'aria-disabled="true" tabindex="-1"'}>
+               <span class="cat-dot" aria-hidden="true"></span>
+               <span class="cat-text">
+                 <span class="cat-name">${copy.name}</span>
+                 <span class="cat-hint">${copy.hint}</span>
+               </span>
+               <span class="cat-status">${statusText}</span>
+               ${hasDetails ? `<span class="cat-chev">${icon('chevronDown', 16)}</span>` : ''}
+             </button>
+             ${hasDetails ? `<div class="cat-details" id="plw-cat-${key}" hidden>${detailsHtml}</div>` : ''}
+           </div>`;
+       };
+
        // Placeholders
-       const ph = result.categories.placeholders;
+       const ph = cats.placeholders;
        let phDetails = '';
        if (Array.isArray(ph.detailItems) && ph.detailItems.length > 0) {
            phDetails = renderInteractiveDetails(
              'placeholders',
              ph.detailItems,
-             (item) => `${esc(item.label || 'Placeholder')} · <code>${esc(item.selector || 'unknown')}</code> · "${esc(item.match || '[match]')}"`,
+             (item) => `${esc(item.label || 'Placeholder')} · “${esc(item.match || '[match]')}” · <code>${esc(item.selector || 'unknown')}</code>`,
              14
            );
        } else if (ph.issues.length > 0) {
-           phDetails = ph.issues.map(i => `<div class="detail-item">• ${esc(i.type)}</div>`).join('');
+           phDetails = ph.issues.map(i => `<div class="detail-item">${esc(i.type)}</div>`).join('');
        }
-       html += renderRow('🔴', 'Placeholders', ph, phDetails);
-       
+
        // Spelling
-       const sp = result.categories.spelling;
+       const sp = cats.spelling;
        let spDetails = '';
        if (Array.isArray(sp.detailItems) && sp.detailItems.length > 0) {
            spDetails = renderInteractiveDetails(
              'spelling',
              sp.detailItems,
-             (item) => `"${esc(item.label || item.match || '[word]')}" · <code>${esc(item.selector || 'unknown')}</code>`,
+             (item) => `“${esc(item.label || item.match || '[word]')}” · <code>${esc(item.selector || 'unknown')}</code>`,
              14
            );
        } else if (sp.skippedReason) {
-           spDetails = `<div class="detail-item">• ${esc(sp.skippedReason)}</div>`;
+           spDetails = `<div class="detail-item">${esc(sp.skippedReason)}</div>`;
        } else if (sp.issues.length > 0) {
            spDetails = sp.issues
              .slice(0, 5)
-             .map(i => `<div class="detail-item">• "${esc(i.word)}"</div>`)
+             .map(i => `<div class="detail-item">“${esc(i.word)}”</div>`)
              .join('');
            if (sp.issues.length > 5) {
              spDetails += `<div class="detail-item">+ ${sp.issues.length - 5} more</div>`;
            }
        }
-       html += renderRow('🔤', 'Spelling', sp, spDetails);
-       
+
        // SEO & Meta
-       const seo = result.categories.seo;
+       const seo = cats.seo;
        let seoDetails = '';
-       if (Array.isArray(seo.detailItems) && seo.detailItems.length > 0) {
-           seoDetails = renderInteractiveDetails(
-             'seo',
-             seo.detailItems,
-             (item) => `${esc(item.label || 'SEO issue')} · <code>${esc(item.selector || 'unknown')}</code>`,
-             14
-           );
-       } else if (seo.issues.length > 0) {
-           seoDetails = seo.issues.map(i => `<div class="detail-item">• ${esc(i)}</div>`).join('');
+       if (seo.issues.length > 0) {
+           seoDetails = seo.issues.map(i => `<div class="detail-item">${esc(i)}</div>`).join('');
+           if (Array.isArray(seo.detailItems) && seo.detailItems.length > 0) {
+             seoDetails += renderInteractiveDetails(
+               'seo',
+               seo.detailItems,
+               (item) => `${esc(item.label || 'SEO issue')} · <code>${esc(item.selector || 'unknown')}</code>`,
+               14
+             );
+           }
        }
-       html += renderRow('🔍', 'SEO & Meta', seo, seoDetails);
-       
+
        // Technical Health
-       const tech = result.categories.technical;
+       const tech = cats.technical;
        let techDetails = '';
        if (tech.issues.length > 0) {
            const detailGroups = Array.isArray(tech.detailGroups) ? tech.detailGroups : [];
            const renderTechnicalItem = (groupKey, item) => {
              if (groupKey === 'empty-links') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}" · href: <code>${esc(item.href || '[missing]')}</code></span></div>`;
+               return `<code>${esc(item.selector || 'unknown')}</code> · “${esc(item.text || '[no text]')}” · href <code>${esc(item.href || '[missing]')}</code>`;
              }
              if (groupKey === 'unsafe-links') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code> · rel: <code>${esc(item.rel || '[missing]')}</code></span></div>`;
+               return `<code>${esc(item.selector || 'unknown')}</code> · href <code>${esc(item.href || '[missing]')}</code> · rel <code>${esc(item.rel || '[missing]')}</code>`;
              }
              if (groupKey === 'http-links') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · href: <code>${esc(item.href || '[missing]')}</code></span></div>`;
+               return `<code>${esc(item.selector || 'unknown')}</code> · href <code>${esc(item.href || '[missing]')}</code>`;
              }
              if (groupKey === 'cls-images') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · src: <code>${esc(item.src || '[missing]')}</code> · width: <code>${esc(item.widthAttr || '[missing]')}</code> · height: <code>${esc(item.heightAttr || '[missing]')}</code></span></div>`;
+               return `<code>${esc(item.selector || 'unknown')}</code> · src <code>${esc(item.src || '[missing]')}</code>`;
              }
              if (groupKey === 'button-type') {
-               return `<div class="tech-item-row"><span><code>${esc(item.selector || 'unknown')}</code> · text: "${esc(item.text || '[no text]')}"</span></div>`;
+               return `<code>${esc(item.selector || 'unknown')}</code> · “${esc(item.text || '[no text]')}”`;
              }
-             return `<div class="tech-item-row"><span>${esc(JSON.stringify(item || {}))}</span></div>`;
+             return esc(JSON.stringify(item || {}));
            };
 
            if (detailGroups.length > 0) {
@@ -1960,76 +2268,70 @@
                  <details class="tech-issue-group">
                     <summary>${esc(group.summary || `Issue ${idx + 1}`)}</summary>
                     <div class="tech-issue-content">
-                      <div class="tech-issue-list">
-                        ${visible.length > 0 ? visible.map(item => {
-                          const itemIds = item.elementId ? encodeURIComponent(item.elementId) : '';
-                          const className = itemIds ? 'detail-item clickable-issue-item' : 'detail-item';
-                          const attr = itemIds ? ` data-highlight-ids="${itemIds}"` : '';
-                          return `<div class="${className}"${attr}>• ${renderTechnicalItem(group.key, item)}</div>`;
-                        }).join('') : '<div class="detail-item">No element details captured.</div>'}
-                        ${hiddenCount > 0 ? `<div class="detail-item">+ ${hiddenCount} more affected elements</div>` : ''}
-                      </div>
-                      <div class="tech-issue-actions">
-                        <button type="button" class="highlight-group-btn" data-highlight-group="${esc(`technical-${group.key || `group-${idx + 1}`}`)}" data-highlight-ids="${encodedHighlightIds}" aria-pressed="false" ${highlightIds.length === 0 ? 'disabled' : ''}>Highlight</button>
-                        <button type="button" class="copy-mcp-prompt-btn" data-copy-prompt="${encodedPrompt}">Copy Webflow MCP Prompt</button>
+                      ${visible.length > 0 ? visible.map(item => {
+                        const itemIds = item.elementId ? encodeURIComponent(item.elementId) : '';
+                        const className = itemIds ? 'detail-item clickable-issue-item' : 'detail-item';
+                        const attr = itemIds ? ` data-highlight-ids="${itemIds}" title="Show on page"` : '';
+                        return `<div class="${className}"${attr}>${renderTechnicalItem(group.key, item)}</div>`;
+                      }).join('') : '<div class="detail-item">No element details captured.</div>'}
+                      ${hiddenCount > 0 ? `<div class="detail-item">+ ${hiddenCount} more affected elements</div>` : ''}
+                      <div class="issue-actions">
+                        <button type="button" class="btn highlight-group-btn" data-highlight-group="${esc(`technical-${group.key || `group-${idx + 1}`}`)}" data-highlight-ids="${encodedHighlightIds}" aria-pressed="false" ${highlightIds.length === 0 ? 'disabled' : ''}>Highlight on page</button>
+                        <button type="button" class="btn copy-mcp-prompt-btn" data-copy-prompt="${encodedPrompt}">Copy Webflow MCP prompt</button>
                       </div>
                     </div>
                  </details>
                `;
              }).join('');
            } else {
-             techDetails = tech.issues.map(i => `<div class="detail-item">• ${esc(i)}</div>`).join('');
+             techDetails = tech.issues.map(i => `<div class="detail-item">${esc(i)}</div>`).join('');
            }
        }
-       html += renderRow('⚙️', 'Technical Health', tech, techDetails);
-       
-       html += `</div>`; // Close list
-       
-       content.innerHTML = html;
 
-       // Toggle category detail blocks
-       const toggleRows = content.querySelectorAll('.category-row.toggleable[data-toggle-target]');
-       toggleRows.forEach((row) => {
-         const toggle = () => {
-           const key = row.getAttribute('data-toggle-target');
-           if (!key) return;
-           const details = content.querySelector(`.cat-details[data-details-key="${key}"]`);
+       view.innerHTML = `
+         <div class="check-summary">
+           ${ringMarkup(52)}
+           <div class="head-text">
+             <div class="verdict">${verdict}</div>
+             <div class="verdict-sub">${verdictSub}</div>
+           </div>
+           <button type="button" class="icon-btn" data-action="rerun" title="Check again" aria-label="Check this page again">${icon('refresh', 16)}</button>
+         </div>
+         ${renderRow('placeholders', ph, phDetails)}
+         ${renderRow('spelling', sp, spDetails)}
+         ${renderRow('seo', seo, seoDetails)}
+         ${renderRow('technical', tech, techDetails)}
+       `;
+
+       const dot = this.$('[data-check-dot]');
+       const count = this.$('[data-check-count]');
+       if (dot) dot.dataset.tone = tone;
+       if (count) count.textContent = String(result.overallScore);
+       this.shell.dataset.blocked = String(!result.canDeploy);
+       this.animateBadgeToScore(result.overallScore, tone);
+
+       this.bindAuditDetails(view);
+    }
+
+    bindAuditDetails(view) {
+       view.querySelectorAll('.cat-row[aria-controls]').forEach((row) => {
+         row.addEventListener('click', () => {
+           const details = view.querySelector(`#${row.getAttribute('aria-controls')}`);
            if (!details) return;
-
-           const isExpanded = row.getAttribute('aria-expanded') === 'true';
-           row.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
-           details.style.display = isExpanded ? 'none' : 'block';
-           details.classList.toggle('collapsed', isExpanded);
-         };
-
-         row.addEventListener('click', toggle);
-         row.addEventListener('keydown', (event) => {
-           if (event.key === 'Enter' || event.key === ' ') {
-             event.preventDefault();
-             toggle();
+           const expanded = row.getAttribute('aria-expanded') === 'true';
+           row.setAttribute('aria-expanded', String(!expanded));
+           details.hidden = expanded;
+           // Bring an opened category to the top of the list when it would run off the bottom
+           const views = this.$('.views');
+           const cat = row.closest('.cat');
+           if (!expanded && views && cat && cat.offsetTop + cat.offsetHeight > views.scrollTop + views.clientHeight) {
+             views.scrollTo({ top: cat.offsetTop - 8, behavior: 'smooth' });
            }
          });
        });
 
-       // Copy MCP prompts from technical issue blocks
-       const copyButtons = content.querySelectorAll('.copy-mcp-prompt-btn[data-copy-prompt]');
-       const highlightGroupButtons = content.querySelectorAll('.highlight-group-btn[data-highlight-ids]');
-       const clickableIssueItems = content.querySelectorAll('.clickable-issue-item[data-highlight-ids]');
-       const copyToClipboard = async (text) => {
-         if (navigator.clipboard && navigator.clipboard.writeText) {
-           await navigator.clipboard.writeText(text);
-           return;
-         }
-         const input = document.createElement('textarea');
-         input.value = text;
-         input.style.position = 'fixed';
-         input.style.opacity = '0';
-         document.body.appendChild(input);
-         input.focus();
-         input.select();
-         document.execCommand('copy');
-         document.body.removeChild(input);
-       };
+       const highlightGroupButtons = view.querySelectorAll('.highlight-group-btn[data-highlight-ids]');
+       const clickableIssueItems = view.querySelectorAll('.clickable-issue-item[data-highlight-ids]');
        const flashButtonText = (button, nextText) => {
          const originalText = button.textContent;
          button.textContent = nextText;
@@ -2040,32 +2342,30 @@
        const setGroupHighlightButtonState = (button, isActive, count = 0) => {
          button.classList.toggle('is-active', isActive);
          button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-         button.textContent = isActive ? `Highlighted (${count})` : 'Highlight';
+         button.textContent = isActive ? `Highlighted (${count})` : 'Highlight on page';
        };
        const clearGroupHighlightState = () => {
          highlightGroupButtons.forEach((btn) => setGroupHighlightButtonState(btn, false));
          this.activeHighlightGroupKey = null;
        };
 
-       copyButtons.forEach((button) => {
+       view.querySelectorAll('.copy-mcp-prompt-btn[data-copy-prompt]').forEach((button) => {
          button.addEventListener('click', async (event) => {
            event.preventDefault();
            event.stopPropagation();
            const encoded = button.getAttribute('data-copy-prompt') || '';
            const prompt = encoded ? decodeURIComponent(encoded) : '';
            if (!prompt) return;
-
            try {
-             await copyToClipboard(prompt);
+             await this.copyText(prompt);
              flashButtonText(button, 'Copied');
            } catch (e) {
-             flashButtonText(button, 'Copy Failed');
+             flashButtonText(button, 'Copy failed');
            }
          });
        });
 
        highlightGroupButtons.forEach((button) => {
-         setGroupHighlightButtonState(button, false);
          button.addEventListener('click', (event) => {
            event.preventDefault();
            event.stopPropagation();
@@ -2073,7 +2373,7 @@
            const encodedIds = button.getAttribute('data-highlight-ids') || '';
            const ids = encodedIds ? decodeURIComponent(encodedIds).split(',').filter(Boolean) : [];
            if (ids.length === 0) {
-             flashButtonText(button, 'No Match');
+             flashButtonText(button, 'No match');
              return;
            }
 
@@ -2091,7 +2391,7 @@
              setGroupHighlightButtonState(button, true, highlighted);
            } else {
              this.activeHighlightGroupKey = null;
-             flashButtonText(button, 'No Match');
+             flashButtonText(button, 'No match');
            }
          });
        });
@@ -2114,625 +2414,7 @@
          });
        });
     }
-
-    renderDropdown(data) {
-      // Filter out auto-discovered links (sitemap links)
-      const allLinks = data.links || [];
-      const links = allLinks.filter(link => link.source !== 'auto'); // Only manual links
-
-      if (links.length === 0 && !this.config.projectId) return;
-
-      const positionStyles = {
-        "bottom-right": "bottom: 0; right: 24px;",
-        "bottom-left": "bottom: 0; left: 24px;",
-        "top-right": "top: 0; right: 24px;",
-        "top-left": "top: 0; left: 24px;",
-        "center-right": "top: 50%; right: 0; transform: translateY(-50%);",
-        "center-left": "top: 50%; left: 0; transform: translateY(-50%);",
-      };
-
-      const posKey = this.config.position || "center-left"; 
-      const styleString = positionStyles[posKey] || positionStyles["center-left"];
-
-      // Calculate where the dropdown content should appear relative to the button
-      // If widget is at the bottom, menu goes up (bottom: 100%). If top, menu goes down (top: 100%).
-      let dropdownPosition = "bottom: 100%; margin-bottom: 12px;";
-      if (posKey.startsWith("top")) {
-        dropdownPosition = "top: 100%; margin-top: 12px;";
-      } else if (posKey.includes("center")) {
-        // For center positions, align to the side? Or keep default?
-        // Let's assume bottom-up for center for now, or maybe top-0 relative to button
-        dropdownPosition = "bottom: 100%; margin-bottom: 12px;";
-      }
-
-      // Ensure container is fixed and positioned correctly matches old style
-      this.container.style.cssText = `
-        position: fixed; 
-        z-index: 9999; 
-        ${styleString}
-      `;
-
-      this.container.innerHTML = `
-        <div class="dropdown-widget-container">
-          ${this.checklistProgress && this.checklistProgress.total > 0 ? `
-            <div class="dropdown-widget-button-group">
-              <button class="dropdown-widget-part-btn link-part" id="plw-trigger-btn">
-                <div class="button-content">
-                   <span>Project Links</span>
-                   <div class="count-badge">${links.length}</div>
-                </div>
-                <svg class="chevron-icon" id="plw-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-              </button>
-              <div class="group-divider"></div>
-              <button class="dropdown-widget-part-btn checklist-part" id="plw-checklist-btn">
-                 <svg class="checklist-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                 <span class="checklist-count">${this.checklistProgress.completed}/${this.checklistProgress.total}</span>
-              </button>
-            </div>
-          ` : `
-            <button class="dropdown-widget-button" id="plw-trigger-btn">
-              <div class="button-content">
-                 <span>Project Links</span>
-                 <div class="count-badge">${links.length}</div>
-              </div>
-              <svg class="chevron-icon" id="plw-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-            </button>
-          `}
-          
-          <div class="dropdown-widget-content" id="plw-content" style="display: none; position: absolute; ${dropdownPosition} right: 0; background-color: #000000; min-width: 280px; box-shadow: 0 0 0 1px #333333, 0 4px 6px -1px rgba(0, 0, 0, 0.5); z-index: 10000; border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
-             <div class="dropdown-header">
-               <span class="header-title">Available Links</span>
-               ${this.config.projectId ? `
-                 <button class="header-manage-btn" id="plw-manage-links-btn" type="button">
-                   Manage
-                 </button>
-               ` : ''}
-            </div>
-            ${links.length > 0
-              ? links
-              .map(
-                (link) => `
-              <div class="dropdown-widget-row">
-                <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="dropdown-link-title" title="${link.title}">
-                  ${link.title}
-                  <svg class="external-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
-                </a>
-                <button class="action-btn copy-btn" onclick="window.copyWidgetLink(this, '${link.url}')" title="Copy Link" aria-label="Copy Link">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                </button>
-              </div>
-            `
-              )
-              .join("")
-              : `<div class="dropdown-empty-state">No links yet. Use Manage to add your first link.</div>`
-            }
-            </div>
-          </div>
-        </div>
-
-        <style>
-          .dropdown-widget-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            background-color: #000;
-            padding: 10px 16px;
-            border: 1px solid #333;
-            border-bottom: none;
-            cursor: pointer;
-            border-radius: 8px 8px 0 0;
-            font-weight: 500;
-            color: #fff;
-            font-size: 14px;
-            transition: all 0.2s;
-            font-family: 'Funnel Display', sans-serif;
-            min-width: 160px;
-            box-sizing: border-box;
-          }
-          
-          .dropdown-widget-button:hover {
-            background-color: #111;
-          }
-
-          .button-content {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-          }
-
-          .count-badge {
-            background: #333;
-            color: #fff;
-            font-size: 10px;
-            padding: 1px 6px;
-            border-radius: 4px;
-            font-weight: 600;
-            font-family: 'Funnel Sans', sans-serif;
-          }
-
-          /* Split Button Group Styles */
-          .dropdown-widget-button-group {
-            display: inline-flex;
-            align-items: stretch;
-            background-color: #000;
-            border: 1px solid #333;
-            border-bottom: none;
-            border-radius: 8px 8px 0 0;
-            overflow: hidden;
-            min-width: 160px;
-          }
-
-          .dropdown-widget-part-btn {
-            background: transparent;
-            border: none;
-            color: #fff;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            padding: 10px 12px;
-            font-family: 'Funnel Display', sans-serif;
-            font-size: 14px;
-            font-weight: 500;
-            transition: background 0.2s;
-          }
-
-          .dropdown-widget-part-btn:hover {
-            background-color: #111;
-          }
-
-          .link-part {
-            flex: 1;
-            justify-content: space-between;
-            gap: 12px;
-          }
-
-          .checklist-part {
-            gap: 6px;
-          }
-
-          .group-divider {
-            width: 1px;
-            background-color: #333;
-          }
-          
-          .checklist-icon {
-             color: #22c55e;
-             width: 14px;
-             height: 14px;
-          }
-          
-          .checklist-count {
-             color: #fff;
-             font-size: 13px;
-             font-weight: 500;
-             font-family: 'Funnel Sans', sans-serif;
-          }
-          
-          .chevron-icon {
-            transition: transform 0.2s ease;
-            color: #666;
-          }
-
-          .dropdown-header {
-            padding: 12px 16px 8px;
-            background: #000;
-            border-bottom: 1px solid #222;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          }
-          
-          .header-title {
-            font-size: 11px; 
-            text-transform: uppercase; 
-            letter-spacing: 0.05em; 
-            color: #888; 
-            font-family: 'Funnel Display', sans-serif;
-          }
-
-          .header-manage-btn {
-            border: 1px solid #2f2f2f;
-            background: #111;
-            color: #b4b4b8;
-            font-size: 10px;
-            line-height: 1;
-            padding: 4px 8px;
-            border-radius: 999px;
-            cursor: pointer;
-            font-family: 'Funnel Sans', sans-serif;
-            transition: all 0.15s ease;
-          }
-
-          .header-manage-btn:hover {
-            color: #ffffff;
-            border-color: #4a4a4f;
-            background: #18181b;
-          }
-
-          .dropdown-empty-state {
-            padding: 14px 16px;
-            color: #888;
-            font-size: 12px;
-            border-bottom: 1px solid #111;
-          }
-
-          .dropdown-widget-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 12px;
-            background-color: #000;
-            transition: background-color 0.2s;
-            border-bottom: 1px solid #111;
-          }
-
-          .dropdown-widget-row:hover {
-            background-color: #111;
-          }
-
-          .dropdown-link-title {
-            flex: 1;
-            color: #fff;
-            font-size: 13px;
-            font-weight: 400;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 0;
-            transition: color 0.15s;
-            font-family: 'Funnel Sans', sans-serif;
-          }
-
-          .dropdown-link-title:hover {
-            color: #ccc;
-          }
-
-          .external-icon {
-            color: #444;
-            transition: color 0.15s;
-          }
-          
-          .dropdown-link-title:hover .external-icon {
-            color: #fff;
-          }
-
-          .action-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 28px;
-            height: 28px;
-            border-radius: 4px;
-            color: #666;
-            background: transparent;
-            border: 1px solid transparent;
-            cursor: pointer;
-            transition: all 0.15s;
-            margin-left: 8px;
-          }
-
-          .action-btn:hover {
-            background-color: #222;
-            color: #fff;
-            border-color: #333;
-          }
-          
-
-          /* Category Rows */
-          .category-list {
-             border: 1px solid #27272a;
-             border-radius: 8px;
-             overflow: hidden;
-          }
-
-          .category-row {
-             display: flex;
-             align-items: center;
-             padding: 12px 14px;
-             background: #18181b;
-             border-bottom: 1px solid #27272a;
-             gap: 10px;
-          }
-
-          .category-row:last-of-type {
-             border-bottom: none;
-          }
-
-          .category-row.toggleable {
-             cursor: pointer;
-             user-select: none;
-          }
-
-          .category-row.toggleable:hover {
-             background: #1f1f23;
-          }
-
-          .category-row.toggleable:focus-visible {
-             outline: 1px solid #3f3f46;
-             outline-offset: -1px;
-          }
-
-          .cat-icon {
-             font-size: 16px;
-             flex-shrink: 0;
-          }
-
-          .cat-name {
-             flex: 1;
-             font-size: 13px;
-             font-weight: 500;
-             color: #e4e4e7;
-          }
-
-          .cat-status {
-             font-size: 12px;
-             color: #71717a;
-          }
-
-          .cat-expander {
-             font-size: 11px;
-             color: #a1a1aa;
-             transition: transform 0.2s ease;
-             margin-left: 4px;
-          }
-
-          .category-row[aria-expanded="true"] .cat-expander {
-             transform: rotate(180deg);
-          }
-
-          .cat-details {
-             background: #0c0c0c;
-             padding: 8px 14px 8px 40px;
-             border-bottom: 1px solid #27272a;
-          }
-
-          .cat-details.collapsed {
-             display: none;
-          }
-
-          .detail-item {
-             font-size: 13px; /* Bump size slightly */
-             color: #e4e4e7 !important; /* Lighter gray and enforced */
-             padding: 4px 0;
-             line-height: 1.4;
-          }
-
-          .detail-item code {
-             font-size: 12px;
-             color: #d4d4d8;
-             background: #18181b;
-             border: 1px solid #27272a;
-             border-radius: 4px;
-             padding: 1px 4px;
-          }
-
-          .tech-issue-group {
-             margin: 6px 0;
-             border: 1px solid #27272a;
-             border-radius: 6px;
-             overflow: hidden;
-             background: #111114;
-          }
-
-          .tech-issue-group summary {
-             list-style: none;
-             cursor: pointer;
-             padding: 10px 12px;
-             font-size: 13px;
-             font-weight: 500;
-             color: #e4e4e7;
-             line-height: 1.35;
-          }
-
-          .tech-issue-group summary::-webkit-details-marker {
-             display: none;
-          }
-
-          .tech-issue-group[open] summary {
-             border-bottom: 1px solid #27272a;
-             background: #17171b;
-          }
-
-          .tech-issue-content {
-             padding: 8px 12px 12px;
-          }
-
-          .tech-issue-list .detail-item {
-             font-size: 12px;
-             color: #d4d4d8 !important;
-             word-break: break-word;
-          }
-
-          .tech-item-row {
-             display: flex;
-             align-items: flex-start;
-             justify-content: space-between;
-             gap: 8px;
-          }
-
-          .tech-issue-actions {
-             margin-top: 10px;
-             display: flex;
-             flex-wrap: wrap;
-             gap: 8px;
-          }
-
-          .category-issue-actions {
-             margin: 0 0 10px;
-             display: flex;
-             flex-wrap: wrap;
-             gap: 8px;
-          }
-
-          .clickable-issue-item {
-             cursor: pointer;
-             border-radius: 6px;
-             padding: 6px 8px;
-             margin: 0 0 2px -8px;
-             transition: background 0.15s ease;
-          }
-
-          .clickable-issue-item:hover {
-             background: #15151a;
-          }
-
-          .clickable-issue-item.is-focused {
-             background: rgba(245, 158, 11, 0.18);
-          }
-
-          .highlight-group-btn,
-          .copy-mcp-prompt-btn {
-             border: 1px solid #333;
-             background: #171717;
-             color: #f4f4f5;
-             font-size: 11px;
-             font-family: 'Funnel Sans', sans-serif;
-             padding: 6px 10px;
-             border-radius: 6px;
-             cursor: pointer;
-             transition: all 0.15s ease;
-             white-space: nowrap;
-          }
-
-          .highlight-group-btn:hover,
-          .copy-mcp-prompt-btn:hover {
-             background: #222;
-             border-color: #4a4a4f;
-          }
-
-          .highlight-group-btn.is-active {
-             background: #f59e0b;
-             border-color: #f59e0b;
-             color: #111827;
-          }
-
-          .highlight-group-btn.is-active:hover {
-             background: #fbbf24;
-             border-color: #fbbf24;
-          }
-
-          .highlight-group-btn:disabled,
-          .copy-mcp-prompt-btn:disabled {
-             opacity: 0.45;
-             cursor: not-allowed;
-          }
-
-          .plw-issue-highlight {
-             outline: 3px solid #f59e0b !important;
-             outline-offset: 2px !important;
-             box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22) !important;
-             transition: outline-color 0.2s ease, box-shadow 0.2s ease;
-          }
-
-          .plw-issue-highlight-focus {
-             animation: plw-highlight-pulse 1.4s ease;
-          }
-
-          @keyframes plw-highlight-pulse {
-             0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
-             80% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
-             100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-          }
-        </style>
-      `;
-
-      // Setup click listeners
-      this.setupHandlers();
-    }
-
-    setupHandlers() {
-       const btn = this.container.querySelector('#plw-trigger-btn');
-       const checklistBtn = this.container.querySelector('#plw-checklist-btn');
-       const manageLinksBtn = this.container.querySelector('#plw-manage-links-btn');
-       const content = this.container.querySelector('#plw-content');
-       const chevron = this.container.querySelector('#plw-chevron');
-
-       const toggleMenu = (e) => {
-         if (!content) return;
-         e.stopPropagation();
-         const isHidden = content.style.display === 'none';
-         content.style.display = isHidden ? 'block' : 'none';
-         if (chevron) chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
-       };
-
-       const openStandalonePanel = (tabId) => {
-         const panel = document.getElementById('plw-standalone-panel');
-         const badge = document.getElementById('plw-audit-badge');
-         if (!panel) return;
-
-         panel.classList.add('open');
-         if (badge) {
-           badge.style.opacity = '0';
-           badge.style.pointerEvents = 'none';
-         }
-
-         const targetTab = panel.querySelector(`.panel-tab[data-tab="${tabId}"]`);
-         if (targetTab) targetTab.click();
-       };
-
-       if (checklistBtn) {
-         checklistBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (content) content.style.display = 'none';
-            if (chevron) chevron.style.transform = 'rotate(0deg)';
-            openStandalonePanel('qa');
-         });
-       }
-
-       if (manageLinksBtn) {
-         manageLinksBtn.addEventListener('click', (e) => {
-           e.stopPropagation();
-           if (content) content.style.display = 'none';
-           if (chevron) chevron.style.transform = 'rotate(0deg)';
-           openStandalonePanel('links');
-         });
-       }
-
-       const closeMenu = (e) => {
-         if (!content) return;
-         // Don't close if clicking inside container or if clicking the audit badge/panel
-         if (this.container.contains(e.target)) return;
-         
-         const auditBadge = document.getElementById('plw-audit-badge');
-         const auditPanel = document.getElementById('plw-standalone-panel');
-         
-         if (auditBadge && auditBadge.contains(e.target)) return;
-         if (auditPanel && auditPanel.contains(e.target)) return;
-
-         content.style.display = 'none';
-         if (chevron) chevron.style.transform = 'rotate(0deg)';
-       };
-
-       if (btn && content) {
-         btn.addEventListener('click', toggleMenu);
-       }
-       document.addEventListener('click', closeMenu);
-    }
   }
-
-  // Helper for copy
-  window.copyWidgetLink = function(btn, url) {
-    if (!navigator.clipboard) {
-       console.error("Clipboard API not available");
-       return;
-    }
-    // Prevent clicking the row
-    if (event) event.stopPropagation();
-
-    navigator.clipboard.writeText(url).then(() => {
-      const originalHtml = btn.innerHTML;
-      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-      btn.style.color = '#fff';
-      setTimeout(() => {
-        btn.innerHTML = originalHtml;
-        btn.style.color = '';
-      }, 2000);
-    }).catch(err => {
-      console.error('Failed to copy text: ', err);
-    });
-  };
 
   // Global function to embed widget
   window.embedProjectLinksWidget = function (containerId, config = {}) {
@@ -2747,6 +2429,7 @@
         projectId: element.dataset.projectId,
         theme: element.dataset.theme || defaultConfig.theme,
         stagingUrl: element.dataset.stagingUrl, // Parse stagingUrl
+        position: element.dataset.position || defaultConfig.position,
       };
 
       if (element.dataset.initialLinks) {
@@ -2775,6 +2458,7 @@
         projectId: script.dataset.projectId,
         theme: script.dataset.theme || defaultConfig.theme,
         stagingUrl: script.dataset.stagingUrl, // Parse stagingUrl
+        position: script.dataset.position || defaultConfig.position,
       };
 
       // Create container element

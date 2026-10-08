@@ -33,7 +33,7 @@ Background: the repo has no `middleware.ts`/`proxy.ts`, so every API route must 
 
 | Issue | Doc |
 |---|---|
-| `/api/save-audit`, `/api/audit-config`, `/api/audit`, `/api/capture-screenshot` and `/api/scan-bulk/notify` read `projects` with the **browser** Firestore SDK on the server, where there is no signed-in user. The `projects` rules require sign-in, so these likely fail with permission-denied. The embed widget's Links tab has the same problem for visitors who aren't signed in. | site-audit.md, project-links.md |
+| `/api/save-audit`, `/api/audit-config`, `/api/audit`, `/api/capture-screenshot` and `/api/scan-bulk/notify` read `projects` with the **browser** Firestore SDK on the server, where there is no signed-in user. The `projects` rules require sign-in, so these likely fail with permission-denied. The `/embed?mode=links` page has the same problem for visitors who aren't signed in (widget.js stopped using it on 2026-10-08). | site-audit.md, project-links.md |
 | The scan notification queue's `docToJob` drops `startedAt`, so anomaly detection runs over **all** pages rather than the scanned ones, and old problems are re-alerted on every scan. | site-monitoring.md |
 | A failed notification job is retried by every drain with no attempt limit, recreating the same `site_alerts` rows and re-sending the email and Slack message each time. `collection_meta_conflict` checks current state rather than a change, and is critical, so it fires on every scan. | site-monitoring.md |
 | `compareImages` ([image-diff.ts](../../src/lib/image-diff.ts)) only decodes PNG, but screenshots are now WebP, so `/api/compare-screenshots` fails on recent captures. | site-monitoring.md |

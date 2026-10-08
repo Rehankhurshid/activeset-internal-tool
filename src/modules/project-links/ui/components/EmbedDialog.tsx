@@ -53,7 +53,7 @@ export function EmbedDialog({ isOpen, onOpenChange, projectId, projectName }: Em
               Copy the code below and paste it into the <code>&lt;head&gt;</code> or <code>&lt;body&gt;</code> of your website.
             </p>
             <div className="mt-2 text-xs text-amber-500 flex items-center gap-2">
-              <span>⚠️ This widget will <strong>only</strong> appear on <code>*.webflow.io</code> domains.</span>
+              <span>⚠️ The widget only appears on staging domains (<code>*.webflow.io</code>, <code>*.framer.website</code>), and it hides the &ldquo;Made in Webflow&rdquo; badge there.</span>
             </div>
           </div>
 
