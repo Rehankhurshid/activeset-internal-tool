@@ -1,5 +1,5 @@
 import type { Tone } from '@/lib/ui-tones';
-import { PAGE_WORK_STATUSES, type PageWorkStatus } from '../../domain/delivery.types';
+import { PAGE_WORK_STATUSES, type PageWorkOwner, type PageWorkStatus } from '../../domain/delivery.types';
 
 /**
  * Colour and shorthand for a page's work status.
@@ -69,6 +69,20 @@ export const PAGE_STATUS_SHORT_LABELS: Record<PageWorkStatus, string> = {
   completed: 'Done',
   not_required: 'N/R',
 };
+
+/** The same, on a column that is the client's: where what they send us stands. */
+export const CLIENT_PAGE_STATUS_SHORT_LABELS: Record<PageWorkStatus, string> = {
+  not_started: 'Waiting',
+  in_progress: 'Revising',
+  blocked: 'Blocked',
+  in_review: 'Checking',
+  completed: 'Final',
+  not_required: 'N/R',
+};
+
+export function pageStatusShortLabel(status: PageWorkStatus, owner: PageWorkOwner = 'activeset'): string {
+  return (owner === 'client' ? CLIENT_PAGE_STATUS_SHORT_LABELS : PAGE_STATUS_SHORT_LABELS)[status];
+}
 
 /** Digit that sets each status from the keyboard, derived from the domain order. */
 export const PAGE_STATUS_KEYS: Record<PageWorkStatus, string> = PAGE_WORK_STATUSES.reduce(

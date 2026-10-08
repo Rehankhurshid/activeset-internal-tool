@@ -16,10 +16,13 @@ export type {
   StackDefinition,
   StackDiscipline,
   StackId,
+  PageWorkOwner,
 } from './domain/delivery.types';
 export {
+  CLIENT_PAGE_WORK_STATUS_LABELS,
   PAGE_WORK_STATUSES,
   PAGE_WORK_STATUS_LABELS,
+  pageWorkStatusLabel,
   SETTLED_PAGE_STATUSES,
   normalizePageWorkStatus,
 } from './domain/delivery.types';
@@ -29,6 +32,7 @@ export { AVAILABLE_STACKS, DEFAULT_STACK_ID, getStack, isStackSupported } from '
 export {
   buildLaunchReadiness,
   buildPageProgress,
+  disciplineOwners,
   pageChecksFor,
   resolveAutoCheck,
   resolveCheck,

@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Check, ChevronDown } from 'lucide-react';
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -12,6 +22,7 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import type {
+  PageWorkOwner,
   PageWorkStatus,
   ProjectPage,
   StackDiscipline,
@@ -28,6 +39,12 @@ export interface PageGridProps {
   positionById: Map<string, number>;
   totalCount: number;
   disciplines: StackDiscipline[];
+  /** Discipline id → who does it on this project. Missing ids are ours. */
+  owners: Readonly<Record<string, PageWorkOwner>>;
+  /** Who the project's services say does it, before anyone changed a column. */
+  serviceOwners: Readonly<Record<string, PageWorkOwner>>;
+  /** `null` goes back to what the services say. */
+  onSetOwner: (disciplineId: string, owner: PageWorkOwner | null) => void;
   assignees: string[];
   loading: boolean;
   onSetWork: (pageId: string, disciplineId: string, status: PageWorkStatus) => Promise<void>;
@@ -66,6 +83,9 @@ export function PageGrid({
   positionById,
   totalCount,
   disciplines,
+  owners,
+  serviceOwners,
+  onSetOwner,
   assignees,
   loading,
   onSetWork,
@@ -135,8 +155,13 @@ export function PageGrid({
             <TableHead className={cn(STICKY_HEAD, STICKY_NUMBER_COL, 'z-30 text-center')}>#</TableHead>
             <TableHead className={cn(STICKY_HEAD, STICKY_PAGE_COL, 'z-30')}>Page</TableHead>
             {disciplines.map((discipline) => (
-              <TableHead key={discipline.id} className={cn(STICKY_HEAD, 'px-1')} title={discipline.label}>
-                {discipline.shortLabel}
+              <TableHead key={discipline.id} className={cn(STICKY_HEAD, 'px-1')}>
+                <OwnerMenu
+                  discipline={discipline}
+                  owner={owners[discipline.id] ?? 'activeset'}
+                  fromServices={serviceOwners[discipline.id] ?? 'activeset'}
+                  onSetOwner={(owner) => onSetOwner(discipline.id, owner)}
+                />
               </TableHead>
             ))}
             <TableHead className={STICKY_HEAD}>Assignee</TableHead>
@@ -171,6 +196,7 @@ export function PageGrid({
                   rowNumber={position + 1}
                   columnCount={columnCount}
                   disciplines={disciplines}
+                  owners={owners}
                   assignees={assignees}
                   isFirst={position === 0}
                   isLast={position === totalCount - 1}
@@ -191,5 +217,65 @@ export function PageGrid({
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+const OWNER_CHOICES: { owner: PageWorkOwner; label: string; hint: string }[] = [
+  { owner: 'activeset', label: 'ActiveSet', hint: 'We do it; counts towards pages built' },
+  { owner: 'client', label: 'The client', hint: 'They send it; we track what arrived' },
+];
+
+/**
+ * A column heading that says, and changes, who does that work on this project.
+ * The client's columns carry a "Client" tag so the grid reads right at a glance.
+ */
+function OwnerMenu({
+  discipline,
+  owner,
+  fromServices,
+  onSetOwner,
+}: {
+  discipline: StackDiscipline;
+  owner: PageWorkOwner;
+  fromServices: PageWorkOwner;
+  onSetOwner: (owner: PageWorkOwner | null) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className="inline-flex items-center gap-1 rounded px-1 py-0.5 uppercase tracking-wide outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+        title={`${discipline.label}: done by ${owner === 'client' ? 'the client' : 'ActiveSet'}`}
+      >
+        {discipline.shortLabel}
+        {owner === 'client' && (
+          <span className="rounded border border-dashed px-1 text-[9px] normal-case tracking-normal">Client</span>
+        )}
+        <ChevronDown className="size-3 opacity-50" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuLabel className="text-xs">Who does {discipline.label.toLowerCase()}?</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {OWNER_CHOICES.map((choice) => (
+          <DropdownMenuItem
+            key={choice.owner}
+            // Picking what the services already say clears the setting, so a
+            // later change of engagement still moves this column.
+            onSelect={() => onSetOwner(choice.owner === fromServices ? null : choice.owner)}
+            className="items-start gap-2"
+          >
+            <Check className={cn('mt-0.5 size-3.5 shrink-0', choice.owner !== owner && 'invisible')} />
+            <span className="flex flex-col">
+              <span className="text-xs font-medium">
+                {choice.label}
+                {choice.owner === fromServices && (
+                  <span className="font-normal text-muted-foreground"> · default</span>
+                )}
+              </span>
+              <span className="text-[11px] text-muted-foreground">{choice.hint}</span>
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

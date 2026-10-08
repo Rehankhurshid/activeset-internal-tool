@@ -12,7 +12,7 @@ import {
   gateFor,
   sectionStagesOf,
 } from '../../domain/delivery.arc';
-import { buildPageProgress } from '../../domain/delivery.progress';
+import { buildPageProgress, disciplineOwners } from '../../domain/delivery.progress';
 import { getStack } from '../../domain/stacks';
 import type { ProjectPage } from '../../domain/delivery.types';
 import { deliveryRepository } from '../../infrastructure/delivery.repository';
@@ -62,7 +62,10 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
 
   const arc = useMemo(() => deliveryArc(checklists), [checklists]);
   const progress = useMemo(() => arcProgress(checklists), [checklists]);
-  const pageProgress = useMemo(() => buildPageProgress(stack, pages), [stack, pages]);
+  const pageProgress = useMemo(
+    () => buildPageProgress(stack, pages, disciplineOwners(stack, { services: project.services, delivery: project.delivery })),
+    [stack, pages, project.services, project.delivery],
+  );
 
   const gates = useMemo(() => {
     const open: Record<string, boolean> = {};

@@ -3,6 +3,7 @@
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDocs,
   onSnapshot,
@@ -31,6 +32,7 @@ import type { Improvement } from '../domain/delivery.feedback';
 import type {
   CheckStatus,
   CreateProjectPageInput,
+  PageWorkOwner,
   PageWorkStatus,
   ProjectDeliveryState,
   ProjectPage,
@@ -489,6 +491,24 @@ export const deliveryRepository = {
     } catch (error) {
       logError(error, 'updateDeliveryState');
       throw new DatabaseError('Failed to update the project');
+    }
+  },
+
+  /**
+   * Says who does a tracker column on this project. `null` goes back to what
+   * the project's services say. The project sheet is rewritten, since its Pages
+   * tab words the client's columns differently.
+   */
+  async setDisciplineOwner(projectId: string, disciplineId: string, owner: PageWorkOwner | null): Promise<void> {
+    try {
+      await updateDoc(doc(db, PROJECTS, projectId), {
+        [`delivery.disciplineOwners.${disciplineId}`]: owner ?? deleteField(),
+        updatedAt: Timestamp.now(),
+      });
+      requestProjectSheetWrite(projectId);
+    } catch (error) {
+      logError(error, 'setDisciplineOwner');
+      throw new DatabaseError('Failed to change who does that work');
     }
   },
 

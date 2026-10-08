@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils';
 import type {
   PageWorkStatus,
   ProjectPage,
+  PageWorkOwner,
   StackDiscipline,
 } from '../../domain/delivery.types';
 import { normalizePageWorkStatus } from '../../domain/delivery.types';
@@ -64,6 +65,8 @@ export interface PageGridRowProps {
   /** Tracker number ("No."), 1-based and always the position in the full list. */
   rowNumber: number;
   disciplines: StackDiscipline[];
+  /** Discipline id → who does it. Missing ids are ours. */
+  owners: Readonly<Record<string, PageWorkOwner>>;
   assignees: string[];
   isFirst: boolean;
   isLast: boolean;
@@ -88,6 +91,7 @@ export function PageGridRow({
   page,
   rowNumber,
   disciplines,
+  owners,
   assignees,
   isFirst,
   isLast,
@@ -157,6 +161,7 @@ export function PageGridRow({
               status={normalizePageWorkStatus(page.work?.[discipline.id])}
               pageTitle={page.title || page.path}
               disciplineLabel={discipline.label}
+              owner={owners[discipline.id]}
               onChange={(next) => onSetWork(discipline.id, next)}
               cellId={`${rowIndex}:${col}`}
               tabIndex={focusedCol === col || (fallbackTabbable && col === 0) ? 0 : -1}

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChecklistItem, ChecklistSection, ProjectChecklist } from '@/types';
 import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
-import { clientKeyLinks, developmentWord, managedSheetContent, pageWord, seoToFix, sheetBoards, sheetPlan } from './project-sheet.content';
+import { clientKeyLinks, clientPageWord, developmentWord, managedSheetContent, pageWord, seoToFix, sheetBoards, sheetPlan } from './project-sheet.content';
 
 let seq = 0;
 const item = (title: string, extra: Partial<ChecklistItem> = {}): ChecklistItem => ({ id: `i${++seq}`, title, status: 'not_started', order: seq, ...extra });
@@ -98,9 +98,10 @@ describe('managedSheetContent', () => {
   });
 
   it('writes pages in order, with development done only when desktop and mobile are', () => {
+    // DreamTeam bought design and development, not copy: their copy is theirs, so Final.
     assert.deepEqual(content.pages, [
-      { page: 'Home', copy: 'Done', design: 'Done', development: 'In progress', link: 'https://dreamteam-ai.webflow.io/' },
-      { page: 'Pricing', copy: 'Done', design: 'Waiting on client', development: 'Not started', link: '' },
+      { page: 'Home', copy: 'Final', design: 'Done', development: 'In progress', link: 'https://dreamteam-ai.webflow.io/' },
+      { page: 'Pricing', copy: 'Final', design: 'Waiting on client', development: 'Not started', link: '' },
     ]);
   });
 
@@ -153,6 +154,26 @@ describe('page words', () => {
     assert.equal(developmentWord('completed', 'not_required'), 'Done');
     assert.equal(developmentWord('not_required', 'not_required'), 'Not needed');
     assert.equal(developmentWord('in_review', 'completed'), 'Waiting on client');
+  });
+});
+
+describe('the client’s own columns on Pages', () => {
+  const pages = [{ title: 'Home', path: '/', order: 0, work: { copy: 'not_started', design: 'in_progress', dev_desktop: 'completed', dev_mobile: 'completed' } }];
+  const row = (extra: Partial<typeof project> = {}) =>
+    managedSheetContent({ project: { ...project, services: ['development'], ...extra }, checklists: [], pages }).pages[0];
+
+  it('words a service the project did not buy as what the client sends', () => {
+    assert.deepEqual(row(), { page: 'Home', copy: 'Waiting on client', design: 'In revision', development: 'Done', link: '' });
+  });
+
+  it('follows the team’s setting for a column', () => {
+    assert.equal(row({ delivery: { disciplineOwners: { design: 'activeset' } } }).design, 'In progress');
+  });
+
+  it('says Final, not Done, for the client’s finished work', () => {
+    assert.equal(clientPageWord('completed'), 'Final');
+    assert.equal(clientPageWord('in_review'), 'Received');
+    assert.equal(clientPageWord(undefined), 'Waiting on client');
   });
 });
 

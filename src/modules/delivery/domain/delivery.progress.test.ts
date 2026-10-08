@@ -4,6 +4,7 @@ import {
   buildLaunchReadiness,
   pageChecksFor,
   buildPageProgress,
+  disciplineOwners,
   resolveAutoCheck,
   resolveCheck,
 } from './delivery.progress';
@@ -29,7 +30,50 @@ function page(id: string, work: Record<string, string>, extra: Partial<ProjectPa
 
 const ALL_DONE = { copy: 'completed', design: 'completed', dev_desktop: 'completed', dev_mobile: 'completed' };
 
+describe('disciplineOwners', () => {
+  it('gives the client the columns for services the project did not buy', () => {
+    assert.deepEqual(disciplineOwners(stack, { services: ['development'] }), {
+      copy: 'client',
+      design: 'client',
+      dev_desktop: 'activeset',
+      dev_mobile: 'activeset',
+    });
+  });
+
+  it('keeps every column ours when no services are recorded', () => {
+    const owners = disciplineOwners(stack, {});
+    assert.ok(Object.values(owners).every((o) => o === 'activeset'));
+  });
+
+  it('lets the team’s setting for a column win', () => {
+    const owners = disciplineOwners(stack, {
+      services: ['development'],
+      delivery: { disciplineOwners: { copy: 'activeset' } },
+    });
+    assert.equal(owners.copy, 'activeset');
+    assert.equal(owners.design, 'client');
+  });
+});
+
 describe('buildPageProgress', () => {
+  it('counts a page built from our own columns only when the client does copy and design', () => {
+    // Different AI, 8 Oct: the build matches their agency's designs, which are
+    // still in revision, and their copy has not arrived.
+    const owners = disciplineOwners(stack, { services: ['development'] });
+    const built = { copy: 'not_started', design: 'in_progress', dev_desktop: 'completed', dev_mobile: 'completed' };
+    const progress = buildPageProgress(stack, [page('home', built), page('demo', { ...built, dev_mobile: 'in_progress' })], owners);
+    assert.equal(progress.done, 1);
+    const design = progress.disciplines.find((d) => d.disciplineId === 'design');
+    assert.equal(design?.owner, 'client');
+    assert.equal(design?.done, 0);
+  });
+
+  it('still counts a page with nothing of ours to do as not built', () => {
+    const owners = disciplineOwners(stack, { services: ['development'] });
+    const progress = buildPageProgress(stack, [page('a', { copy: 'completed', dev_desktop: 'not_required', dev_mobile: 'not_required' })], owners);
+    assert.equal(progress.done, 0);
+  });
+
   it('counts a page done only when every applicable discipline is settled', () => {
     const pages = [
       page('a', ALL_DONE),

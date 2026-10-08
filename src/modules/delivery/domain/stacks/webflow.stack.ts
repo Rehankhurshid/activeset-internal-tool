@@ -18,10 +18,10 @@ import type { StackCheck, StackDefinition, StackDiscipline } from '../delivery.t
  */
 
 const disciplines: StackDiscipline[] = [
-  { id: 'copy', label: 'Copy', shortLabel: 'Copy', order: 0 },
-  { id: 'design', label: 'Design', shortLabel: 'Design', order: 1 },
-  { id: 'dev_desktop', label: 'Dev — desktop', shortLabel: 'Desktop', order: 2 },
-  { id: 'dev_mobile', label: 'Dev — mobile', shortLabel: 'Mobile', order: 3 },
+  { id: 'copy', label: 'Copy', shortLabel: 'Copy', order: 0, service: 'copy' },
+  { id: 'design', label: 'Design', shortLabel: 'Design', order: 1, service: 'web_design' },
+  { id: 'dev_desktop', label: 'Dev — desktop', shortLabel: 'Desktop', order: 2, service: 'development' },
+  { id: 'dev_mobile', label: 'Dev — mobile', shortLabel: 'Mobile', order: 3, service: 'development' },
 ];
 
 /** Asked of every page. Kept short on purpose: only things that genuinely vary page to page. */

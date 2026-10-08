@@ -10,9 +10,10 @@ import { cn } from '@/lib/utils';
 import { TONE_CLASSES } from '@/lib/ui-tones';
 import { useShortcut } from '@/shared/keyboard';
 import type { Project, ProjectLink } from '@/types';
-import { buildPageProgress, type PageProgress } from '../../domain/delivery.progress';
+import { buildPageProgress, disciplineOwners, type PageProgress } from '../../domain/delivery.progress';
 import {
   normalizePageWorkStatus,
+  type PageWorkOwner,
   type PageWorkStatus,
   type ProjectPage,
   type StackDefinition,
@@ -75,7 +76,17 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
     [stack.disciplines],
   );
 
-  const progress = useMemo(() => buildPageProgress(stack, pages), [stack, pages]);
+  // Who does each column: the team's setting, else the project's services.
+  const owners = useMemo(
+    () => disciplineOwners(stack, { services: project.services, delivery: project.delivery }),
+    [stack, project.services, project.delivery],
+  );
+  const serviceOwners = useMemo(
+    () => disciplineOwners(stack, { services: project.services }),
+    [stack, project.services],
+  );
+
+  const progress = useMemo(() => buildPageProgress(stack, pages, owners), [stack, pages, owners]);
 
   const assigneeOptions = useMemo(() => {
     const all = new Set<string>(teamAssignees);
@@ -119,6 +130,15 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
       return true;
     });
   }, [pages, filters, disciplines]);
+
+  const handleSetOwner = useCallback(
+    (disciplineId: string, owner: PageWorkOwner | null) => {
+      deliveryRepository.setDisciplineOwner(project.id, disciplineId, owner).catch((error) => {
+        toast.error(error instanceof Error ? error.message : 'Could not change who does that work');
+      });
+    },
+    [project.id],
+  );
 
   const handleSetWork = useCallback(
     (pageId: string, disciplineId: string, status: PageWorkStatus) =>
@@ -253,6 +273,9 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
         positionById={positionById}
         totalCount={pages.length}
         disciplines={disciplines}
+        owners={owners}
+        serviceOwners={serviceOwners}
+        onSetOwner={handleSetOwner}
         assignees={assigneeOptions}
         loading={loading}
         onSetWork={handleSetWork}
@@ -274,6 +297,8 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
 /** "14 of 26 pages built", and the per-discipline detail behind that number. */
 function ProgressStrip({ progress }: { progress: PageProgress }) {
   const percent = progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100);
+  const ours = progress.disciplines.filter((d) => d.owner !== 'client');
+  const theirs = progress.disciplines.filter((d) => d.owner === 'client');
 
   return (
     <div className="rounded-md border p-3">
@@ -309,33 +334,43 @@ function ProgressStrip({ progress }: { progress: PageProgress }) {
         />
       </div>
 
-      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
-        {progress.disciplines.map((discipline) => {
-          const width =
-            discipline.applicable === 0
-              ? 0
-              : Math.round((discipline.done / discipline.applicable) * 100);
-          return (
-            <div key={discipline.disciplineId} className="flex items-center gap-1.5">
-              <span className="text-[11px] text-muted-foreground">{discipline.label}</span>
-              <span className="text-[11px] font-medium tabular-nums">
-                {discipline.done}/{discipline.applicable}
-              </span>
-              <span className="h-1 w-10 overflow-hidden rounded-full bg-muted">
-                <span
-                  className={cn('block h-full rounded-full', PAGE_STATUS_TONES.completed.bar)}
-                  style={{ width: `${width}%` }}
-                />
-              </span>
-              {discipline.blocked > 0 && (
-                <span className="text-[11px] tabular-nums text-rose-600 dark:text-rose-400">
-                  {discipline.blocked} blocked
-                </span>
-              )}
-            </div>
-          );
-        })}
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {ours.map((discipline) => (
+          <DisciplineCount key={discipline.disciplineId} discipline={discipline} />
+        ))}
+        {theirs.length > 0 && (
+          <>
+            <span className="h-3 w-px bg-border" aria-hidden="true" />
+            <span className="text-[11px] text-muted-foreground">From the client:</span>
+            {theirs.map((discipline) => (
+              <DisciplineCount key={discipline.disciplineId} discipline={discipline} />
+            ))}
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+/** One column's count: done for ours, final for the client's ("Copy 2/6 final"). */
+function DisciplineCount({ discipline }: { discipline: PageProgress['disciplines'][number] }) {
+  const width = discipline.applicable === 0 ? 0 : Math.round((discipline.done / discipline.applicable) * 100);
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[11px] text-muted-foreground">{discipline.label}</span>
+      <span className="text-[11px] font-medium tabular-nums">
+        {discipline.done}/{discipline.applicable}
+        {discipline.owner === 'client' && <span className="font-normal text-muted-foreground"> final</span>}
+      </span>
+      <span className="h-1 w-10 overflow-hidden rounded-full bg-muted">
+        <span
+          className={cn('block h-full rounded-full', PAGE_STATUS_TONES.completed.bar)}
+          style={{ width: `${width}%` }}
+        />
+      </span>
+      {discipline.blocked > 0 && (
+        <span className="text-[11px] tabular-nums text-rose-600 dark:text-rose-400">{discipline.blocked} blocked</span>
+      )}
     </div>
   );
 }

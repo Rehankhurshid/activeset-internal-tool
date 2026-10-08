@@ -10,6 +10,7 @@ import type { Project } from '@/modules/project-links';
 import { ProjectTextCheckCard, WebsiteAuditDashboardScreen } from '@/modules/site-monitoring';
 import {
     buildPageProgress,
+    disciplineOwners,
     deliveryRepository,
     getStack,
     type ProjectPage as DeliveryPage,
@@ -374,7 +375,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     }
 
     const deliveryStack = getStack(project.delivery?.stackId);
-    const deliveryDone = buildPageProgress(deliveryStack, deliveryPages).done;
+    const deliveryDone = buildPageProgress(deliveryStack, deliveryPages, disciplineOwners(deliveryStack, project)).done;
 
     const isAdhoc = normalizeBillingType(project.billingType) === 'adhoc';
     const autoLinks = project.links.filter(l => l.source === 'auto');

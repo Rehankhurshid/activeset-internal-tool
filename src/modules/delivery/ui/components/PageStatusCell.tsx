@@ -7,13 +7,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import {
   PAGE_WORK_STATUSES,
-  PAGE_WORK_STATUS_LABELS,
+  pageWorkStatusLabel,
+  type PageWorkOwner,
   type PageWorkStatus,
 } from '../../domain/delivery.types';
 import {
   PAGE_STATUS_KEYS,
-  PAGE_STATUS_SHORT_LABELS,
   PAGE_STATUS_TONES,
+  pageStatusShortLabel,
   statusForDigit,
 } from './delivery-tones';
 
@@ -21,6 +22,8 @@ export interface PageStatusCellProps {
   status: PageWorkStatus;
   pageTitle: string;
   disciplineLabel: string;
+  /** The client's column reads as what they sent us, with a dashed edge. */
+  owner?: PageWorkOwner;
   /** Writes through to Firestore. Rejecting reverts the optimistic value. */
   onChange: (next: PageWorkStatus) => Promise<void>;
   /** `data-grid-cell`, so the grid can put focus back after an arrow key. */
@@ -48,6 +51,7 @@ export function PageStatusCell({
   status,
   pageTitle,
   disciplineLabel,
+  owner = 'activeset',
   onChange,
   cellId,
   tabIndex,
@@ -123,19 +127,21 @@ export function PageStatusCell({
           tabIndex={tabIndex}
           onFocus={onFocus}
           onKeyDown={handleKeyDown}
-          aria-label={`${disciplineLabel} on ${pageTitle}: ${PAGE_WORK_STATUS_LABELS[shown]}`}
+          aria-label={`${disciplineLabel}${owner === 'client' ? ' (client)' : ''} on ${pageTitle}: ${pageWorkStatusLabel(shown, owner)}`}
           className={cn(
             'flex h-7 w-full min-w-[68px] items-center justify-center rounded px-1.5 text-[11px] font-medium',
             'transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+            owner === 'client' && 'border border-dashed border-border',
             tone.cell,
           )}
         >
-          {PAGE_STATUS_SHORT_LABELS[shown]}
+          {pageStatusShortLabel(shown, owner)}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={4} className="w-48 p-1">
         <p className="px-2 pb-1 pt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
           {disciplineLabel}
+          {owner === 'client' && ' · the client’s'}
         </p>
         {PAGE_WORK_STATUSES.map((value) => (
           <button
@@ -148,7 +154,7 @@ export function PageStatusCell({
             )}
           >
             <span className={cn('size-2 shrink-0 rounded-full', PAGE_STATUS_TONES[value].dot)} />
-            <span className="flex-1 truncate">{PAGE_WORK_STATUS_LABELS[value]}</span>
+            <span className="flex-1 truncate">{pageWorkStatusLabel(value, owner)}</span>
             <kbd className="rounded border bg-muted px-1 font-mono text-[10px] text-muted-foreground">
               {PAGE_STATUS_KEYS[value]}
             </kbd>

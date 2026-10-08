@@ -1,4 +1,5 @@
-import type { AuditResult, ChecklistItem } from '@/types';
+import { workOwner } from '@/lib/engagements';
+import type { AuditResult, ChecklistItem, Project } from '@/types';
 import {
   SETTLED_PAGE_STATUSES,
   isAutoCheckId,
@@ -6,6 +7,7 @@ import {
   type AutoCheckId,
   type AutoCheckVerdict,
   type CheckStatus,
+  type PageWorkOwner,
   type ProjectDeliveryState,
   type ProjectPage,
   type StackCheck,
@@ -25,6 +27,8 @@ import {
 export interface DisciplineProgress {
   disciplineId: string;
   label: string;
+  /** Ours, or the client's: theirs are tracked, not counted as pages built. */
+  owner: PageWorkOwner;
   done: number;
   /** Pages where this discipline applies, i.e. excluding `not_required`. */
   applicable: number;
@@ -32,7 +36,7 @@ export interface DisciplineProgress {
 }
 
 export interface PageProgress {
-  /** Pages where every applicable discipline is settled. */
+  /** Pages where every applicable discipline of ours is settled. */
   done: number;
   total: number;
   blocked: number;
@@ -40,8 +44,34 @@ export interface PageProgress {
   disciplines: DisciplineProgress[];
 }
 
-export function buildPageProgress(stack: StackDefinition, pages: ProjectPage[]): PageProgress {
+/** Discipline id → who does it on this project. Missing ids are ours. */
+export type DisciplineOwners = Readonly<Record<string, PageWorkOwner>>;
+
+/**
+ * Who does each column on this project: the team's setting for the column,
+ * else the project's services (a service it did not buy is the client's).
+ */
+export function disciplineOwners(
+  stack: Pick<StackDefinition, 'disciplines'>,
+  project: Pick<Project, 'services' | 'delivery'>,
+): Record<string, PageWorkOwner> {
+  const set = project.delivery?.disciplineOwners ?? {};
+  return Object.fromEntries(stack.disciplines.map((d) => [d.id, workOwner(d.service, project.services, set[d.id])]));
+}
+
+/**
+ * How far the pages are. "Built" counts only our own columns: on a project
+ * where the client writes the copy, a page is built when we have built it,
+ * whatever their copy says. Their columns still get a count each, so the team
+ * sees what has arrived.
+ */
+export function buildPageProgress(
+  stack: StackDefinition,
+  pages: ProjectPage[],
+  owners: DisciplineOwners = {},
+): PageProgress {
   const disciplines = [...stack.disciplines].sort((a, b) => a.order - b.order);
+  const ownerOf = (d: StackDiscipline): PageWorkOwner => owners[d.id] ?? 'activeset';
 
   const perDiscipline: DisciplineProgress[] = disciplines.map((d) => {
     let done = 0;
@@ -54,9 +84,10 @@ export function buildPageProgress(stack: StackDefinition, pages: ProjectPage[]):
       if (status === 'completed') done += 1;
       if (status === 'blocked') blocked += 1;
     }
-    return { disciplineId: d.id, label: d.label, done, applicable, blocked };
+    return { disciplineId: d.id, label: d.label, owner: ownerOf(d), done, applicable, blocked };
   });
 
+  const ours = disciplines.filter((d) => ownerOf(d) === 'activeset');
   let donePages = 0;
   let blockedPages = 0;
   for (const page of pages) {
@@ -64,8 +95,10 @@ export function buildPageProgress(stack: StackDefinition, pages: ProjectPage[]):
     let allSettled = true;
     let isBlocked = false;
     for (const d of disciplines) {
+      if (normalizePageWorkStatus(page.work?.[d.id]) === 'blocked') isBlocked = true;
+    }
+    for (const d of ours) {
       const status = normalizePageWorkStatus(page.work?.[d.id]);
-      if (status === 'blocked') isBlocked = true;
       if (status === 'not_required') continue;
       anyApplicable = true;
       if (!SETTLED_PAGE_STATUSES.has(status)) allSettled = false;

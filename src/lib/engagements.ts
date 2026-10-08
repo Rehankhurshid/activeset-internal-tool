@@ -1,4 +1,4 @@
-import type { ServiceId, SOPTemplate } from '@/types';
+import type { PageWorkOwner, ServiceId, SOPTemplate } from '@/types';
 
 /**
  * What ActiveSet sells, and how a project's checklist is put together from it.
@@ -134,4 +134,24 @@ export function pickServiceTemplates(
     const template = options.find((t) => t.id === chosen[service]) ?? options[0];
     return template ? { service, template, options } : { service, options };
   });
+}
+
+/**
+ * Who does a kind of page work, given the services the project bought.
+ *
+ * Rehan, 2026-10-08, on Different AI (Development only): "Copy and Design is
+ * not being done from our side." Work for a service the project did not buy is
+ * the client's; the team's own setting for the column wins. A project with no
+ * services recorded (made before engagements) keeps every column ours, as it
+ * always was.
+ */
+export function workOwner(
+  service: ServiceId | undefined,
+  services: readonly unknown[] | null | undefined,
+  override?: unknown,
+): PageWorkOwner {
+  if (override === 'activeset' || override === 'client') return override;
+  const bought = orderServices(services);
+  if (!service || bought.length === 0) return 'activeset';
+  return bought.includes(service) ? 'activeset' : 'client';
 }

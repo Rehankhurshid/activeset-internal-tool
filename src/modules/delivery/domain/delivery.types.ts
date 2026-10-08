@@ -13,7 +13,8 @@
  * re-exported here — the same arrangement the client-portal module uses.
  */
 export type { AutoCheckId, CheckStatus, ProjectDeliveryState, StackId } from '@/types';
-import type { AutoCheckId, CheckStatus, StackId } from '@/types';
+import type { AutoCheckId, CheckStatus, PageWorkOwner, ServiceId, StackId } from '@/types';
+export type { PageWorkOwner } from '@/types';
 
 /**
  * How far a single discipline has got on a single page.
@@ -49,6 +50,24 @@ export const PAGE_WORK_STATUS_LABELS: Record<PageWorkStatus, string> = {
   not_required: 'Not required',
 };
 
+/**
+ * The same statuses on a column that is the client's. We are not doing that
+ * work, so "In progress" or "Completed" would claim it; these say where what
+ * they send us stands: not here yet, still changing, being checked, final.
+ */
+export const CLIENT_PAGE_WORK_STATUS_LABELS: Record<PageWorkStatus, string> = {
+  not_started: 'Waiting on the client',
+  in_progress: 'In revision',
+  blocked: 'Blocked',
+  in_review: 'Checking what arrived',
+  completed: 'Final',
+  not_required: 'Not needed',
+};
+
+export function pageWorkStatusLabel(status: PageWorkStatus, owner: PageWorkOwner = 'activeset'): string {
+  return (owner === 'client' ? CLIENT_PAGE_WORK_STATUS_LABELS : PAGE_WORK_STATUS_LABELS)[status];
+}
+
 /** Statuses that need no further work. */
 export const SETTLED_PAGE_STATUSES: ReadonlySet<PageWorkStatus> = new Set<PageWorkStatus>([
   'completed',
@@ -70,6 +89,11 @@ export interface StackDiscipline {
   /** Used for grid headers, where horizontal space is scarce. */
   shortLabel: string;
   order: number;
+  /**
+   * The service this work belongs to. A project that did not buy it gets the
+   * column as the client's (see `disciplineOwners`).
+   */
+  service?: ServiceId;
 }
 
 

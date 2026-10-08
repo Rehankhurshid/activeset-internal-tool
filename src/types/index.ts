@@ -764,6 +764,14 @@ export interface ChecklistItemTemplate {
  */
 export type ServiceId = 'brand' | 'copy' | 'web_design' | 'development';
 
+/**
+ * Who does one kind of page work (a page tracker column) on a project: us, or
+ * the client and their own people. Copy and design on a "Development only"
+ * project are the client's: we track that they arrived, not that we made them.
+ * See `workOwner` in `src/lib/engagements.ts`.
+ */
+export type PageWorkOwner = 'activeset' | 'client';
+
 /** Whose step it is, as the client sees it. Unset means ours. */
 export type ClientStepWho = 'activeset' | 'client' | 'together';
 
@@ -1297,6 +1305,12 @@ export interface ProjectDeliveryState {
   /** How often the team and client sync; drives the "no call recently" nudge. */
   callCadence?: 'weekly' | 'biweekly' | 'none';
   lastSyncCallAt?: string;
+  /**
+   * Who does each page tracker column (discipline id → owner), where the team
+   * set it by hand. Unset columns follow the project's services: a service it
+   * did not buy is the client's.
+   */
+  disciplineOwners?: Record<string, PageWorkOwner>;
   /** The generated Google Sheet, once sheet sync exists. */
   trackerSheetId?: string;
   trackerSheetUrl?: string;

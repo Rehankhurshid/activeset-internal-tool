@@ -1,6 +1,6 @@
-import type { ChecklistSection, ClientStepWho, Project, ProjectChecklist, ProjectTimeline, SOPTemplate, SOPTemplateSection, Task } from '@/types';
+import type { ChecklistSection, ClientStepWho, PageWorkOwner, Project, ServiceId, ProjectChecklist, ProjectTimeline, SOPTemplate, SOPTemplateSection, Task } from '@/types';
 import { normalizeClientStatus } from '@/types';
-import { servicesName, orderServices, isServiceId } from '@/lib/engagements';
+import { servicesName, orderServices, isServiceId, workOwner } from '@/lib/engagements';
 import { resolveTimelinePlan } from './client-timeline';
 import { portalStageSources } from './portal-sources';
 import { sheetMetrics, type ProjectMetric, type SheetMetrics } from './project-metrics';
@@ -137,7 +137,7 @@ export interface SheetPageInput {
 }
 
 export interface ManagedSheetInput {
-  project: Pick<Project, 'name' | 'client' | 'services' | 'reviewOwnerEmail' | 'links' | 'clientTimeline' | 'clientFacing'>;
+  project: Pick<Project, 'name' | 'client' | 'services' | 'reviewOwnerEmail' | 'links' | 'clientTimeline' | 'clientFacing' | 'delivery'>;
   checklists: readonly Pick<ProjectChecklist, 'sections' | 'templateId' | 'templateIds' | 'createdAt'>[];
   templates?: readonly Pick<SOPTemplate, 'id' | 'service' | 'sections'>[];
   agency?: readonly Omit<SOPTemplateSection, 'order'>[];
@@ -168,6 +168,26 @@ export function pageWord(status: string | undefined): string {
       return 'In progress';
     default:
       return 'Not started';
+  }
+}
+
+/**
+ * A column that is the client's (their copy, their agency's design), in the
+ * sheet's words. We are not doing that work, so it says where what they send
+ * stands rather than claiming progress: still to come, still changing, final.
+ */
+export function clientPageWord(status: string | undefined): string {
+  switch (status) {
+    case 'completed':
+      return 'Final';
+    case 'not_required':
+      return 'Not needed';
+    case 'in_review':
+      return 'Received';
+    case 'in_progress':
+      return 'In revision';
+    default:
+      return 'Waiting on client';
   }
 }
 
@@ -374,13 +394,21 @@ export function managedSheetContent(input: ManagedSheetInput): ManagedSheetConte
   const client = project.client?.trim() || project.name;
   const boards = sheetBoards(input.checklists, input.templates, client);
 
+  // Whose each column is, by the same rule as the page tracker: the team's
+  // setting, else the services the project bought (see `workOwner`).
+  const set = project.delivery?.disciplineOwners ?? {};
+  const owner = (id: string, service: ServiceId): PageWorkOwner => workOwner(service, project.services, set[id]);
+  const word = (id: string, service: ServiceId) => (owner(id, service) === 'client' ? clientPageWord : pageWord);
   const pages = [...(input.pages ?? [])]
     .sort((a, b) => a.order - b.order)
     .map((page) => ({
       page: page.title?.trim() || page.path,
-      copy: pageWord(page.work?.copy),
-      design: pageWord(page.work?.design),
-      development: developmentWord(page.work?.dev_desktop, page.work?.dev_mobile),
+      copy: word('copy', 'copy')(page.work?.copy),
+      design: word('design', 'web_design')(page.work?.design),
+      development:
+        owner('dev_desktop', 'development') === 'client'
+          ? clientPageWord(page.work?.dev_desktop)
+          : developmentWord(page.work?.dev_desktop, page.work?.dev_mobile),
       link: page.stagingLink && /^https?:\/\//i.test(page.stagingLink) ? page.stagingLink : '',
     }));
 

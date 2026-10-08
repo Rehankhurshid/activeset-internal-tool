@@ -127,6 +127,9 @@ const STATUS_COLOURS: Record<string, { bg: string; fg: string }> = {
   'Not needed': { bg: '#F8FAFC', fg: '#94A3B8' },
   Waiting: { bg: '#FEF3C7', fg: '#B45309' },
   Received: { bg: '#DCFCE7', fg: '#15803D' },
+  // The client's own columns on Pages (their copy, their design).
+  'In revision': { bg: '#EDE9FE', fg: '#6D28D9' },
+  Final: { bg: '#DCFCE7', fg: '#15803D' },
 };
 const WHO_COLOURS: Record<string, string> = { ActiveSet: '#475569', Client: '#B45309', Together: '#6D28D9' };
 const ROWS = 300;
@@ -315,8 +318,7 @@ async function layOut(spreadsheetId: string): Promise<void> {
     text(all(PG, 1, 4), font(DISPLAY, 10, C.muted, { bold: true }), { horizontalAlignment: 'CENTER' }),
     centre(range(PG, 0, 1, 1, 4)),
     text(all(PG, 4, 5), font(BODY, 10, C.link, { underline: true }), { wrapStrategy: 'CLIP' }),
-    rule(range(PG, 1, ROWS, 0, 5), formula('=AND($A2<>"",$B2="Done",$C2="Done",$D2="Done")'), { backgroundColorStyle: { rgbColor: hex('#F0FDF4') } }),
-    ...chips(all(PG, 1, 4), STATUS_COLOURS),
+    ...formatPageWords(PG),
 
     // What we need: Item · Needed by · Status, overdue in red.
     base(IN, 3),
@@ -356,9 +358,10 @@ function formatPlan(OV: number) {
  * under an older version gets the missing tabs on its next write.
  * 2 (2026-10-01): Checklist and SEO. 3 (same day): a Link column on Process.
  * 4 (same day): the deliverables tabs drawn as bands on every write, the SEO
- * tab renamed "Page SEO", and the Overview's PLAN roll-up.
+ * tab renamed "Page SEO", and the Overview's PLAN roll-up. 5 (2026-10-08): the
+ * client's own columns on Pages ("In revision", "Final") coloured.
  */
-export const LAYOUT_VERSION = 4;
+export const LAYOUT_VERSION = 5;
 
 /** The fixed tabs added after the first four, and how each is laid out. Deliverables tabs are drawn by `writeBoards`. */
 const EXTRA_TABS = [{ title: MANAGED_TABS.seo, colour: '#DB2777', cols: MANAGED_SEO_HEADER.length, frozen: 1 }];
@@ -417,6 +420,18 @@ function formatSeo(SE: number) {
  * Brings a sheet laid out by an older version up to date: adds the tabs it is
  * missing and restyles the Overview's help lines, which grew with them.
  */
+/**
+ * The Pages tab's status colours, and a page row going green once nothing on it
+ * is still to come: ours Done, the client's Final, or not needed.
+ */
+function formatPageWords(PG: number): Record<string, unknown>[] {
+  const settled = (col: string) => `OR($${col}2="Done",$${col}2="Final",$${col}2="Not needed")`;
+  return [
+    rule(range(PG, 1, ROWS, 0, 5), formula(`=AND($A2<>"",${settled('B')},${settled('C')},${settled('D')})`), { backgroundColorStyle: { rgbColor: hex('#F0FDF4') } }),
+    ...chips(range(PG, 1, ROWS, 1, 4), STATUS_COLOURS),
+  ];
+}
+
 async function upgradeLayout(spreadsheetId: string): Promise<void> {
   // v4: "SEO" is now "Page SEO", and the old Checklist tab (one flat table with
   // its own rules) gives way to the banded one `writeBoards` draws.
@@ -435,7 +450,11 @@ async function upgradeLayout(spreadsheetId: string): Promise<void> {
   const missing = EXTRA_TABS.filter((t) => !have.has(t.title));
   const overview = meta.tabs.find((t) => t.title === MANAGED_TABS.overview);
   const process = meta.tabs.find((t) => t.title === MANAGED_TABS.process);
+  const pagesTab = meta.tabs.find((t) => t.title === MANAGED_TABS.pages);
   const requests: Record<string, unknown>[] = [];
+  // v5: the client's columns on Pages ("In revision", "Final") get colours too.
+  // Rules only add, so the older all-Done rule stays; this one covers it.
+  if (pagesTab?.sheetId !== undefined) requests.push(...formatPageWords(pagesTab.sheetId));
   if (process?.sheetId !== undefined) {
     requests.push(
       { updateSheetProperties: { properties: { sheetId: process.sheetId, gridProperties: { columnCount: MANAGED_PROCESS_HEADER.length + 2 } }, fields: 'gridProperties.columnCount' } },
