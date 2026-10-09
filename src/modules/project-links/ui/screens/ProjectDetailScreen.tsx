@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import dynamic from 'next/dynamic';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/modules/auth-access';
 import { EmbedDialog } from '@/modules/project-links';
 import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
@@ -27,7 +27,15 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Building2, ChevronDown, Code, Handshake, ImageIcon, LayoutList, LayoutDashboard, Globe, Link2, ListChecks, MoreHorizontal, RefreshCw, Loader2, Plus, Search as SearchIcon, Share2, GanttChartSquare, Receipt, ListTodo } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { CLIENT_STATUS_LABELS, clientPortalRepository, normalizeClientStatus } from '@/modules/client-portal';
+import {
+    CLIENT_STATUS_LABELS,
+    ClientStatusChip,
+    clientPortalRepository,
+    isPortalStale,
+    normalizeClientStatus,
+} from '@/modules/client-portal';
+import { ProjectClientFlowBanner } from '@/components/projects/ProjectClientFlowBanner';
+import { todayIso } from '@/lib/review-status';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScanSitemapDialog } from '@/modules/project-links';
 import { InlineEdit } from '@/components/ui/inline-edit';
@@ -72,6 +80,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
     // Default to 'audit' tab, or whatever ?tab=… in the URL points at. The list of
     // valid tab values is enforced below in tabOptions; falling back to 'audit' is safe.
+    const router = useRouter();
+    const pathname = usePathname();
     const searchParams = useSearchParams();
     const initialTab = (() => {
         const fromUrl = searchParams?.get('tab');
@@ -79,6 +89,24 @@ export default function ProjectDetailPage({ params }: PageProps) {
         return fromUrl && valid.includes(fromUrl) ? fromUrl : 'audit';
     })();
     const [activeTab, setActiveTab] = useState(initialTab);
+
+
+    useEffect(() => {
+        const fromUrl = searchParams?.get('tab');
+        const valid = ['audit', 'delivery', 'client', 'links', 'tasks', 'webflow', 'images', 'checklist', 'timeline', 'invoices'];
+        const next = fromUrl && valid.includes(fromUrl) ? fromUrl : 'audit';
+        setActiveTab((prev) => (prev === next ? prev : next));
+    }, [searchParams]);
+
+    const handleTabChange = (tab: string) => {
+        setActiveTab(tab);
+        const params = new URLSearchParams(searchParams?.toString() ?? '');
+        if (tab === 'audit') params.delete('tab');
+        else params.set('tab', tab);
+        const q = params.toString();
+        router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+    };
+
 
     // The tasks/timeline/checklist subscriptions below exist only to populate the
     // tab-count badges. The default Audit view needs none of them, so we defer
@@ -406,8 +434,22 @@ export default function ProjectDetailPage({ params }: PageProps) {
         ? { label: `${deliveryDone}/${deliveryPages.length}`, tone: 'set' }
         : { label: 'Not Set', tone: 'unset' };
 
+    const clientStatus = normalizeClientStatus(project.clientFacing?.status);
+    const clientPortalAttention =
+        project.clientPortal?.enabled === true &&
+        (clientStatus === 'needs_client' || clientStatus === 'blocked' || isPortalStale(project, todayIso()));
+    const clientStatCompact: Record<string, string> = {
+        on_track: 'On track',
+        needs_client: 'Waiting',
+        blocked: 'Blocked',
+        paused: 'Paused',
+        delivered: 'Done',
+    };
     const clientStat: TabStat = project.clientPortal?.enabled === true
-        ? { label: CLIENT_STATUS_LABELS[normalizeClientStatus(project.clientFacing?.status)], tone: 'set' }
+        ? {
+            label: clientStatCompact[clientStatus] ?? CLIENT_STATUS_LABELS[clientStatus],
+            tone: clientPortalAttention ? 'attention' : 'set',
+          }
         : { label: 'Off', tone: 'unset' };
 
     const tabOptions: TabOption[] = [
@@ -479,7 +521,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                 project={{ id: project.id, name: project.name, client: project.client }}
                 tabs={tabOptions}
                 activeTab={activeTab}
-                onTabChange={setActiveTab}
+                onTabChange={handleTabChange}
                 onShare={handleShareClientLink}
                 onEmbed={() => setIsEmbedDialogOpen(true)}
                 onCopyClientLink={handleShareClientLink}
@@ -498,7 +540,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             <Badge asChild variant="secondary" className="font-mono text-xs">
                                 <button
                                     type="button"
-                                    onClick={() => setActiveTab('links')}
+                                    onClick={() => handleTabChange('links')}
                                     className="cursor-pointer"
                                     aria-label="Open project links"
                                 >
@@ -516,6 +558,27 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                     inputClassName="h-7 text-xs w-48"
                                 />
                             </div>
+                            {project.clientPortal?.enabled === true ? (
+                                <button
+                                    type="button"
+                                    onClick={() => handleTabChange('client')}
+                                    className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    aria-label="Open client tab"
+                                >
+                                    <ClientStatusChip project={project} size="sm" />
+                                </button>
+                            ) : (
+                                <Badge asChild variant="outline" className="text-[10px] font-medium">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleTabChange('client')}
+                                        className="cursor-pointer"
+                                        aria-label="Set up client portal"
+                                    >
+                                        Portal off
+                                    </button>
+                                </Badge>
+                            )}
                             {isAdmin && (
                                 <ProjectBillingButton
                                     projectId={project.id}
@@ -540,8 +603,17 @@ export default function ProjectDetailPage({ params }: PageProps) {
                     </div>
                 </div>
 
+                <ProjectClientFlowBanner
+                    project={project}
+                    onOpenClientTab={() => handleTabChange('client')}
+                    onOpenTasksTab={() => handleTabChange('tasks')}
+                    onCopyPortalLink={() => void handleShareClientLink()}
+                    isCopyingLink={isSharingClientLink}
+                    className="mb-2"
+                />
+
                 {/* Main Content */}
-                <Tabs defaultValue="audit" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <Tabs defaultValue="audit" value={activeTab} onValueChange={handleTabChange} className="w-full">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
                         {/* Mobile: Sheet selector — single button shows current tab and opens full list */}
                         <div className="sm:hidden">
@@ -549,7 +621,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                 options={tabOptions}
                                 value={activeTab}
                                 activeOption={activeTabOption}
-                                onChange={setActiveTab}
+                                onChange={handleTabChange}
                             />
                         </div>
 
@@ -557,7 +629,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
                             primaryOptions={primaryDesktopTabs}
                             overflowOptions={overflowDesktopTabs}
                             value={activeTab}
-                            onChange={setActiveTab}
+                            onChange={handleTabChange}
                         />
 
                         {/* Show Scan Sitemap when in audit tab */}
@@ -617,10 +689,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
                         <ClientPanel
                             project={project}
                             timeline={timeline ?? null}
-                            // The checklist the client's tracker follows, subscribed above for the tab counts.
                             checklists={checklists}
                             userEmail={user.email ?? ''}
                             isAdmin={isAdmin}
+                            onOpenTab={(tab) => handleTabChange(tab)}
                             // Already subscribed here for the tab counts. The panel
                             // uses them read-only, to show which asks are currently
                             // published to the client and to name the ask a reply

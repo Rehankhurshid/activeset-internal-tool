@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/co
 import { ChevronDown, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type TabStat = { label: string; tone: 'set' | 'unset' };
+export type TabStat = { label: string; tone: 'set' | 'unset' | 'attention' };
 export type TabOption = { value: string; label: string; compactLabel?: string; icon: ReactNode; stat?: TabStat };
 
 export function TabStatBadge({ stat, className }: { stat: TabStat; className?: string }) {
@@ -17,8 +17,12 @@ export function TabStatBadge({ stat, className }: { stat: TabStat; className?: s
 
     return (
         <Badge
-            variant="secondary"
-            className={cn('h-5 px-1.5 text-[10px] font-mono leading-none tabular-nums', className)}
+            variant={stat.tone === 'attention' ? 'outline' : 'secondary'}
+            className={cn(
+                'h-5 px-1.5 text-[10px] font-mono leading-none tabular-nums',
+                stat.tone === 'attention' && 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200',
+                className,
+            )}
         >
             {stat.label}
         </Badge>

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, GanttChartSquare, ListChecks, ListTodo } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Project, ProjectChecklist, ProjectTimeline, SOPTemplate, Task } from '@/types';
 import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
@@ -30,6 +31,7 @@ interface ClientPanelProps {
   isAdmin: boolean;
   /** Unused since the asks list left this tab: the Tasks tab owns them, the client's page shows them. */
   tasks?: Task[];
+  onOpenTab?: (tab: 'checklist' | 'tasks' | 'timeline') => void;
 }
 
 function SectionTitle({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -164,7 +166,7 @@ function useSourceTemplates(checklists: ProjectChecklist[]): { templates: SOPTem
  * checklist (or the project sheet), and this tab only shows the result.
  */
 export function ClientPanel(props: ClientPanelProps) {
-  const { project, timeline, userEmail, checklists = [] } = props;
+  const { project, timeline, userEmail, checklists = [], onOpenTab } = props;
   const [link, setLink] = useState<PortalLinkState | null>(null);
   const enabled = link ? link.enabled : project.clientPortal?.enabled === true;
   const status = normalizeClientStatus(project.clientFacing?.status);
@@ -222,6 +224,23 @@ export function ClientPanel(props: ClientPanelProps) {
           <span className="text-xs text-muted-foreground">Off: the client can&apos;t open anything until the link is on.</span>
         )}
       </div>
+
+      {onOpenTab && (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => onOpenTab('checklist')}>
+            <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
+            Checklist
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => onOpenTab('tasks')}>
+            <ListTodo className="h-3.5 w-3.5" aria-hidden="true" />
+            Tasks
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => onOpenTab('timeline')}>
+            <GanttChartSquare className="h-3.5 w-3.5" aria-hidden="true" />
+            Timeline
+          </Button>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="gap-3">
