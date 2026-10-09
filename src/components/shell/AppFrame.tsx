@@ -1,12 +1,20 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/modules/auth-access';
-import { CommandPalette } from '@/components/CommandPalette';
-import { ShortcutHelp } from '@/shared/keyboard';
 import { cn } from '@/lib/utils';
 import { AppRail } from './AppRail';
 import { HintBar } from './HintBar';
+
+const CommandPalette = dynamic(
+  () => import('@/components/CommandPalette').then((m) => m.CommandPalette),
+  { ssr: false },
+);
+const ShortcutHelp = dynamic(
+  () => import('@/shared/keyboard').then((m) => m.ShortcutHelp),
+  { ssr: false },
+);
 
 function isAppRoute(pathname: string | null): boolean {
   if (!pathname) return false;
@@ -18,10 +26,9 @@ function isAppRoute(pathname: string | null): boolean {
  * left rail and bottom hint bar; public routes such as /share, /view, /embed,
  * /portal and the login screen render bare.
  *
- * The keyboard layer is mounted only on app routes. The command palette already
- * guards its own bindings on a signed-in user, but the shortcut-help sheet does
- * not: without this, a client on their portal page who typed `?` would be shown
- * the internal app's shortcut sheet.
+ * Command palette and shortcut help load only after sign-in (lazy + gated on
+ * `shell`) so the login screen does not pull cmdk, project search, or the
+ * shortcut sheet. Portal and other public routes never mount them.
  */
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -34,7 +41,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       {shell && <AppRail />}
       <div className={cn(shell && 'md:pl-[var(--shell-rail)] md:pb-[var(--shell-hintbar)]')}>{children}</div>
       {shell && <HintBar />}
-      {inApp && (
+      {shell && (
         <>
           <ShortcutHelp />
           <CommandPalette />

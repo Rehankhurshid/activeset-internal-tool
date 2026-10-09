@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2, Search, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { proposalService } from '@/app/modules/proposal/services/ProposalService';
-import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
+import { projectLinksRepository } from '@/modules/project-links';
 import type { Proposal } from '@/app/modules/proposal/types/Proposal';
 
 interface LinkProposalDialogProps {

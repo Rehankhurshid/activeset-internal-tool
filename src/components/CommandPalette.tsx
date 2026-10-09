@@ -16,7 +16,7 @@ import {
   Sun,
 } from '@phosphor-icons/react';
 
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/modules/auth-access';
 import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
 import type { Project } from '@/types';
 import {

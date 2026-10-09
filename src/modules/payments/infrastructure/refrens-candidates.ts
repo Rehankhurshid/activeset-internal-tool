@@ -1,6 +1,6 @@
 import 'server-only';
 import { listAllInvoicesCached, listOpenInvoices, type RefrensInvoiceSummary } from '@/services/RefrensService';
-import { listAllInvoices } from '@/modules/invoices/infrastructure/invoices.repository';
+import { listAllInvoices } from '@/modules/invoices';
 import { VIA_LABELS } from '@/modules/payments/domain/payments.matching';
 import {
   outstandingOn,

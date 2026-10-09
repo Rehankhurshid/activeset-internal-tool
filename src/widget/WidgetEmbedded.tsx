@@ -5,7 +5,7 @@ import { WidgetConfig } from '@/types';
 import { QAWidget } from '@/components/qa/QAWidget';
 import { ChecklistWidget } from '@/components/checklist/ChecklistWidget';
 import { ProjectLinksWidget } from '@/components/widget/ProjectLinksWidget';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/modules/auth-access';
 
 interface WidgetEmbeddedProps {
   config?: WidgetConfig & { stagingUrl?: string; projectId?: string };

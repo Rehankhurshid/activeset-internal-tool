@@ -16,12 +16,14 @@ const modules = [
   "webflow",
   "checklists",
   "proposal",
-  "seo-engine",
   "screenshot-runner",
   "settings",
   "client-portal",
   "delivery",
   "payments",
+  "internal-tools",
+  "invoices",
+  "timeline",
 ];
 
 const createModuleBoundaryRule = (moduleName) => {
@@ -46,10 +48,8 @@ const createModuleBoundaryRule = (moduleName) => {
                 "@/hooks/useModuleAccess",
                 "@/components/auth/LoginForm",
                 "@/components/navigation/AppNavigation",
-                "@/components/dashboard/Dashboard",
                 "@/components/page-details",
                 "@/components/website-audit-dashboard",
-                "@/components/scan-sitemap-dialog",
                 "@/components/projects/EmbedDialog",
                 "@/components/projects/ProjectTextCheckCard",
               ],

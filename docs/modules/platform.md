@@ -209,7 +209,7 @@ Stored config docs: `access_control/module_access`, `configurations/*`, `app_sec
 |---|---|
 | `dev` | `next dev --turbopack` |
 | `build` / `start` | `next build` / `next start` (`output: 'standalone'`) |
-| `lint` | `next lint` — broken: Next 16.0.10 has no `lint` subcommand (prints usage) |
+| `lint` | `eslint .` — broken: Next 16.0.10 has no `lint` subcommand (prints usage) |
 | `typecheck` | `tsc --noEmit` |
 | `lint:architecture` | ESLint over `src/app/page.tsx`, `src/app/**/page.tsx`, `src/modules/**` with `--max-warnings=0` (passes at a00f91e) |
 | `arch:check` | `typecheck` + `lint:architecture` |

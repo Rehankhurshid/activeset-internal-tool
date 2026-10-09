@@ -1,7 +1,7 @@
 import 'server-only';
 import { db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
-import { listAllInvoices } from '@/modules/invoices/infrastructure/invoices.repository';
+import { listAllInvoices } from '@/modules/invoices';
 import type {
   IncomingPayment,
   PayerRule,

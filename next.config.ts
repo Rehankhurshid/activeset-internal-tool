@@ -47,7 +47,13 @@ const nextConfig: NextConfig = {
     ]
   },
   experimental: {
-    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'date-fns'],
+    optimizePackageImports: [
+      'lucide-react',
+      '@radix-ui/react-icons',
+      '@phosphor-icons/react',
+      'date-fns',
+      '@tanstack/react-table',
+    ],
   },
 };
 

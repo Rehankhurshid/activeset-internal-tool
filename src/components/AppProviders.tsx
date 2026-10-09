@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider } from "@/modules/auth-access";
 import { ShortcutProvider } from "@/shared/keyboard";
 import { AppFrame } from "@/components/shell";
 

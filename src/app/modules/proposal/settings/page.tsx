@@ -1,7 +1,7 @@
 "use client";
 
 import { useConfigurations } from "@/hooks/useConfigurations";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/modules/auth-access";
 import { SimpleListEditor } from "@/app/modules/settings/components/SimpleListEditor";
 import { RichItemEditor } from "@/app/modules/settings/components/RichItemEditor";
 import { KeyValueEditor } from "@/app/modules/settings/components/KeyValueEditor";

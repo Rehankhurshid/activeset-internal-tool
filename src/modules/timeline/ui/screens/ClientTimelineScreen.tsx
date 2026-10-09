@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { AppNavigation } from '@/shared/ui';
 import { useAuth } from '@/modules/auth-access';
-import { projectLinksRepository } from '@/modules/project-links/infrastructure/project-links.repository';
+import { projectLinksRepository } from '@/modules/project-links';
 import type { Project } from '@/modules/project-links';
 import { timelineRepository } from '../../infrastructure/timeline.repository';
 import type {
