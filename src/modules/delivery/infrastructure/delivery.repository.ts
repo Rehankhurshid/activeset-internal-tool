@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { requestProjectSheetWrite } from '@/lib/project-sheet-trigger';
+import { logDeliveryUpdate } from '@/lib/delivery-update-log';
 import { fetchAuthed } from '@/lib/api-client';
 import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
@@ -289,14 +290,19 @@ export const deliveryRepository = {
     pageId: string,
     disciplineId: string,
     status: PageWorkStatus,
+    userEmail?: string,
+    pageLabel?: string,
   ): Promise<void> {
     try {
       await updateDoc(pageRef(projectId, pageId), {
         [`work.${disciplineId}`]: status,
         updatedAt: nowIso(),
       });
-      // The project sheet's Pages tab shows this status.
       requestProjectSheetWrite(projectId);
+      if (userEmail) {
+        const summary = pageLabel ?? `${disciplineId} → ${status}`;
+        logDeliveryUpdate(projectId, { by: userEmail, summary, kind: 'page' }).catch(() => {});
+      }
     } catch (error) {
       logError(error, 'setPageWork');
       throw new DatabaseError('Failed to update the status');
@@ -499,6 +505,19 @@ export const deliveryRepository = {
    * the project's services say. The project sheet is rewritten, since its Pages
    * tab words the client's columns differently.
    */
+
+  async setDevOwnerEmail(projectId: string, email: string): Promise<void> {
+    try {
+      await updateDoc(doc(db, PROJECTS, projectId), {
+        'delivery.devOwnerEmail': email.toLowerCase().trim(),
+        updatedAt: Timestamp.now(),
+      });
+    } catch (error) {
+      logError(error, 'setDevOwnerEmail');
+      throw new DatabaseError('Failed to save dev owner');
+    }
+  },
+
   async setDisciplineOwner(projectId: string, disciplineId: string, owner: PageWorkOwner | null): Promise<void> {
     try {
       await updateDoc(doc(db, PROJECTS, projectId), {

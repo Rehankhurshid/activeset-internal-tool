@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ChecklistItem, ChecklistSection, ProjectChecklist } from '@/types';
+import type { ChecklistItem, ChecklistSection, Project, ProjectChecklist } from '@/types';
 import { AGENCY_CLOSE, AGENCY_START } from '@/lib/sop-templates';
 import { clientKeyLinks, clientPageWord, developmentWord, managedSheetContent, pageWord, seoToFix, sheetBoards, sheetPlan } from './project-sheet.content';
 
@@ -34,7 +34,7 @@ const designAndBuild = checklist([
   section('Step 8: Pre-Launch', [item('Connect the domain', { dueDate: '2026-10-20' })], { clientStage: 'Launch', clientStep: 'Go live' }),
 ]);
 
-const project = {
+const project: Pick<Project, 'name' | 'client' | 'services' | 'reviewOwnerEmail' | 'links'> & Partial<Project> = {
   name: 'Website redesign',
   client: 'DreamTeam',
   services: ['development', 'web_design'] as ('development' | 'web_design')[],

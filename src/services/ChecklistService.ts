@@ -25,6 +25,7 @@ import {
 } from '@/types';
 import { COLLECTIONS } from '@/lib/constants';
 import { requestProjectSheetWrite } from '@/lib/project-sheet-trigger';
+import { logDeliveryUpdate } from '@/lib/delivery-update-log';
 import { linksFromValues } from '@/lib/checklist-links';
 import { projectsService } from '@/services/database';
 import { getTemplateById, getDefaultTemplate, SOP_TEMPLATES } from '@/lib/sop-templates';
@@ -237,6 +238,17 @@ export const checklistService = {
                 }).catch(() => {});
                 // And the project's sheet, which shows the same step.
                 requestProjectSheetWrite(checklist.projectId);
+            }
+            if (userEmail && checklist.projectId) {
+                const section = sections.find((s) => s.id === sectionId);
+                const item = section?.items.find((i) => i.id === itemId);
+                if (item) {
+                    logDeliveryUpdate(checklist.projectId, {
+                        by: userEmail,
+                        summary: `${section?.title ?? 'Checklist'} · ${item.title} → ${status}`,
+                        kind: 'checklist',
+                    }).catch(() => {});
+                }
             }
         } catch (error) {
             logError(error, 'updateItemStatus');

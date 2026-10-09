@@ -1315,6 +1315,12 @@ export interface ProjectDeliveryState {
   trackerSheetId?: string;
   trackerSheetUrl?: string;
   trackerSyncedAt?: string;
+  /** Who gets the every-two-days dev delivery nudge for this project. */
+  devOwnerEmail?: string;
+  /** Last time the dev nudge cron pinged them. */
+  lastDevNudgeAt?: string;
+  /** Last checklist or page update logged for the dev owner. */
+  lastDevActivityAt?: string;
 }
 
 // --- CLIENT PORTAL / CLIENT-FACING TYPES ---

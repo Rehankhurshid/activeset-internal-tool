@@ -51,6 +51,14 @@
     {
       "path": "/api/cron/fold-sync",
       "schedule": "30 4,12 * * *"
+    },
+    {
+      "path": "/api/cron/dev-delivery-nudge",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/delivery-evening-digest",
+      "schedule": "30 13 * * *"
     }
   ]
 }

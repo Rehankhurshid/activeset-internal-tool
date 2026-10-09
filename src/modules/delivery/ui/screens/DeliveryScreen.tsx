@@ -141,9 +141,19 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
   );
 
   const handleSetWork = useCallback(
-    (pageId: string, disciplineId: string, status: PageWorkStatus) =>
-      deliveryRepository.setPageWork(project.id, pageId, disciplineId, status),
-    [project.id],
+    (pageId: string, disciplineId: string, status: PageWorkStatus) => {
+      const page = pages.find((p) => p.id === pageId);
+      const label = page ? `${page.path} · ${disciplineId} → ${status}` : undefined;
+      return deliveryRepository.setPageWork(
+        project.id,
+        pageId,
+        disciplineId,
+        status,
+        userEmail,
+        label,
+      );
+    },
+    [project.id, pages, userEmail],
   );
 
   const handleUpdatePage = useCallback(

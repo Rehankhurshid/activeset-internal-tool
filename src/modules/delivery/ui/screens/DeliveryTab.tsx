@@ -20,6 +20,8 @@ import { AddAgencyBasics } from '../components/AddAgencyBasics';
 import { StageRail } from '../components/StageRail';
 import { TemplateImprovements } from '../components/TemplateImprovements';
 import { StageScreen } from './StageScreen';
+import { DeliveryEvidenceCard } from '../components/DeliveryEvidenceCard';
+import { DevOwnerPicker } from '../components/DevOwnerPicker';
 
 interface DeliveryTabProps {
   project: Project;
@@ -105,6 +107,8 @@ export function DeliveryTab({ project, userEmail }: DeliveryTabProps) {
 
   return (
     <div className="space-y-4">
+      <DeliveryEvidenceCard projectId={project.id} projectName={project.name} />
+      <DevOwnerPicker project={project} userEmail={userEmail} />
       <div className="space-y-2">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           {progress.total > 0 ? (

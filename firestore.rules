@@ -155,6 +155,10 @@ service cloud.firestore {
         allow read, write: if isActiveSetUser();
       }
 
+      match /delivery_updates/{updateId} {
+        allow read, write: if isActiveSetUser();
+      }
+
     }
 
     // ──────────────────────────────────────────────────────────────────────

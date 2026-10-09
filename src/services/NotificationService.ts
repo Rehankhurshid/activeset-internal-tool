@@ -9,6 +9,9 @@ import {
 } from '@/modules/delivery/domain/delivery.nudge';
 import { CreateSiteAlertInput, ALERT_TYPE_LABELS } from '@/types/alerts';
 import { DailyHealthReport, ProjectHealthSummary } from '@/types/health-report';
+import type { DevNudgeCandidate } from '@/lib/delivery-dev-nudge';
+import type { PendingDeliveryUpdate } from '@/lib/delivery-evening-digest';
+import { lookupUserIdByEmail, mention, postMessage } from '@/lib/slack';
 
 interface EmailConfig {
   gmailUser?: string;
@@ -1281,5 +1284,88 @@ export async function sendIncomingPaymentsEmail(input: {
     html,
   });
   console.log(`[notifications] Incoming payments email sent: ${input.rows.length} rows`);
+  return 'sent';
+}
+
+
+export async function sendDevDeliveryNudgeEmail(row: DevNudgeCandidate): Promise<'sent' | 'skipped'> {
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword) return 'skipped';
+
+  const stale =
+    row.daysSinceActivity === null
+      ? 'no logged update yet'
+      : `${row.daysSinceActivity} day${row.daysSinceActivity === 1 ? '' : 's'} since the last delivery update`;
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:8px;">
+      <div style="font-size:18px;font-weight:600;margin-bottom:8px;">Delivery check-in · ${escapeHtml(row.projectName)}</div>
+      <div style="font-size:14px;color:#94a3b8;margin-bottom:16px;">${escapeHtml(stale)}. Tick the checklist or page grid so the client portal and sheet stay current.</div>
+      <a href="${row.deliveryUrl}" style="display:inline-block;background:#1e293b;color:#e2e8f0;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">Open Delivery tab</a>
+    </div>`;
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
+  });
+  await transporter.sendMail({
+    from: `"ActiveSet Delivery" <${email.gmailUser}>`,
+    to: row.devEmail,
+    subject: `Delivery update due · ${row.projectName}`,
+    html,
+  });
+  return 'sent';
+}
+
+export async function sendDevDeliveryNudgeSlack(row: DevNudgeCandidate): Promise<'sent' | 'skipped'> {
+  if (!process.env.SLACK_BOT_TOKEN) return 'skipped';
+  const userId = await lookupUserIdByEmail(row.devEmail);
+  const mentionStr = mention(userId, row.devEmail.split('@')[0]);
+  const text = `${mentionStr} Delivery on *${row.projectName}* has not been updated in 2+ days. <${row.deliveryUrl}|Open Delivery tab>`;
+  if (!userId) return 'skipped';
+  try {
+    await postMessage({ channel: userId, text });
+    return 'sent';
+  } catch {
+    return 'skipped';
+  }
+}
+
+export async function sendDeliveryEveningDigestEmail(
+  updates: PendingDeliveryUpdate[],
+  baseUrl: string,
+  to: string,
+): Promise<'sent' | 'skipped'> {
+  const email = getEmailConfig();
+  if (!email.gmailUser || !email.gmailAppPassword || !to || updates.length === 0) return 'skipped';
+
+  const rows = updates
+    .map(
+      (u) => `<tr>
+        <td style="padding:8px 0;border-bottom:1px solid #1e293b;font-size:13px;color:#e2e8f0;">${escapeHtml(u.projectName)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #1e293b;font-size:13px;color:#94a3b8;">${escapeHtml(u.by)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #1e293b;font-size:13px;color:#e2e8f0;">${escapeHtml(u.summary)}</td>
+      </tr>`,
+    )
+    .join('');
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:640px;margin:0 auto;background:#0f172a;color:#e2e8f0;padding:24px;border-radius:8px;">
+      <div style="font-size:18px;font-weight:600;margin-bottom:8px;">Delivery updates today</div>
+      <div style="font-size:14px;color:#94a3b8;margin-bottom:16px;">${updates.length} update${updates.length === 1 ? '' : 's'} from the team.</div>
+      <table style="width:100%;border-collapse:collapse;">${rows}</table>
+      <div style="margin-top:20px;"><a href="${baseUrl}/modules/project-links" style="color:#93c5fd;">Open projects</a></div>
+    </div>`;
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: email.gmailUser, pass: email.gmailAppPassword },
+  });
+  await transporter.sendMail({
+    from: `"ActiveSet Delivery" <${email.gmailUser}>`,
+    to,
+    subject: `Delivery updates · ${updates.length} change${updates.length === 1 ? '' : 's'} today`,
+    html,
+  });
   return 'sent';
 }
