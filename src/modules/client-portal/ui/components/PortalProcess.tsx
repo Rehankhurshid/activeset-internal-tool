@@ -1,4 +1,4 @@
-import { Check, ExternalLink, Video } from 'lucide-react';
+import { Check, ExternalLink, PlayCircle, Video } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PortalMeetingView, PortalStageView, PortalStepView } from '../../domain/client-portal.types';
 import { formatDay, formatStageDates } from './portal-format';
@@ -66,17 +66,23 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
   const withSteps = stages.filter((s) => (s.steps?.length ?? 0) > 0);
   if (withSteps.length === 0) return null;
 
-  // The step the project is on: the first one not done in the stage it is in.
-  // A step left open in an earlier stage stays open, but is not where we are.
-  const currentStage = withSteps.find((s) => s.state === 'current');
-  const nowId = (currentStage?.steps ?? []).find((step) => step.state !== 'done')?.id;
+  // Where the work is: every step under way in a live stage (design and
+  // development can both be live at once), or, in a live stage with nothing
+  // under way yet, its first step not done.
+  const nowIds = new Set<string>();
+  for (const stage of withSteps.filter((s) => s.state === 'current')) {
+    const steps = stage.steps ?? [];
+    const underWay = steps.filter((step) => step.state === 'current');
+    const next = steps.find((step) => step.state !== 'done');
+    for (const step of underWay.length ? underWay : next ? [next] : []) nowIds.add(step.id);
+  }
   let number = 0;
 
   return (
     <section aria-labelledby="portal-process-heading" className="space-y-5">
       <div className="space-y-1">
         <PortalSectionHeading id="portal-process-heading">The process</PortalSectionHeading>
-        <p className="text-sm text-muted-foreground">Every step from kickoff to launch, in order.</p>
+        <p className="text-sm text-muted-foreground">Every step from kickoff to launch. Some run side by side.</p>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -111,7 +117,7 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
               <ol>
                 {steps.map((step) => {
                   number += 1;
-                  const isNow = step.id === nowId;
+                  const isNow = nowIds.has(step.id);
                   return (
                     <li
                       key={step.id}
@@ -151,17 +157,31 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
                         {step.note && <p className="text-xs text-muted-foreground">{step.note}</p>}
                         {step.url && (
                           <div className="flex flex-wrap gap-x-4 gap-y-1">
-                            {(step.links ?? [{ label: step.urlLabel ?? '', url: step.url }]).map((link) => (
-                              <a
-                                key={link.url}
-                                href={link.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
-                              >
-                                {link.label || (step.waiting ? 'Open to review' : 'Open')}
-                                <ExternalLink aria-hidden="true" className="h-3 w-3" />
-                              </a>
+                            {(step.links ?? [{ label: step.urlLabel ?? '', url: step.url }]).map((link: NonNullable<typeof step.links>[number]) => (
+                              <span key={link.url} className="inline-flex items-center gap-2">
+                                <a
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
+                                >
+                                  {link.label || (step.waiting ? 'Open to review' : 'Open')}
+                                  <ExternalLink aria-hidden="true" className="h-3 w-3" />
+                                </a>
+                                {link.help && (
+                                <a
+                                  href={link.help.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={link.help.label}
+                                  className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                                >
+                                  <PlayCircle aria-hidden="true" className="h-3 w-3" />
+                                  Watch how
+                                  <span className="sr-only">: {link.help.label}</span>
+                                </a>
+                            )}
+                              </span>
                             ))}
                           </div>
                         )}

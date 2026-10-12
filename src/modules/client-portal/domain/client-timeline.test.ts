@@ -74,6 +74,21 @@ describe('resolveTimelinePlan', () => {
     assert.equal(resolveTimelinePlan(leftovers).currentIndex, 0);
   });
 
+  it('keeps an earlier phase in progress while it still has work under way, beside the furthest', () => {
+    const step = (id: string, state: 'done' | 'current' | 'upcoming') => ({ id, title: id, state });
+    const stage = (id: string) => ({ id, title: id, deliverables: [], files: [] });
+    // The client keeps designing pages while we build the ones already designed.
+    const sideBySide = [
+      { stage: stage('kickoff'), steps: [step('k1', 'done'), step('k2', 'upcoming')] },
+      { stage: stage('design'), steps: [step('d1', 'done'), step('d2', 'current')] },
+      { stage: stage('dev'), steps: [step('v1', 'current'), step('v2', 'upcoming')] },
+      { stage: stage('launch'), steps: [step('l1', 'upcoming')] },
+    ];
+    const resolved = resolveTimelinePlan(sideBySide);
+    assert.equal(resolved.currentIndex, 2, 'the project is still where it has got furthest');
+    assert.deepEqual(resolved.stages.map((s) => s.state), ['done', 'current', 'current', 'upcoming']);
+  });
+
   it('honours a pin, the complete marker and Delivered', () => {
     const sources = timelineStages(timeline(), undefined);
     assert.equal(resolveTimelinePlan(sources, { currentStageId: 'b' }).currentIndex, 1);

@@ -738,6 +738,14 @@ export interface ChecklistItemField {
    * (the moodboard, the sitemap, the staging site). Only for `url` fields.
    */
   forClient?: boolean;
+  /**
+   * This link is the how-to for the link in field `helpFor` (the MarkUp video
+   * for the MarkUp board, Rehan, 2026-10-13: "as a help along with the MarkUp
+   * link … not as a main thing"). The client sees it as a small "Watch how"
+   * on that link, never as a link of its own, and not at all while that field
+   * is empty.
+   */
+  helpFor?: string;
 }
 
 /**

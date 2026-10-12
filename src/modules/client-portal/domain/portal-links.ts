@@ -4,6 +4,8 @@ import type { ClientPortalView, PortalFileView } from './client-portal.types';
 export interface PortalLinkView extends PortalFileView {
   /** The step it belongs to ("Moodboarding"), or nothing for a project-wide link. */
   note?: string;
+  /** Its how-to (the MarkUp video), shown small beside it rather than as a link of its own. */
+  help?: { label: string; url: string };
 }
 
 /**
@@ -27,6 +29,7 @@ export function portalLinks(view: Pick<ClientPortalView, 'websiteUrl' | 'stages'
           title,
           url: link.url,
           ...(title !== step.title ? { note: step.title } : {}),
+          ...('help' in link && link.help ? { help: link.help } : {}),
         });
       });
     }
@@ -38,6 +41,8 @@ export function portalLinks(view: Pick<ClientPortalView, 'websiteUrl' | 'stages'
     .sort((a, b) => b.date.localeCompare(a.date));
   for (const call of calls) links.push({ id: `call-${call.id}`, title: call.title, url: call.recordingUrl!, note: `Call recording · ${new Date(call.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}` });
   links.push(...view.files);
+  // Once each, counting "site.webflow.io" and "site.webflow.io/" as the same place.
   const seen = new Set<string>();
-  return links.filter((l) => (seen.has(l.url) ? false : (seen.add(l.url), true)));
+  const key = (url: string) => url.replace(/\/+$/, '');
+  return links.filter((l) => (seen.has(key(l.url)) ? false : (seen.add(key(l.url)), true)));
 }

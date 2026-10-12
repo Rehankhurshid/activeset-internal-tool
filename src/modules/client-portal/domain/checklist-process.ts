@@ -9,7 +9,7 @@ import type {
 } from '@/types';
 import { HANDOVER_STAGE, KICKOFF_STAGE, LAUNCH_STAGE, SERVICE_LABELS, SERVICE_ORDER, isServiceId } from '@/lib/engagements';
 import { isIsoDay, type PlanStageState } from './client-plan';
-import type { TimelineStageSource, TimelineStep } from './client-timeline';
+import type { StepLink, TimelineStageSource, TimelineStep } from './client-timeline';
 
 /**
  * The client's process, read off the checklist the team ticks.
@@ -119,23 +119,38 @@ interface Bucket {
   title: string;
   stage: string;
   who?: ClientStepWho;
-  items: { status?: ChecklistItem['status']; doneOn?: string; dueDate?: string; links: { label: string; url: string }[] }[];
+  items: { status?: ChecklistItem['status']; doneOn?: string; dueDate?: string; links: StepLink[] }[];
 }
 
 /**
  * The links recorded on an item that are the client's to open: `url` fields
  * marked `forClient`, on the item or, for a checklist made before the mark, on
- * the SOP item it came from.
+ * the SOP item it came from. A field that is the how-to for another
+ * (`helpFor`) rides on that link and goes nowhere without it.
  */
 function clientLinks(
   item: Partial<Pick<ChecklistItem, 'fields' | 'values'>>,
   source: Partial<Pick<ChecklistItem, 'fields'>> | undefined,
-): { label: string; url: string }[] {
+): StepLink[] {
   const marked = new Set((source?.fields ?? []).filter((f) => f.forClient).map((f) => f.id));
-  return (item.fields ?? [])
-    .filter((f) => f.type === 'url' && (f.forClient || marked.has(f.id)))
-    .map((f) => ({ label: f.label, url: item.values?.[f.id]?.trim() ?? '' }))
-    .filter((l) => /^https?:\/\/\S+$/i.test(l.url));
+  const helpOf = new Map((source?.fields ?? []).filter((f) => f.helpFor).map((f) => [f.id, f.helpFor!]));
+  const valid = (url: string) => /^https?:\/\/\S+$/i.test(url);
+  const fields = (item.fields ?? []).filter((f) => f.type === 'url' && (f.forClient || marked.has(f.id)));
+  const urlOf = (id: string) => item.values?.[id]?.trim() ?? '';
+  const helps = new Map<string, { label: string; url: string }>();
+  for (const f of fields) {
+    const target = f.helpFor ?? helpOf.get(f.id);
+    if (target && valid(urlOf(f.id))) helps.set(target, { label: f.label, url: urlOf(f.id) });
+  }
+  return fields
+    .filter((f) => !(f.helpFor ?? helpOf.get(f.id)))
+    .map((f) => {
+      const link: StepLink = { label: f.label, url: urlOf(f.id) };
+      const help = helps.get(f.id);
+      if (help) link.help = help;
+      return link;
+    })
+    .filter((l) => valid(l.url));
 }
 
 /**
@@ -186,7 +201,7 @@ function stepFrom(bucket: Bucket): TimelineStep | null {
     // The page shows them all, that one first: the staging site, then how to comment on it.
     const seen = new Set([link.url]);
     const rest = bucket.items.flatMap((i) => i.links).filter((l) => (seen.has(l.url) ? false : (seen.add(l.url), true)));
-    if (rest.length > 0) step.links = [link, ...rest];
+    if (rest.length > 0 || link.help) step.links = [link, ...rest];
   }
   const owner = ownerOf(bucket.who);
   if (owner) step.owner = owner;

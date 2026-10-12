@@ -29,6 +29,13 @@ import {
  */
 
 /** A milestone as the client sees it: its title, where it stands and its dates. */
+/** One of a step's links, with the how-to that goes with it, if any. Both always http(s). */
+export interface StepLink {
+  label: string;
+  url: string;
+  help?: { label: string; url: string };
+}
+
 export interface TimelineStep {
   id: string;
   title: string;
@@ -51,7 +58,7 @@ export interface TimelineStep {
    * staging site, the MarkUp board, a how-to video), `url` among them. Always
    * http(s). Absent for a sheet step, which has one Link column.
    */
-  links?: { label: string; url: string }[];
+  links?: StepLink[];
   /** Only from the project sheet's "Note for client" column. */
   note?: string;
 }
@@ -159,6 +166,12 @@ export interface ResolveTimelineOptions {
  * one housekeeping item nobody ticked in Kickoff must not keep a client
  * looking at "Kickoff" while their moodboard is done (DreamTeam, 2026-10-01).
  * Delivered and the complete marker win; a pin only where one is passed.
+ *
+ * That phase is not the only live one. Design and development often run side
+ * by side: the client (or our designers) keep designing pages while we build
+ * the ones already designed (Rehan, 2026-10-13). So an earlier phase with a
+ * step still under way stays in progress beside it, rather than reading as
+ * done. One left untouched behind it still reads as done, as before.
  */
 export function resolveTimelinePlan(
   sources: TimelineStageSource[],
@@ -204,8 +217,9 @@ export function resolveTimelinePlan(
     source,
     stages: sources.map(({ stage }, index) => {
       const t = tracking[index];
+      const alongside = index < currentIndex && sources[index].steps.some((s) => s.state === 'current');
       const state: PlanStageState =
-        currentIndex < 0 || index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming';
+        currentIndex < 0 ? 'done' : index === currentIndex || alongside ? 'current' : index < currentIndex ? 'done' : 'upcoming';
       const resolved: ResolvedStage = { stage, state, tracking: t };
       if (t.total > 0) resolved.percent = Math.floor((t.done / t.total) * 100);
       return resolved;

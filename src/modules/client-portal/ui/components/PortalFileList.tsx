@@ -1,4 +1,4 @@
-import { ArrowUpRight, Figma, FileText, FolderOpen, Globe, Link2, Video, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, Figma, FileText, FolderOpen, Globe, Link2, PlayCircle, Video, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PortalFileView } from '../../domain/client-portal.types';
 import { hostnameOf } from './portal-format';
@@ -15,7 +15,7 @@ function iconFor(url: string): LucideIcon {
 }
 
 interface PortalFileListProps {
-  files: (PortalFileView & { icon?: LucideIcon; note?: string })[];
+  files: (PortalFileView & { icon?: LucideIcon; note?: string; help?: { label: string; url: string } })[];
   /** Tighter rows for a list inside a card rather than a section of its own. */
   compact?: boolean;
   className?: string;
@@ -36,34 +36,57 @@ export function PortalFileList({ files, compact = false, className }: PortalFile
       {files.map((file) => {
         const Icon = file.icon ?? iconFor(file.url);
         return (
-          <li key={file.id}>
-            <a
-              href={file.url}
-              target="_blank"
-              rel="noopener noreferrer"
+          // The whole row opens the link (its anchor stretches over the row), so a
+          // how-to can sit on it as a second, separate link without nesting anchors.
+          <li
+            key={file.id}
+            className={cn(
+              'group relative flex items-center gap-3 transition-colors hover:bg-accent has-[a:focus-visible]:bg-accent',
+              compact ? 'px-3 py-2.5' : 'px-4 py-3.5 sm:px-5',
+            )}
+          >
+            <span
               className={cn(
-                'group flex items-center gap-3 transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                compact ? 'px-3 py-2.5' : 'px-4 py-3.5 sm:px-5',
+                'flex shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground',
+                compact ? 'h-7 w-7' : 'h-9 w-9',
               )}
             >
-              <span
-                className={cn(
-                  'flex shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground',
-                  compact ? 'h-7 w-7' : 'h-9 w-9',
-                )}
+              <Icon aria-hidden="true" className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <a
+                href={file.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block truncate text-sm font-medium text-foreground after:absolute after:inset-0 focus-visible:outline-none"
               >
-                <Icon aria-hidden="true" className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+                {file.title}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="truncate">{file.note ?? hostnameOf(file.url)}</span>
+                {file.help && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <a
+                      href={file.help.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={file.help.label}
+                      className="relative z-10 inline-flex shrink-0 items-center gap-1 rounded font-medium text-foreground underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none"
+                    >
+                      <PlayCircle aria-hidden="true" className="h-3 w-3" />
+                      Watch how
+                      <span className="sr-only">: {file.help.label} (opens in a new tab)</span>
+                    </a>
+                  </>
+                )}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-foreground">{file.title}</span>
-                <span className="block truncate text-xs text-muted-foreground">{file.note ?? hostnameOf(file.url)}</span>
-              </span>
-              <ArrowUpRight
-                aria-hidden="true"
-                className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
-              />
-              <span className="sr-only">(opens in a new tab)</span>
-            </a>
+            </span>
+            <ArrowUpRight
+              aria-hidden="true"
+              className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+            />
           </li>
         );
       })}

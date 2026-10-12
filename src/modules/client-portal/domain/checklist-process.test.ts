@@ -421,6 +421,31 @@ describe('links on steps', () => {
     assert.deepEqual(step.links?.map((l) => l.label), ['Staging site', 'MarkUp board', 'How to use MarkUp']);
   });
 
+  it('puts a how-to on the link it explains, never as a link of its own', () => {
+    const review = (values: Record<string, string>) => checklist([
+      section('Client Review', [
+        item('Share the staging and MarkUp links for feedback', {
+          status: 'in_progress',
+          clientStep: 'Review on staging',
+          fields: [
+            { id: 'staging', label: 'Staging site', type: 'url', forClient: true },
+            { id: 'markup', label: 'MarkUp board', type: 'url', forClient: true },
+            { id: 'guide', label: 'How to use MarkUp (video)', type: 'url', forClient: true, helpFor: 'markup' },
+          ],
+          values,
+        }),
+      ], { clientStage: 'Web Development' }),
+    ]);
+    const [step] = checklistProcess([review({ staging: 'https://site.webflow.io/', markup: 'https://app.markup.io/x', guide: 'https://www.youtube.com/watch?v=1' })])[0].steps;
+    assert.deepEqual(step.links, [
+      { label: 'Staging site', url: 'https://site.webflow.io/' },
+      { label: 'MarkUp board', url: 'https://app.markup.io/x', help: { label: 'How to use MarkUp (video)', url: 'https://www.youtube.com/watch?v=1' } },
+    ]);
+    // No MarkUp board yet: the video has nothing to explain, so it stays off the page.
+    const [alone] = checklistProcess([review({ guide: 'https://www.youtube.com/watch?v=1' })])[0].steps;
+    assert.equal(alone.url, undefined);
+  });
+
   it('leaves links off a step with only one', () => {
     const [stage] = checklistProcess([moodboards([{ id: 'moodboard', label: 'Moodboard', type: 'url', forClient: true }], { moodboard: 'https://figma.com/x' })]);
     assert.equal(stage.steps[0].links, undefined);

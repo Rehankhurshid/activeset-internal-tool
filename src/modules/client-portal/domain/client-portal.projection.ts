@@ -119,8 +119,11 @@ function toStep(step: TimelineStep): PortalStepView {
   if (step.waiting) view.waiting = true;
   if (step.url) view.url = step.url;
   if (step.url && step.urlLabel) view.urlLabel = step.urlLabel;
-  const links = (step.links ?? []).filter((l) => /^https?:\/\/\S+$/i.test(l.url)).map((l) => ({ label: l.label, url: l.url }));
-  if (links.length > 1) view.links = links;
+  const valid = (url: string) => /^https?:\/\/\S+$/i.test(url);
+  const links = (step.links ?? [])
+    .filter((l) => valid(l.url))
+    .map((l) => (l.help && valid(l.help.url) ? { label: l.label, url: l.url, help: { label: l.help.label, url: l.help.url } } : { label: l.label, url: l.url }));
+  if (links.length > 1 || links.some((l) => l.help)) view.links = links;
   if (step.note) view.note = step.note;
   return view;
 }
