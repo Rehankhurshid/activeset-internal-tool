@@ -150,15 +150,20 @@ export function PortalProcess({ stages, now }: PortalProcessProps) {
                         </p>
                         {step.note && <p className="text-xs text-muted-foreground">{step.note}</p>}
                         {step.url && (
-                          <a
-                            href={step.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
-                          >
-                            {step.urlLabel ?? (step.waiting ? 'Open to review' : 'Open')}
-                            <ExternalLink aria-hidden="true" className="h-3 w-3" />
-                          </a>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1">
+                            {(step.links ?? [{ label: step.urlLabel ?? '', url: step.url }]).map((link) => (
+                              <a
+                                key={link.url}
+                                href={link.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
+                              >
+                                {link.label || (step.waiting ? 'Open to review' : 'Open')}
+                                <ExternalLink aria-hidden="true" className="h-3 w-3" />
+                              </a>
+                            ))}
+                          </div>
                         )}
                         {(onStep.get(step.id) ?? []).map((meeting) => (
                           <MeetingLine key={meeting.id} meeting={meeting} now={now} />

@@ -464,7 +464,14 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 emoji: '\u{1F91D}',
                 role: 'client_review',
                 items: makeItems([
-                    { title: 'Share the staging and MarkUp links for feedback', emoji: '\u{1F517}', clientStep: 'Review on staging', clientWho: 'client', fields: [{ id: 'staging', label: 'Staging site', type: 'url', projectLink: { title: 'Staging', matches: ['Staging Website URL', 'Staging link'] }, forClient: true }] },
+                    {
+                        title: 'Share the staging and MarkUp links for feedback', emoji: '\u{1F517}', clientStep: 'Review on staging', clientWho: 'client',
+                        fields: [
+                            { id: 'staging', label: 'Staging site', type: 'url', projectLink: { title: 'Staging', matches: ['Staging Website URL', 'Staging link'] }, forClient: true },
+                            { id: 'markup', label: 'Leave feedback in MarkUp', type: 'url', placeholder: 'MarkUp invite link', projectLink: { title: 'MarkUp', matches: ['Feedback URL', 'MarkUp folder', 'Feedback'] }, forClient: true },
+                            { id: 'markup_guide', label: 'How to use MarkUp (video)', type: 'url', placeholder: 'https://www.youtube.com/watch?v=ns1GZ7EDHpk', forClient: true },
+                        ],
+                    },
                     { title: 'Work through the MarkUp comments', emoji: '\u{1F4AC}' },
                 ]),
             },

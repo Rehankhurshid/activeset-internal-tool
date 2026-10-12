@@ -54,6 +54,8 @@ export interface PortalStepView {
   url?: string;
   /** The link's name ("Moodboard"), when known; otherwise the page says "Open". */
   urlLabel?: string;
+  /** All of the step's links when there is more than one, `url` first. Always http(s). */
+  links?: { label: string; url: string }[];
   /** One line the team wrote for the client ("Note for client" column). */
   note?: string;
 }

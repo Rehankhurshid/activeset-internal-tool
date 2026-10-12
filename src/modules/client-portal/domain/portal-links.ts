@@ -19,8 +19,16 @@ export function portalLinks(view: Pick<ClientPortalView, 'websiteUrl' | 'stages'
   for (const stage of view.stages) {
     for (const step of stage.steps ?? []) {
       if (!step.url) continue;
-      const title = step.urlLabel || step.title;
-      links.push({ id: `step-${step.id}`, title, url: step.url, ...(title !== step.title ? { note: step.title } : {}) });
+      const stepLinks = step.links ?? [{ label: step.urlLabel ?? '', url: step.url }];
+      stepLinks.forEach((link, index) => {
+        const title = link.label || step.title;
+        links.push({
+          id: index === 0 ? `step-${step.id}` : `step-${step.id}-${index}`,
+          title,
+          url: link.url,
+          ...(title !== step.title ? { note: step.title } : {}),
+        });
+      });
     }
   }
   // The calls the team shared, newest first: what was said is as much a reference as the files.

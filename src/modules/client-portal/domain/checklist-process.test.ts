@@ -399,6 +399,33 @@ describe('links on steps', () => {
     assert.equal(stage.steps[0].url, undefined);
   });
 
+  it('shows every client link on the step, the first one on the latest item as its main link', () => {
+    const review = checklist([
+      section('Client Review', [
+        item('Share the staging and MarkUp links for feedback', {
+          status: 'in_progress',
+          clientStep: 'Review on staging',
+          clientWho: 'client',
+          fields: [
+            { id: 'staging', label: 'Staging site', type: 'url', forClient: true },
+            { id: 'markup', label: 'MarkUp board', type: 'url', forClient: true },
+            { id: 'guide', label: 'How to use MarkUp', type: 'url', forClient: true },
+          ],
+          values: { staging: 'https://site.webflow.io/', markup: 'https://app.markup.io/x', guide: 'https://www.youtube.com/watch?v=1' },
+        }),
+      ], { clientStage: 'Web Development' }),
+    ]);
+    const [step] = checklistProcess([review])[0].steps;
+    assert.equal(step.url, 'https://site.webflow.io/');
+    assert.equal(step.urlLabel, 'Staging site');
+    assert.deepEqual(step.links?.map((l) => l.label), ['Staging site', 'MarkUp board', 'How to use MarkUp']);
+  });
+
+  it('leaves links off a step with only one', () => {
+    const [stage] = checklistProcess([moodboards([{ id: 'moodboard', label: 'Moodboard', type: 'url', forClient: true }], { moodboard: 'https://figma.com/x' })]);
+    assert.equal(stage.steps[0].links, undefined);
+  });
+
   it('borrows the mark from the SOP for a checklist made before it existed', () => {
     const sop: Pick<SOPTemplate, 'id' | 'service' | 'sections'> = {
       id: 'sop_brand', service: 'web_design',

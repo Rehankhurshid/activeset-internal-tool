@@ -177,11 +177,16 @@ function stepFrom(bucket: Bucket): TimelineStep | null {
       .pop();
     if (due) step.endDate = due;
   }
-  // The step's link: the latest one recorded on its items (the later item is the later work).
-  const link = bucket.items.flatMap((i) => i.links).pop();
+  // The step's link: the first one on the latest item that has any (the later
+  // item is the later work); the sheet's single Link column shows this one.
+  const link = [...bucket.items].reverse().find((i) => i.links.length > 0)?.links[0];
   if (link) {
     step.url = link.url;
     step.urlLabel = link.label;
+    // The page shows them all, that one first: the staging site, then how to comment on it.
+    const seen = new Set([link.url]);
+    const rest = bucket.items.flatMap((i) => i.links).filter((l) => (seen.has(l.url) ? false : (seen.add(l.url), true)));
+    if (rest.length > 0) step.links = [link, ...rest];
   }
   const owner = ownerOf(bucket.who);
   if (owner) step.owner = owner;

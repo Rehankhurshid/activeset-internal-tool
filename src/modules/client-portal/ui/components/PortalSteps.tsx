@@ -43,11 +43,12 @@ export function PortalSteps({ steps, now }: { steps: PortalStepView[]; now: Date
                 <span className="sr-only">, {STATE_WORD[step.state]}</span>
               </span>
               {step.note && <span className="mt-0.5 block text-xs text-muted-foreground">{step.note}</span>}
-              {step.url && (
-                <a href={step.url} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-block text-xs font-medium text-foreground underline-offset-2 hover:underline">
-                  Open
-                </a>
-              )}
+              {step.url &&
+                (step.links ?? [{ label: '', url: step.url }]).map((link) => (
+                  <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer" className="mr-3 mt-0.5 inline-block text-xs font-medium text-foreground underline-offset-2 hover:underline">
+                    {link.label || 'Open'}
+                  </a>
+                ))}
             </span>
             <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">
               {dates}

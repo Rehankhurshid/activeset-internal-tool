@@ -46,6 +46,12 @@ export interface TimelineStep {
   url?: string;
   /** What `url` is ("Moodboard", "Sitemap"), when the checklist names it. */
   urlLabel?: string;
+  /**
+   * Every link for this step when a checklist records more than one (the
+   * staging site, the MarkUp board, a how-to video), `url` among them. Always
+   * http(s). Absent for a sheet step, which has one Link column.
+   */
+  links?: { label: string; url: string }[];
   /** Only from the project sheet's "Note for client" column. */
   note?: string;
 }
