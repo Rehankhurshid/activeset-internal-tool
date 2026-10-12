@@ -144,6 +144,10 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
     (pageId: string, disciplineId: string, status: PageWorkStatus) => {
       const page = pages.find((p) => p.id === pageId);
       const label = page ? `${page.path} · ${disciplineId} → ${status}` : undefined;
+      // Reopening one of our own columns is a rebuild (a new design revision):
+      // the client's "Looks good" was for the build that was there, so it goes.
+      const reopensBuild =
+        Boolean(page?.clientReview) && owners[disciplineId] !== 'client' && !['completed', 'not_required'].includes(status);
       return deliveryRepository.setPageWork(
         project.id,
         pageId,
@@ -151,9 +155,10 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
         status,
         userEmail,
         label,
+        reopensBuild,
       );
     },
-    [project.id, pages, userEmail],
+    [project.id, pages, userEmail, owners],
   );
 
   const handleUpdatePage = useCallback(

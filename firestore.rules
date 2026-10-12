@@ -149,7 +149,7 @@ service cloud.firestore {
       // ────────────────────────────────────────────────────────────────────
       // Delivery: one document per page being built. Team-only, like the rest of
       // the project's working data. Clients never read this directly — page
-      // progress reaches them as a count through the portal projection, and in
+      // progress reaches them through the portal projection ("Your pages"), and in
       // full through the generated tracker sheet.
       match /pages/{pageId} {
         allow read, write: if isActiveSetUser();

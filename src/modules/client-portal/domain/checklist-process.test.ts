@@ -446,6 +446,17 @@ describe('links on steps', () => {
     assert.equal(alone.url, undefined);
   });
 
+  it('marks the step of an item that is the client’s review of the pages', () => {
+    const review = checklist([
+      section('Client Review', [
+        item('Share the staging link', { clientStep: 'Review on staging', clientWho: 'client', pageReview: true }),
+        item('Work through the comments', { clientStep: 'Fixes from your review' }),
+      ], { clientStage: 'Web Development', role: 'client_review' }),
+    ]);
+    const steps = checklistProcess([review])[0].steps;
+    assert.deepEqual(steps.map((s) => [s.title, s.review ?? false]), [['Review on staging', true], ['Fixes from your review', false]]);
+  });
+
   it('leaves links off a step with only one', () => {
     const [stage] = checklistProcess([moodboards([{ id: 'moodboard', label: 'Moodboard', type: 'url', forClient: true }], { moodboard: 'https://figma.com/x' })]);
     assert.equal(stage.steps[0].links, undefined);

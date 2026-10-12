@@ -9,6 +9,8 @@ export type {
 } from '@/types';
 import type { ClientStatus } from '@/types';
 import type { SheetChangeState, WorkState } from './project-sheet.types';
+import type { PortalPageFeedbackLink, PortalPageView } from './portal-pages';
+export type { PortalPageFeedbackLink, PortalPageState, PortalPageView } from './portal-pages';
 export type { WorkState } from './project-sheet.types';
 export {
   CLIENT_STATUSES,
@@ -263,6 +265,14 @@ export interface ClientPortalView {
    * thing to say yes to.
    */
   review?: PortalReviewView;
+  /**
+   * The pages being built, from the page tracker: name, staging link, where
+   * each stands for them, and their own parts not yet final. Each ready page
+   * can be approved on its own ("Looks good").
+   */
+  pages?: PortalPageView[];
+  /** Where to comment on them: the client's review step's links, less staging. */
+  pagesFeedback?: PortalPageFeedbackLink[];
   /** ISO timestamp the projection was built (server time). */
   generatedAt: string;
 }
@@ -301,5 +311,7 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'readiness',
   'sheetUrl',
   'review',
+  'pages',
+  'pagesFeedback',
   'generatedAt',
 ] as const;

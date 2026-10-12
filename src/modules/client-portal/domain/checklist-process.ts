@@ -33,7 +33,7 @@ import type { StepLink, TimelineStageSource, TimelineStep } from './client-timel
 /** The section and item fields this reads. SOP templates and live checklists both fit. */
 type TaggedSection = Pick<ChecklistSection, 'title' | 'clientStep' | 'clientWho' | 'clientStage'> & {
   order?: number;
-  items?: (Pick<ChecklistItem, 'title' | 'clientStep' | 'clientWho' | 'clientHidden'> &
+  items?: (Pick<ChecklistItem, 'title' | 'clientStep' | 'clientWho' | 'clientHidden' | 'pageReview'> &
     Partial<Pick<ChecklistItem, 'status' | 'completedAt' | 'dueDate' | 'order' | 'fields' | 'values'>>)[];
 };
 
@@ -119,6 +119,8 @@ interface Bucket {
   title: string;
   stage: string;
   who?: ClientStepWho;
+  /** An item in it is marked `pageReview`: the client's review of the pages we build. */
+  review?: boolean;
   items: { status?: ChecklistItem['status']; doneOn?: string; dueDate?: string; links: StepLink[] }[];
 }
 
@@ -206,6 +208,7 @@ function stepFrom(bucket: Bucket): TimelineStep | null {
   const owner = ownerOf(bucket.who);
   if (owner) step.owner = owner;
   if (owner === 'client' && state === 'current') step.waiting = true;
+  if (bucket.review) step.review = true;
   return step;
 }
 
@@ -254,6 +257,7 @@ export function checklistProcess(
           buckets.set(key, bucket);
           if (!stageOrder.includes(stage)) stageOrder.push(stage);
         }
+        if (item.pageReview ?? source?.pageReview) bucket.review = true;
         bucket.items.push({
           status: item.status,
           doneOn: item.status === 'completed' ? doneOn(item) : undefined,

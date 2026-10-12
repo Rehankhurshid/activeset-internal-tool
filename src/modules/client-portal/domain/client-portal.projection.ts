@@ -21,8 +21,9 @@ import {
   safeHttpUrl,
   type ResolvedStage,
 } from './client-plan';
-import { resolveTimelinePlan, stageForDate, type TimelineStep } from './client-timeline';
+import { resolveTimelinePlan, stageForDate, type TimelineStageSource, type TimelineStep } from './client-timeline';
 import { portalStageSources } from './portal-sources';
+import { portalPages, type PageTrackerInput, type PortalPageFeedbackLink, type PortalPageView } from './portal-pages';
 import { sheetAsks, sheetChanges, sheetFacts, sheetFiles, sheetReadiness, sheetWork } from './project-sheet.portal';
 import type { ProjectSheetSnapshot } from './project-sheet.types';
 import type {
@@ -69,6 +70,12 @@ export interface BuildClientPortalViewInput {
    */
   templates?: Pick<SOPTemplate, 'id' | 'service' | 'sections'>[];
   agency?: Omit<SOPTemplateSection, 'order'>[];
+  /**
+   * Optional. The page tracker (`projects/{id}/pages`) with the stack's
+   * columns and whose each is. Only each page's name, staging link, state and
+   * the client's own parts leave (`portalPages`).
+   */
+  pages?: PageTrackerInput;
   now?: Date;
 }
 
@@ -285,6 +292,54 @@ function toPortalReview(
  * section title (the stage they are asked to approve), and the steps its SOP
  * labels for them, by that label and the day each was finished: never an item.
  */
+/**
+ * Pages ready on the tracker start the client's review before the process
+ * reaches it: design and development run side by side, so built pages can be
+ * reviewed while others are still being designed (Rehan, 2026-10-13). Their
+ * review step reads in progress with how many pages are ready. A step already
+ * done stays done; nothing here ticks anything.
+ */
+export function withPagesInReview(
+  sources: TimelineStageSource[],
+  pages: readonly PortalPageView[],
+): TimelineStageSource[] {
+  const ready = pages.filter((p) => p.state === 'ready' || p.state === 'approved').length;
+  if (ready === 0) return sources;
+  const note = `${ready} of ${pages.length} ${pages.length === 1 ? 'page' : 'pages'} ready for your review`;
+  return sources.map((source) => ({
+    ...source,
+    steps: source.steps.map((step) =>
+      step.review && step.state !== 'done' ? { ...step, state: 'current' as const, note } : step,
+    ),
+  }));
+}
+
+/**
+ * Where to comment on the pages: the links on the client's review step (the
+ * MarkUp board and its how-to), less the staging site, which each page links
+ * to itself.
+ */
+export function feedbackLinks(
+  sources: readonly TimelineStageSource[],
+  pages: readonly PortalPageView[],
+): PortalPageFeedbackLink[] | undefined {
+  const step = sources.flatMap((s) => s.steps).find((s) => s.review && s.url);
+  if (!step) return undefined;
+  const hostOf = (url: string) => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return '';
+    }
+  };
+  const staging = new Set(pages.map((p) => (p.stagingUrl ? hostOf(p.stagingUrl) : '')).filter(Boolean));
+  const valid = (url: string) => /^https?:\/\/\S+$/i.test(url);
+  const links = (step.links ?? [{ label: step.urlLabel ?? '', url: step.url! }])
+    .filter((l) => valid(l.url) && l.label && !staging.has(hostOf(l.url)))
+    .map((l) => (l.help && valid(l.help.url) ? { label: l.label, url: l.url, help: { label: l.help.label, url: l.help.url } } : { label: l.label, url: l.url }));
+  return links.length ? links : undefined;
+}
+
 export function buildClientPortalView(input: BuildClientPortalViewInput): ClientPortalView {
   const { project, timeline, tasks = [], checklists = [], meetings = [], sheet = null, templates, agency, now = new Date() } = input;
   const settings = project.clientPortal;
@@ -306,7 +361,9 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
   const fromSheet = picked.kind === 'sheet';
   const fromChecklist = picked.kind === 'checklist';
   const fromTimeline = picked.kind === 'timeline';
-  const timelineSources = picked.sources;
+  // Page by page, from the tracker the team keeps in the Delivery tab.
+  const pages = input.pages ? portalPages(input.pages.rows, input.pages.disciplines, input.pages.owners) : [];
+  const timelineSources = withPagesInReview(picked.sources, pages);
   const byPhase = picked.kind !== null;
 
   // Otherwise the saved plan; failing that, what a portal shared before plans
@@ -389,6 +446,8 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     readiness: readiness.length ? readiness : undefined,
     sheetUrl: sheet?.showSheetLink && sheet.url ? sheet.url : undefined,
     review: toPortalReview(checklists, project.delivery?.approvals),
+    pages: pages.length ? pages : undefined,
+    pagesFeedback: pages.length ? feedbackLinks(timelineSources, pages) : undefined,
     generatedAt: now.toISOString(),
   };
 

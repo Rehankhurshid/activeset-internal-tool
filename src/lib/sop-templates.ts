@@ -41,6 +41,8 @@ type ItemSpec = {
     clientWho?: ClientStepWho;
     /** Kept off the client's page although its section is on it. */
     clientHidden?: boolean;
+    /** The client's review of the pages we build. See `ChecklistItem.pageReview`. */
+    pageReview?: boolean;
 };
 
 const makeItems = (items: ItemSpec[]): SOPTemplateItem[] =>
@@ -465,7 +467,7 @@ export const SOP_TEMPLATES: SOPTemplate[] = [
                 role: 'client_review',
                 items: makeItems([
                     {
-                        title: 'Share the staging and MarkUp links for feedback', emoji: '\u{1F517}', clientStep: 'Review on staging', clientWho: 'client',
+                        title: 'Share the staging and MarkUp links for feedback', emoji: '\u{1F517}', clientStep: 'Review on staging', clientWho: 'client', pageReview: true,
                         fields: [
                             { id: 'staging', label: 'Staging site', type: 'url', projectLink: { title: 'Staging', matches: ['Staging Website URL', 'Staging link'] }, forClient: true },
                             { id: 'markup', label: 'Leave feedback in MarkUp', type: 'url', placeholder: 'MarkUp invite link', projectLink: { title: 'MarkUp', matches: ['Feedback URL', 'MarkUp folder', 'Feedback'] }, forClient: true },

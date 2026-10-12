@@ -59,8 +59,13 @@ export interface TimelineStep {
    * http(s). Absent for a sheet step, which has one Link column.
    */
   links?: StepLink[];
-  /** Only from the project sheet's "Note for client" column. */
+  /** The project sheet's "Note for client" column, or how many pages are ready for their review. */
   note?: string;
+  /**
+   * The client's review of the pages we build (an item marked `pageReview`).
+   * Pages ready on the page tracker start it early. Never leaves the projection.
+   */
+  review?: boolean;
 }
 
 /** One phase with the milestones the client sees in it. */

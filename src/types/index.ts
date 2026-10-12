@@ -844,6 +844,13 @@ export interface ChecklistItem {
   /** Left out of the client's page even though its section is on it. */
   clientHidden?: boolean;
   /**
+   * This item's client step is their review of the pages we build ("Review on
+   * staging"). Pages ready on the page tracker start it early, since design
+   * and development run side by side (Rehan, 2026-10-13), and its links (the
+   * MarkUp board) sit beside "Your pages".
+   */
+  pageReview?: boolean;
+  /**
    * Where an agent found what it filled in or ticked here, in a few words
    * ("Fathom: DreamTeam KickOff Call, 22 Sep"), so the team can check it.
    * Set by `scripts/checklist.ts`; cleared by nobody, overwritten by the next fill.

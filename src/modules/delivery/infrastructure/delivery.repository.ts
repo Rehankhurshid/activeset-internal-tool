@@ -292,11 +292,14 @@ export const deliveryRepository = {
     status: PageWorkStatus,
     userEmail?: string,
     pageLabel?: string,
+    /** Clear the client's "Looks good": the team is rebuilding the page. */
+    reopensBuild = false,
   ): Promise<void> {
     try {
       await updateDoc(pageRef(projectId, pageId), {
         [`work.${disciplineId}`]: status,
         updatedAt: nowIso(),
+        ...(reopensBuild ? { clientReview: deleteField() } : {}),
       });
       requestProjectSheetWrite(projectId);
       if (userEmail) {

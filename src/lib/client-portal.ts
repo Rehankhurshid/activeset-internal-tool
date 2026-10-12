@@ -5,6 +5,9 @@ import { PortalAuthError, verifyPortalToken } from '@/lib/client-portal-tokens';
 import { buildClientPortalView } from '@/modules/client-portal/domain/client-portal.projection';
 import type { ClientPortalView } from '@/modules/client-portal/domain/client-portal.types';
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
+import type { ProjectPage } from '@/modules/delivery/domain/delivery.types';
+import { getStack } from '@/modules/delivery/domain/stacks';
+import { disciplineOwners } from '@/modules/delivery/domain/delivery.progress';
 import { snapshotOf } from '@/lib/project-sheet';
 import { AGENCY_CLOSE, AGENCY_START, SOP_TEMPLATES } from '@/lib/sop-templates';
 import type { Project, ProjectChecklist, ProjectMeeting, ProjectTimeline, SOPTemplate, Task } from '@/types';
@@ -111,7 +114,7 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
   }
 
   const { projectId, tokenHash, project: raw } = verified;
-  const [timelineSnap, asksSnap, checklistSnap, meetingSnap, sheetSnap] = await Promise.all([
+  const [timelineSnap, asksSnap, checklistSnap, meetingSnap, sheetSnap, pagesSnap] = await Promise.all([
     adminDb.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
     adminDb
       .collection(COLLECTIONS.TASKS)
@@ -142,6 +145,9 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
     // The project sheet's last snapshot. Read from Firestore, never from
     // Google: a client's page must not wait on, or fail with, the Sheets API.
     adminDb.collection(COLLECTIONS.PROJECT_SHEETS).doc(projectId).get(),
+    // The page tracker, for "Your pages". Only names, staging links and states
+    // leave it (see portalPages).
+    adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId).collection(COLLECTIONS.PROJECT_PAGES).limit(500).get(),
   ]);
 
   const project = toProject(projectId, raw);
@@ -155,6 +161,12 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
   const meetings = meetingSnap.docs.map((d) => ({ ...(d.data() as ProjectMeeting), id: d.id }));
   const sheet = snapshotOf(sheetSnap.exists ? (sheetSnap.data() as ProjectSheetRecord) : null);
   const templates = await loadSourceTemplates(checklists);
+  const stack = getStack(project.delivery?.stackId);
+  const pages = {
+    rows: pagesSnap.docs.map((d) => ({ ...(d.data() as Omit<ProjectPage, 'id'>), id: d.id })),
+    disciplines: stack.disciplines,
+    owners: disciplineOwners(stack, project),
+  };
 
   return {
     view: buildClientPortalView({
@@ -166,6 +178,7 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
       sheet,
       templates,
       agency: [AGENCY_START, AGENCY_CLOSE],
+      pages,
     }),
     projectId,
     tokenHash,
