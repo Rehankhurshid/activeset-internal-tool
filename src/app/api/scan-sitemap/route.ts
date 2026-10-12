@@ -1,11 +1,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import type { Project, ProjectLink } from '@/types';
 import { auditService } from '@/services/AuditService';
 import { changeLogService } from '@/services/ChangeLogService';
 import { getWebflowToken } from '@/services/projectSecrets';
+import { buildWebflowPageUrl, isAuditablePage } from '@/lib/webflow-public-url';
+import {
+    fetchServedWebflowSiteId,
+    fetchSitemapUrls,
+    resolveConnectedSiteBaseUrl,
+} from '@/lib/webflow-sitemap-io';
 
 export const runtime = 'nodejs';
 
@@ -371,26 +377,7 @@ async function fetchWebflowSyncData(project: Project | null): Promise<WebflowSyn
         accept: 'application/json',
     };
 
-    let baseUrl = project.webflowConfig.customDomain
-        ? normalizeBaseUrl(project.webflowConfig.customDomain)
-        : '';
-
-    if (!baseUrl) {
-        try {
-            const siteResponse = await fetch(`https://api.webflow.com/v2/sites/${project.webflowConfig.siteId}`, {
-                headers,
-            });
-
-            if (siteResponse.ok) {
-                const siteData = await siteResponse.json();
-                if (typeof siteData.previewUrl === 'string' && siteData.previewUrl.trim()) {
-                    baseUrl = siteData.previewUrl.replace(/\/$/, '');
-                }
-            }
-        } catch (siteError) {
-            console.warn(`[scan-sitemap] Failed to fetch Webflow site details for base URL:`, siteError);
-        }
-    }
+    const baseUrl = (await resolveConnectedSiteBaseUrl(project.webflowConfig, apiToken)) || '';
 
     const allPages: Array<{
         publishedPath?: string;
@@ -425,6 +412,7 @@ async function fetchWebflowSyncData(project: Project | null): Promise<WebflowSyn
 
     const publishedPages = allPages.filter((page) => !page.archived && !page.draft);
     const entries: SitemapEntry[] = [];
+    const seenUrls = new Set<string>();
 
     publishedPages.forEach((page) => {
         const path = page.publishedPath || (page.slug ? `/${page.slug}` : '');
@@ -441,8 +429,10 @@ async function fetchWebflowSyncData(project: Project | null): Promise<WebflowSyn
             }
         }
 
-        if (baseUrl) {
-            const fullUrl = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`.replace(/\/$/, '') || baseUrl;
+        if (baseUrl && isAuditablePage(page)) {
+            const fullUrl = buildWebflowPageUrl(baseUrl, page.publishedPath, page.slug);
+            if (!fullUrl || seenUrls.has(fullUrl.toLowerCase())) return;
+            seenUrls.add(fullUrl.toLowerCase());
             typeMaps.pageTypeMap.set(fullUrl.toLowerCase(), pageType);
             entries.push({ url: fullUrl });
         }
@@ -533,6 +523,7 @@ export async function POST(request: NextRequest) {
                     folderTypeMap: {}
                 },
                 mergedFolderPageTypes: { ...(project.folderPageTypes || {}) },
+                baseUrl: undefined,
                 hasApiToken: false,
             } satisfies WebflowSyncData;
         });
@@ -542,6 +533,7 @@ export async function POST(request: NextRequest) {
         let localeMapping: LocaleMapping = { pathToLocale: new Map(), detectedLocales: [] };
         let source: 'sitemap' | 'webflow' = 'sitemap';
         let usedWebflowFallback = false;
+        let sitemapFromOtherSite: string | undefined;
 
         if (requestedSitemapUrl) {
             normalizedSitemapUrl = normalizeBaseUrl(requestedSitemapUrl);
@@ -566,6 +558,23 @@ export async function POST(request: NextRequest) {
                 if (sitemapEntries.length === 0) {
                     throw new Error('No URLs found in sitemap');
                 }
+
+                // The saved sitemap can belong to another Webflow site — typically the
+                // client's current live site while we build its replacement. Its URLs
+                // would audit the wrong website, so the connected site's pages win.
+                if (project.webflowConfig?.siteId && webflowSyncData.entries.length > 0) {
+                    const servedSiteId = await fetchServedWebflowSiteId(new URL(sitemapEntries[0].url).origin);
+                    if (servedSiteId && servedSiteId !== project.webflowConfig.siteId.toLowerCase()) {
+                        console.log(
+                            `[scan-sitemap] ${normalizedSitemapUrl} lists pages of Webflow site ${servedSiteId}, not the connected ${project.webflowConfig.siteId}; using the connected site's pages`
+                        );
+                        sitemapFromOtherSite = normalizedSitemapUrl;
+                        normalizedSitemapUrl = undefined;
+                        sitemapEntries = webflowSyncData.entries;
+                        localeMapping = { pathToLocale: new Map(), detectedLocales: [] };
+                        source = 'webflow';
+                    }
+                }
             } catch (error) {
                 if (!useWebflowFallback || webflowSyncData.entries.length === 0) {
                     const message = error instanceof Error ? error.message : 'Failed to fetch sitemap';
@@ -577,10 +586,40 @@ export async function POST(request: NextRequest) {
                 usedWebflowFallback = true;
                 console.log(`[scan-sitemap] Falling back to Webflow sync for project ${projectId}`);
             }
-        } else if (useWebflowFallback && webflowSyncData.entries.length > 0) {
-            sitemapEntries = webflowSyncData.entries;
-            source = 'webflow';
-            console.log(`[scan-sitemap] Syncing project ${projectId} from Webflow pages`);
+        } else if (useWebflowFallback) {
+            const derivedSitemap = webflowSyncData.baseUrl
+                ? `${webflowSyncData.baseUrl}/sitemap.xml`
+                : undefined;
+
+            if (derivedSitemap) {
+                normalizedSitemapUrl = derivedSitemap;
+                try {
+                    const xmlUrls = await fetchSitemapUrls(derivedSitemap);
+                    sitemapEntries = xmlUrls.map((url) => ({ url }));
+                    source = 'sitemap';
+                    console.log(
+                        `[scan-sitemap] Loaded ${sitemapEntries.length} URLs from Webflow staging sitemap (${derivedSitemap})`
+                    );
+                } catch (stagingError) {
+                    console.warn(`[scan-sitemap] Staging sitemap fetch failed:`, stagingError);
+                }
+            }
+
+            if (sitemapEntries.length === 0 && webflowSyncData.entries.length > 0) {
+                sitemapEntries = webflowSyncData.entries;
+                source = 'webflow';
+                console.log(`[scan-sitemap] Syncing project ${projectId} from Webflow pages API`);
+            }
+
+            if (sitemapEntries.length === 0) {
+                return NextResponse.json(
+                    {
+                        error:
+                            'Could not sync from Webflow. Publish to the Webflow subdomain, check the API token, or enter a sitemap URL.',
+                    },
+                    { status: 400 }
+                );
+            }
         } else {
             return NextResponse.json(
                 { error: 'Missing sitemap URL. Configure a sitemap or connect Webflow to sync pages.' },
@@ -749,6 +788,9 @@ export async function POST(request: NextRequest) {
 
         if (normalizedSitemapUrl && source === 'sitemap') {
             projectUpdate.sitemapUrl = normalizedSitemapUrl;
+        } else if (sitemapFromOtherSite) {
+            // Forget it, or every sync and the nightly drift check would keep reading it.
+            projectUpdate.sitemapUrl = FieldValue.delete();
         }
 
         if (
@@ -779,6 +821,8 @@ export async function POST(request: NextRequest) {
             localesDetected: [...new Set(sitemapEntries.map(e => e.locale).filter(Boolean))],
             source,
             usedWebflowFallback,
+            sitemapFromOtherSite,
+            baseUrl: source === 'webflow' ? webflowSyncData.baseUrl : undefined,
             remappedToStaging: Boolean(domainMapping)
         });
 

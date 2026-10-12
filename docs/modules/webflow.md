@@ -4,7 +4,7 @@ title: Webflow integration (Pages, SEO, Images, Schema, Sitemap Sync)
 keywords: [webflow, webflow api, data api v2, webflow pages, webflow tab, webflow pages tab, seo editor, bulk edit, bulk seo, seo health, seo score, qc, open graph, same as seo, meta title, meta description, cms template, cms variables, wf variable, locale, localization, publish site, unpublish site, draft, archive, copy dom, credentials, connect to webflow, api token, site id, project_secrets, webflowConfig, hasApiToken, x-project-id, reveal-token, validate-token, images, image assets, general assets, cms images, alt text, optimise, optimise everything, live badge, cms live, content delivery api, api-cdn, assets resolve, schema, schema markup, json-ld, schema-gen, ollama, gemma, sitemap sync, sitemap drift, missing from sitemap, missing from webflow, ignore path, webflow-settings, settings auditor, ai-seo-gen, gemini, cms-alt, cmsRuns, schemaRuns, schema_analyses, webflow_sessions]
 entry_points: [/modules/project-links/[id]?tab=webflow]
 code_roots: [src/app/api/webflow, src/components/webflow, src/lib/cms, src/modules/webflow, src/hooks, src/services, src/lib]
-last_verified: 2026-09-23 @ a00f91e
+last_verified: 2026-10-09
 ---
 # Webflow integration (Pages, SEO, Images, Schema, Sitemap Sync)
 
@@ -53,7 +53,7 @@ Auth legend: **ID token + project** = `Authorization: Bearer <Firebase ID token>
 
 | Method | Path | File | Auth | Purpose |
 |---|---|---|---|---|
-| POST | `/api/webflow/config` | [config/route.ts](../../src/app/api/webflow/config/route.ts) | ID token + `requireProjectAccess(body.projectId)` | Save token to `project_secrets/{id}`; write `webflowConfig {siteId, siteName, customDomain, lastSyncedAt, hasApiToken:true}` on project doc |
+| POST | `/api/webflow/config` | [config/route.ts](../../src/app/api/webflow/config/route.ts) | ID token + `requireProjectAccess(body.projectId)` | Save token to `project_secrets/{id}`; write `webflowConfig {siteId, siteName, shortName, customDomain, lastSyncedAt, hasApiToken:true}` on project doc (`shortName` from `GET /v2/sites/{siteId}`; `{shortName}.webflow.io` always serves this site) |
 | DELETE | `/api/webflow/config?projectId=` | same | ID token + project | Delete secret doc, set `webflowConfig: null` |
 | GET | `/api/webflow/config?projectId=` | same | ID token + project | `{configured}` — never returns token |
 | POST | `/api/webflow/config/reveal-token` | [reveal-token/route.ts](../../src/app/api/webflow/config/reveal-token/route.ts) | ID token + project | Returns raw token (logged with uid/email). Used only by Schema tab "copy command" |
@@ -123,7 +123,8 @@ Auth legend: **ID token + project** = `Authorization: Bearer <Firebase ID token>
 
 ### Lib
 - [webflow-token-resolver.ts](../../src/lib/webflow-token-resolver.ts) — `resolveWebflowToken(req)` → `{projectId, apiToken}` or a `NextResponse` to return.
-- [webflow-sitemap-io.ts](../../src/lib/webflow-sitemap-io.ts) — `fetchWebflowPages` (paginates all pages), `fetchSitemapUrls` (one level of sitemap index, ≤50 children, 20 s timeout), `runSitemapDiff` (never throws; sets `error`).
+- [webflow-sitemap-io.ts](../../src/lib/webflow-sitemap-io.ts) — `fetchWebflowPages` (paginates all pages), `fetchWebflowSiteUrlHints`, `fetchServedWebflowSiteId` (reads `data-wf-site` off a host's home page), `resolveConnectedSiteBaseUrl` (the host that really serves the connected site: saved domain only if its `data-wf-site` matches, else `{shortName}.webflow.io`), `fetchSitemapUrls` (one level of sitemap index, ≤50 children, 20 s timeout), `runSitemapDiff` (never throws; sets `error`; uses `resolveConnectedSiteBaseUrl` + `/sitemap.xml` when `projects.sitemapUrl` is empty).
+- [webflow-public-url.ts](../../src/lib/webflow-public-url.ts) — `candidateWebflowBaseUrls` / `resolveWebflowPublicBaseUrl` (custom domain → `{shortName}.webflow.io`, unverified; the Pages tab uses it), `extractWebflowSiteId`, `isAuditablePage` (drops drafts, archived, `/404`, `/401`, CMS templates), `buildWebflowPageUrl`.
 - [webflow-utils.ts](../../src/lib/webflow-utils.ts) — `formatForDisplay` (re-exported by [platform/webflow/utils.ts](../../src/platform/webflow/utils.ts), which nothing imports).
 - [project-admin.ts](../../src/lib/project-admin.ts) — `getWebflowTokenAdmin` (second reader of `project_secrets`, used by worker handlers).
 - `src/lib/cms/` — shared by API routes, worker handlers and the `cms-alt` CLI:
@@ -150,7 +151,7 @@ Auth legend: **ID token + project** = `Authorization: Bearer <Firebase ID token>
 
 | Path | One document = | Key fields (type, file) | Written by | Read by | SDK |
 |---|---|---|---|---|---|
-| `projects/{id}.webflowConfig` | Non-secret connection metadata | `siteId, siteName?, customDomain?, lastSyncedAt?, hasApiToken?` (`WebflowConfig`, [types/webflow.ts](../../src/types/webflow.ts)) | `/api/webflow/config` POST/DELETE | Project page (client listener), every hook's `isReady` check, cron eligibility | admin write, client read |
+| `projects/{id}.webflowConfig` | Non-secret connection metadata | `siteId, siteName?, shortName?, customDomain?, lastSyncedAt?, hasApiToken?` (`WebflowConfig`, [types/webflow.ts](../../src/types/webflow.ts)) | `/api/webflow/config` POST/DELETE | Project page (client listener), every hook's `isReady` check, cron eligibility, `/api/scan-sitemap` URL building | admin write, client read |
 | `projects/{id}.webflowSitemapDiff` | Last drift snapshot | `checkedAt, sitemapUrl, missingFromSitemap[], missingFromWebflow[], webflowStaticCount, sitemapStaticCount, error?` (`WebflowSitemapDiff`, [types/index.ts](../../src/types/index.ts)) — lists are **raw** (pre-ignore) | sitemap-diff POST, cron | sitemap-diff GET | admin |
 | `projects/{id}.sitemapIgnorePaths` | Normalized paths excluded from drift | `string[]`, sorted | sitemap-diff/ignore | UI + cron `applyIgnore` | admin |
 | `projects/{id}.webflowSettingsAudit` | Settings Auditor extension result | `lastAuditDate, siteSlug, score, passedCount, totalCount (default 17), results.{general,publishing,seo}` (untyped) | `/api/webflow-settings` POST | same GET | admin |
@@ -228,7 +229,10 @@ Stored secrets: the Webflow token per project in `project_secrets`. There is no 
    Schema tab → copy command → `reveal-token` (token substituted for `__WEBFLOW_TOKEN__` in the clipboard text) → `POST /api/webflow/schema/progress/start` → command gets `--run-id --run-secret --progress-url --upload-url` → user runs `npx @activeset/schema-gen@latest generate …` locally → CLI posts `progress/event` and `progress/upload` → `schema_analyses` docs → tab's `onSnapshot` shows them; live terminal polls `progress/events?since=`. Offline fallback: Import JSON writes the same docs from the browser.
 
 7. **Sitemap drift.**
-   `WebflowSitemapSync` → `useWebflowSitemapDiff.load` (GET stored) / `refresh` (POST → `runSitemapDiff`: all Webflow pages + sitemap URLs → `computeSitemapDiff`) → persisted on the project. Ignore → `/sitemap-diff/ignore`; lists are filtered at render. Nightly cron does the same for all eligible projects and notifies only new, non-ignored paths.
+   `WebflowSitemapSync` → `useWebflowSitemapDiff.load` (GET stored) / `refresh` (POST → `runSitemapDiff`: all Webflow pages + sitemap URLs → `computeSitemapDiff`) → persisted on the project. Ignore → `/sitemap-diff/ignore`; lists are filtered at render. Nightly cron does the same for all eligible projects and notifies only new, non-ignored paths. When `projects.sitemapUrl` is empty but Webflow is connected, `runSitemapDiff` uses `resolveConnectedSiteBaseUrl` + `/sitemap.xml`.
+
+8. **Token-only / no production domain (staging-only sites).**
+   Connect on the Webflow Pages tab (Site ID + API token in `project_secrets`). Page lists, SEO, Images, and Schema always use the Data API — no live custom domain required. To seed project **auto links** (Audit tab, Delivery "Import from sitemap"): use **Sync Webflow** on the Audit tab or **Scan Sitemap** with an empty URL; `/api/scan-sitemap` resolves the connected site's host with `resolveConnectedSiteBaseUrl`, tries its sitemap, then falls back to published static paths from `GET /v2/sites/{siteId}/pages` (`isAuditablePage`; CMS items are not listed by that API, so they only come from a sitemap). Audits still fetch page HTML over HTTP, so pages must be reachable on that staging host (publish to the Webflow subdomain if scans fail).
 
 ## Gotchas and invariants
 
@@ -249,6 +253,8 @@ Stored secrets: the Webflow token per project in `project_secrets`. There is no 
 - **Site health averages static pages only** (`calculateSiteHealth` returns all zeros when there are no static pages). Length checks are skipped when the value contains `{{` (CMS variables).
 - **Unpublish does not exist.** `POST /sites/[id]` with `unpublish` returns 400 and the hook short-circuits; the button is labelled "(N/A)". Publish with no `customDomains` publishes to **every** custom domain plus the Webflow subdomain.
 - **Drift lists are stored raw**; the ignore list is applied at render and before notifying, so un-ignoring resurfaces instantly ([WebflowSitemapDiffService.ts:35-47](../../src/services/WebflowSitemapDiffService.ts)). `/404` and `/401` are never "missing from sitemap". CMS item URLs are excluded by folder of any CMS template page plus `folderPageTypes` `collection` entries.
+- **Public page URLs without a custom domain** must not guess from `siteName` (display name ≠ Webflow slug). Use `webflowConfig.shortName` from config save, or `resolveWebflowPublicBaseUrl` ([webflow-public-url.ts](../../src/lib/webflow-public-url.ts)). The site API's `previewUrl` is a screenshot PNG on screenshots.webflow.com, never a host.
+- **A saved sitemap or domain can belong to another Webflow site.** During a rebuild the client's live domain (and the old site's `*.webflow.io` sitemap, which lists live-domain URLs) still serves their old site. `/api/scan-sitemap` checks the first sitemap URL's `data-wf-site`; if it is a different site id it audits the connected site's pages instead and deletes `projects.sitemapUrl` (response `sitemapFromOtherSite`). Stale auto links from the old site are removed with their audit history, as with any sync. Seen on Different AI (Oct 2026).
 - **Cron digest links use the request `Host` header** (`getBaseUrl`, [cron/webflow-sitemap-diff/route.ts:168-172](../../src/app/api/cron/webflow-sitemap-diff/route.ts)). It does not self-call, so the deployment-protection trap from the cron-internal-urls incident does not apply, but links may point at the deployment host rather than the canonical domain.
 - **reveal-token puts the raw token on the clipboard** inside the copied CLI command ([WebflowSchemaDashboard.tsx:471-486](../../src/components/webflow/WebflowSchemaDashboard.tsx)); the on-screen preview masks it. Every reveal is logged with uid/email.
 - **`deleteWebflowToken` deletes the whole `project_secrets` doc** — fine today because it only holds the Webflow token; switch to a field delete if another secret is added ([projectSecrets.ts:53-55](../../src/services/projectSecrets.ts)). There are two readers of that doc (`projectSecrets.ts`, `project-admin.ts:45`); keep field names in sync.

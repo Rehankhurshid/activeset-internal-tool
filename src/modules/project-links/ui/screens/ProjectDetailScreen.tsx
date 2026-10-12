@@ -647,6 +647,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
                                 </Button>
                                 <ScanSitemapDialog
                                     projectId={project.id}
+                                    hasWebflowSync={hasWebflowSync}
+                                    savedSitemapUrl={project.sitemapUrl}
                                 />
                             </div>
                         )}

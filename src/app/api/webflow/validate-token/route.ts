@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
       valid: true,
       siteName: siteData.displayName || siteData.shortName || siteData.name,
       siteId: siteData.id,
+      shortName: typeof siteData.shortName === 'string' ? siteData.shortName : undefined,
     });
   } catch (error) {
     console.error('Webflow validate token error:', error);

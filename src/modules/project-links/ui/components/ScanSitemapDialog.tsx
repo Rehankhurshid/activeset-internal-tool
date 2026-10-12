@@ -19,6 +19,9 @@ import { toast } from "sonner"
 interface ScanSitemapDialogProps {
     projectId: string;
     onScanComplete?: () => void;
+    /** When true, an empty sitemap field runs `/api/scan-sitemap` with Webflow API fallback. */
+    hasWebflowSync?: boolean;
+    savedSitemapUrl?: string;
 }
 
 interface ScanResult {
@@ -27,17 +30,25 @@ interface ScanResult {
     removed: number;
     totalFound: number;
     localesDetected?: string[];
+    source?: 'sitemap' | 'webflow';
+    usedWebflowFallback?: boolean;
     error?: string;
 }
 
-export function ScanSitemapDialog({ projectId, onScanComplete }: ScanSitemapDialogProps) {
+export function ScanSitemapDialog({
+    projectId,
+    onScanComplete,
+    hasWebflowSync = false,
+    savedSitemapUrl,
+}: ScanSitemapDialogProps) {
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
-    const [sitemapUrl, setSitemapUrl] = useState("")
+    const [sitemapUrl, setSitemapUrl] = useState(savedSitemapUrl ?? "")
 
     const handleScan = async () => {
-        if (!sitemapUrl) {
-            toast.error("Please enter a sitemap URL")
+        const trimmed = sitemapUrl.trim()
+        if (!trimmed && !hasWebflowSync) {
+            toast.error("Enter a sitemap URL or connect Webflow on the Webflow Pages tab")
             return
         }
 
@@ -46,7 +57,11 @@ export function ScanSitemapDialog({ projectId, onScanComplete }: ScanSitemapDial
             const response = await fetch('/api/scan-sitemap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ projectId, sitemapUrl })
+                body: JSON.stringify({
+                    projectId,
+                    sitemapUrl: trimmed || undefined,
+                    useWebflowFallback: hasWebflowSync,
+                }),
             })
 
             const data: ScanResult = await response.json()
@@ -59,9 +74,15 @@ export function ScanSitemapDialog({ projectId, onScanComplete }: ScanSitemapDial
                 const localeInfo = data.localesDetected?.length 
                     ? ` (${data.localesDetected.length} languages detected)`
                     : ''
-                toast.success(`Found ${data.totalFound} pages (${data.count} new)${localeInfo}`)
+                const sourceLabel =
+                    data.source === 'webflow'
+                        ? data.usedWebflowFallback
+                            ? 'Webflow fallback'
+                            : 'Webflow'
+                        : 'Sitemap'
+                toast.success(`${sourceLabel}: ${data.totalFound} pages (${data.count} new)${localeInfo}`)
             } else {
-                toast.info("No new pages found in sitemap")
+                toast.info("No new pages found")
             }
 
             setOpen(false)
@@ -89,16 +110,20 @@ export function ScanSitemapDialog({ projectId, onScanComplete }: ScanSitemapDial
                 <DialogHeader>
                     <DialogTitle>Scan Sitemap</DialogTitle>
                     <DialogDescription>
-                        Enter the URL of your sitemap.xml to automatically import pages.
-                        You can mark folders as CMS or Static from the dashboard after scanning.
+                        Import pages from a live sitemap.xml, or leave the URL empty to sync from Webflow
+                        (staging sitemap or page list) when the project is connected with an API token.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="sitemap-url">Sitemap URL</Label>
+                        <Label htmlFor="sitemap-url">Sitemap URL {hasWebflowSync ? '(optional)' : ''}</Label>
                         <Input
                             id="sitemap-url"
-                            placeholder="https://example.com/sitemap.xml"
+                            placeholder={
+                                hasWebflowSync
+                                    ? 'Leave empty to sync from Webflow'
+                                    : 'https://example.com/sitemap.xml'
+                            }
                             value={sitemapUrl}
                             onChange={(e) => setSitemapUrl(e.target.value)}
                             disabled={loading}
@@ -111,7 +136,7 @@ export function ScanSitemapDialog({ projectId, onScanComplete }: ScanSitemapDial
                     </Button>
                     <Button onClick={handleScan} disabled={loading}>
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Start Scan
+                        {hasWebflowSync && !sitemapUrl.trim() ? 'Sync from Webflow' : 'Start Scan'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

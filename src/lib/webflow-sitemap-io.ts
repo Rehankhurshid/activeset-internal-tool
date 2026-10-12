@@ -5,6 +5,15 @@ import {
   computeSitemapDiff,
   type RawWebflowPageInput,
 } from '@/services/WebflowSitemapDiffService';
+import {
+  candidateWebflowBaseUrls,
+  extractWebflowSiteId,
+  urlHintsFromWebflowSitePayload,
+  webflowConfigToUrlHints,
+  webflowSubdomainUrl,
+  type WebflowUrlHints,
+} from '@/lib/webflow-public-url';
+import type { WebflowConfig } from '@/types/webflow';
 
 /**
  * Network I/O + orchestration for the Webflow ↔ sitemap drift check.
@@ -14,6 +23,7 @@ import {
 const WEBFLOW_API = 'https://api.webflow.com/v2';
 const SITEMAP_FETCH_TIMEOUT_MS = 20_000;
 const MAX_CHILD_SITEMAPS = 50;
+const HOST_CHECK_TIMEOUT_MS = 10_000;
 
 function normalizeSitemapUrl(value: string): string {
   const trimmed = value.trim();
@@ -64,6 +74,73 @@ export async function fetchWebflowPages(
   }
 
   return pages;
+}
+
+/** Load URL hints (`shortName`) from `GET /v2/sites/{siteId}` (server-only). */
+export async function fetchWebflowSiteUrlHints(
+  siteId: string,
+  apiToken: string
+): Promise<WebflowUrlHints> {
+  const headers = {
+    Authorization: `Bearer ${apiToken}`,
+    accept: 'application/json',
+  };
+  const response = await fetch(`${WEBFLOW_API}/sites/${siteId}`, { headers });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch Webflow site details: ${response.status} ${response.statusText}`
+    );
+  }
+  const siteData = (await response.json()) as Record<string, unknown>;
+  return urlHintsFromWebflowSitePayload(siteData);
+}
+
+/**
+ * Which Webflow site a host serves, read from its home page's `data-wf-site`.
+ * `null` when it cannot tell (unreachable, password page, not Webflow).
+ */
+export async function fetchServedWebflowSiteId(baseUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/`, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(HOST_CHECK_TIMEOUT_MS),
+      headers: { 'User-Agent': 'ActiveSet-Site-Check/1.0' },
+    });
+    if (!response.ok) return null;
+    return extractWebflowSiteId(await response.text());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The host the connected Webflow site is actually published on. The saved
+ * domain wins only if it serves this site: while a rebuild is in progress the
+ * client's live domain still serves their old site, and auditing it would
+ * audit the wrong website. Otherwise `{shortName}.webflow.io`, which always
+ * belongs to the site.
+ */
+export async function resolveConnectedSiteBaseUrl(
+  config: WebflowConfig,
+  apiToken: string
+): Promise<string | undefined> {
+  let hints = webflowConfigToUrlHints(config);
+  if (!hints.shortName) {
+    try {
+      hints = { ...hints, ...(await fetchWebflowSiteUrlHints(config.siteId, apiToken)) };
+    } catch (err) {
+      console.warn('[webflow-sitemap-io] Could not load site details:', err);
+    }
+  }
+
+  const siteId = config.siteId.toLowerCase();
+  const candidates = candidateWebflowBaseUrls(hints);
+  for (const candidate of candidates) {
+    if ((await fetchServedWebflowSiteId(candidate)) === siteId) return candidate;
+  }
+  // Nothing confirmed (unpublished, password-protected): the subdomain is still
+  // this site's, the saved domain may not be.
+  return webflowSubdomainUrl(hints.shortName) ?? candidates[0];
 }
 
 function decodeXmlEntities(value: string): string {
@@ -136,7 +213,7 @@ export async function fetchSitemapUrls(sitemapUrl: string): Promise<string[]> {
  */
 export async function runSitemapDiff(project: Project): Promise<WebflowSitemapDiff> {
   const checkedAt = new Date().toISOString();
-  const sitemapUrl = project.sitemapUrl?.trim() || '';
+  let sitemapUrl = project.sitemapUrl?.trim() || '';
   const base: WebflowSitemapDiff = {
     checkedAt,
     sitemapUrl,
@@ -149,12 +226,26 @@ export async function runSitemapDiff(project: Project): Promise<WebflowSitemapDi
   try {
     const siteId = project.webflowConfig?.siteId;
     if (!siteId) return { ...base, error: 'Webflow is not connected for this project' };
-    if (!sitemapUrl) return { ...base, error: 'No sitemap URL configured for this project' };
 
     const apiToken = await getWebflowToken(project.id);
     if (!apiToken) {
       return { ...base, error: 'No Webflow API token configured for this project' };
     }
+
+    if (!sitemapUrl && project.webflowConfig) {
+      const baseUrl = await resolveConnectedSiteBaseUrl(project.webflowConfig, apiToken);
+      if (baseUrl) sitemapUrl = `${baseUrl}/sitemap.xml`;
+    }
+
+    if (!sitemapUrl) {
+      return {
+        ...base,
+        error:
+          'No sitemap URL configured. Add a sitemap URL or connect Webflow so the app can use the staging sitemap.',
+      };
+    }
+
+    base.sitemapUrl = sitemapUrl;
 
     const [webflowPages, sitemapUrls] = await Promise.all([
       fetchWebflowPages(siteId, apiToken),

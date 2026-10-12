@@ -121,6 +121,8 @@ export interface AISEOGeneratedData {
 export interface WebflowConfig {
   siteId: string;
   siteName?: string;
+  /** Webflow site slug; `{shortName}.webflow.io` always serves this site. */
+  shortName?: string;
   customDomain?: string;
   lastSyncedAt?: string;
   hasApiToken?: boolean;

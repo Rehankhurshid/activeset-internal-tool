@@ -19,7 +19,7 @@ const JOB_BUDGET_MS = 4 * 60 * 1000; // 4 minutes shared across all projects
 const CONCURRENCY = 4;
 
 /**
- * Daily cron: for every Webflow-connected project with a configured sitemap,
+ * Daily cron: for every Webflow-connected project (saved or derivable sitemap URL),
  * recompute the page drift, persist the snapshot, and send a digest of any
  * NEW (previously-unseen, non-ignored) differences.
  */
@@ -43,8 +43,7 @@ export async function GET(request: NextRequest) {
       (p) =>
         (p.status || 'current') === 'current' &&
         Boolean(p.webflowConfig?.siteId) &&
-        Boolean(p.webflowConfig?.hasApiToken) &&
-        Boolean(p.sitemapUrl?.trim())
+        Boolean(p.webflowConfig?.hasApiToken)
     );
 
     console.log(`[sitemap-diff-cron] ${eligible.length} eligible project(s)`);

@@ -4,8 +4,11 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { COLLECTIONS } from '@/lib/constants';
 import { ApiAuthError, apiAuthErrorResponse, requireProjectAccess } from '@/lib/api-auth';
 import { setWebflowToken, deleteWebflowToken, hasWebflowToken } from '@/services/projectSecrets';
+import { urlHintsFromWebflowSitePayload } from '@/lib/webflow-public-url';
 
 export const runtime = 'nodejs';
+
+const WEBFLOW_API = 'https://api.webflow.com/v2';
 
 interface SaveBody {
   projectId?: string;
@@ -39,10 +42,28 @@ export async function POST(req: NextRequest) {
 
     await setWebflowToken(projectId, apiToken);
 
+    let shortName: string | null = null;
+    try {
+      const siteResponse = await fetch(`${WEBFLOW_API}/sites/${encodeURIComponent(siteId)}`, {
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          accept: 'application/json',
+        },
+      });
+      if (siteResponse.ok) {
+        const siteData = (await siteResponse.json()) as Record<string, unknown>;
+        const hints = urlHintsFromWebflowSitePayload(siteData);
+        shortName = hints.shortName?.trim() || null;
+      }
+    } catch (siteErr) {
+      console.warn('[api/webflow/config POST] Could not fetch site metadata:', siteErr);
+    }
+
     const metadata: Record<string, unknown> = {
       siteId,
       siteName: body.siteName || null,
       customDomain: body.customDomain || null,
+      shortName,
       lastSyncedAt: new Date().toISOString(),
       hasApiToken: true,
     };

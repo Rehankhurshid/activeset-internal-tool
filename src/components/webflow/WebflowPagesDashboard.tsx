@@ -67,6 +67,11 @@ import { WebflowSitemapSync } from './WebflowSitemapSync';
 import { webflowService } from '@/services/WebflowService';
 import { formatDistanceToNow } from 'date-fns';
 import { SEOVariableRenderer } from './SEOVariableRenderer';
+import {
+  buildWebflowPageUrl,
+  resolveWebflowPublicBaseUrl,
+  webflowConfigToUrlHints,
+} from '@/lib/webflow-public-url';
 
 interface WebflowPagesDashboardProps {
   projectId: string;
@@ -837,6 +842,11 @@ function PageRow({
   handleToggleDraft: (page: WebflowPageWithQC) => Promise<void>;
   handleToggleArchive: (page: WebflowPageWithQC) => Promise<void>;
 }) {
+  const publicBaseUrl = resolveWebflowPublicBaseUrl(webflowConfigToUrlHints(webflowConfig));
+  const publicPageUrl = publicBaseUrl
+    ? buildWebflowPageUrl(publicBaseUrl, page.publishedPath, page.slug)
+    : page.publishedPath || (page.slug ? `/${page.slug}` : '');
+
   return (
     <TableRow className="group">
       <TableCell className="font-medium align-top py-3">
@@ -864,9 +874,7 @@ function PageRow({
                 <div className="space-y-1">
                   <h4 className="text-sm font-semibold break-words">{page.title || 'Untitled'}</h4>
                   <p className="text-xs text-muted-foreground break-all">
-                    {page.publishedPath
-                      ? `https://${webflowConfig.customDomain || webflowConfig.siteName?.toLowerCase().replace(/\s+/g, '') + '.webflow.io'}${page.publishedPath}`
-                      : `/${page.slug}`}
+                    {publicPageUrl}
                   </p>
                 </div>
                 <Separator />
@@ -1079,9 +1087,7 @@ function PageRow({
                     asChild
                   >
                     <a
-                      href={page.publishedPath
-                        ? `https://${webflowConfig.customDomain || webflowConfig.siteName?.toLowerCase().replace(/\s+/g, '') + '.webflow.io'}${page.publishedPath}`
-                        : '#'}
+                      href={publicPageUrl || '#'}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
