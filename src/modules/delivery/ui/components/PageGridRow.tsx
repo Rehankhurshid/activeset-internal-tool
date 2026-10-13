@@ -147,14 +147,6 @@ export function PageGridRow({
                     aria-label="Has a review comment"
                   />
                 )}
-                {page.clientReview?.approvedAt && (
-                  <span
-                    className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-medium text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
-                    title="The client said this page looks good on their portal. Reopening one of our columns asks them again."
-                  >
-                    Client OK · {format(new Date(page.clientReview.approvedAt), 'd MMM')}
-                  </span>
-                )}
               </div>
               <p className="truncate px-1 font-mono text-[10px] text-muted-foreground" title={page.path}>
                 {page.path}

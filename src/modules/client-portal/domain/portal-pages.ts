@@ -13,9 +13,10 @@ const normalizePageWorkStatus = (raw: unknown): PageWorkStatus =>
  * staging").
  *
  * - `ready`: our own columns are done, so they can open it on staging and
- *   comment. Their design still changing does not hold it back; it is built to
- *   the design we have, and a new revision gets built when it arrives.
- * - `approved`: they said "Looks good" to the build that is there now.
+ *   comment in MarkUp. Their design still changing does not hold it back; it
+ *   is built to the design we have, and a new revision gets built when it
+ *   arrives. There is no per-page sign-off (Rehan: "Looks good is not
+ *   required"); their comments are the review.
  * - `building`: we have started our part.
  * - `waiting`: nothing of ours has started and their part (copy, design) has
  *   not arrived.
@@ -35,7 +36,7 @@ export interface PageTrackerInput {
   owners: Record<string, PageWorkOwner>;
 }
 
-export type PortalPageState = 'ready' | 'approved' | 'building' | 'waiting' | 'planned';
+export type PortalPageState = 'ready' | 'building' | 'waiting' | 'planned';
 
 export interface PortalPageView {
   id: string;
@@ -43,8 +44,6 @@ export interface PortalPageView {
   /** Where the page is on staging, when the team recorded it. Always http(s). */
   stagingUrl?: string;
   state: PortalPageState;
-  /** ISO, when `approved`. */
-  approvedAt?: string;
   /** Their own parts that are not final yet, in their words: "Your design: in revision". */
   theirs?: string[];
 }
@@ -67,7 +66,7 @@ const isHttp = (url: string | undefined): url is string => typeof url === 'strin
 
 /** One page's state from its columns: ours decide whether it is built, theirs only add a note. */
 export function portalPageState(
-  page: Pick<ProjectPage, 'work' | 'clientReview'>,
+  page: Pick<ProjectPage, 'work'>,
   disciplines: readonly Pick<StackDiscipline, 'id'>[],
   owners: Readonly<Record<string, PageWorkOwner>>,
 ): PortalPageState {
@@ -75,9 +74,7 @@ export function portalPageState(
   const ours = disciplines.filter((d) => (owners[d.id] ?? 'activeset') !== 'client').map((d) => statusOf(d.id));
   const theirs = disciplines.filter((d) => owners[d.id] === 'client').map((d) => statusOf(d.id));
   const relevant = ours.filter((s) => s !== 'not_required');
-  if (relevant.length > 0 && ours.every((s) => BUILT.has(s))) {
-    return page.clientReview?.approvedAt ? 'approved' : 'ready';
-  }
+  if (relevant.length > 0 && ours.every((s) => BUILT.has(s))) return 'ready';
   if (ours.some((s) => STARTED.has(s))) return 'building';
   if (theirs.some((s) => !SETTLED.has(s))) return 'waiting';
   return 'planned';
@@ -100,7 +97,6 @@ export function portalPages(
       const state = portalPageState(page, columns, owners);
       const view: PortalPageView = { id: page.id, title: page.title?.trim() || page.path, state };
       if (isHttp(page.stagingLink)) view.stagingUrl = page.stagingLink.trim();
-      if (state === 'approved') view.approvedAt = page.clientReview!.approvedAt;
       const theirs = columns
         .filter((d) => owners[d.id] === 'client')
         .map((d) => ({ d, status: normalizePageWorkStatus(page.work?.[d.id]) }))

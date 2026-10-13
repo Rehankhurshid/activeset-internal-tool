@@ -267,8 +267,7 @@ export interface ClientPortalView {
   review?: PortalReviewView;
   /**
    * The pages being built, from the page tracker: name, staging link, where
-   * each stands for them, and their own parts not yet final. Each ready page
-   * can be approved on its own ("Looks good").
+   * each stands for them, and their own parts not yet final.
    */
   pages?: PortalPageView[];
   /** Where to comment on them: the client's review step's links, less staging. */

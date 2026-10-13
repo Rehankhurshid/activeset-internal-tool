@@ -192,13 +192,6 @@ export interface ProjectPage {
   reviewComment?: string;
   /** The discovered link this page was seeded from, when it was. */
   sourceLinkId?: string;
-  /**
-   * The client said "Looks good" to this page on their portal, once our build
-   * of it was done. Written only by the portal's page-approve route; cleared
-   * when the team reopens one of its own columns (a rebuild for a new design
-   * revision), so the page asks for their review again.
-   */
-  clientReview?: { approvedAt: string };
   createdAt: string;
   updatedAt: string;
 }

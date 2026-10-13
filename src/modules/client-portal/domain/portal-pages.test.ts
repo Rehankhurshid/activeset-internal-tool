@@ -22,20 +22,12 @@ describe('portalPageState', () => {
   it('is ready once our columns are built, whatever their design is doing', () => {
     const built = { copy: 'not_required', design: 'in_progress', dev_desktop: 'completed', dev_mobile: 'completed' } as const;
     assert.equal(portalPageState({ work: built }, disciplines, owners), 'ready');
-    assert.equal(portalPageState({ work: built, clientReview: { approvedAt: '2026-10-13T10:00:00Z' } }, disciplines, owners), 'approved');
   });
 
   it('is being built, waiting on them, or not started', () => {
     assert.equal(portalPageState({ work: { dev_desktop: 'completed', dev_mobile: 'in_progress' } }, disciplines, owners), 'building');
     assert.equal(portalPageState({ work: { design: 'not_started' } }, disciplines, owners), 'waiting');
     assert.equal(portalPageState({ work: { copy: 'completed', design: 'completed' } }, disciplines, owners), 'planned');
-  });
-
-  it('keeps an old "Looks good" off a page we are building again', () => {
-    assert.equal(
-      portalPageState({ work: { dev_desktop: 'in_progress', dev_mobile: 'completed' }, clientReview: { approvedAt: 'x' } }, disciplines, owners),
-      'building',
-    );
   });
 });
 

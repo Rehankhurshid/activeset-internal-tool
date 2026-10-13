@@ -28,8 +28,8 @@ function resolveNow(generatedAt: string): Date {
 }
 
 /**
- * The client's dashboard. Server-safe (no hooks); only the approval card,
- * the pages ("Looks good") and the view beacon are client components. Everything renders inside
+ * The client's dashboard. Server-safe (no hooks); only the approval card and
+ * the view beacon are client components. Everything renders inside
  * `.portal-theme`, the light palette defined in globals.css, and uses token
  * utilities only.
  *
@@ -65,7 +65,7 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         {/* From the project sheet or the checklist, the whole process as one numbered list, right under where we are. */}
         {showsProcess(view.planSource) && <PortalProcess stages={view.stages} now={now} />}
         {view.pages && (
-          <PortalPages pages={view.pages} feedback={view.pagesFeedback} token={token} now={now} preview={preview} />
+          <PortalPages pages={view.pages} feedback={view.pagesFeedback} />
         )}
         {view.asks.length > 0 && <PortalAsks asks={view.asks} received={view.asksReceived} now={now} />}
         {view.work && <PortalWork work={view.work} generatedAt={view.generatedAt} />}

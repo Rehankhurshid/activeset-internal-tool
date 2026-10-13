@@ -303,7 +303,7 @@ export function withPagesInReview(
   sources: TimelineStageSource[],
   pages: readonly PortalPageView[],
 ): TimelineStageSource[] {
-  const ready = pages.filter((p) => p.state === 'ready' || p.state === 'approved').length;
+  const ready = pages.filter((p) => p.state === 'ready').length;
   if (ready === 0) return sources;
   const note = `${ready} of ${pages.length} ${pages.length === 1 ? 'page' : 'pages'} ready for your review`;
   return sources.map((source) => ({
