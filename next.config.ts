@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   // @sparticuz/chromium errors with 'input directory does not exist'.
   outputFileTracingIncludes: {
     '/api/generate-pdf/**/*': ['./node_modules/@sparticuz/chromium/**/*'],
+    // Fonts the portal link preview reads from disk (src/lib/og/portal-card.tsx).
+    '/portal/**/*': ['./src/assets/og-fonts/**/*'],
   },
   output: 'standalone',
   images: {

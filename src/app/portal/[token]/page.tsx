@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { cache } from 'react';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { getBaseUrl } from '@/lib/base-url';
 import { loadClientPortalByToken } from '@/lib/client-portal';
 import { hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 // Deliberately NOT '@/modules/client-portal': that barrel also exports the
@@ -24,20 +25,36 @@ const FALLBACK_TITLE = 'Project page';
 // read and one token "touch" (the loader bumps useCount on every call).
 const loadPortal = cache((token: string) => loadClientPortalByToken(token));
 
+// Overrides the root layout's internal-tool description; says nothing about status.
+const DESCRIPTION = 'A private project page prepared by ActiveSet.';
+
+/**
+ * Title and link preview. The preview image is ./opengraph-image.tsx, which Next
+ * adds on its own; metadataBase pins its URL to the public origin, because the
+ * fallback (the deployment URL) sits behind Vercel's protection and unfurlers
+ * would get a login page instead of the image.
+ */
+function portalMetadata(title: string): Metadata {
+  return {
+    metadataBase: new URL(getBaseUrl()),
+    title,
+    description: DESCRIPTION,
+    robots: ROBOTS,
+    openGraph: { type: 'website', siteName: 'ActiveSet', title, description: DESCRIPTION },
+    twitter: { card: 'summary_large_image', title, description: DESCRIPTION },
+  };
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { token } = await params;
-  const base: Metadata = {
-    title: FALLBACK_TITLE,
-    // Overrides the root layout's internal-tool description; says nothing about status.
-    description: 'A private project page prepared by ActiveSet.',
-    robots: ROBOTS,
-  };
+  const base = portalMetadata(FALLBACK_TITLE);
   if (!hasFirebaseAdminCredentials) return base;
 
   try {
     const loaded = await loadPortal(token);
     if (!loaded) return base;
-    return { ...base, title: `${loaded.view.brandName} · ${loaded.view.projectName}` };
+    const { brandName, projectName } = loaded.view;
+    return portalMetadata(brandName === projectName ? brandName : `${brandName} · ${projectName}`);
   } catch {
     return base;
   }

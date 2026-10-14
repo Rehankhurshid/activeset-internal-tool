@@ -340,6 +340,21 @@ export function feedbackLinks(
   return links.length ? links : undefined;
 }
 
+/**
+ * The client's name and logo as the portal shows them. Shared with the link
+ * preview image, so the page and its unfurl never disagree.
+ */
+export function portalBrand(project: Pick<Project, 'name' | 'client' | 'logoUrl' | 'clientPortal'>): {
+  brandName: string;
+  brandLogoUrl?: string;
+} {
+  const settings = project.clientPortal;
+  return {
+    brandName: settings?.brandName?.trim() || project.client?.trim() || project.name,
+    brandLogoUrl: settings?.brandLogoUrl || project.logoUrl || undefined,
+  };
+}
+
 export function buildClientPortalView(input: BuildClientPortalViewInput): ClientPortalView {
   const { project, timeline, tasks = [], checklists = [], meetings = [], sheet = null, templates, agency, now = new Date() } = input;
   const settings = project.clientPortal;
@@ -412,8 +427,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
   const view: ClientPortalView = {
     projectId: project.id,
     projectName: project.name,
-    brandName: settings?.brandName?.trim() || project.client?.trim() || project.name,
-    brandLogoUrl: settings?.brandLogoUrl || project.logoUrl || undefined,
+    ...portalBrand(project),
     welcome: settings?.welcome?.trim() || undefined,
     agencyContactEmail: project.reviewOwnerEmail || project.assigneeEmails?.[0] || undefined,
     websiteUrl: detectWebsiteUrl(project, !saved && !byPhase),
