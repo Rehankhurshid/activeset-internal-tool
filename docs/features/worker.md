@@ -540,14 +540,32 @@ running.
 
 The Pages table's Record button (Links column) queues a `page_recording`
 job: a 60 fps scroll-through video of one page, from its staging or live
-address, one eased scroll at a time. The worker needs two things for it
-that the image jobs do not:
+address, one eased scroll at a time.
 
-- **ffmpeg**, to encode. `winget install --id Gyan.FFmpeg -e` and restart
-  the service so it picks up the new PATH, or point `FFMPEG_PATH` at
+**Any team computer can make them, not only this one** (Rehan, 2026-10-17).
+On a Mac with the repo, Chrome and ffmpeg (`brew install ffmpeg`):
+
+```bash
+npm run recorder
+```
+
+That is the worker loop taking `page_recording` jobs only, so it never picks
+up alt text or image work. It shows in the app's worker list under the
+machine's hostname. Whichever machine is on claims the job first; both can
+be running at once.
+
+What a machine needs:
+
+- **ffmpeg**, to encode. On Windows `winget install --id Gyan.FFmpeg -e` and
+  restart the service so it picks up the new PATH, or point `FFMPEG_PATH` at
   `ffmpeg.exe`. `npm run worker doctor` lists it under Browser.
-- **A Bunny pull zone** (`BUNNY_CDN_HOST`) as well as the storage zone, or
-  the video would have no address to play from.
+- **Somewhere to put the video.** Bunny when the machine has
+  `BUNNY_STORAGE_ZONE`, `BUNNY_STORAGE_KEY` and `BUNNY_CDN_HOST` (only
+  Goliath does). Otherwise the project's Firebase Storage bucket
+  (`NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` with the admin credentials every
+  checkout pulls from Vercel), under `recordings/`, with a download-token
+  link. The page records which store it used (`recording.storage`), so a
+  re-record made on another machine still deletes the old file.
 
 Try the recorder on any machine with `npm run record-page -- <url>`; it
 writes to `captures/videos/`. A 20-second video takes about 90 seconds on an

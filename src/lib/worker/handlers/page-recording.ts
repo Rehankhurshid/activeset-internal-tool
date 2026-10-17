@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { db as adminDb } from '@/lib/firebase-admin';
 import { COLLECTIONS } from '@/lib/constants';
-import { BUNNY_NOT_CONFIGURED, bunnyConfig, deleteFromBunny, putToBunny } from '@/lib/backup/bunny';
+import { NO_VIDEO_STORE, videoStore, videoStoreFor } from '@/lib/page-recording/video-store';
 import { ffmpegVersion, NO_FFMPEG, recordPage } from '@/lib/page-recording/recorder';
 import {
   recordableUrlProblem,
@@ -18,7 +18,8 @@ import {
  * The app writes `recording: { status: 'queued', … }` on the page and queues
  * this job in the same batch. From here on the worker owns the field: it says
  * `recording` with a progress figure while the frames are captured, then
- * `done` with a CDN link, or `failed` with the reason. The Pages table reads
+ * `done` with a link (Bunny, or Firebase Storage on a machine without Bunny),
+ * or `failed` with the reason. The Pages table reads
  * the page document it already subscribes to, so it needs no job listener.
  */
 
@@ -70,9 +71,8 @@ export async function runPageRecording(
     // Checked again here: the app is not the only thing that can write a job.
     const problem = recordableUrlProblem(payload.url);
     if (problem) throw new Error(`${problem}: ${payload.url}`);
-    const bunny = bunnyConfig();
-    if (!bunny) throw new Error(BUNNY_NOT_CONFIGURED.replace('archive the originals', 'keep the video'));
-    if (!bunny.cdnHost) throw new Error('Bunny has no pull zone (BUNNY_CDN_HOST), so a video would have no address to play from.');
+    const store = videoStore();
+    if (!store) throw new Error(NO_VIDEO_STORE);
     if (!ffmpegVersion()) throw new Error(NO_FFMPEG);
 
     const snapshot = await ref.get();
@@ -106,8 +106,8 @@ export async function runPageRecording(
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       const videoPath = storagePath(projectId, payload.pageId, payload.source, stamp, 'mp4');
       const posterPath = storagePath(projectId, payload.pageId, payload.source, stamp, 'jpg');
-      const video = await putToBunny(bunny, videoPath, await fs.readFile(videoFile), 'video/mp4');
-      const poster = await putToBunny(bunny, posterPath, await fs.readFile(posterFile), 'image/jpeg').catch(() => null);
+      const videoUrl = await store.put(videoPath, await fs.readFile(videoFile), 'video/mp4');
+      const posterUrl = await store.put(posterPath, await fs.readFile(posterFile), 'image/jpeg').catch(() => null);
 
       await ref.update({
         recording: {
@@ -117,9 +117,10 @@ export async function runPageRecording(
           source: payload.source,
           sourceUrl: payload.url,
           jobId,
-          videoUrl: video.url,
+          videoUrl,
           videoPath,
-          ...(poster?.url ? { posterUrl: poster.url, posterPath } : {}),
+          ...(posterUrl ? { posterUrl, posterPath } : {}),
+          storage: store.kind,
           durationSec: result.durationSec,
           width: result.width,
           height: result.height,
@@ -129,11 +130,13 @@ export async function runPageRecording(
       });
 
       // The new one is safely in place; the one it replaces can go.
+      // It may be in the other store, if a different machine made it.
+      const oldStore = previous?.videoPath ? videoStoreFor(previous.storage) : null;
       for (const old of [previous?.videoPath, previous?.posterPath]) {
-        if (old && old !== videoPath && old !== posterPath) await deleteFromBunny(bunny, old).catch(() => undefined);
+        if (oldStore && old && old !== videoPath && old !== posterPath) await oldStore.remove(old).catch(() => undefined);
       }
 
-      return { pageId: payload.pageId, videoUrl: video.url!, durationSec: result.durationSec, bytes: result.bytes };
+      return { pageId: payload.pageId, videoUrl, durationSec: result.durationSec, bytes: result.bytes };
     } finally {
       await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
     }

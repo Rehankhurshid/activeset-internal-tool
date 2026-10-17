@@ -28,6 +28,8 @@ export interface PageRecording {
   /** Storage paths, so a re-record can remove the video it replaces. */
   videoPath?: string;
   posterPath?: string;
+  /** Which store the paths are in: Bunny on the worker, Firebase Storage elsewhere. Absent means Bunny. */
+  storage?: 'bunny' | 'firebase';
   durationSec?: number;
   width?: number;
   height?: number;
