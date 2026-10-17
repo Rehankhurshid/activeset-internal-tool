@@ -536,6 +536,24 @@ running.
 6. Pause it from the panel and watch the log say `paused from the app`, then
    press Run checks and watch the report appear in the panel.
 
+## Page recordings
+
+The Pages table's Record button (Links column) queues a `page_recording`
+job: a 60 fps scroll-through video of one page, from its staging or live
+address, one eased scroll at a time. The worker needs two things for it
+that the image jobs do not:
+
+- **ffmpeg**, to encode. `winget install --id Gyan.FFmpeg -e` and restart
+  the service so it picks up the new PATH, or point `FFMPEG_PATH` at
+  `ffmpeg.exe`. `npm run worker doctor` lists it under Browser.
+- **A Bunny pull zone** (`BUNNY_CDN_HOST`) as well as the storage zone, or
+  the video would have no address to play from.
+
+Try the recorder on any machine with `npm run record-page -- <url>`; it
+writes to `captures/videos/`. A 20-second video takes about 90 seconds on an
+M-series Mac. How it gets 60 fps out of a 40 ms screenshot is in
+[docs/modules/delivery.md](../modules/delivery.md) (Gotchas).
+
 ## Moving more work here later
 
 The queue is generic — `kind`, `projectId`, `payload` — precisely so page

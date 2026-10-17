@@ -29,6 +29,7 @@ import {
 } from '../components/DeliveryToolbar';
 import { ImportPagesDialog } from '../components/ImportPagesDialog';
 import { PageGrid } from '../components/PageGrid';
+import { recordingTargets, type RecordingSource } from '../../domain/delivery.recording';
 
 const NO_FILTERS: DeliveryFilters = {
   query: '',
@@ -193,6 +194,25 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
     [project.id],
   );
 
+  const recordingTargetsFor = useCallback(
+    (page: ProjectPage) => recordingTargets(page, { links: project.links, sitemapUrl: project.sitemapUrl }),
+    [project.links, project.sitemapUrl],
+  );
+
+  const handleRecordPage = useCallback(
+    async (page: ProjectPage, source: RecordingSource, url: string) => {
+      await deliveryRepository.requestRecording({
+        projectId: project.id,
+        projectName: project.name,
+        page,
+        source,
+        url,
+        requestedBy: userEmail,
+      });
+    },
+    [project.id, project.name, userEmail],
+  );
+
   const handleAddPage = useCallback(
     async (input: { path: string; title: string }) => {
       await deliveryRepository.addPage(project.id, input);
@@ -292,6 +312,8 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
         onUpdatePage={handleUpdatePage}
         onMovePage={handleMovePage}
         onDeletePage={handleDeletePage}
+        recordingTargetsFor={recordingTargetsFor}
+        onRecordPage={handleRecordPage}
       />
 
       <p className="text-[11px] text-muted-foreground">

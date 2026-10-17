@@ -50,6 +50,7 @@ const KIND_LABEL: Record<string, string> = {
   alt_text: 'Draft ALT for pages',
   webflow_alt: 'Draft ALT for the library',
   library_sweep: 'New images (hourly)',
+  page_recording: 'Record a page',
 };
 
 const PHASE_WORD: Record<Phase, string> = { describing: 'Reading', optimising: 'Shrinking' };
@@ -63,6 +64,9 @@ export function jobTitle(job: WorkerJobDoc): string {
     const scope = job.payload?.srcs ? ` · ${(job.payload.srcs as unknown[]).length} picked` : '';
     const what = steps?.alt === false ? ' · images only' : steps?.images === false ? ' · ALT only' : '';
     return `${name}${scope}${what}`;
+  }
+  if (job.kind === 'page_recording' && typeof job.payload?.pageTitle === 'string') {
+    return `Record ${job.payload.pageTitle}`;
   }
   return KIND_LABEL[job.kind] ?? job.kind;
 }
@@ -80,7 +84,9 @@ function openLink(job: WorkerJobDoc): string {
   const base = `/modules/project-links/${job.projectId}`;
   return job.kind === 'library_group' || job.kind === 'library_sweep' || job.kind === 'alt_apply' || job.kind === 'webflow_alt'
     ? `${base}?tab=webflow&section=images`
-    : `${base}?tab=audit`;
+    : job.kind === 'page_recording'
+      ? `${base}?tab=delivery`
+      : `${base}?tab=audit`;
 }
 
 const percent = (job: WorkerJobDoc) => Math.round((job.fraction ?? 0) * 100);

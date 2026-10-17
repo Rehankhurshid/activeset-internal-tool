@@ -160,3 +160,15 @@ export async function probeBunny(config: BunnyConfig): Promise<string> {
     return `storage ok, but ${config.cdnHost} is unreachable — ${error instanceof Error ? error.message : String(error)}`;
   }
 }
+
+/** Remove one file. A file that is already gone is not an error. */
+export async function deleteFromBunny(config: BunnyConfig, path: string): Promise<void> {
+  const res = await fetch(`https://${config.host}/${config.zone}/${path}`, {
+    method: 'DELETE',
+    headers: { AccessKey: config.key },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Bunny refused the delete (${res.status})`);
+  }
+}

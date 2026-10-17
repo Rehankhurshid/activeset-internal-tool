@@ -40,6 +40,8 @@ import { runImageApply, type ImageApplyPayload } from '@/lib/worker/handlers/ima
 import { runLibraryGroup, type LibraryGroupPayload } from '@/lib/worker/handlers/library-group';
 import { runLibrarySweep, type LibrarySweepPayload } from '@/lib/worker/handlers/library-sweep';
 import { runWebflowAlt, type WebflowAltPayload } from '@/lib/worker/handlers/webflow-alt';
+import { runPageRecording, type PageRecordingPayload } from '@/lib/worker/handlers/page-recording';
+import { ffmpegVersion } from '@/lib/page-recording/recorder';
 import { loadProjectDocAdmin } from '@/lib/project-admin';
 import {
   claimNextCommand,
@@ -211,6 +213,13 @@ async function handle(job: WorkerJob): Promise<Record<string, unknown>> {
     return result as unknown as Record<string, unknown>;
   }
 
+  if (job.kind === 'page_recording') {
+    const payload = job.payload as unknown as PageRecordingPayload;
+    const result = await runPageRecording(job.id, job.projectId, payload, (message, fraction) => progress(message, fraction));
+    log(green('  done'), `${payload.url} · ${result.durationSec} s · ${formatBytes(result.bytes)}`);
+    return result as unknown as Record<string, unknown>;
+  }
+
   if (job.kind === 'image_budget') {
     const project = await loadProjectDocAdmin(job.projectId);
     if (!project) throw new Error(`Project ${job.projectId} not found`);
@@ -294,6 +303,7 @@ async function buildDoctorReport(): Promise<string> {
     await residentLine(),
     `Keep-alive: ${resolveOllama().keepAlive} after the last image`,
     browser ? `Browser: ${browser}` : 'No Chrome or Edge found',
+    ffmpegVersion() ? `Video: ${ffmpegVersion()}` : 'Video: no ffmpeg — page recordings will fail',
     hasFirebaseAdminCredentials ? 'Firebase admin ready' : 'No Firebase admin credentials',
   ]
     .filter(Boolean)
@@ -346,6 +356,12 @@ program
     console.log(bold('Browser'));
     const browser = findBrowserExecutable();
     console.log(browser ? `  ${green(browser)}` : `  ${red('No Chrome or Edge found')}`);
+    const ffmpeg = ffmpegVersion();
+    console.log(
+      ffmpeg
+        ? `  ${green(ffmpeg)} ${dim('(page recordings)')}`
+        : `  ${yellow('No ffmpeg')} ${dim('— page recordings will fail. winget install Gyan.FFmpeg, or set FFMPEG_PATH')}`,
+    );
 
     console.log();
     console.log(bold('Credentials'));
@@ -409,7 +425,7 @@ async function loop(options: { once?: boolean; interval?: string; kinds?: string
         ...hardware,
         model: resolveOllama().model,
         paused,
-        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt', 'image_apply', 'library_group', 'library_sweep'],
+        kinds: kinds ?? ['alt_text', 'image_budget', 'alt_apply', 'webflow_alt', 'image_apply', 'library_group', 'library_sweep', 'page_recording'],
         busyWith: null,
       });
 

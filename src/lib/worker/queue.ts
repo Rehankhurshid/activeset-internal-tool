@@ -28,7 +28,8 @@ export type WorkerJobKind =
   | 'webflow_alt'
   | 'image_apply'
   | 'library_group'
-  | 'library_sweep';
+  | 'library_sweep'
+  | 'page_recording';
 export type WorkerJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface WorkerJob<P = Record<string, unknown>> {

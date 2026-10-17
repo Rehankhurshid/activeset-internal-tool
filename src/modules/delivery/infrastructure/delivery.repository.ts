@@ -29,6 +29,7 @@ import type { ChecklistItemStatus, ProjectChecklist, ProjectLink, SOPTemplate,
   DeliverablePriority,
 } from '@/types';
 import type { MissingBasic } from '../domain/delivery.basics';
+import type { PageRecording, RecordingSource } from '../domain/delivery.recording';
 import type { Improvement } from '../domain/delivery.feedback';
 import type {
   CheckStatus,
@@ -106,6 +107,7 @@ function fromDoc(id: string, data: DocumentData): ProjectPage {
     docsLink: data.docsLink ?? undefined,
     reviewComment: data.reviewComment ?? undefined,
     sourceLinkId: data.sourceLinkId ?? undefined,
+    recording: (data.recording ?? undefined) as PageRecording | undefined,
     createdAt: String(data.createdAt ?? nowIso()),
     updatedAt: String(data.updatedAt ?? nowIso()),
   };
@@ -259,6 +261,68 @@ export const deliveryRepository = {
     } catch (error) {
       logError(error, 'importFromLinks');
       throw new DatabaseError('Failed to import pages');
+    }
+  },
+
+  /**
+   * Ask the worker for a scroll-through video of one page.
+   *
+   * The job and the page's `recording: queued` go in one batch, so the table
+   * never shows a recording that was not queued, or a job it cannot see. Not a
+   * page edit: no `updatedAt`, no sheet rewrite.
+   */
+  async requestRecording(input: {
+    projectId: string;
+    projectName?: string;
+    page: Pick<ProjectPage, 'id' | 'title' | 'path'>;
+    source: RecordingSource;
+    url: string;
+    requestedBy?: string;
+  }): Promise<string> {
+    try {
+      const batch = writeBatch(db);
+      const job = doc(collection(db, 'worker_jobs'));
+      const requestedAt = nowIso();
+      batch.set(job, {
+        kind: 'page_recording',
+        projectId: input.projectId,
+        ...(input.projectName ? { projectName: input.projectName } : {}),
+        payload: {
+          pageId: input.page.id,
+          source: input.source,
+          url: input.url,
+          pageTitle: input.page.title || input.page.path,
+        },
+        status: 'queued',
+        createdAt: requestedAt,
+        attempts: 0,
+        ...(input.requestedBy ? { requestedBy: input.requestedBy } : {}),
+      });
+      const recording: PageRecording = stripUndefined({
+        status: 'queued' as const,
+        source: input.source,
+        sourceUrl: input.url,
+        jobId: job.id,
+        requestedBy: input.requestedBy,
+        requestedAt,
+      });
+      // Only the request fields: the previous video's paths stay until the
+      // worker has a new one, so a failed re-record still plays the old video.
+      batch.update(pageRef(input.projectId, input.page.id), {
+        'recording.status': recording.status,
+        'recording.source': recording.source,
+        'recording.sourceUrl': recording.sourceUrl,
+        'recording.jobId': recording.jobId,
+        'recording.requestedAt': recording.requestedAt,
+        'recording.requestedBy': recording.requestedBy ?? deleteField(),
+        'recording.progress': deleteField(),
+        'recording.error': deleteField(),
+      });
+      await batch.commit();
+      return job.id;
+    } catch (error) {
+      logError(error, 'requestRecording');
+      throw new DatabaseError('Could not queue the recording');
     }
   },
 

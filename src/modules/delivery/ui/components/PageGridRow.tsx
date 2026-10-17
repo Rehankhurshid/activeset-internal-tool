@@ -45,6 +45,8 @@ import type {
 } from '../../domain/delivery.types';
 import { normalizePageWorkStatus } from '../../domain/delivery.types';
 import { PageStatusCell } from './PageStatusCell';
+import { PageRecordingControl } from './PageRecordingControl';
+import type { RecordingSource, RecordingTargets } from '../../domain/delivery.recording';
 
 /** Radix Select cannot hold an empty value, so "nobody" needs a name. */
 const UNASSIGNED = '__unassigned__';
@@ -85,6 +87,9 @@ export interface PageGridRowProps {
   /** Row index in the *rendered* list, for the grid's focus bookkeeping. */
   rowIndex: number;
   columnCount: number;
+  /** Where this page can be recorded from: its staging link, the project's staging or live site. */
+  recordingTargets: RecordingTargets;
+  onRecord: (source: RecordingSource, url: string) => Promise<void>;
 }
 
 export function PageGridRow({
@@ -107,6 +112,8 @@ export function PageGridRow({
   onNavigate,
   rowIndex,
   columnCount,
+  recordingTargets,
+  onRecord,
 }: PageGridRowProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const hasComment = Boolean(page.reviewComment?.trim());
@@ -195,6 +202,12 @@ export function PageGridRow({
               icon={<ExternalLink className="size-3.5" />}
             />
             <LinkIcon href={page.docsLink} label="Docs" icon={<FileText className="size-3.5" />} />
+            <PageRecordingControl
+              pageTitle={page.title || page.path}
+              recording={page.recording}
+              targets={recordingTargets}
+              onRecord={onRecord}
+            />
           </div>
         </TableCell>
 

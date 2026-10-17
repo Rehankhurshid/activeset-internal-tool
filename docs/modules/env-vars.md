@@ -116,7 +116,8 @@ last_verified: 2026-09-23 @ a00f91e
 | `BUNNY_STORAGE_ZONE` | Feature (backups) | No | [backup/bunny.ts](../../src/lib/backup/bunny.ts) | Bunny storage zone for original-image backups | worker-alt-text-images |
 | `BUNNY_STORAGE_KEY` | Feature (backups) | No | backup/bunny.ts | Bunny storage API key | worker-alt-text-images |
 | `BUNNY_STORAGE_HOST` | Optional | No | backup/bunny.ts | Regional storage host | worker-alt-text-images |
-| `BUNNY_CDN_HOST` | Optional | No | backup/bunny.ts | Pull-zone host so backups can be read back | worker-alt-text-images |
+| `BUNNY_CDN_HOST` | Optional (required for page recordings) | No | backup/bunny.ts, worker/handlers/page-recording.ts | Pull-zone host so backups can be read back and page videos can play | worker-alt-text-images |
+| `FFMPEG_PATH` | Optional | No | [page-recording/recorder.ts](../../src/lib/page-recording/recorder.ts) | ffmpeg binary for page recordings; default `ffmpeg` on PATH | delivery |
 
 ## Scripts, CLIs and the worker
 

@@ -14,6 +14,7 @@
  */
 export type { AutoCheckId, CheckStatus, ProjectDeliveryState, StackId } from '@/types';
 import type { AutoCheckId, CheckStatus, PageWorkOwner, ServiceId, StackId } from '@/types';
+import type { PageRecording } from './delivery.recording';
 export type { PageWorkOwner } from '@/types';
 
 /**
@@ -192,6 +193,8 @@ export interface ProjectPage {
   reviewComment?: string;
   /** The discovered link this page was seeded from, when it was. */
   sourceLinkId?: string;
+  /** Its scroll-through video, written by the worker (see delivery.recording.ts). */
+  recording?: PageRecording;
   createdAt: string;
   updatedAt: string;
 }

@@ -28,6 +28,7 @@ import type {
   StackDiscipline,
 } from '../../domain/delivery.types';
 import { PageGridRow, STICKY_NUMBER_COL, STICKY_PAGE_COL } from './PageGridRow';
+import type { RecordingSource, RecordingTargets } from '../../domain/delivery.recording';
 
 const STICKY_HEAD =
   'sticky top-0 z-20 bg-background shadow-[inset_0_-1px_0_var(--border)] h-9 px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground';
@@ -53,6 +54,8 @@ export interface PageGridProps {
     patch: Partial<Omit<ProjectPage, 'id' | 'createdAt'>>,
   ) => Promise<void>;
   onMovePage: (pageId: string, toIndex: number) => void;
+  recordingTargetsFor: (page: ProjectPage) => RecordingTargets;
+  onRecordPage: (page: ProjectPage, source: RecordingSource, url: string) => Promise<void>;
   onDeletePage: (pageId: string) => void;
 }
 
@@ -92,6 +95,8 @@ export function PageGrid({
   onUpdatePage,
   onMovePage,
   onDeletePage,
+  recordingTargetsFor,
+  onRecordPage,
 }: PageGridProps) {
   const [active, setActive] = useState<ActiveCell | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -210,6 +215,8 @@ export function PageGrid({
                   fallbackTabbable={active === null && rowIndex === 0}
                   onCellFocus={(col) => setActive({ row: rowIndex, col })}
                   onNavigate={navigate}
+                  recordingTargets={recordingTargetsFor(page)}
+                  onRecord={(source, url) => onRecordPage(page, source, url)}
                 />
               );
             })
