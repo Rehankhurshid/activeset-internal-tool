@@ -26,12 +26,15 @@ import { portalStageSources } from './portal-sources';
 import { portalPages, type PageTrackerInput, type PortalPageFeedbackLink, type PortalPageView } from './portal-pages';
 import { sheetAsks, sheetChanges, sheetFacts, sheetFiles, sheetReadiness, sheetWork } from './project-sheet.portal';
 import type { ProjectSheetSnapshot } from './project-sheet.types';
+import { SIGN_OFF_CHANNELS, signOffLog } from './sign-off-log';
+import { clientOwnerName, isoDayOrUndefined } from './waiting-on-client';
 import type {
   ClientPortalView,
   PortalAskView,
   PortalFileView,
   PortalMeetingView,
   PortalReviewView,
+  PortalSignOffView,
   PortalStageView,
   PortalStepView,
 } from './client-portal.types';
@@ -192,10 +195,31 @@ function placeMeetings(stages: PortalStageView[], meetings: ProjectMeeting[]): v
   }
 }
 
+/**
+ * A task ask: title, due date, when we asked, when we follow up, and who has
+ * it on their side by name. Never the description or our assignee.
+ */
 function toAsk(t: Task): PortalAskView {
   const ask: PortalAskView = { id: t.id, title: t.title };
   if (t.dueDate) ask.dueDate = t.dueDate;
+  const asked = isoDayOrUndefined(t.askedAt);
+  if (asked) ask.askedDate = asked;
+  const followUp = isoDayOrUndefined(t.followUpAt);
+  if (followUp) ask.followUpDate = followUp;
+  const owner = clientOwnerName(t.clientOwner);
+  if (owner) ask.owner = owner;
   return ask;
+}
+
+/** The sign-off log as the client sees it: what, when, their words, where. Never who wrote it down or the link. */
+function toSignOffs(approvals: NonNullable<Project['delivery']>['approvals']): PortalSignOffView[] {
+  return signOffLog(approvals).map((a, index) => {
+    const view: PortalSignOffView = { id: `signoff-${index + 1}`, title: a.stageTitle, approvedAt: a.approvedAt };
+    const note = typeof a.note === 'string' ? a.note.trim() : '';
+    if (note) view.note = note;
+    if (a.via && (SIGN_OFF_CHANNELS as string[]).includes(a.via)) view.via = a.via;
+    return view;
+  });
 }
 
 /**
@@ -415,6 +439,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     .filter((t) => t.needsClientInput === true && t.status !== 'done')
     .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || a.order - b.order)
     .map(toAsk);
+  const signOffs = toSignOffs(project.delivery?.approvals);
   const fromSheetAsks = sheet ? sheetAsks(sheet) : { asks: [], received: 0 };
   const asks = mergeAsks(fromSheetAsks.asks, taskAsks);
 
@@ -460,6 +485,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     readiness: readiness.length ? readiness : undefined,
     sheetUrl: sheet?.showSheetLink && sheet.url ? sheet.url : undefined,
     review: toPortalReview(checklists, project.delivery?.approvals),
+    signOffs: signOffs.length ? signOffs : undefined,
     pages: pages.length ? pages : undefined,
     pagesFeedback: pages.length ? feedbackLinks(timelineSources, pages) : undefined,
     generatedAt: now.toISOString(),

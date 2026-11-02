@@ -52,10 +52,12 @@ export function ClientApprovalCard({ project, stageKey, className }: ClientAppro
           </h3>
           <p className="text-xs text-muted-foreground">
             {approval
-              ? `Approved on ${approvedOn} from their portal link.`
+              ? approval.recordedBy
+                ? `Approved on ${approvedOn}, recorded by ${approval.recordedBy.split('@')[0]} in the Client tab's sign-off log.`
+                : `Approved on ${approvedOn} from their portal link.`
               : portalOn
-                ? 'They approve from their portal link. Nothing here is blocked by it — this is the record, not a lock.'
-                : 'The client portal is off, so there is nowhere for them to approve. Turn it on in the Client tab, or record their approval however you got it.'}
+                ? 'They approve from their portal link, or record one they gave in Slack or on a call under Sign-offs in the Client tab. Nothing here is blocked by it — this is the record, not a lock.'
+                : 'The client portal is off, so there is nowhere for them to approve. Record one they gave in Slack or on a call under Sign-offs in the Client tab.'}
           </p>
         </div>
       </div>
@@ -66,7 +68,7 @@ export function ClientApprovalCard({ project, stageKey, className }: ClientAppro
         </p>
       )}
 
-      {!approval && !portalOn && (
+      {!approval && (
         <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
           {/* A plain link: the Client tab is chosen from the URL on load. */}
           <a href={`/modules/project-links/${project.id}?tab=client`}>

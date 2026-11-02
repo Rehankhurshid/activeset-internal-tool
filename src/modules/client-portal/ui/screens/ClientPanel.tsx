@@ -17,6 +17,8 @@ import { ClientMeetingsCard } from '../components/ClientMeetingsCard';
 import { ClientStatusChip } from '../components/ClientStatusChip';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalLinkCard } from '../components/PortalLinkCard';
+import { SignOffLogCard } from '../components/SignOffLogCard';
+import { WaitingOnClientCard } from '../components/WaitingOnClientCard';
 import { useProjectSheet } from '../components/ProjectSheetCard';
 import { ProjectSheetPanel } from '../components/ProjectSheetPanel';
 
@@ -29,7 +31,7 @@ interface ClientPanelProps {
   userEmail: string;
   /** Unused; kept so the project screen's call stays the same. */
   isAdmin: boolean;
-  /** Unused since the asks list left this tab: the Tasks tab owns them, the client's page shows them. */
+  /** The project's tasks; the open "Needs client input" ones are the Waiting on client list. */
   tasks?: Task[];
   onOpenTab?: (tab: 'checklist' | 'tasks' | 'timeline') => void;
 }
@@ -160,13 +162,13 @@ function useSourceTemplates(checklists: ProjectChecklist[]): { templates: SOPTem
 }
 
 /**
- * The Client tab, lean: the link, the sheet, what the client sees, and calls to
- * share. Nothing here moves the client's page by hand. Rehan, 2026-10-01: the
+ * The Client tab, lean: the link, the sheet, what the client sees, what is
+ * waiting on them, what they signed off, and calls to share. Nothing here moves the client's page by hand. Rehan, 2026-10-01: the
  * checklist manages it, so where the project is comes from ticking the
  * checklist (or the project sheet), and this tab only shows the result.
  */
 export function ClientPanel(props: ClientPanelProps) {
-  const { project, timeline, userEmail, checklists = [], onOpenTab } = props;
+  const { project, timeline, userEmail, checklists = [], tasks = [], onOpenTab } = props;
   const [link, setLink] = useState<PortalLinkState | null>(null);
   const enabled = link ? link.enabled : project.clientPortal?.enabled === true;
   const status = normalizeClientStatus(project.clientFacing?.status);
@@ -199,6 +201,13 @@ export function ClientPanel(props: ClientPanelProps) {
     const shown = plan ?? legacy?.plan;
     return shown ? resolveClientPlan(shown, checklists, { currentStageId: legacy?.currentStageId, status }) : null;
   }, [picked.kind, plan, timeline, project.links, currentPhaseId, checklists, status]);
+
+  // The stages the client's page shows, for the sign-off log's "what comes next".
+  const shownPlan = steps ?? planResolved;
+  const shownStages = useMemo(
+    () => (shownPlan ? shownPlan.stages.map((r) => ({ title: r.stage.title, state: r.state })) : []),
+    [shownPlan],
+  );
 
   const source =
     picked.kind === 'checklist'
@@ -282,6 +291,39 @@ export function ClientPanel(props: ClientPanelProps) {
           )}
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Waiting on client</SectionTitle>
+            <CardDescription className="text-xs">
+              Open asks, overdue first. Their page shows each with who has it on their side, when we asked and the next
+              follow-up.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <WaitingOnClientCard tasks={tasks} onOpenTasks={onOpenTab ? () => onOpenTab('tasks') : undefined} />
+          </CardContent>
+        </Card>
+
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Sign-offs</SectionTitle>
+            <CardDescription className="text-xs">
+              What the client approved and when. Their page shows the same log, without the source links.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SignOffLogCard
+              project={project}
+              checklists={checklists}
+              stages={shownStages}
+              currentIndex={shownPlan && shownPlan.currentIndex >= 0 ? shownPlan.currentIndex : undefined}
+              userEmail={userEmail}
+            />
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="gap-3">
         <CardHeader>

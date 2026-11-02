@@ -1,4 +1,5 @@
 import type { ClientPortalView } from '../../domain/client-portal.types';
+import { askOverdue } from '../../domain/waiting-on-client';
 import { todayIso } from './portal-states';
 
 interface PortalYourTurnProps {
@@ -19,7 +20,7 @@ interface Item {
  */
 export function PortalYourTurn({ view, now }: PortalYourTurnProps) {
   const today = todayIso(now);
-  const overdue = view.asks.filter((a) => a.dueDate && a.dueDate < today).length;
+  const overdue = view.asks.filter((a) => askOverdue(a, today)).length;
   const open = view.asks.length - overdue;
   // Same rule as The work's "Ready for your review" filter: any track waiting on them.
   const review = (view.work ?? []).reduce((n, w) => n + w.items.filter((i) => i.states.includes('in_review')).length, 0);
