@@ -43,6 +43,11 @@ export function MarkLaunchedCard({
   const [domain, setDomain] = useState('');
   const [includeUnlinked, setIncludeUnlinked] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Whether this dialog was opened as "Move links again…", fixed when it opens.
+  // Read from the live project instead, a launch someone else finishes while
+  // this dialog is open would turn a first launch into an overwrite of theirs;
+  // captured here, it hits the repository's already-launched guard instead.
+  const [relaunch, setRelaunch] = useState(false);
 
   const origin = liveOriginOf(domain);
   const plan = useMemo(() => (origin ? launchPlan(pages, origin) : null), [origin, pages]);
@@ -52,6 +57,7 @@ export function MarkLaunchedCard({
   const start = () => {
     setDomain(suggestLiveOrigin(project) ?? '');
     setIncludeUnlinked(true);
+    setRelaunch(Boolean(launch));
     setOpen(true);
   };
 
@@ -65,7 +71,7 @@ export function MarkLaunchedCard({
         includeUnlinked,
         keepPrelaunch: new Set(pages.filter((p) => p.prelaunchLink).map((p) => p.id)),
         by: userEmail,
-        again: Boolean(launch),
+        again: relaunch,
       });
       toast.success(`Marked launched on ${new URL(record.liveOrigin).host}`, {
         description: `${record.rewritten + record.linked} page ${record.rewritten + record.linked === 1 ? 'link' : 'links'} now open the live site.`,
@@ -115,9 +121,9 @@ export function MarkLaunchedCard({
       <Dialog open={open} onOpenChange={(next) => !saving && setOpen(next)}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{launch ? 'Move page links to the live site again' : 'Mark the site launched'}</DialogTitle>
+            <DialogTitle>{relaunch ? 'Move page links to the live site again' : 'Mark the site launched'}</DialogTitle>
             <DialogDescription>
-              {launch
+              {relaunch && launch
                 ? `Already marked launched on ${launch.launchedAt.slice(0, 10)}. Run this again only to move links added since, or to a different domain.`
                 : 'Every page link not on the live domain moves to it with the same path. Nothing else on the pages changes, and the old link is kept.'}
             </DialogDescription>
@@ -170,9 +176,9 @@ export function MarkLaunchedCard({
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={confirm} disabled={!plan || saving || (Boolean(launch) && changes === 0)}>
+            <Button onClick={confirm} disabled={!plan || saving || (relaunch && changes === 0)}>
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {launch
+              {relaunch
                 ? `Move ${changes} ${changes === 1 ? 'link' : 'links'}`
                 : changes > 0
                   ? `Move ${changes} ${changes === 1 ? 'link' : 'links'} and mark launched`
