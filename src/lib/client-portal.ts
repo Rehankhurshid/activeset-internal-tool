@@ -166,6 +166,7 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
     rows: pagesSnap.docs.map((d) => ({ ...(d.data() as Omit<ProjectPage, 'id'>), id: d.id })),
     disciplines: stack.disciplines,
     owners: disciplineOwners(stack, project),
+    liveOrigin: project.delivery?.launch?.liveOrigin,
   };
 
   return {

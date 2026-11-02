@@ -80,7 +80,8 @@ export interface BuildClientPortalViewInput {
 }
 
 /**
- * "Open site". The Webflow custom domain is the client's own public site. A
+ * "Open site". The Webflow custom domain is the client's own public site, else
+ * the domain the team marked the site launched on. A
  * manual link switched on for the client counts too, but only on a portal that
  * has no plan yet: those switches no longer exist, and a link nobody can turn
  * off again must not stay on the page forever.
@@ -88,6 +89,9 @@ export interface BuildClientPortalViewInput {
 function detectWebsiteUrl(project: Project, legacy: boolean): string | undefined {
   const custom = project.webflowConfig?.customDomain;
   if (custom) return custom.startsWith('http') ? custom : `https://${custom}`;
+  // The domain the team marked the site launched on (Delivery tab, Launch stage).
+  const launched = project.delivery?.launch?.liveOrigin;
+  if (launched && /^https?:\/\//i.test(launched)) return launched;
   if (!legacy) return undefined;
   const live = (project.links || []).find(
     (l) =>
@@ -377,7 +381,9 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
   const fromChecklist = picked.kind === 'checklist';
   const fromTimeline = picked.kind === 'timeline';
   // Page by page, from the tracker the team keeps in the Delivery tab.
-  const pages = input.pages ? portalPages(input.pages.rows, input.pages.disciplines, input.pages.owners) : [];
+  const pages = input.pages
+    ? portalPages(input.pages.rows, input.pages.disciplines, input.pages.owners, input.pages.liveOrigin)
+    : [];
   const timelineSources = withPagesInReview(picked.sources, pages);
   const byPhase = picked.kind !== null;
 

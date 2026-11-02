@@ -90,24 +90,30 @@ export interface RecordingTargets {
  * the page's path on it. Live: the project's "Live" link, else the sitemap's
  * site, with the path. A path that is already a full URL (sheet imports store
  * them that way) stands in for staging when there is no staging link.
+ *
+ * Once the site is marked launched the page's link is the live page, so
+ * staging is the link it had before (`prelaunchLink`), and live is the launch's
+ * domain before anything else.
  */
 export function recordingTargets(
-  page: { path: string; stagingLink?: string },
-  project: { links?: readonly ProjectLink[]; sitemapUrl?: string },
+  page: { path: string; stagingLink?: string; prelaunchLink?: string },
+  project: { links?: readonly ProjectLink[]; sitemapUrl?: string; launchOrigin?: string },
 ): RecordingTargets {
   const links = project.links ?? [];
   const pathIsUrl = isHttpUrl(page.path);
   const path = pathIsUrl ? new URL(page.path.trim()).pathname : page.path;
   const targets: RecordingTargets = {};
 
-  if (isHttpUrl(page.stagingLink)) targets.staging = page.stagingLink.trim();
+  if (isHttpUrl(page.prelaunchLink)) targets.staging = page.prelaunchLink.trim();
+  else if (isHttpUrl(page.stagingLink)) targets.staging = page.stagingLink.trim();
   else if (pathIsUrl) targets.staging = page.path.trim();
   else {
     const origin = originOf(linkByTitle(links, STAGING_TITLE)?.url);
     if (origin) targets.staging = joinPath(origin, path);
   }
 
-  const liveOrigin = originOf(linkByTitle(links, LIVE_TITLE)?.url) ?? originOf(project.sitemapUrl);
+  const liveOrigin =
+    originOf(project.launchOrigin) ?? originOf(linkByTitle(links, LIVE_TITLE)?.url) ?? originOf(project.sitemapUrl);
   if (liveOrigin) {
     const live = joinPath(liveOrigin, path);
     if (live !== targets.staging) targets.live = live;

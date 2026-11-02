@@ -1336,6 +1336,42 @@ export interface ProjectDeliveryState {
   lastDevNudgeAt?: string;
   /** Last checklist or page update logged for the dev owner. */
   lastDevActivityAt?: string;
+  /**
+   * The day the site went live, written by "Mark launched" on the Delivery
+   * tab's Launch stage, which swapped the pages' staging links for live ones in
+   * the same write. Its presence is what stops the swap being run twice.
+   */
+  launch?: DeliveryLaunchRecord;
+  /** The last comparison of the page tracker against the live sitemap. */
+  sitemapGap?: DeliverySitemapGap;
+  /** Paths (or `/folder/*`) the team said do not belong on the tracker. */
+  sitemapIgnore?: string[];
+}
+
+/** `delivery.launch`: who marked the site live, when, and what that rewrote. */
+export interface DeliveryLaunchRecord {
+  launchedAt: string;
+  launchedBy?: string;
+  /** e.g. `https://www.acme.com`, no trailing slash. */
+  liveOrigin: string;
+  /** The hosts the page links were moved off, e.g. `acme.webflow.io`. */
+  fromHosts: string[];
+  /** Page links rewritten, and pages that had none and were given one. */
+  rewritten: number;
+  linked: number;
+}
+
+/** `delivery.sitemapGap`: pages on the live sitemap that are not on the tracker. */
+export interface DeliverySitemapGap {
+  checkedAt: string;
+  sitemapUrl: string;
+  /** Static pages on the sitemap that no tracker row has, by path. */
+  missing: { path: string; url: string }[];
+  /** URLs left out as CMS items (folders the project or the scan knows are collections). */
+  cmsSkipped: number;
+  /** Every page URL the sitemap listed. */
+  sitemapCount: number;
+  error?: string;
 }
 
 // --- CLIENT PORTAL / CLIENT-FACING TYPES ---

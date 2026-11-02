@@ -5,6 +5,7 @@ import { db as adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin
 import { COLLECTIONS } from '@/lib/constants';
 import { loadAllProjectsAdmin } from '@/services/ScanJobService';
 import { runSitemapDiff } from '@/lib/webflow-sitemap-io';
+import { refreshSitemapGap } from '@/lib/delivery-sitemap-gap';
 import { applyIgnore } from '@/services/WebflowSitemapDiffService';
 import {
   sendSitemapDriftNotifications,
@@ -22,6 +23,11 @@ const CONCURRENCY = 4;
  * Daily cron: for every Webflow-connected project (saved or derivable sitemap URL),
  * recompute the page drift, persist the snapshot, and send a digest of any
  * NEW (previously-unseen, non-ignored) differences.
+ *
+ * Then, with what is left of the budget, compares every launched project's
+ * live sitemap with its page tracker (`delivery.sitemapGap`, see
+ * delivery-sitemap-gap.ts), so pages built after launch show up on the
+ * Delivery tab without anyone pressing Check. Stored only; nobody is emailed.
  */
 export async function GET(request: NextRequest) {
   if (!isCronAuthorized(request)) {
@@ -139,6 +145,27 @@ export async function GET(request: NextRequest) {
     // Digest of NEW drift only.
     await sendSitemapDriftNotifications(notices, baseUrl);
 
+    // Launched projects, Webflow or not: the live sitemap against the tracker.
+    const launched = allProjects.filter(
+      (p) => (p.status || 'current') === 'current' && Boolean(p.delivery?.launch?.liveOrigin),
+    );
+    const gapQueue = [...launched];
+    const gaps: Array<{ projectId: string; missing: number; error?: string }> = [];
+    const gapWorkers = Array.from({ length: Math.min(CONCURRENCY, gapQueue.length) }, async () => {
+      while (gapQueue.length > 0 && Date.now() < deadline) {
+        const project = gapQueue.shift();
+        if (!project) break;
+        try {
+          const gap = await refreshSitemapGap(project.id);
+          gaps.push({ projectId: project.id, missing: gap.missing.length, ...(gap.error ? { error: gap.error } : {}) });
+        } catch (error) {
+          console.error(`[sitemap-diff-cron] Sitemap gap failed for ${project.id}:`, error);
+          gaps.push({ projectId: project.id, missing: 0, error: error instanceof Error ? error.message : 'Unknown error' });
+        }
+      }
+    });
+    await Promise.all(gapWorkers);
+
     const totalNewDrift = results.reduce((sum, r) => sum + r.newDrift, 0);
     console.log(
       `[sitemap-diff-cron] Done. ${results.length} checked, ${notices.length} project(s) with new drift (${totalNewDrift} paths).`
@@ -151,6 +178,7 @@ export async function GET(request: NextRequest) {
       projectsSkipped: skipped,
       projectsWithNewDrift: notices.length,
       results,
+      trackerGaps: { checked: gaps.length, skipped: gapQueue.length, gaps },
     });
   } catch (error) {
     console.error('[sitemap-diff-cron] Failed:', error);

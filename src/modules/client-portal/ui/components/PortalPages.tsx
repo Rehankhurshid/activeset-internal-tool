@@ -28,14 +28,17 @@ export function PortalPages({ pages, feedback }: PortalPagesProps) {
     .filter(([, n]) => n > 0)
     .map(([state, n]) => `${n} ${STATE_LABEL[state].toLowerCase()}`)
     .join(' · ');
+  // Once the team marks the site launched, the links open the live site.
+  const live = pages.some((p) => p.live) && !pages.some((p) => p.stagingUrl && !p.live);
 
   return (
     <section aria-labelledby="portal-pages-heading" className="space-y-5">
       <div className="space-y-1">
         <PortalSectionHeading id="portal-pages-heading">Your pages</PortalSectionHeading>
         <p className="text-sm text-muted-foreground">
-          Each page is ready to review as soon as we have built it, even while others are still being designed. Open it
-          on staging and leave your comments. When a new version of a design arrives, we build it.
+          {live
+            ? 'Your site is live. Each page below opens on your own domain.'
+            : 'Each page is ready to review as soon as we have built it, even while others are still being designed. Open it on staging and leave your comments. When a new version of a design arrives, we build it.'}
         </p>
         {summary && <p className="text-xs tabular-nums text-muted-foreground">{summary}</p>}
       </div>
@@ -96,7 +99,7 @@ export function PortalPages({ pages, feedback }: PortalPagesProps) {
                 rel="noopener noreferrer"
                 className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
               >
-                Open on staging
+                {page.live ? 'Open page' : 'Open on staging'}
                 <ExternalLink aria-hidden="true" className="h-3 w-3" />
               </a>
             )}

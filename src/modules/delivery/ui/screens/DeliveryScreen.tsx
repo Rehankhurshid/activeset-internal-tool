@@ -195,8 +195,13 @@ export function DeliveryScreen({ project, stack, userEmail }: DeliveryScreenProp
   );
 
   const recordingTargetsFor = useCallback(
-    (page: ProjectPage) => recordingTargets(page, { links: project.links, sitemapUrl: project.sitemapUrl }),
-    [project.links, project.sitemapUrl],
+    (page: ProjectPage) =>
+      recordingTargets(page, {
+        links: project.links,
+        sitemapUrl: project.sitemapUrl,
+        launchOrigin: project.delivery?.launch?.liveOrigin,
+      }),
+    [project.links, project.sitemapUrl, project.delivery?.launch?.liveOrigin],
   );
 
   const handleRecordPage = useCallback(

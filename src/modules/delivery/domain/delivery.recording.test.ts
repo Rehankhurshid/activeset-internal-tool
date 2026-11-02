@@ -30,6 +30,14 @@ describe('recordingTargets', () => {
     assert.deepEqual(targets, { live: 'https://www.acme.com/blog' });
   });
 
+  it('after launch, records staging from the pre-launch link and live from the launch domain', () => {
+    const targets = recordingTargets(
+      { path: '/pricing', stagingLink: 'https://www.acme.com/pricing', prelaunchLink: 'https://acme.webflow.io/pricing' },
+      { links: [link('Live site', 'https://old.acme.com')], launchOrigin: 'https://www.acme.com' },
+    );
+    assert.deepEqual(targets, { staging: 'https://acme.webflow.io/pricing', live: 'https://www.acme.com/pricing' });
+  });
+
   it('ignores sitemap pages whose titles happen to say live or staging', () => {
     const targets = recordingTargets(
       { path: '/demo' },
