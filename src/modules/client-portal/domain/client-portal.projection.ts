@@ -30,6 +30,7 @@ import { sheetAsks, sheetChanges, sheetFacts, sheetFiles, sheetReadiness, sheetW
 import type { ProjectSheetSnapshot } from './project-sheet.types';
 import { SIGN_OFF_CHANNELS, signOffLog } from './sign-off-log';
 import { clientOwnerName, isoDayOrUndefined } from './waiting-on-client';
+import { portalContentSyncs, type ContentSync } from './content-syncs';
 import type {
   ClientPortalView,
   PortalAskView,
@@ -44,6 +45,11 @@ import { portalContact } from './portal-contact';
 
 export interface BuildClientPortalViewInput {
   project: Project;
+  /**
+   * Optional. The project's content syncs (`projects/{id}/content_syncs`).
+   * Only rows the team shows, and only `portalContentSyncs`' fields, leave.
+   */
+  contentSyncs?: Partial<ContentSync>[];
   /**
    * The Timeline tab. When it has milestones to show, its phases are the
    * client's stages; otherwise it is read only for a portal shared before
@@ -456,6 +462,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
   const work = sheet ? sheetWork(sheet.data, new Set(stages.map((s) => s.id))) : [];
   const changes = sheet ? sheetChanges(sheet.data) : [];
   const readiness = sheet ? sheetReadiness(sheet.data) : [];
+  const syncs = portalContentSyncs(input.contentSyncs);
 
   const view: ClientPortalView = {
     projectId: project.id,
@@ -499,6 +506,7 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     pagesFeedback: pages.length ? feedbackLinks(timelineSources, pages) : undefined,
     deliverables: deliverables.length ? deliverables : undefined,
     rules: rules.length ? rules : undefined,
+    syncs: syncs.length ? syncs : undefined,
     generatedAt: now.toISOString(),
   };
 

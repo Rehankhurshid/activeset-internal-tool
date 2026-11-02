@@ -5,6 +5,7 @@ import { PortalAuthError, verifyPortalToken } from '@/lib/client-portal-tokens';
 import { buildClientPortalView } from '@/modules/client-portal/domain/client-portal.projection';
 import type { ClientPortalView } from '@/modules/client-portal/domain/client-portal.types';
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
+import type { ContentSync } from '@/modules/client-portal/domain/content-syncs';
 import type { ProjectPage } from '@/modules/delivery/domain/delivery.types';
 import { getStack } from '@/modules/delivery/domain/stacks';
 import { disciplineOwners } from '@/modules/delivery/domain/delivery.progress';
@@ -136,7 +137,7 @@ async function buildPortalViewFor(
   projectId: string,
   raw: Record<string, unknown>,
 ): Promise<{ view: ClientPortalView; project: Project; readsSheet: boolean }> {
-  const [timelineSnap, asksSnap, checklistSnap, meetingSnap, sheetSnap, pagesSnap] = await Promise.all([
+  const [timelineSnap, asksSnap, checklistSnap, meetingSnap, sheetSnap, pagesSnap, syncsSnap] = await Promise.all([
     adminDb.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
     adminDb
       .collection(COLLECTIONS.TASKS)
@@ -170,6 +171,10 @@ async function buildPortalViewFor(
     // The page tracker, for "Your pages". Only names, staging links and states
     // leave it (see portalPages).
     adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId).collection(COLLECTIONS.PROJECT_PAGES).limit(500).get(),
+    // Content syncs (Airtable → Webflow…), as the team or the Whalesync cron
+    // last recorded them. Never Whalesync itself: the page must not wait on it.
+    // The projection keeps only shown rows and their client fields.
+    adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId).collection(COLLECTIONS.PROJECT_CONTENT_SYNCS).limit(50).get(),
   ]);
 
   const project = toProject(projectId, raw);
@@ -203,6 +208,7 @@ async function buildPortalViewFor(
       templates,
       agency: [AGENCY_START, AGENCY_CLOSE],
       pages,
+      contentSyncs: syncsSnap.docs.map((d) => ({ ...(d.data() as Partial<ContentSync>), id: d.id })),
     }),
   };
 }

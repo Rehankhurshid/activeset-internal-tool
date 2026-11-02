@@ -16,6 +16,7 @@ import { PortalProcess } from '../components/PortalProcess';
 import { PortalReview } from '../components/PortalReview';
 import { PortalSignOffs } from '../components/PortalSignOffs';
 import { PortalStages } from '../components/PortalStages';
+import { PortalSyncs } from '../components/PortalSyncs';
 import { TrackPortalView } from '../components/TrackPortalView';
 
 interface ClientPortalScreenProps {
@@ -69,6 +70,8 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         {/* Pinned under where we are: what everyone on the project has agreed with them. */}
         <PortalRules rules={view.rules} />
         <PortalYourTurn view={view} now={now} />
+        {/* Whether their data is still reaching the site: up top, since a broken sync is the thing they cannot see otherwise. */}
+        <PortalSyncs syncs={view.syncs} now={now} />
         {/* From the project sheet or the checklist, the whole process as one numbered list, right under where we are. */}
         {showsProcess(view.planSource) && <PortalProcess stages={view.stages} now={now} />}
         {view.pages && (

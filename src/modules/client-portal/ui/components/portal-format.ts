@@ -102,6 +102,18 @@ export function formatRelativeDay(iso: string | null | undefined, now: Date): st
   return years <= 1 ? 'a year ago' : `${years} years ago`;
 }
 
+/** "just now", "25 min ago", "3 h ago", else as `formatRelativeDay`. For things that happen hourly; null when unknown. */
+export function formatRelativeTime(iso: string | null | undefined, now: Date): string | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return null;
+  const minutes = Math.round((now.getTime() - ms) / 60_000);
+  if (minutes < 2) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.round(minutes / 60)} h ago`;
+  return formatRelativeDay(new Date(ms).toISOString().slice(0, 10), now);
+}
+
 /** "staging.peakxv.com" for display under a link; falls back to the raw string. */
 export function hostnameOf(url: string): string {
   try {

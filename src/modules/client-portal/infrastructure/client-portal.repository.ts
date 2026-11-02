@@ -18,6 +18,7 @@ import type { PortalWarning } from '../domain/portal-health';
 import { cleanSharedWith } from '../domain/portal-deliverables';
 import type { ProjectSheetRecord, SheetStagesFrom, SheetTabRole } from '../domain/project-sheet.types';
 import { normalizeClientTimelineSettings } from '../domain/client-timeline';
+import type { ContentSync, ContentSyncInput } from '../domain/content-syncs';
 
 /** A deliverable as the Client tab edits it. */
 export interface DeliverableInput {
@@ -111,6 +112,31 @@ export interface ProjectSheetSettings {
   showSheetLink?: boolean;
 }
 
+/** A sync on the Whalesync account, for linking a row to it. */
+export interface WhalesyncOption {
+  id: string;
+  name: string;
+  status: string | null;
+  source: string | null;
+  destination: string | null;
+}
+
+/** What the Client tab gets back from the syncs route. */
+export interface ContentSyncsState {
+  syncs: ContentSync[];
+  /** Whether WHALESYNC_API_KEY is set on this deployment. */
+  connected: boolean;
+  /** With `available`: the Whalesync account's syncs. */
+  available?: WhalesyncOption[];
+  availableError?: string;
+}
+
+/** A saved row, and what Whalesync said when it was read straight after. */
+export interface ContentSyncSaved {
+  sync: ContentSync;
+  refreshError?: string;
+}
+
 async function readJson<T>(res: Response, fallback: string): Promise<T> {
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new Error(body?.error || `${fallback} (${res.status})`);
@@ -170,7 +196,21 @@ type ClientPortalRepository = {
   syncSheet(projectId: string): Promise<ProjectSheetState>;
   updateSheetSettings(projectId: string, settings: ProjectSheetSettings): Promise<ProjectSheetState>;
   unbindSheet(projectId: string): Promise<ProjectSheetState>;
+  listSyncs(projectId: string, options?: { available?: boolean }): Promise<ContentSyncsState>;
+  createSync(projectId: string, sync: ContentSyncInput): Promise<ContentSyncSaved>;
+  updateSync(projectId: string, syncId: string, patch: ContentSyncInput): Promise<ContentSyncSaved>;
+  deleteSync(projectId: string, syncId: string): Promise<void>;
+  refreshSyncs(projectId: string): Promise<{ refreshed: number; failed: number; syncs: ContentSync[] }>;
 };
+
+function syncsUrl(projectId: string, syncId?: string): string {
+  const base = `/api/client-portal/${encodeURIComponent(projectId)}/syncs`;
+  return syncId ? `${base}/${encodeURIComponent(syncId)}` : base;
+}
+
+async function sendJson(url: string, method: string, body: unknown): Promise<Response> {
+  return fetchAuthed(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
 
 async function postSheet(projectId: string, body: Record<string, unknown>, fallback: string): Promise<ProjectSheetState> {
   const res = await fetchAuthed(`/api/client-portal/${encodeURIComponent(projectId)}/sheet`, {
@@ -368,4 +408,29 @@ export const clientPortalRepository: ClientPortalRepository = {
   updateSheetSettings: (projectId, settings) =>
     postSheet(projectId, { action: 'settings', ...settings }, 'Could not save'),
   unbindSheet: (projectId) => postSheet(projectId, { action: 'unbind' }, 'Could not unbind the sheet'),
+
+  async listSyncs(projectId, options) {
+    const res = await fetchAuthed(`${syncsUrl(projectId)}${options?.available ? '?available=1' : ''}`);
+    return readJson<ContentSyncsState>(res, 'Could not load syncs');
+  },
+
+  async createSync(projectId, sync) {
+    const res = await sendJson(syncsUrl(projectId), 'POST', { action: 'create', sync });
+    return readJson<ContentSyncSaved>(res, 'Could not add the sync');
+  },
+
+  async updateSync(projectId, syncId, patch) {
+    const res = await sendJson(syncsUrl(projectId, syncId), 'PATCH', patch);
+    return readJson<ContentSyncSaved>(res, 'Could not save the sync');
+  },
+
+  async deleteSync(projectId, syncId) {
+    const res = await fetchAuthed(syncsUrl(projectId, syncId), { method: 'DELETE' });
+    await readJson<{ ok: boolean }>(res, 'Could not remove the sync');
+  },
+
+  async refreshSyncs(projectId) {
+    const res = await sendJson(syncsUrl(projectId), 'POST', { action: 'refresh' });
+    return readJson<{ refreshed: number; failed: number; syncs: ContentSync[] }>(res, 'Could not refresh from Whalesync');
+  },
 };
