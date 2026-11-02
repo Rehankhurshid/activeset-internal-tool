@@ -4,6 +4,14 @@ import { daysBetweenIso, todayIso } from '@/lib/review-status';
 /** Portals with no team update for this many days count as stale. */
 export const PORTAL_STALE_AFTER_DAYS = 7;
 
+/**
+ * A tighter bar for the Client tab (ACT-92, 2026-11-02): a page last updated
+ * more than this many days ago gets a team-only warning there, and the
+ * client's page stops saying "Updated N days ago" until it moves again. The
+ * dashboard's "Client updates due" nudge keeps the week above.
+ */
+export const PORTAL_FRESH_DAYS = 2;
+
 /** Sort order for dashboards: what needs attention first. */
 export const CLIENT_STATUS_ORDER: ClientStatus[] = ['needs_client', 'blocked', 'on_track', 'paused', 'delivered'];
 
@@ -49,4 +57,17 @@ export function ageLabel(days: number | null): string {
   if (days < 14) return `${days}d`;
   if (days < 60) return `${Math.round(days / 7)}w`;
   return `${Math.round(days / 30)}mo`;
+}
+
+/**
+ * True when `lastUpdateAt` is no older than `freshDays` whole days (viewer's
+ * calendar). Never-updated and unreadable dates are not fresh.
+ */
+export function isUpdateFresh(
+  lastUpdateAt: string | undefined,
+  today: string = todayIso(),
+  freshDays: number = PORTAL_FRESH_DAYS,
+): boolean {
+  const days = daysSinceClientUpdate({ lastUpdateAt }, today);
+  return days !== null && days <= freshDays;
 }

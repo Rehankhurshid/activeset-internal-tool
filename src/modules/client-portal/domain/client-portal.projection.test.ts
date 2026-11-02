@@ -248,6 +248,27 @@ describe('buildClientPortalView', () => {
     assert.equal(view.brandLogoUrl, 'https://cdn.example.com/brand.png');
     assert.equal(view.websiteUrl, 'https://peakxv.com');
   });
+
+  it('shows the chosen point of contact, and none of the internal owners', () => {
+    const view = buildClientPortalView({
+      project: project({
+        reviewOwnerEmail: 'salman@activeset.co',
+        assigneeEmails: ['sanjay@activeset.co'],
+        clientPortal: { enabled: true, agencyContactEmail: 'Rehan@ActiveSet.co ' },
+      }),
+      timeline: null,
+    });
+    assert.equal(view.agencyContactEmail, 'rehan@activeset.co');
+    const json = JSON.stringify(view);
+    assert.equal(json.includes('salman@'), false, 'the lead stays internal');
+    assert.equal(json.includes('sanjay@'), false, 'the team stays internal');
+  });
+
+  it('falls back to the lead, then the team, when no point of contact is chosen', () => {
+    assert.equal(buildClientPortalView({ project: project(), timeline: null }).agencyContactEmail, 'rehan@activeset.co');
+    const noLead = buildClientPortalView({ project: project({ reviewOwnerEmail: undefined }), timeline: null });
+    assert.equal(noLead.agencyContactEmail, 'salman@activeset.co');
+  });
 });
 
 describe('the review the client is asked to sign off', () => {

@@ -277,7 +277,7 @@ No feature flags. Constants: `PORTAL_STALE_AFTER_DAYS = 7`, note max 160 chars (
    4. Files: only http(s) URLs survive `normalizeClientPlan`. Website URL = `webflowConfig.customDomain`; a visible manual link titled live/production/website counts only on a pre-plan portal.
    5. `lastUpdateAt` = the latest of the team's `clientFacing.lastUpdateAt`, the plan's `updatedAt` and, when any stage is tracked, the newest checklist `updatedAt` (a tick moves the tracker, so it is news).
    6. Asks = tasks with `needsClientInput && status !== 'done'`, `{id,title,dueDate}` only, sorted by due date.
-   7. Brand = `clientPortal.brandName` → `project.client` → `project.name`; logo = `brandLogoUrl` → `project.logoUrl`; agency contact = `reviewOwnerEmail` → `assigneeEmails[0]` (not `contactEmails`). Status via `normalizeClientStatus` + portal label.
+   7. Brand = `clientPortal.brandName` → `project.client` → `project.name`; logo = `brandLogoUrl` → `project.logoUrl`; agency contact = `portalContact`: `clientPortal.agencyContactEmail` → `reviewOwnerEmail` → `assigneeEmails[0]` (not `contactEmails`; see "Stale-page warnings and the client's point of contact" below). Status via `normalizeClientStatus` + portal label.
    8. Review = first `client_review` section (checklists in load order, sections by `order`) without an approval, else the last one (with `approvedAt`, `approvedNote`). Section title only, never item titles.
 
 5. **Client approves a stage**
@@ -341,6 +341,26 @@ No feature flags. Constants: `PORTAL_STALE_AFTER_DAYS = 7`, note max 160 chars (
 - **Signed-in team members are not counted**, but only if Firebase auth restores within 1.5 s; the settle logic in [TrackPortalView.tsx:52-73](../../src/modules/client-portal/ui/components/TrackPortalView.tsx) prevents the fallback timer double-firing.
 - **Day math is viewer-local.** `daysSinceClientUpdate` converts the stored instant to the viewer's calendar day before differencing ([client-status.ts:19-22](../../src/modules/client-portal/domain/client-status.ts)).
 - **Vercel preview deployments sit behind Vercel SSO**, so a portal link on a preview cannot be opened anonymously; test on production (`app.activeset.co` serves public routes). `CLIENT_PORTAL_TOKEN_KEY` must be identical across Production/Preview/Development because they share one Firebase project.
+
+### Stale-page warnings and the client's point of contact (ACT-92, ACT-95, 2026-11-02)
+
+**ACT-92: warn the team when the client's page goes stale.** Different AI's page said "Updated 4 days ago", had no Target launch and showed Go live in progress weeks after launch, and nothing told the team.
+
+- [domain/portal-health.ts](../../src/modules/client-portal/domain/portal-health.ts) `portalWarnings({ view, enabled, readsSheet, contact, today? })` → `PortalWarning[]` (`id`, `level: 'warn' | 'info'`, `title`, `fix`), pure. Nothing while the link is off. While not Delivered: `never_updated` (no `lastUpdateAt`), `stale` (`lastUpdateAt` more than `PORTAL_FRESH_DAYS` = 2 whole days old), `no_target_launch` (a hand-kept sheet feeds the page and its Overview has no Target launch; an app-kept sheet or no sheet never shows the client a target launch, so no warning), `launch_passed` (Target launch is in the past). Always: `no_contact` (nobody to show) or `contact_fallback` (info: the page shows the lead because nobody chose a contact).
+- It reads the **view the client gets**, so `lastUpdateAt` is the projection's (note, plan, checklist ticks, sheet change, shared calls), not `clientFacing.lastUpdateAt` alone.
+- `GET /api/client-portal/[projectId]/health` ([health/route.ts](../../src/app/api/client-portal/[projectId]/health/route.ts)), Firebase ID token (`requireProjectAccess`), 503 without firebase-admin, 404 for no project. Returns `{ enabled, lastUpdateAt, warnings }` only, never the view. Built by `loadClientPortalForTeam(projectId)` in [src/lib/client-portal.ts](../../src/lib/client-portal.ts), which shares `buildPortalViewFor` with the token loader, so the warnings and the page cannot disagree. It skips the token check, so it must never back a client route.
+- Client tab: [PortalHealthCard](../../src/modules/client-portal/ui/components/PortalHealthCard.tsx) at the top ("only the team sees this"), fed by `usePortalWarnings` in [ClientPanel.tsx](../../src/modules/client-portal/ui/screens/ClientPanel.tsx) via `clientPortalRepository.getHealth`. Re-checked when the link switch, `clientFacing.lastUpdateAt`/`status`, the contact, the owners or the sheet's `syncedAt` change. A failed check shows nothing.
+- Client's page: [PortalNowCard](../../src/modules/client-portal/ui/components/PortalNowCard.tsx) shows "Updated …" only while `isUpdateFresh(view.lastUpdateAt)` ([client-status.ts](../../src/modules/client-portal/domain/client-status.ts), ≤ 2 whole days); after that the line is hidden until something moves. `lastUpdateAt` is still in the payload.
+- Two thresholds on purpose: `PORTAL_FRESH_DAYS = 2` (Client tab warning, the "Updated" line) and `PORTAL_STALE_AFTER_DAYS = 7` (dashboard "Client updates due", the stale count, `ClientStatusChip`). Lower the second if the dashboard should nag at 2 days too.
+
+**ACT-95: the client's point of contact, apart from the internal owners.** The portal used to show the project lead (`reviewOwnerEmail`), so a project led internally by one person but fronted by another showed the wrong name.
+
+- `ClientPortalSettings.agencyContactEmail` ([types](../../src/types/index.ts)): "Client point of contact", shown to the client. Written by `projectsService.updateClientPortalSettings({ agencyContactEmail })` (lower-cased; `null`/empty deletes it, back to the fallback).
+- Internal owners stay where they were: `reviewOwnerEmail` (lead) + `assigneeEmails` (team, the people picker). Team only.
+- [domain/portal-contact.ts](../../src/modules/client-portal/domain/portal-contact.ts): `portalContact(project)` → `{ email?, source: 'set' | 'lead' | 'team' | 'none' }` (chosen → lead → first of the team), `internalOwners(project)`. Used by the projection (`agencyContactEmail`, the footer mailto) and the app-kept sheet's Overview "Project lead" (chosen → lead → the checklist's `our_lead`, as before).
+- **Migration: none needed.** A project with no `agencyContactEmail` shows exactly what it showed before (the lead, else the first of the team), and the Client tab says so with the `contact_fallback` note until someone picks.
+- Client tab: "Who the client talks to" card, [PortalPeopleFields](../../src/modules/client-portal/ui/components/PortalPeopleFields.tsx): a select for the point of contact (the project's people first, then the team from `useAssignees`, plus "Project lead (…)" for the fallback; saves on change) beside the internal owners (`ProjectPeoplePicker` + the lead).
+- Tests: [portal-health.test.ts](../../src/modules/client-portal/domain/portal-health.test.ts), the contact cases in `client-portal.projection.test.ts` (chosen contact shown, lead and team absent from the JSON) and `project-sheet.content.test.ts`, `isUpdateFresh` in `client-status.test.ts`.
 
 ## Tests
 

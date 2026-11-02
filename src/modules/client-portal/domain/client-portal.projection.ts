@@ -35,6 +35,7 @@ import type {
   PortalStageView,
   PortalStepView,
 } from './client-portal.types';
+import { portalContact } from './portal-contact';
 
 export interface BuildClientPortalViewInput {
   project: Project;
@@ -429,7 +430,8 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     projectName: project.name,
     ...portalBrand(project),
     welcome: settings?.welcome?.trim() || undefined,
-    agencyContactEmail: project.reviewOwnerEmail || project.assigneeEmails?.[0] || undefined,
+    // The client's point of contact, else the lead as before (see portal-contact.ts).
+    agencyContactEmail: portalContact(project).email,
     websiteUrl: detectWebsiteUrl(project, !saved && !byPhase),
     status,
     statusLabel: CLIENT_STATUS_PORTAL_LABELS[status],

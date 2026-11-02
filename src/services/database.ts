@@ -1398,11 +1398,18 @@ export const projectsService = {
       brandLogoUrl?: string | null;
       welcome?: string | null;
       contactEmails?: string[];
+      /** `null` goes back to the project lead. */
+      agencyContactEmail?: string | null;
     },
   ): Promise<void> {
+    const contact = patch.agencyContactEmail === undefined ? undefined : patch.agencyContactEmail?.trim().toLowerCase() || null;
     if (isLocalProjectBypassEnabled()) {
       updateLocalProject(projectId, (project) => {
         const portal = { enabled: false, ...project.clientPortal };
+        if (contact !== undefined) {
+          if (contact) portal.agencyContactEmail = contact;
+          else delete portal.agencyContactEmail;
+        }
         const set = (key: 'brandName' | 'brandLogoUrl' | 'welcome', value: string | null | undefined) => {
           if (value === undefined) return;
           const trimmed = value?.trim();
@@ -1432,6 +1439,7 @@ export const projectsService = {
         const emails = Array.from(new Set(patch.contactEmails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
         update['clientPortal.contactEmails'] = emails;
       }
+      if (contact !== undefined) update['clientPortal.agencyContactEmail'] = contact ?? deleteField();
       await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), update);
     } catch (error) {
       logError(error, 'updateClientPortalSettings');

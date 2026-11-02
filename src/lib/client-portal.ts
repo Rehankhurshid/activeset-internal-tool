@@ -114,6 +114,28 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
   }
 
   const { projectId, tokenHash, project: raw } = verified;
+  const { view } = await buildPortalViewFor(projectId, raw);
+  return { view, projectId, tokenHash };
+}
+
+/**
+ * The client's view of a project for the team (the Client tab's warnings),
+ * built by exactly the code the portal page uses, whether or not the link is
+ * on. Null when the project does not exist. Never hand this to a client
+ * route: it skips the token check.
+ */
+export async function loadClientPortalForTeam(
+  projectId: string,
+): Promise<{ view: ClientPortalView; project: Project; readsSheet: boolean } | null> {
+  const snap = await adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId).get();
+  if (!snap.exists) return null;
+  return buildPortalViewFor(projectId, snap.data() as Record<string, unknown>);
+}
+
+async function buildPortalViewFor(
+  projectId: string,
+  raw: Record<string, unknown>,
+): Promise<{ view: ClientPortalView; project: Project; readsSheet: boolean }> {
   const [timelineSnap, asksSnap, checklistSnap, meetingSnap, sheetSnap, pagesSnap] = await Promise.all([
     adminDb.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
     adminDb
@@ -169,6 +191,8 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
   };
 
   return {
+    project,
+    readsSheet: sheet !== null,
     view: buildClientPortalView({
       project,
       timeline,
@@ -180,7 +204,5 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
       agency: [AGENCY_START, AGENCY_CLOSE],
       pages,
     }),
-    projectId,
-    tokenHash,
   };
 }

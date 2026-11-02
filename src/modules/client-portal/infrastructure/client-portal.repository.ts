@@ -12,6 +12,7 @@ import type {
   ProjectMeeting,
 } from '@/types';
 import { normalizeClientPlan } from '../domain/client-plan';
+import type { PortalWarning } from '../domain/portal-health';
 import type { ProjectSheetRecord, SheetStagesFrom, SheetTabRole } from '../domain/project-sheet.types';
 import { normalizeClientTimelineSettings } from '../domain/client-timeline';
 
@@ -41,6 +42,14 @@ export interface PortalLinkState {
   issuedAt: string | null;
   lastUsedAt: string | null;
   useCount: number;
+}
+
+/** Mirror of the JSON returned by /api/client-portal/[projectId]/health. Team only. */
+export interface PortalHealthState {
+  enabled: boolean;
+  /** What the client's page counts as its last update. */
+  lastUpdateAt: string | null;
+  warnings: PortalWarning[];
 }
 
 /** Same row shape as the proposal views endpoint, so ViewsPopover can render both. */
@@ -82,6 +91,7 @@ type ClientPortalRepository = {
   getLinkState(projectId: string): Promise<PortalLinkState>;
   setLink(projectId: string, action: PortalLinkAction): Promise<PortalLinkState>;
   listViews(projectId: string, limit?: number): Promise<PortalViewRow[]>;
+  getHealth(projectId: string): Promise<PortalHealthState>;
   updateClientFacing(
     projectId: string,
     patch: { status?: ClientStatus; statusNote?: string | null; currentStageId?: string | null },
@@ -91,7 +101,13 @@ type ClientPortalRepository = {
   markClientUpdated(projectId: string, byEmail: string): Promise<void>;
   updateClientPortalSettings(
     projectId: string,
-    patch: { brandName?: string | null; brandLogoUrl?: string | null; welcome?: string | null; contactEmails?: string[] },
+    patch: {
+      brandName?: string | null;
+      brandLogoUrl?: string | null;
+      welcome?: string | null;
+      contactEmails?: string[];
+      agencyContactEmail?: string | null;
+    },
   ): Promise<void>;
   editPlan(projectId: string, byEmail: string, edit: (plan: ClientPlan) => ClientPlan): Promise<void>;
   savePlan(projectId: string, plan: ClientPlan, byEmail: string): Promise<void>;
@@ -156,6 +172,11 @@ export const clientPortalRepository: ClientPortalRepository = {
     return body.views ?? [];
   },
 
+  async getHealth(projectId: string): Promise<PortalHealthState> {
+    const res = await fetchAuthed(`/api/client-portal/${encodeURIComponent(projectId)}/health`);
+    return readJson<PortalHealthState>(res, 'Could not check the client page');
+  },
+
   /**
    * `touch: true` also stamps "last updated", which is what the stale-portal
    * nudge reads. Pass it when the team has actually told the client something
@@ -177,6 +198,7 @@ export const clientPortalRepository: ClientPortalRepository = {
       brandLogoUrl?: string | null;
       welcome?: string | null;
       contactEmails?: string[];
+      agencyContactEmail?: string | null;
     },
   ) => projectsService.updateClientPortalSettings(projectId, patch),
 

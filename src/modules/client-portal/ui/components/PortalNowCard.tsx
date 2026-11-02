@@ -1,6 +1,8 @@
 import { CircleCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { todayIso } from '@/lib/review-status';
 import { showsProcess, type ClientPortalView, type PortalStageView } from '../../domain/client-portal.types';
+import { isUpdateFresh } from '../../domain/client-status';
 import { PortalStageDetail } from './PortalStageDetail';
 import { formatDay, formatRelativeDay, formatStageDates } from './portal-format';
 import { PortalSectionHeading } from './PortalSectionHeading';
@@ -58,7 +60,9 @@ export function PortalNowCard({ view, now }: PortalNowCardProps) {
   const current = currentStageIndex !== undefined ? stages[currentStageIndex] : undefined;
   const next = currentStageIndex !== undefined ? stages[currentStageIndex + 1] : undefined;
   const allDone = stages.length > 0 && current === undefined;
-  const relative = formatRelativeDay(view.lastUpdateAt, now);
+  // "Updated 4 days ago" tells the client nobody is looking, so it shows only
+  // while fresh; the team gets a warning on the Client tab instead (ACT-92).
+  const relative = isUpdateFresh(view.lastUpdateAt, todayIso(now)) ? formatRelativeDay(view.lastUpdateAt, now) : null;
   const dates = current ? formatStageDates(current.startDate, current.dueDate, now) : '';
 
   // With the process (from the sheet or the checklist), the full step list sits in "The process" below; here, only the step we are on.

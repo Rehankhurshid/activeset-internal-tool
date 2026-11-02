@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isPortalStale } from './client-status';
+import { isPortalStale, isUpdateFresh } from './client-status';
 
 describe('isPortalStale', () => {
   const old = { lastUpdateAt: '2026-09-01T10:00:00.000Z' };
@@ -16,5 +16,17 @@ describe('isPortalStale', () => {
       false,
     );
     assert.equal(isPortalStale({ clientPortal: { enabled: false }, clientFacing: old }, '2026-09-28'), false);
+  });
+});
+
+describe('isUpdateFresh', () => {
+  it('is fresh for two whole days, then not', () => {
+    assert.equal(isUpdateFresh('2026-10-30T12:00:00', '2026-11-01'), true);
+    assert.equal(isUpdateFresh('2026-10-30T12:00:00', '2026-11-02'), false);
+  });
+
+  it('is never fresh without a readable date', () => {
+    assert.equal(isUpdateFresh(undefined, '2026-11-02'), false);
+    assert.equal(isUpdateFresh('not a date', '2026-11-02'), false);
   });
 });

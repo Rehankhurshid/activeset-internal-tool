@@ -1388,6 +1388,14 @@ export interface ClientPortalSettings {
   welcome?: string;
   /** Client contacts (informational until per-contact tokens exist). */
   contactEmails?: string[];
+  /**
+   * The client's point of contact at ActiveSet: the one address the portal
+   * footer and the app-kept sheet show the client. Unset → the project lead
+   * (`reviewOwnerEmail`), then the first of `assigneeEmails`, as before it
+   * existed. The internal owners stay `reviewOwnerEmail` + `assigneeEmails`,
+   * which never reach the client except through this fallback.
+   */
+  agencyContactEmail?: string;
 }
 
 /**

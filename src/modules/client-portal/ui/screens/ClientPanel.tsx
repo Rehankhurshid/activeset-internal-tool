@@ -12,11 +12,14 @@ import { legacyClientPlan, normalizeClientPlan, resolveClientPlan, type Resolved
 import { resolveTimelinePlan, type TimelineStageSource } from '../../domain/client-timeline';
 import { portalStageSources } from '../../domain/portal-sources';
 import { normalizeClientStatus } from '../../domain/client-portal.types';
-import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
+import type { PortalWarning } from '../../domain/portal-health';
+import { clientPortalRepository, type PortalLinkState } from '../../infrastructure/client-portal.repository';
 import { ClientMeetingsCard } from '../components/ClientMeetingsCard';
 import { ClientStatusChip } from '../components/ClientStatusChip';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
+import { PortalHealthCard } from '../components/PortalHealthCard';
 import { PortalLinkCard } from '../components/PortalLinkCard';
+import { PortalPeopleFields } from '../components/PortalPeopleFields';
 import { useProjectSheet } from '../components/ProjectSheetCard';
 import { ProjectSheetPanel } from '../components/ProjectSheetPanel';
 
@@ -160,6 +163,31 @@ function useSourceTemplates(checklists: ProjectChecklist[]): { templates: SOPTem
 }
 
 /**
+ * Team-only warnings about the client's page, read from the server's build of
+ * that page (ACT-92). Checked again whenever something the page shows moves.
+ * A failed check shows nothing: it is a nudge, not a gate.
+ */
+function usePortalWarnings(projectId: string, key: string): PortalWarning[] {
+  const [loaded, setLoaded] = useState<{ key: string; warnings: PortalWarning[] } | null>(null);
+  const fullKey = `${projectId}|${key}`;
+  useEffect(() => {
+    let cancelled = false;
+    clientPortalRepository
+      .getHealth(projectId)
+      .then((health) => {
+        if (!cancelled) setLoaded({ key: fullKey, warnings: health.warnings });
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded({ key: fullKey, warnings: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, fullKey]);
+  return loaded?.warnings ?? [];
+}
+
+/**
  * The Client tab, lean: the link, the sheet, what the client sees, and calls to
  * share. Nothing here moves the client's page by hand. Rehan, 2026-10-01: the
  * checklist manages it, so where the project is comes from ticking the
@@ -173,6 +201,18 @@ export function ClientPanel(props: ClientPanelProps) {
 
   const sheetState = useProjectSheet(project.id);
   const sheetRecord = sheetState.state?.sheet ?? null;
+  const warnings = usePortalWarnings(
+    project.id,
+    [
+      enabled,
+      project.clientFacing?.lastUpdateAt,
+      project.clientFacing?.status,
+      project.clientPortal?.agencyContactEmail,
+      project.reviewOwnerEmail,
+      (project.assigneeEmails ?? []).join(','),
+      sheetRecord?.syncedAt,
+    ].join('|'),
+  );
   const { templates, loading: templatesLoading } = useSourceTemplates(checklists);
   // Decided by the same function as the client's page, so the two cannot disagree.
   const picked = useMemo(
@@ -224,6 +264,8 @@ export function ClientPanel(props: ClientPanelProps) {
           <span className="text-xs text-muted-foreground">Off: the client can&apos;t open anything until the link is on.</span>
         )}
       </div>
+
+      <PortalHealthCard warnings={warnings} />
 
       {onOpenTab && (
         <div className="flex flex-wrap gap-2">
@@ -280,6 +322,15 @@ export function ClientPanel(props: ClientPanelProps) {
               here as you tick it.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="gap-3">
+        <CardHeader>
+          <SectionTitle>Who the client talks to</SectionTitle>
+        </CardHeader>
+        <CardContent>
+          <PortalPeopleFields project={project} />
         </CardContent>
       </Card>
 
