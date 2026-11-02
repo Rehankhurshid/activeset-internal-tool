@@ -2,6 +2,7 @@ import { ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PortalAskView } from '../../domain/client-portal.types';
 import { formatDay } from './portal-format';
+import { askOverdue } from '../../domain/waiting-on-client';
 import { todayIso } from './portal-states';
 import { PortalSectionHeading } from './PortalSectionHeading';
 
@@ -19,7 +20,9 @@ const KIND_LABEL: Partial<Record<NonNullable<PortalAskView['kind']>, string>> = 
 
 /**
  * "What we need from you": overdue first, then by date. Renders nothing when
- * there are no open asks.
+ * there are no open asks. A task ask also says when we asked, who has it on
+ * their side and when we next follow up; one past its due date or its
+ * follow-up is overdue (`askOverdue`, shared with the team's list).
  *
  * Read-only by design: the portal is a status page, and the client replies in
  * the shared Slack channel that kickoff opens, or fills the sheet's
@@ -28,6 +31,8 @@ const KIND_LABEL: Partial<Record<NonNullable<PortalAskView['kind']>, string>> = 
 export function PortalAsks({ asks, received, now }: PortalAsksProps) {
   if (asks.length === 0) return null;
   const today = todayIso(now);
+  // Overdue first; otherwise the projection's order (soonest due first). Stable.
+  const ordered = [...asks].sort((a, b) => Number(askOverdue(b, today)) - Number(askOverdue(a, today)));
 
   return (
     <section aria-labelledby="portal-asks-heading" className="space-y-5">
@@ -40,9 +45,11 @@ export function PortalAsks({ asks, received, now }: PortalAsksProps) {
         ) : null}
       </div>
       <ol className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-        {asks.map((ask, index) => {
-          const overdue = !!ask.dueDate && ask.dueDate < today;
+        {ordered.map((ask, index) => {
+          const overdue = askOverdue(ask, today);
           const due = ask.dueDate ? formatDay(ask.dueDate, now) : (ask.dueText ?? '');
+          const dueLate = !!ask.dueDate && ask.dueDate < today;
+          const followUpLate = !!ask.followUpDate && ask.followUpDate < today;
           // "Decisions · Decision" says it twice: the section name is enough.
           const kindLabel = ask.kind && KIND_LABEL[ask.kind];
           const meta = [
@@ -50,7 +57,13 @@ export function PortalAsks({ asks, received, now }: PortalAsksProps) {
             kindLabel && !ask.group?.toLowerCase().includes(kindLabel.toLowerCase()) ? kindLabel : '',
             ask.owner ? `With ${ask.owner}` : '',
             ask.progress ? `${ask.progress.done} of ${ask.progress.total} filled` : '',
+            ask.askedDate ? `Asked ${formatDay(ask.askedDate, now)}` : '',
           ].filter(Boolean);
+          const followUp = ask.followUpDate
+            ? followUpLate
+              ? `Follow-up was due ${formatDay(ask.followUpDate, now)}`
+              : `Next follow-up ${formatDay(ask.followUpDate, now)}`
+            : '';
           return (
             <li key={ask.id} className="flex items-start gap-3 px-4 py-3.5 sm:px-5">
               <span
@@ -75,11 +88,14 @@ export function PortalAsks({ asks, received, now }: PortalAsksProps) {
                     )}
                   </p>
                   {due && (
-                    <p className={cn('mt-0.5 text-xs sm:mt-0 sm:shrink-0', overdue ? 'font-medium text-rose-700' : 'text-muted-foreground')}>
-                      {overdue ? `Overdue, needed by ${due}` : ask.dueDate ? `Due ${due}` : due}
+                    <p className={cn('mt-0.5 text-xs sm:mt-0 sm:shrink-0', dueLate ? 'font-medium text-rose-700' : 'text-muted-foreground')}>
+                      {dueLate ? `Overdue, needed by ${due}` : ask.dueDate ? `Due ${due}` : due}
                     </p>
                   )}
                 </div>
+                {followUp && (
+                  <p className={cn('text-xs', followUpLate ? 'font-medium text-rose-700' : 'text-muted-foreground')}>{followUp}</p>
+                )}
                 {ask.why && <p className="text-xs text-muted-foreground">{ask.why}</p>}
                 {meta.length > 0 && <p className="text-[11px] text-muted-foreground/80">{meta.join(' · ')}</p>}
               </div>

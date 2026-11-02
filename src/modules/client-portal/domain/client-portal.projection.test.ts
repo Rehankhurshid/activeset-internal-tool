@@ -214,6 +214,59 @@ describe('buildClientPortalView', () => {
     assert.deepEqual(view.asks, [{ id: 't1', title: 'Send final About copy', dueDate: '2026-09-22' }]);
   });
 
+  it('adds when an ask was asked, its next follow-up and who has it on their side, never our assignee', () => {
+    const base = tasks()[0];
+    const ask = {
+      ...base,
+      askedAt: '2026-10-24',
+      followUpAt: '2026-10-31',
+      clientOwner: 'Security team',
+      assignee: `${SECRET}@activeset.co`,
+      sourceLink: `https://slack.com/${SECRET}`,
+    };
+    const view = buildClientPortalView({
+      project: project(),
+      timeline: timeline(),
+      tasks: [ask, { ...base, id: 't9', clientOwner: 'cto@peakxv.com', followUpAt: 'next week' }],
+    });
+    assert.deepEqual(view.asks[0], {
+      id: 't1',
+      title: 'Send final About copy',
+      dueDate: '2026-09-22',
+      askedDate: '2026-10-24',
+      followUpDate: '2026-10-31',
+      owner: 'Security team',
+    });
+    assert.deepEqual(view.asks[1], { id: 't9', title: 'Send final About copy', dueDate: '2026-09-22' });
+    assert.equal(JSON.stringify(view).includes(SECRET), false);
+  });
+
+  it('logs every sign-off, oldest first, without who recorded it or the source link', () => {
+    const withLog = project({
+      delivery: {
+        approvals: [
+          { stageKey: 'c1:review', stageTitle: 'Staging review', approvedAt: '2026-10-30T09:00:00.000Z' },
+          {
+            stageKey: `team:${SECRET}`,
+            stageTitle: 'Homepage design',
+            approvedAt: '2026-10-27T12:00:00.000Z',
+            note: 'Picked the green variant',
+            via: 'slack',
+            recordedBy: `${SECRET}@activeset.co`,
+            sourceUrl: `https://activeset.slack.com/archives/${SECRET}`,
+          },
+        ],
+      },
+    });
+    const view = buildClientPortalView({ project: withLog, timeline: null });
+    assert.deepEqual(view.signOffs, [
+      { id: 'signoff-1', title: 'Homepage design', approvedAt: '2026-10-27T12:00:00.000Z', note: 'Picked the green variant', via: 'slack' },
+      { id: 'signoff-2', title: 'Staging review', approvedAt: '2026-10-30T09:00:00.000Z' },
+    ]);
+    assert.equal(JSON.stringify(view).includes(SECRET), false);
+    assert.equal(buildClientPortalView({ project: project(), timeline: null }).signOffs, undefined);
+  });
+
   it('uses portal wording for the status and falls back safely', () => {
     const view = buildClientPortalView({ project: project(), timeline: timeline() });
     assert.equal(view.status, 'needs_client');

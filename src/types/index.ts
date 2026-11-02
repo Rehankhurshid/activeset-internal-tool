@@ -693,15 +693,35 @@ export type ChecklistStage = 'kickoff' | 'launch';
  */
 export type StageRole = 'kickoff' | 'pages' | 'client_review' | 'launch';
 
-/** One client sign-off on one stage. Append-only; the team clears it, not the client. */
+/** Where a sign-off the team recorded was given, when it was not the portal's Approve button. */
+export type SignOffChannel = 'slack' | 'email' | 'call' | 'other';
+
+/**
+ * One client sign-off. Append-only; the team clears it, not the client.
+ *
+ * Two writers. The portal's Approve button records a `client_review` stage
+ * (no `recordedBy`). The team records one given elsewhere, in Slack, by email
+ * or on a call (`recordedBy` set): either against a `client_review` stage, so
+ * the portal stops asking for it, or against anything else under a
+ * `team:<id>` key. Together they are the project's sign-off log.
+ */
 export interface StageApproval {
-  /** `${checklistId}:${sectionId}` — the stage's key in the delivery arc. */
+  /**
+   * `${checklistId}:${sectionId}` for a checklist stage, or `team:<id>` for a
+   * sign-off the team recorded that is not one of the checklist's stages.
+   */
   stageKey: string;
-  /** Kept alongside the key so the record still reads if the section is renamed. */
+  /** What was approved. Kept alongside the key so the record still reads if the section is renamed. */
   stageTitle: string;
   approvedAt: string;
-  /** Whatever the client typed when approving, if anything. */
+  /** What the client said ("picked the green variant"). Shown to the client. */
   note?: string;
+  /** Team email that recorded a sign-off given outside the portal. Never shown to the client. */
+  recordedBy?: string;
+  /** Where it was given, when not on the portal. Shown to the client ("in Slack"). */
+  via?: SignOffChannel;
+  /** The message it was given in (a Slack permalink, an email). http(s); never shown to the client. */
+  sourceUrl?: string;
 }
 
 /** One labelled link on a task: the tool, the reference, the example. */
@@ -1145,6 +1165,22 @@ export interface Task {
   isBlocker?: boolean;
   /** True when ActiveSet is waiting on client input. */
   needsClientInput?: boolean;
+  /**
+   * ISO YYYY-MM-DD: when the client was asked. Stamped the day the task is
+   * flagged `needsClientInput`; the team can correct it. The client sees it.
+   */
+  askedAt?: string;
+  /**
+   * ISO YYYY-MM-DD: when we next chase it. Past and still open means the ask is
+   * overdue on both sides. The client sees it.
+   */
+  followUpAt?: string;
+  /**
+   * Who it is with on the client's side ("Security team", "Priya"): a name,
+   * never an address. The client sees it as "With …". Our own owner is
+   * `assignee`, which never leaves the app.
+   */
+  clientOwner?: string;
   /** 0-1 confidence for AI/deterministic extraction. */
   confidence?: number;
   /** Email of the assigned team member. */
@@ -1219,6 +1255,9 @@ export type UpdateTaskInput = Partial<
     | 'qaStatus'
     | 'isBlocker'
     | 'needsClientInput'
+    | 'askedAt'
+    | 'followUpAt'
+    | 'clientOwner'
     | 'confidence'
     | 'assignee'
     | 'order'

@@ -800,7 +800,13 @@ export function TaskTable({
                           : 'text-muted-foreground hover:text-amber-600',
                       )}
                       onClick={() =>
-                        handleUpdate(task.id, { needsClientInput: !needsClient })
+                        handleUpdate(task.id, {
+                          needsClientInput: !needsClient,
+                          // Dated the day it is flagged, for the "Waiting on client" list.
+                          ...(!needsClient && !task.askedAt
+                            ? { askedAt: new Date().toISOString().slice(0, 10) }
+                            : {}),
+                        })
                       }
                       title={toggleLabel}
                       aria-label={toggleLabel}

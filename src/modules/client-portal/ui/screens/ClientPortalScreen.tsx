@@ -12,6 +12,7 @@ import { PortalNowCard } from '../components/PortalNowCard';
 import { PortalPages } from '../components/PortalPages';
 import { PortalProcess } from '../components/PortalProcess';
 import { PortalReview } from '../components/PortalReview';
+import { PortalSignOffs } from '../components/PortalSignOffs';
 import { PortalStages } from '../components/PortalStages';
 import { TrackPortalView } from '../components/TrackPortalView';
 
@@ -35,8 +36,9 @@ function resolveNow(generatedAt: string): Date {
  *
  * In reading order: where the project is, whether anything is waiting on them
  * and what, the work itself, what they get and when, how ready launch is, any
- * change outside scope, the files, and the one thing they can sign. Sections
- * fed by the project sheet render nothing when no sheet is bound.
+ * change outside scope, the files, the one thing they can sign, and the log
+ * of what they have signed off. Sections fed by the project sheet render
+ * nothing when no sheet is bound.
  */
 export function ClientPortalScreen({ view, token, preview = false }: ClientPortalScreenProps) {
   const now = resolveNow(view.generatedAt);
@@ -77,7 +79,14 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         </div>
         {/* Below the stages and files deliberately: there is no approving
             something you have not been shown. */}
-        <PortalReview review={view.review} token={token} now={now} preview={preview} />
+        <PortalReview
+          // An answered review is already a line of the sign-off log below.
+          review={view.review?.approvedAt && view.signOffs?.length ? undefined : view.review}
+          token={token}
+          now={now}
+          preview={preview}
+        />
+        <PortalSignOffs signOffs={view.signOffs} stages={view.stages} currentStageIndex={view.currentStageIndex} now={now} />
         <PortalFooter brandName={view.brandName} agencyContactEmail={view.agencyContactEmail} />
       </main>
       <div className="hidden lg:sticky lg:top-8 lg:block">

@@ -41,6 +41,7 @@ import {
   ClientPlan,
   ClientTimelineSettings,
   ServiceId,
+  StageApproval,
 } from '@/types';
 import { DatabaseError, logError } from '@/lib/errors';
 import { orderServices } from '@/lib/engagements';
@@ -1516,6 +1517,52 @@ export const projectsService = {
   },
 
   /**
+   * Edit the sign-off log (`delivery.approvals`): record a sign-off the client
+   * gave outside the portal, or clear one. A transaction, so it never drops an
+   * approval the client made on the portal a moment earlier, and it stamps
+   * `clientFacing.lastUpdateAt`: a new line in their log is news to them.
+   */
+  async updateSignOffs(
+    projectId: string,
+    mutate: (current: StageApproval[]) => StageApproval[],
+    byEmail: string,
+  ): Promise<void> {
+    const by = byEmail.trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => ({
+        ...project,
+        delivery: { ...project.delivery, approvals: mutate(project.delivery?.approvals ?? []) },
+        clientFacing: { ...project.clientFacing, lastUpdateAt: nowIso, ...(by ? { lastUpdateBy: by } : {}) },
+      }));
+      return;
+    }
+
+    try {
+      const ref = doc(db, PROJECTS_COLLECTION, projectId);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new DatabaseError('Project not found');
+        const current = ((snap.data()?.delivery?.approvals ?? []) as StageApproval[]).filter(
+          (a) => a && typeof a.stageKey === 'string',
+        );
+        const update: UpdateData<DocumentData> = {
+          'delivery.approvals': mutate(current),
+          'clientFacing.lastUpdateAt': nowIso,
+          updatedAt: Timestamp.now(),
+        };
+        if (by) update['clientFacing.lastUpdateBy'] = by;
+        tx.update(ref, update);
+      });
+    } catch (error) {
+      logError(error, 'updateSignOffs');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Failed to save the sign-off');
+    }
+  },
+
+  /**
    * Edit how the Timeline appears on the client's page: files per phase,
    * milestones held back, the client's email domains. A transaction, like
    * plan edits, and it stamps `clientFacing.lastUpdateAt`: a file added to a
@@ -1595,6 +1642,9 @@ function taskFromDoc(id: string, data: Record<string, unknown>): Task {
     qaStatus: data.qaStatus as Task['qaStatus'],
     isBlocker: data.isBlocker as boolean | undefined,
     needsClientInput: data.needsClientInput as boolean | undefined,
+    askedAt: data.askedAt as string | undefined,
+    followUpAt: data.followUpAt as string | undefined,
+    clientOwner: data.clientOwner as string | undefined,
     confidence: data.confidence as number | undefined,
     assignee: data.assignee as string | undefined,
     order: (data.order as number | undefined) ?? 0,
@@ -1775,6 +1825,8 @@ export const tasksService = {
       const now = Timestamp.now();
       const payload = stripUndefined({
         ...input,
+        // An ask is dated the day it is made, so the client's list can say when we asked.
+        ...(input.needsClientInput && !input.askedAt ? { askedAt: new Date().toISOString().slice(0, 10) } : {}),
         order: input.order ?? Date.now(),
         clickupSyncRequestId: generateClickUpSyncRequestId(),
         clickupSyncRequestedAt: now,
@@ -1808,6 +1860,7 @@ export const tasksService = {
         ids.push(ref.id);
         const payload = stripUndefined({
           ...input,
+          ...(input.needsClientInput && !input.askedAt ? { askedAt: new Date().toISOString().slice(0, 10) } : {}),
           order: input.order ?? baseOrder + idx,
           clickupSyncRequestId: generateClickUpSyncRequestId(),
           clickupSyncRequestedAt: now,
@@ -1857,6 +1910,9 @@ export const tasksService = {
       }
       if ('billedAmount' in updates && updates.billedAmount === undefined) {
         cleaned.billedAmount = deleteField();
+      }
+      for (const field of ['askedAt', 'followUpAt', 'clientOwner'] as const) {
+        if (field in updates && !updates[field]) cleaned[field] = deleteField();
       }
 
       // Build the ClickUp patch (subset of CLICKUP_PUSHABLE_FIELDS that the

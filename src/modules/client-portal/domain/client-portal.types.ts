@@ -7,7 +7,7 @@ export type {
   ClientStageKind,
   ClientStatus,
 } from '@/types';
-import type { ClientStatus } from '@/types';
+import type { ClientStatus, SignOffChannel } from '@/types';
 import type { SheetChangeState, WorkState } from './project-sheet.types';
 import type { PortalPageFeedbackLink, PortalPageView } from './portal-pages';
 export type { PortalPageFeedbackLink, PortalPageState, PortalPageView } from './portal-pages';
@@ -123,6 +123,10 @@ export interface PortalAskView {
   group?: string;
   /** The client's own person for it. */
   owner?: string;
+  /** ISO YYYY-MM-DD: when we asked. From a task only. */
+  askedDate?: string;
+  /** ISO YYYY-MM-DD: when we next follow up. Past and still open reads as overdue. From a task only. */
+  followUpDate?: string;
   /** Where to put it, or the sheet tab to fill. Always http(s). */
   url?: string;
   /** `fill`: a `[Fill this]` tab of the project sheet. */
@@ -265,6 +269,8 @@ export interface ClientPortalView {
    * thing to say yes to.
    */
   review?: PortalReviewView;
+  /** Everything the client has signed off, oldest first: on this page or elsewhere. */
+  signOffs?: PortalSignOffView[];
   /**
    * The pages being built, from the page tracker: name, staging link, where
    * each stands for them, and their own parts not yet final.
@@ -274,6 +280,20 @@ export interface ClientPortalView {
   pagesFeedback?: PortalPageFeedbackLink[];
   /** ISO timestamp the projection was built (server time). */
   generatedAt: string;
+}
+
+/**
+ * One line of the sign-off log: what they approved, when, and what they said.
+ * Never who on our side wrote it down, nor the link to the message.
+ */
+export interface PortalSignOffView {
+  id: string;
+  title: string;
+  /** ISO timestamp. */
+  approvedAt: string;
+  note?: string;
+  /** Where it was given, when not on this page. */
+  via?: SignOffChannel;
 }
 
 export interface PortalReviewView {
@@ -310,6 +330,7 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'readiness',
   'sheetUrl',
   'review',
+  'signOffs',
   'pages',
   'pagesFeedback',
   'generatedAt',
