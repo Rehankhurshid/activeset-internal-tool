@@ -192,8 +192,44 @@ describe('buildClientPortalView', () => {
   it('keeps an old portal publishing its link switches until a plan is saved, when there is no timeline', () => {
     const view = buildClientPortalView({ project: project(), timeline: null });
     assert.equal(view.planSource, 'plan');
-    assert.deepEqual(view.files.map((f) => f.title), ['Staging']);
+    // The switched-on link is a deliverable now, shown once, there, not again under files.
+    assert.deepEqual(view.files.map((f) => f.title), []);
+    assert.deepEqual(view.deliverables?.map((d) => d.versions[0].title), ['Staging']);
     assert.equal(view.websiteUrl, 'https://peakxv.com');
+  });
+
+  it('publishes deliverables with their versions and names, never addresses, and rules by text and kind', () => {
+    const view = buildClientPortalView({
+      project: withPlan({
+        links: [
+          { id: 'd1', title: 'Founders list', url: 'https://docs.google.com/spreadsheets/d/1', order: 0, source: 'manual', clientVisible: true, version: 1, sharedAt: '2026-09-10', sharedWith: 'Shruthi' },
+          { id: 'd2', title: 'Founders list', url: 'https://docs.google.com/spreadsheets/d/2', order: 1, source: 'manual', clientVisible: true, version: 2, sharedAt: '2026-09-20', sharedWith: `Shruthi, ${SECRET}@client.com`, deliverableId: 'd1' },
+          { id: 'd3', title: 'Internal draft', url: `https://docs.google.com/${SECRET}`, order: 2, source: 'manual', version: 3, deliverableId: 'd1' },
+        ],
+        clientRules: {
+          rules: [
+            { id: 'r1', text: 'Brokerage figures are masked or random', category: 'compliance' },
+            { id: 'r2', text: 'Buttons are fully rounded, no arrow', category: 'brand' },
+          ],
+          updatedAt: '2026-09-18T09:00:00.000Z',
+          updatedBy: `${SECRET}@activeset.co`,
+        },
+      }),
+      timeline: null,
+    });
+    assert.equal(view.deliverables?.length, 1);
+    assert.deepEqual(
+      view.deliverables?.[0].versions.map((v) => [v.version, v.sharedAt, v.sharedWith]),
+      [
+        [2, '2026-09-20', 'Shruthi'],
+        [1, '2026-09-10', 'Shruthi'],
+      ],
+    );
+    assert.deepEqual(view.rules, [
+      { id: 'r1', text: 'Brokerage figures are masked or random', category: 'compliance' },
+      { id: 'r2', text: 'Buttons are fully rounded, no arrow', category: 'brand' },
+    ]);
+    assert.equal(JSON.stringify(view).includes(SECRET), false);
   });
 
   it('stops publishing the old link switches once a plan is saved', () => {

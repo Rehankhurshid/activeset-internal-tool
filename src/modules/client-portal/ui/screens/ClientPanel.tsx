@@ -14,7 +14,9 @@ import { portalStageSources } from '../../domain/portal-sources';
 import { normalizeClientStatus } from '../../domain/client-portal.types';
 import type { PortalWarning } from '../../domain/portal-health';
 import { clientPortalRepository, type PortalLinkState } from '../../infrastructure/client-portal.repository';
+import { ClientDeliverablesCard } from '../components/ClientDeliverablesCard';
 import { ClientMeetingsCard } from '../components/ClientMeetingsCard';
+import { ClientRulesCard } from '../components/ClientRulesCard';
 import { ClientStatusChip } from '../components/ClientStatusChip';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalHealthCard } from '../components/PortalHealthCard';
@@ -310,6 +312,32 @@ export function ClientPanel(props: ClientPanelProps) {
           </CardHeader>
           <CardContent>
             <ProjectSheetPanel projectId={project.id} sheetState={sheetState} hasAppTimeline={picked.kind === 'timeline'} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Rules agreed with the client</SectionTitle>
+            <CardDescription className="text-xs">
+              Compliance, brand and copy do&apos;s and don&apos;ts for everyone on the project. Pinned on the client&apos;s page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ClientRulesCard project={project} userEmail={userEmail} />
+          </CardContent>
+        </Card>
+
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Deliverables</SectionTitle>
+            <CardDescription className="text-xs">
+              Files and sheets we handed over, with each version, the day and who got it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ClientDeliverablesCard project={project} />
           </CardContent>
         </Card>
       </div>

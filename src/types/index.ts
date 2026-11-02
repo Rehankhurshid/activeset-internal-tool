@@ -12,6 +12,20 @@ export interface ProjectLink {
   pageType?: 'static' | 'collection' | 'unknown'; // Detected from Webflow or URL patterns
   /** Shown on the client portal as a deliverable. Manual links only; default false. */
   clientVisible?: boolean;
+  /**
+   * Deliverable details, read only when `clientVisible` (see
+   * src/modules/client-portal/domain/portal-deliverables.ts). The day it was
+   * handed over (YYYY-MM-DD), who on the client's side got it (names, never
+   * addresses), and its version number. Kept off the public widget endpoint.
+   */
+  sharedAt?: string;
+  sharedWith?: string;
+  version?: number;
+  /**
+   * Versions of one deliverable share this: the id of its first version's
+   * link. Absent on a first version, whose own id is the group.
+   */
+  deliverableId?: string;
 }
 
 // --- FOLDER PAGE TYPES ---
@@ -196,7 +210,9 @@ export interface AuditResult {
 }
 
 export type CreateProjectLinkInput = Omit<ProjectLink, 'id'>;
-export type UpdateProjectLinkInput = Partial<Pick<ProjectLink, 'title' | 'url' | 'order' | 'auditResult'>>;
+export type UpdateProjectLinkInput = Partial<
+  Pick<ProjectLink, 'title' | 'url' | 'order' | 'auditResult' | 'clientVisible' | 'sharedAt' | 'sharedWith' | 'version' | 'deliverableId'>
+>;
 
 // --- CHANGE LOG TYPES ---
 
@@ -438,6 +454,11 @@ export interface Project {
    * team-only project doc, because the files are private links.
    */
   clientTimeline?: ClientTimelineSettings;
+  /**
+   * Rules agreed with the client (compliance, brand, copy do's and don'ts),
+   * pinned on their page and on the Client tab for the whole team.
+   */
+  clientRules?: ClientRules;
   // --- Billing ---
   /** How the project is billed. Missing = 'fixed'. `adhoc` unlocks the
    *  per-task billable hours + "generate invoice from tasks" flow. */
@@ -1545,6 +1566,24 @@ export interface ClientTimelineSettings {
    * the client contacts and the site's own domain.
    */
   meetingDomains?: string[];
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+/** What a client rule is about. Optional on each rule. */
+export type ClientRuleCategory = 'compliance' | 'brand' | 'copy';
+
+/** One rule agreed with the client, e.g. "Brokerage figures are masked or random". */
+export interface ClientRule {
+  id: string;
+  text: string;
+  category?: ClientRuleCategory;
+}
+
+/** `projects/{id}.clientRules`: the team edits it, the client sees `rules` (text and category only). */
+export interface ClientRules {
+  rules: ClientRule[];
+  /** ISO timestamp of the last edit. */
   updatedAt?: string;
   updatedBy?: string;
 }

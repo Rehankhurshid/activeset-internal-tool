@@ -5,10 +5,11 @@ import { PortalFileList } from './PortalFileList';
 
 /**
  * The client's links beside the page on wide screens, in view while they
- * scroll: the website, each step's link and the shared files. On a phone the
+ * scroll: the website, each step's link, the latest version of each
+ * deliverable and the shared files. On a phone the
  * same links stay inline on the steps and under "Files & links".
  */
-export function PortalLinksSidebar({ view }: { view: Pick<ClientPortalView, 'websiteUrl' | 'stages' | 'files'> }) {
+export function PortalLinksSidebar({ view }: { view: Pick<ClientPortalView, 'websiteUrl' | 'stages' | 'files' | 'deliverables'> }) {
   const links = portalLinks(view).map((l) => (l.id === '__site' ? { ...l, icon: Globe } : l));
   if (links.length === 0) return null;
   return (

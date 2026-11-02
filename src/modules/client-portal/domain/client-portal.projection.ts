@@ -23,6 +23,8 @@ import {
 } from './client-plan';
 import { resolveTimelinePlan, stageForDate, type TimelineStageSource, type TimelineStep } from './client-timeline';
 import { portalStageSources } from './portal-sources';
+import { portalDeliverables } from './portal-deliverables';
+import { portalRules } from './client-rules';
 import { portalPages, type PageTrackerInput, type PortalPageFeedbackLink, type PortalPageView } from './portal-pages';
 import { sheetAsks, sheetChanges, sheetFacts, sheetFiles, sheetReadiness, sheetWork } from './project-sheet.portal';
 import type { ProjectSheetSnapshot } from './project-sheet.types';
@@ -444,8 +446,13 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
   const fromSheetAsks = sheet ? sheetAsks(sheet) : { asks: [], received: 0 };
   const asks = mergeAsks(fromSheetAsks.asks, taskAsks);
 
-  const baseFiles = byPhase ? normalizePlanFiles(project.clientTimeline?.files).map(toFile) : (plan?.files ?? []).map(toFile);
+  const deliverables = portalDeliverables(project.links);
+  // An old portal's files are its switched-on links, which are now deliverables: show them once, there.
+  const deliverableUrls = new Set(deliverables.flatMap((d) => d.versions.map((v) => v.url)));
+  const planFiles = (plan?.files ?? []).map(toFile).filter((f) => !(legacy && deliverableUrls.has(f.url)));
+  const baseFiles = byPhase ? normalizePlanFiles(project.clientTimeline?.files).map(toFile) : planFiles;
   const files = sheet ? dedupeFiles([...sheetFiles(sheet), ...baseFiles]) : baseFiles;
+  const rules = portalRules(project.clientRules?.rules);
   const work = sheet ? sheetWork(sheet.data, new Set(stages.map((s) => s.id))) : [];
   const changes = sheet ? sheetChanges(sheet.data) : [];
   const readiness = sheet ? sheetReadiness(sheet.data) : [];
@@ -490,6 +497,8 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     signOffs: signOffs.length ? signOffs : undefined,
     pages: pages.length ? pages : undefined,
     pagesFeedback: pages.length ? feedbackLinks(timelineSources, pages) : undefined,
+    deliverables: deliverables.length ? deliverables : undefined,
+    rules: rules.length ? rules : undefined,
     generatedAt: now.toISOString(),
   };
 
