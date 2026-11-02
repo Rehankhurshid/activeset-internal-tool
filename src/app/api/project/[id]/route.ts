@@ -29,10 +29,25 @@ const PUBLIC_FIELDS = [
   'publicAuditShareEnabled',
 ] as const;
 
+// Deliverable details on a link (who on the client's side got it, when, which
+// version) are for the client portal, which builds its own allow-list. The
+// widget only needs a link's title and address, so they never leave here.
+const PRIVATE_LINK_FIELDS = ['sharedWith', 'sharedAt', 'version', 'deliverableId'] as const;
+
+function publicLinks(links: unknown): unknown {
+  if (!Array.isArray(links)) return links;
+  return links.map((link) => {
+    if (!link || typeof link !== 'object') return link;
+    const copy = { ...(link as Record<string, unknown>) };
+    for (const key of PRIVATE_LINK_FIELDS) delete copy[key];
+    return copy;
+  });
+}
+
 function pickPublicFields(data: Record<string, unknown>) {
   const out: Record<string, unknown> = {};
   for (const key of PUBLIC_FIELDS) {
-    if (key in data) out[key] = data[key];
+    if (key in data) out[key] = key === 'links' ? publicLinks(data[key]) : data[key];
   }
   return out;
 }

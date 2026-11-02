@@ -13,6 +13,7 @@ import { LaunchExtras } from '../components/LaunchExtras';
 import { buildAuditsByPageId, buildAutoVerdicts } from '../components/launch-scan';
 import { StageChecklist } from '../components/StageChecklist';
 import { ImportPagesFromSheet } from '../components/ImportPagesFromSheet';
+import { SitemapGapCard } from '../components/SitemapGapCard';
 import { ProjectSheetPanel } from '@/modules/client-portal';
 import { DeliveryScreen } from './DeliveryScreen';
 
@@ -160,6 +161,8 @@ export function StageScreen({
               <ProjectSheetPanel projectId={project.id} compact />
             </CardContent>
           </Card>
+          {/* After launch, pages built late show up here too, not only at the Launch stage. */}
+          {project.delivery?.launch && <SitemapGapCard project={project} pages={pages} />}
           <DeliveryScreen project={project} stack={stack} userEmail={userEmail} />
         </div>
       ) : stage.role === 'client_review' ? (

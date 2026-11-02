@@ -12,6 +12,20 @@ export interface ProjectLink {
   pageType?: 'static' | 'collection' | 'unknown'; // Detected from Webflow or URL patterns
   /** Shown on the client portal as a deliverable. Manual links only; default false. */
   clientVisible?: boolean;
+  /**
+   * Deliverable details, read only when `clientVisible` (see
+   * src/modules/client-portal/domain/portal-deliverables.ts). The day it was
+   * handed over (YYYY-MM-DD), who on the client's side got it (names, never
+   * addresses), and its version number. Kept off the public widget endpoint.
+   */
+  sharedAt?: string;
+  sharedWith?: string;
+  version?: number;
+  /**
+   * Versions of one deliverable share this: the id of its first version's
+   * link. Absent on a first version, whose own id is the group.
+   */
+  deliverableId?: string;
 }
 
 // --- FOLDER PAGE TYPES ---
@@ -196,7 +210,9 @@ export interface AuditResult {
 }
 
 export type CreateProjectLinkInput = Omit<ProjectLink, 'id'>;
-export type UpdateProjectLinkInput = Partial<Pick<ProjectLink, 'title' | 'url' | 'order' | 'auditResult'>>;
+export type UpdateProjectLinkInput = Partial<
+  Pick<ProjectLink, 'title' | 'url' | 'order' | 'auditResult' | 'clientVisible' | 'sharedAt' | 'sharedWith' | 'version' | 'deliverableId'>
+>;
 
 // --- CHANGE LOG TYPES ---
 
@@ -438,6 +454,11 @@ export interface Project {
    * team-only project doc, because the files are private links.
    */
   clientTimeline?: ClientTimelineSettings;
+  /**
+   * Rules agreed with the client (compliance, brand, copy do's and don'ts),
+   * pinned on their page and on the Client tab for the whole team.
+   */
+  clientRules?: ClientRules;
   // --- Billing ---
   /** How the project is billed. Missing = 'fixed'. `adhoc` unlocks the
    *  per-task billable hours + "generate invoice from tasks" flow. */
@@ -693,15 +714,35 @@ export type ChecklistStage = 'kickoff' | 'launch';
  */
 export type StageRole = 'kickoff' | 'pages' | 'client_review' | 'launch';
 
-/** One client sign-off on one stage. Append-only; the team clears it, not the client. */
+/** Where a sign-off the team recorded was given, when it was not the portal's Approve button. */
+export type SignOffChannel = 'slack' | 'email' | 'call' | 'other';
+
+/**
+ * One client sign-off. Append-only; the team clears it, not the client.
+ *
+ * Two writers. The portal's Approve button records a `client_review` stage
+ * (no `recordedBy`). The team records one given elsewhere, in Slack, by email
+ * or on a call (`recordedBy` set): either against a `client_review` stage, so
+ * the portal stops asking for it, or against anything else under a
+ * `team:<id>` key. Together they are the project's sign-off log.
+ */
 export interface StageApproval {
-  /** `${checklistId}:${sectionId}` — the stage's key in the delivery arc. */
+  /**
+   * `${checklistId}:${sectionId}` for a checklist stage, or `team:<id>` for a
+   * sign-off the team recorded that is not one of the checklist's stages.
+   */
   stageKey: string;
-  /** Kept alongside the key so the record still reads if the section is renamed. */
+  /** What was approved. Kept alongside the key so the record still reads if the section is renamed. */
   stageTitle: string;
   approvedAt: string;
-  /** Whatever the client typed when approving, if anything. */
+  /** What the client said ("picked the green variant"). Shown to the client. */
   note?: string;
+  /** Team email that recorded a sign-off given outside the portal. Never shown to the client. */
+  recordedBy?: string;
+  /** Where it was given, when not on the portal. Shown to the client ("in Slack"). */
+  via?: SignOffChannel;
+  /** The message it was given in (a Slack permalink, an email). http(s); never shown to the client. */
+  sourceUrl?: string;
 }
 
 /** One labelled link on a task: the tool, the reference, the example. */
@@ -1145,6 +1186,22 @@ export interface Task {
   isBlocker?: boolean;
   /** True when ActiveSet is waiting on client input. */
   needsClientInput?: boolean;
+  /**
+   * ISO YYYY-MM-DD: when the client was asked. Stamped the day the task is
+   * flagged `needsClientInput`; the team can correct it. The client sees it.
+   */
+  askedAt?: string;
+  /**
+   * ISO YYYY-MM-DD: when we next chase it. Past and still open means the ask is
+   * overdue on both sides. The client sees it.
+   */
+  followUpAt?: string;
+  /**
+   * Who it is with on the client's side ("Security team", "Priya"): a name,
+   * never an address. The client sees it as "With …". Our own owner is
+   * `assignee`, which never leaves the app.
+   */
+  clientOwner?: string;
   /** 0-1 confidence for AI/deterministic extraction. */
   confidence?: number;
   /** Email of the assigned team member. */
@@ -1219,6 +1276,9 @@ export type UpdateTaskInput = Partial<
     | 'qaStatus'
     | 'isBlocker'
     | 'needsClientInput'
+    | 'askedAt'
+    | 'followUpAt'
+    | 'clientOwner'
     | 'confidence'
     | 'assignee'
     | 'order'
@@ -1336,6 +1396,42 @@ export interface ProjectDeliveryState {
   lastDevNudgeAt?: string;
   /** Last checklist or page update logged for the dev owner. */
   lastDevActivityAt?: string;
+  /**
+   * The day the site went live, written by "Mark launched" on the Delivery
+   * tab's Launch stage, which swapped the pages' staging links for live ones in
+   * the same write. Its presence is what stops the swap being run twice.
+   */
+  launch?: DeliveryLaunchRecord;
+  /** The last comparison of the page tracker against the live sitemap. */
+  sitemapGap?: DeliverySitemapGap;
+  /** Paths (or `/folder/*`) the team said do not belong on the tracker. */
+  sitemapIgnore?: string[];
+}
+
+/** `delivery.launch`: who marked the site live, when, and what that rewrote. */
+export interface DeliveryLaunchRecord {
+  launchedAt: string;
+  launchedBy?: string;
+  /** e.g. `https://www.acme.com`, no trailing slash. */
+  liveOrigin: string;
+  /** The hosts the page links were moved off, e.g. `acme.webflow.io`. */
+  fromHosts: string[];
+  /** Page links rewritten, and pages that had none and were given one. */
+  rewritten: number;
+  linked: number;
+}
+
+/** `delivery.sitemapGap`: pages on the live sitemap that are not on the tracker. */
+export interface DeliverySitemapGap {
+  checkedAt: string;
+  sitemapUrl: string;
+  /** Static pages on the sitemap that no tracker row has, by path. */
+  missing: { path: string; url: string }[];
+  /** URLs left out as CMS items (folders the project or the scan knows are collections). */
+  cmsSkipped: number;
+  /** Every page URL the sitemap listed. */
+  sitemapCount: number;
+  error?: string;
 }
 
 // --- CLIENT PORTAL / CLIENT-FACING TYPES ---
@@ -1388,6 +1484,14 @@ export interface ClientPortalSettings {
   welcome?: string;
   /** Client contacts (informational until per-contact tokens exist). */
   contactEmails?: string[];
+  /**
+   * The client's point of contact at ActiveSet: the one address the portal
+   * footer and the app-kept sheet show the client. Unset → the project lead
+   * (`reviewOwnerEmail`), then the first of `assigneeEmails`, as before it
+   * existed. The internal owners stay `reviewOwnerEmail` + `assigneeEmails`,
+   * which never reach the client except through this fallback.
+   */
+  agencyContactEmail?: string;
 }
 
 /**
@@ -1498,6 +1602,24 @@ export interface ClientTimelineSettings {
    * the client contacts and the site's own domain.
    */
   meetingDomains?: string[];
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+/** What a client rule is about. Optional on each rule. */
+export type ClientRuleCategory = 'compliance' | 'brand' | 'copy';
+
+/** One rule agreed with the client, e.g. "Brokerage figures are masked or random". */
+export interface ClientRule {
+  id: string;
+  text: string;
+  category?: ClientRuleCategory;
+}
+
+/** `projects/{id}.clientRules`: the team edits it, the client sees `rules` (text and category only). */
+export interface ClientRules {
+  rules: ClientRule[];
+  /** ISO timestamp of the last edit. */
   updatedAt?: string;
   updatedBy?: string;
 }

@@ -192,8 +192,44 @@ describe('buildClientPortalView', () => {
   it('keeps an old portal publishing its link switches until a plan is saved, when there is no timeline', () => {
     const view = buildClientPortalView({ project: project(), timeline: null });
     assert.equal(view.planSource, 'plan');
-    assert.deepEqual(view.files.map((f) => f.title), ['Staging']);
+    // The switched-on link is a deliverable now, shown once, there, not again under files.
+    assert.deepEqual(view.files.map((f) => f.title), []);
+    assert.deepEqual(view.deliverables?.map((d) => d.versions[0].title), ['Staging']);
     assert.equal(view.websiteUrl, 'https://peakxv.com');
+  });
+
+  it('publishes deliverables with their versions and names, never addresses, and rules by text and kind', () => {
+    const view = buildClientPortalView({
+      project: withPlan({
+        links: [
+          { id: 'd1', title: 'Founders list', url: 'https://docs.google.com/spreadsheets/d/1', order: 0, source: 'manual', clientVisible: true, version: 1, sharedAt: '2026-09-10', sharedWith: 'Shruthi' },
+          { id: 'd2', title: 'Founders list', url: 'https://docs.google.com/spreadsheets/d/2', order: 1, source: 'manual', clientVisible: true, version: 2, sharedAt: '2026-09-20', sharedWith: `Shruthi, ${SECRET}@client.com`, deliverableId: 'd1' },
+          { id: 'd3', title: 'Internal draft', url: `https://docs.google.com/${SECRET}`, order: 2, source: 'manual', version: 3, deliverableId: 'd1' },
+        ],
+        clientRules: {
+          rules: [
+            { id: 'r1', text: 'Brokerage figures are masked or random', category: 'compliance' },
+            { id: 'r2', text: 'Buttons are fully rounded, no arrow', category: 'brand' },
+          ],
+          updatedAt: '2026-09-18T09:00:00.000Z',
+          updatedBy: `${SECRET}@activeset.co`,
+        },
+      }),
+      timeline: null,
+    });
+    assert.equal(view.deliverables?.length, 1);
+    assert.deepEqual(
+      view.deliverables?.[0].versions.map((v) => [v.version, v.sharedAt, v.sharedWith]),
+      [
+        [2, '2026-09-20', 'Shruthi'],
+        [1, '2026-09-10', 'Shruthi'],
+      ],
+    );
+    assert.deepEqual(view.rules, [
+      { id: 'r1', text: 'Brokerage figures are masked or random', category: 'compliance' },
+      { id: 'r2', text: 'Buttons are fully rounded, no arrow', category: 'brand' },
+    ]);
+    assert.equal(JSON.stringify(view).includes(SECRET), false);
   });
 
   it('stops publishing the old link switches once a plan is saved', () => {
@@ -212,6 +248,59 @@ describe('buildClientPortalView', () => {
   it('turns open needsClientInput tasks into asks with title and due date only', () => {
     const view = buildClientPortalView({ project: project(), timeline: timeline(), tasks: tasks() });
     assert.deepEqual(view.asks, [{ id: 't1', title: 'Send final About copy', dueDate: '2026-09-22' }]);
+  });
+
+  it('adds when an ask was asked, its next follow-up and who has it on their side, never our assignee', () => {
+    const base = tasks()[0];
+    const ask = {
+      ...base,
+      askedAt: '2026-10-24',
+      followUpAt: '2026-10-31',
+      clientOwner: 'Security team',
+      assignee: `${SECRET}@activeset.co`,
+      sourceLink: `https://slack.com/${SECRET}`,
+    };
+    const view = buildClientPortalView({
+      project: project(),
+      timeline: timeline(),
+      tasks: [ask, { ...base, id: 't9', clientOwner: 'cto@peakxv.com', followUpAt: 'next week' }],
+    });
+    assert.deepEqual(view.asks[0], {
+      id: 't1',
+      title: 'Send final About copy',
+      dueDate: '2026-09-22',
+      askedDate: '2026-10-24',
+      followUpDate: '2026-10-31',
+      owner: 'Security team',
+    });
+    assert.deepEqual(view.asks[1], { id: 't9', title: 'Send final About copy', dueDate: '2026-09-22' });
+    assert.equal(JSON.stringify(view).includes(SECRET), false);
+  });
+
+  it('logs every sign-off, oldest first, without who recorded it or the source link', () => {
+    const withLog = project({
+      delivery: {
+        approvals: [
+          { stageKey: 'c1:review', stageTitle: 'Staging review', approvedAt: '2026-10-30T09:00:00.000Z' },
+          {
+            stageKey: `team:${SECRET}`,
+            stageTitle: 'Homepage design',
+            approvedAt: '2026-10-27T12:00:00.000Z',
+            note: 'Picked the green variant',
+            via: 'slack',
+            recordedBy: `${SECRET}@activeset.co`,
+            sourceUrl: `https://activeset.slack.com/archives/${SECRET}`,
+          },
+        ],
+      },
+    });
+    const view = buildClientPortalView({ project: withLog, timeline: null });
+    assert.deepEqual(view.signOffs, [
+      { id: 'signoff-1', title: 'Homepage design', approvedAt: '2026-10-27T12:00:00.000Z', note: 'Picked the green variant', via: 'slack' },
+      { id: 'signoff-2', title: 'Staging review', approvedAt: '2026-10-30T09:00:00.000Z' },
+    ]);
+    assert.equal(JSON.stringify(view).includes(SECRET), false);
+    assert.equal(buildClientPortalView({ project: project(), timeline: null }).signOffs, undefined);
   });
 
   it('uses portal wording for the status and falls back safely', () => {
@@ -247,6 +336,27 @@ describe('buildClientPortalView', () => {
     assert.equal(view.brandName, 'Peak XV Partners');
     assert.equal(view.brandLogoUrl, 'https://cdn.example.com/brand.png');
     assert.equal(view.websiteUrl, 'https://peakxv.com');
+  });
+
+  it('shows the chosen point of contact, and none of the internal owners', () => {
+    const view = buildClientPortalView({
+      project: project({
+        reviewOwnerEmail: 'salman@activeset.co',
+        assigneeEmails: ['sanjay@activeset.co'],
+        clientPortal: { enabled: true, agencyContactEmail: 'Rehan@ActiveSet.co ' },
+      }),
+      timeline: null,
+    });
+    assert.equal(view.agencyContactEmail, 'rehan@activeset.co');
+    const json = JSON.stringify(view);
+    assert.equal(json.includes('salman@'), false, 'the lead stays internal');
+    assert.equal(json.includes('sanjay@'), false, 'the team stays internal');
+  });
+
+  it('falls back to the lead, then the team, when no point of contact is chosen', () => {
+    assert.equal(buildClientPortalView({ project: project(), timeline: null }).agencyContactEmail, 'rehan@activeset.co');
+    const noLead = buildClientPortalView({ project: project({ reviewOwnerEmail: undefined }), timeline: null });
+    assert.equal(noLead.agencyContactEmail, 'salman@activeset.co');
   });
 });
 

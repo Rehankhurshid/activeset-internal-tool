@@ -12,11 +12,19 @@ import { legacyClientPlan, normalizeClientPlan, resolveClientPlan, type Resolved
 import { resolveTimelinePlan, type TimelineStageSource } from '../../domain/client-timeline';
 import { portalStageSources } from '../../domain/portal-sources';
 import { normalizeClientStatus } from '../../domain/client-portal.types';
-import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
+import type { PortalWarning } from '../../domain/portal-health';
+import { clientPortalRepository, type PortalLinkState } from '../../infrastructure/client-portal.repository';
+import { ClientDeliverablesCard } from '../components/ClientDeliverablesCard';
 import { ClientMeetingsCard } from '../components/ClientMeetingsCard';
+import { ClientRulesCard } from '../components/ClientRulesCard';
 import { ClientStatusChip } from '../components/ClientStatusChip';
+import { ClientSyncsCard } from '../components/ClientSyncsCard';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
+import { PortalHealthCard } from '../components/PortalHealthCard';
 import { PortalLinkCard } from '../components/PortalLinkCard';
+import { PortalPeopleFields } from '../components/PortalPeopleFields';
+import { SignOffLogCard } from '../components/SignOffLogCard';
+import { WaitingOnClientCard } from '../components/WaitingOnClientCard';
 import { useProjectSheet } from '../components/ProjectSheetCard';
 import { ProjectSheetPanel } from '../components/ProjectSheetPanel';
 
@@ -29,7 +37,7 @@ interface ClientPanelProps {
   userEmail: string;
   /** Unused; kept so the project screen's call stays the same. */
   isAdmin: boolean;
-  /** Unused since the asks list left this tab: the Tasks tab owns them, the client's page shows them. */
+  /** The project's tasks; the open "Needs client input" ones are the Waiting on client list. */
   tasks?: Task[];
   onOpenTab?: (tab: 'checklist' | 'tasks' | 'timeline') => void;
 }
@@ -160,19 +168,57 @@ function useSourceTemplates(checklists: ProjectChecklist[]): { templates: SOPTem
 }
 
 /**
- * The Client tab, lean: the link, the sheet, what the client sees, and calls to
- * share. Nothing here moves the client's page by hand. Rehan, 2026-10-01: the
+ * Team-only warnings about the client's page, read from the server's build of
+ * that page (ACT-92). Checked again whenever something the page shows moves.
+ * A failed check shows nothing: it is a nudge, not a gate.
+ */
+function usePortalWarnings(projectId: string, key: string): PortalWarning[] {
+  const [loaded, setLoaded] = useState<{ key: string; warnings: PortalWarning[] } | null>(null);
+  const fullKey = `${projectId}|${key}`;
+  useEffect(() => {
+    let cancelled = false;
+    clientPortalRepository
+      .getHealth(projectId)
+      .then((health) => {
+        if (!cancelled) setLoaded({ key: fullKey, warnings: health.warnings });
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded({ key: fullKey, warnings: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, fullKey]);
+  return loaded?.warnings ?? [];
+}
+
+/**
+ * The Client tab, lean: the link, the sheet, what the client sees, who they
+ * talk to, what is waiting on them, what they signed off, and calls to share.
+ * Nothing here moves the client's page by hand. Rehan, 2026-10-01: the
  * checklist manages it, so where the project is comes from ticking the
  * checklist (or the project sheet), and this tab only shows the result.
  */
 export function ClientPanel(props: ClientPanelProps) {
-  const { project, timeline, userEmail, checklists = [], onOpenTab } = props;
+  const { project, timeline, userEmail, checklists = [], tasks = [], onOpenTab } = props;
   const [link, setLink] = useState<PortalLinkState | null>(null);
   const enabled = link ? link.enabled : project.clientPortal?.enabled === true;
   const status = normalizeClientStatus(project.clientFacing?.status);
 
   const sheetState = useProjectSheet(project.id);
   const sheetRecord = sheetState.state?.sheet ?? null;
+  const warnings = usePortalWarnings(
+    project.id,
+    [
+      enabled,
+      project.clientFacing?.lastUpdateAt,
+      project.clientFacing?.status,
+      project.clientPortal?.agencyContactEmail,
+      project.reviewOwnerEmail,
+      (project.assigneeEmails ?? []).join(','),
+      sheetRecord?.syncedAt,
+    ].join('|'),
+  );
   const { templates, loading: templatesLoading } = useSourceTemplates(checklists);
   // Decided by the same function as the client's page, so the two cannot disagree.
   const picked = useMemo(
@@ -200,6 +246,13 @@ export function ClientPanel(props: ClientPanelProps) {
     return shown ? resolveClientPlan(shown, checklists, { currentStageId: legacy?.currentStageId, status }) : null;
   }, [picked.kind, plan, timeline, project.links, currentPhaseId, checklists, status]);
 
+  // The stages the client's page shows, for the sign-off log's "what comes next".
+  const shownPlan = steps ?? planResolved;
+  const shownStages = useMemo(
+    () => (shownPlan ? shownPlan.stages.map((r) => ({ title: r.stage.title, state: r.state })) : []),
+    [shownPlan],
+  );
+
   const source =
     picked.kind === 'checklist'
       ? 'From the checklist: each step moves as you tick its items. Press “Sent · waiting on them” on a client’s step when it goes out, and their page says it is waiting on them.'
@@ -224,6 +277,8 @@ export function ClientPanel(props: ClientPanelProps) {
           <span className="text-xs text-muted-foreground">Off: the client can&apos;t open anything until the link is on.</span>
         )}
       </div>
+
+      <PortalHealthCard warnings={warnings} />
 
       {onOpenTab && (
         <div className="flex flex-wrap gap-2">
@@ -262,6 +317,32 @@ export function ClientPanel(props: ClientPanelProps) {
         </Card>
       </div>
 
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Rules agreed with the client</SectionTitle>
+            <CardDescription className="text-xs">
+              Compliance, brand and copy do&apos;s and don&apos;ts for everyone on the project. Pinned on the client&apos;s page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ClientRulesCard project={project} userEmail={userEmail} />
+          </CardContent>
+        </Card>
+
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Deliverables</SectionTitle>
+            <CardDescription className="text-xs">
+              Files and sheets we handed over, with each version, the day and who got it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ClientDeliverablesCard project={project} />
+          </CardContent>
+        </Card>
+      </div>
+
       <Card className="gap-3">
         <CardHeader>
           <SectionTitle>What the client sees</SectionTitle>
@@ -283,6 +364,48 @@ export function ClientPanel(props: ClientPanelProps) {
         </CardContent>
       </Card>
 
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Waiting on client</SectionTitle>
+            <CardDescription className="text-xs">
+              Open asks, overdue first. Their page shows each with who has it on their side, when we asked and the next
+              follow-up.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <WaitingOnClientCard tasks={tasks} onOpenTasks={onOpenTab ? () => onOpenTab('tasks') : undefined} />
+          </CardContent>
+        </Card>
+
+        <Card className="gap-3">
+          <CardHeader>
+            <SectionTitle>Sign-offs</SectionTitle>
+            <CardDescription className="text-xs">
+              What the client approved and when. Their page shows the same log, without the source links.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SignOffLogCard
+              project={project}
+              checklists={checklists}
+              stages={shownStages}
+              currentIndex={shownPlan && shownPlan.currentIndex >= 0 ? shownPlan.currentIndex : undefined}
+              userEmail={userEmail}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="gap-3">
+        <CardHeader>
+          <SectionTitle>Who the client talks to</SectionTitle>
+        </CardHeader>
+        <CardContent>
+          <PortalPeopleFields project={project} />
+        </CardContent>
+      </Card>
+
       <Card className="gap-3">
         <CardHeader>
           <SectionTitle>Meetings</SectionTitle>
@@ -296,6 +419,19 @@ export function ClientPanel(props: ClientPanelProps) {
             stages={picked.kind ? picked.sources.map((s) => s.stage) : (planResolved?.stages.map((r) => r.stage) ?? [])}
             userEmail={userEmail}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="gap-3">
+        <CardHeader>
+          <SectionTitle>Data syncs</SectionTitle>
+          <CardDescription className="text-xs">
+            Syncs that carry the client&apos;s data into the site (Airtable → Webflow through Whalesync). Their page shows a
+            chip per sync: running or not, last run, open issues.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ClientSyncsCard projectId={project.id} />
         </CardContent>
       </Card>
 

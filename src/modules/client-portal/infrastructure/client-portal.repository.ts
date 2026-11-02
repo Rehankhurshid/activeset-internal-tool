@@ -6,14 +6,47 @@ import type {
   ClientPlan,
   ClientPlanFile,
   ClientPlanStage,
+  ClientRule,
   ClientStatus,
   ClientTimelineSettings,
   MeetingShareStatus,
   ProjectMeeting,
 } from '@/types';
 import { normalizeClientPlan } from '../domain/client-plan';
+import { normalizeClientRules } from '../domain/client-rules';
+import type { PortalWarning } from '../domain/portal-health';
+import { cleanSharedWith } from '../domain/portal-deliverables';
 import type { ProjectSheetRecord, SheetStagesFrom, SheetTabRole } from '../domain/project-sheet.types';
 import { normalizeClientTimelineSettings } from '../domain/client-timeline';
+import type { ContentSync, ContentSyncInput } from '../domain/content-syncs';
+
+/** A deliverable as the Client tab edits it. */
+export interface DeliverableInput {
+  title: string;
+  url: string;
+  /** YYYY-MM-DD, or empty. */
+  sharedAt: string;
+  /** Names, or empty. */
+  sharedWith: string;
+  /** 1, 2, 3… or undefined. */
+  version?: number;
+  /** The first version's link id, for a later version. */
+  deliverableId?: string;
+}
+
+/** The link fields a deliverable writes; an empty one is cleared (undefined is stripped before saving). */
+function deliverableFields(input: DeliverableInput) {
+  const url = input.url.trim();
+  const sharedWith = cleanSharedWith(input.sharedWith);
+  return {
+    title: input.title.trim(),
+    url: /^https?:\/\//i.test(url) ? url : `https://${url}`,
+    sharedAt: /^\d{4}-\d{2}-\d{2}$/.test(input.sharedAt) ? input.sharedAt : undefined,
+    sharedWith,
+    version: input.version && Number.isInteger(input.version) && input.version > 0 ? input.version : undefined,
+    deliverableId: input.deliverableId || undefined,
+  };
+}
 
 /** What the Client tab gets back from the meetings route. */
 export interface MeetingsState {
@@ -41,6 +74,14 @@ export interface PortalLinkState {
   issuedAt: string | null;
   lastUsedAt: string | null;
   useCount: number;
+}
+
+/** Mirror of the JSON returned by /api/client-portal/[projectId]/health. Team only. */
+export interface PortalHealthState {
+  enabled: boolean;
+  /** What the client's page counts as its last update. */
+  lastUpdateAt: string | null;
+  warnings: PortalWarning[];
 }
 
 /** Same row shape as the proposal views endpoint, so ViewsPopover can render both. */
@@ -71,6 +112,31 @@ export interface ProjectSheetSettings {
   showSheetLink?: boolean;
 }
 
+/** A sync on the Whalesync account, for linking a row to it. */
+export interface WhalesyncOption {
+  id: string;
+  name: string;
+  status: string | null;
+  source: string | null;
+  destination: string | null;
+}
+
+/** What the Client tab gets back from the syncs route. */
+export interface ContentSyncsState {
+  syncs: ContentSync[];
+  /** Whether WHALESYNC_API_KEY is set on this deployment. */
+  connected: boolean;
+  /** With `available`: the Whalesync account's syncs. */
+  available?: WhalesyncOption[];
+  availableError?: string;
+}
+
+/** A saved row, and what Whalesync said when it was read straight after. */
+export interface ContentSyncSaved {
+  sync: ContentSync;
+  refreshError?: string;
+}
+
 async function readJson<T>(res: Response, fallback: string): Promise<T> {
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new Error(body?.error || `${fallback} (${res.status})`);
@@ -82,6 +148,7 @@ type ClientPortalRepository = {
   getLinkState(projectId: string): Promise<PortalLinkState>;
   setLink(projectId: string, action: PortalLinkAction): Promise<PortalLinkState>;
   listViews(projectId: string, limit?: number): Promise<PortalViewRow[]>;
+  getHealth(projectId: string): Promise<PortalHealthState>;
   updateClientFacing(
     projectId: string,
     patch: { status?: ClientStatus; statusNote?: string | null; currentStageId?: string | null },
@@ -91,9 +158,19 @@ type ClientPortalRepository = {
   markClientUpdated(projectId: string, byEmail: string): Promise<void>;
   updateClientPortalSettings(
     projectId: string,
-    patch: { brandName?: string | null; brandLogoUrl?: string | null; welcome?: string | null; contactEmails?: string[] },
+    patch: {
+      brandName?: string | null;
+      brandLogoUrl?: string | null;
+      welcome?: string | null;
+      contactEmails?: string[];
+      agencyContactEmail?: string | null;
+    },
   ): Promise<void>;
   editPlan(projectId: string, byEmail: string, edit: (plan: ClientPlan) => ClientPlan): Promise<void>;
+  saveRules(projectId: string, rules: ClientRule[], byEmail: string): Promise<void>;
+  addDeliverable(projectId: string, deliverable: DeliverableInput, order: number): Promise<void>;
+  updateDeliverable(projectId: string, linkId: string, deliverable: DeliverableInput): Promise<void>;
+  setDeliverableVisible(projectId: string, linkId: string, visible: boolean): Promise<void>;
   savePlan(projectId: string, plan: ClientPlan, byEmail: string): Promise<void>;
   updateStage(projectId: string, stageId: string, patch: Partial<ClientPlanStage>, byEmail: string): Promise<void>;
   addStage(projectId: string, stage: ClientPlanStage, byEmail: string): Promise<void>;
@@ -119,7 +196,21 @@ type ClientPortalRepository = {
   syncSheet(projectId: string): Promise<ProjectSheetState>;
   updateSheetSettings(projectId: string, settings: ProjectSheetSettings): Promise<ProjectSheetState>;
   unbindSheet(projectId: string): Promise<ProjectSheetState>;
+  listSyncs(projectId: string, options?: { available?: boolean }): Promise<ContentSyncsState>;
+  createSync(projectId: string, sync: ContentSyncInput): Promise<ContentSyncSaved>;
+  updateSync(projectId: string, syncId: string, patch: ContentSyncInput): Promise<ContentSyncSaved>;
+  deleteSync(projectId: string, syncId: string): Promise<void>;
+  refreshSyncs(projectId: string): Promise<{ refreshed: number; failed: number; syncs: ContentSync[] }>;
 };
+
+function syncsUrl(projectId: string, syncId?: string): string {
+  const base = `/api/client-portal/${encodeURIComponent(projectId)}/syncs`;
+  return syncId ? `${base}/${encodeURIComponent(syncId)}` : base;
+}
+
+async function sendJson(url: string, method: string, body: unknown): Promise<Response> {
+  return fetchAuthed(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
 
 async function postSheet(projectId: string, body: Record<string, unknown>, fallback: string): Promise<ProjectSheetState> {
   const res = await fetchAuthed(`/api/client-portal/${encodeURIComponent(projectId)}/sheet`, {
@@ -156,6 +247,11 @@ export const clientPortalRepository: ClientPortalRepository = {
     return body.views ?? [];
   },
 
+  async getHealth(projectId: string): Promise<PortalHealthState> {
+    const res = await fetchAuthed(`/api/client-portal/${encodeURIComponent(projectId)}/health`);
+    return readJson<PortalHealthState>(res, 'Could not check the client page');
+  },
+
   /**
    * `touch: true` also stamps "last updated", which is what the stale-portal
    * nudge reads. Pass it when the team has actually told the client something
@@ -177,8 +273,35 @@ export const clientPortalRepository: ClientPortalRepository = {
       brandLogoUrl?: string | null;
       welcome?: string | null;
       contactEmails?: string[];
+      agencyContactEmail?: string | null;
     },
   ) => projectsService.updateClientPortalSettings(projectId, patch),
+
+  /**
+   * A deliverable is a manual project link switched on for the client, with
+   * when it was shared, with whom and its version. A new version is a new
+   * link carrying the first version's id as `deliverableId`.
+   */
+  addDeliverable: (projectId: string, deliverable: DeliverableInput, order: number) =>
+    projectsService.addLinkToProject(projectId, {
+      ...deliverableFields(deliverable),
+      order,
+      isDefault: false,
+      source: 'manual',
+      clientVisible: true,
+    }),
+
+  /** Edits one version: every field, an empty one cleared. */
+  updateDeliverable: (projectId: string, linkId: string, deliverable: DeliverableInput) =>
+    projectsService.updateLink(projectId, linkId, deliverableFields(deliverable)),
+
+  /** Off takes it off the client's page; the link stays on the Links tab. */
+  setDeliverableVisible: (projectId: string, linkId: string, visible: boolean) =>
+    projectsService.updateLink(projectId, linkId, { clientVisible: visible }),
+
+  /** The rules agreed with the client, replaced whole, always cleaned on the way in. */
+  saveRules: (projectId: string, rules: ClientRule[], byEmail: string) =>
+    projectsService.updateClientRules(projectId, normalizeClientRules(rules), byEmail),
 
   /**
    * Edits the client plan from its latest stored value (a transaction), always
@@ -285,4 +408,29 @@ export const clientPortalRepository: ClientPortalRepository = {
   updateSheetSettings: (projectId, settings) =>
     postSheet(projectId, { action: 'settings', ...settings }, 'Could not save'),
   unbindSheet: (projectId) => postSheet(projectId, { action: 'unbind' }, 'Could not unbind the sheet'),
+
+  async listSyncs(projectId, options) {
+    const res = await fetchAuthed(`${syncsUrl(projectId)}${options?.available ? '?available=1' : ''}`);
+    return readJson<ContentSyncsState>(res, 'Could not load syncs');
+  },
+
+  async createSync(projectId, sync) {
+    const res = await sendJson(syncsUrl(projectId), 'POST', { action: 'create', sync });
+    return readJson<ContentSyncSaved>(res, 'Could not add the sync');
+  },
+
+  async updateSync(projectId, syncId, patch) {
+    const res = await sendJson(syncsUrl(projectId, syncId), 'PATCH', patch);
+    return readJson<ContentSyncSaved>(res, 'Could not save the sync');
+  },
+
+  async deleteSync(projectId, syncId) {
+    const res = await fetchAuthed(syncsUrl(projectId, syncId), { method: 'DELETE' });
+    await readJson<{ ok: boolean }>(res, 'Could not remove the sync');
+  },
+
+  async refreshSyncs(projectId) {
+    const res = await sendJson(syncsUrl(projectId), 'POST', { action: 'refresh' });
+    return readJson<{ refreshed: number; failed: number; syncs: ContentSync[] }>(res, 'Could not refresh from Whalesync');
+  },
 };

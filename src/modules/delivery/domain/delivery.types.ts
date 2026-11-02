@@ -12,7 +12,14 @@
  * document, so they are declared in @/types with the rest of `Project` and
  * re-exported here — the same arrangement the client-portal module uses.
  */
-export type { AutoCheckId, CheckStatus, ProjectDeliveryState, StackId } from '@/types';
+export type {
+  AutoCheckId,
+  CheckStatus,
+  DeliveryLaunchRecord,
+  DeliverySitemapGap,
+  ProjectDeliveryState,
+  StackId,
+} from '@/types';
 import type { AutoCheckId, CheckStatus, PageWorkOwner, ServiceId, StackId } from '@/types';
 import type { PageRecording } from './delivery.recording';
 export type { PageWorkOwner } from '@/types';
@@ -188,7 +195,10 @@ export interface ProjectPage {
   /** ISO YYYY-MM-DD, matching the DatePicker convention used elsewhere. */
   expectedDate?: string;
   designLink?: string;
+  /** Where the page is to be opened: staging while it is built, the live site once launched. */
   stagingLink?: string;
+  /** What `stagingLink` was before "Mark launched" moved it to the live site. Team-only. */
+  prelaunchLink?: string;
   docsLink?: string;
   reviewComment?: string;
   /** The discovered link this page was seeded from, when it was. */

@@ -23,21 +23,33 @@ import {
 } from './client-plan';
 import { resolveTimelinePlan, stageForDate, type TimelineStageSource, type TimelineStep } from './client-timeline';
 import { portalStageSources } from './portal-sources';
+import { portalDeliverables } from './portal-deliverables';
+import { portalRules } from './client-rules';
 import { portalPages, type PageTrackerInput, type PortalPageFeedbackLink, type PortalPageView } from './portal-pages';
 import { sheetAsks, sheetChanges, sheetFacts, sheetFiles, sheetReadiness, sheetWork } from './project-sheet.portal';
 import type { ProjectSheetSnapshot } from './project-sheet.types';
+import { SIGN_OFF_CHANNELS, signOffLog } from './sign-off-log';
+import { clientOwnerName, isoDayOrUndefined } from './waiting-on-client';
+import { portalContentSyncs, type ContentSync } from './content-syncs';
 import type {
   ClientPortalView,
   PortalAskView,
   PortalFileView,
   PortalMeetingView,
   PortalReviewView,
+  PortalSignOffView,
   PortalStageView,
   PortalStepView,
 } from './client-portal.types';
+import { portalContact } from './portal-contact';
 
 export interface BuildClientPortalViewInput {
   project: Project;
+  /**
+   * Optional. The project's content syncs (`projects/{id}/content_syncs`).
+   * Only rows the team shows, and only `portalContentSyncs`' fields, leave.
+   */
+  contentSyncs?: Partial<ContentSync>[];
   /**
    * The Timeline tab. When it has milestones to show, its phases are the
    * client's stages; otherwise it is read only for a portal shared before
@@ -80,7 +92,8 @@ export interface BuildClientPortalViewInput {
 }
 
 /**
- * "Open site". The Webflow custom domain is the client's own public site. A
+ * "Open site". The Webflow custom domain is the client's own public site, else
+ * the domain the team marked the site launched on. A
  * manual link switched on for the client counts too, but only on a portal that
  * has no plan yet: those switches no longer exist, and a link nobody can turn
  * off again must not stay on the page forever.
@@ -88,6 +101,9 @@ export interface BuildClientPortalViewInput {
 function detectWebsiteUrl(project: Project, legacy: boolean): string | undefined {
   const custom = project.webflowConfig?.customDomain;
   if (custom) return custom.startsWith('http') ? custom : `https://${custom}`;
+  // The domain the team marked the site launched on (Delivery tab, Launch stage).
+  const launched = project.delivery?.launch?.liveOrigin;
+  if (launched && /^https?:\/\//i.test(launched)) return launched;
   if (!legacy) return undefined;
   const live = (project.links || []).find(
     (l) =>
@@ -192,10 +208,31 @@ function placeMeetings(stages: PortalStageView[], meetings: ProjectMeeting[]): v
   }
 }
 
+/**
+ * A task ask: title, due date, when we asked, when we follow up, and who has
+ * it on their side by name. Never the description or our assignee.
+ */
 function toAsk(t: Task): PortalAskView {
   const ask: PortalAskView = { id: t.id, title: t.title };
   if (t.dueDate) ask.dueDate = t.dueDate;
+  const asked = isoDayOrUndefined(t.askedAt);
+  if (asked) ask.askedDate = asked;
+  const followUp = isoDayOrUndefined(t.followUpAt);
+  if (followUp) ask.followUpDate = followUp;
+  const owner = clientOwnerName(t.clientOwner);
+  if (owner) ask.owner = owner;
   return ask;
+}
+
+/** The sign-off log as the client sees it: what, when, their words, where. Never who wrote it down or the link. */
+function toSignOffs(approvals: NonNullable<Project['delivery']>['approvals']): PortalSignOffView[] {
+  return signOffLog(approvals).map((a, index) => {
+    const view: PortalSignOffView = { id: `signoff-${index + 1}`, title: a.stageTitle, approvedAt: a.approvedAt };
+    const note = typeof a.note === 'string' ? a.note.trim() : '';
+    if (note) view.note = note;
+    if (a.via && (SIGN_OFF_CHANNELS as string[]).includes(a.via)) view.via = a.via;
+    return view;
+  });
 }
 
 /**
@@ -377,7 +414,9 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
   const fromChecklist = picked.kind === 'checklist';
   const fromTimeline = picked.kind === 'timeline';
   // Page by page, from the tracker the team keeps in the Delivery tab.
-  const pages = input.pages ? portalPages(input.pages.rows, input.pages.disciplines, input.pages.owners) : [];
+  const pages = input.pages
+    ? portalPages(input.pages.rows, input.pages.disciplines, input.pages.owners, input.pages.liveOrigin)
+    : [];
   const timelineSources = withPagesInReview(picked.sources, pages);
   const byPhase = picked.kind !== null;
 
@@ -415,21 +454,29 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     .filter((t) => t.needsClientInput === true && t.status !== 'done')
     .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || a.order - b.order)
     .map(toAsk);
+  const signOffs = toSignOffs(project.delivery?.approvals);
   const fromSheetAsks = sheet ? sheetAsks(sheet) : { asks: [], received: 0 };
   const asks = mergeAsks(fromSheetAsks.asks, taskAsks);
 
-  const baseFiles = byPhase ? normalizePlanFiles(project.clientTimeline?.files).map(toFile) : (plan?.files ?? []).map(toFile);
+  const deliverables = portalDeliverables(project.links);
+  // An old portal's files are its switched-on links, which are now deliverables: show them once, there.
+  const deliverableUrls = new Set(deliverables.flatMap((d) => d.versions.map((v) => v.url)));
+  const planFiles = (plan?.files ?? []).map(toFile).filter((f) => !(legacy && deliverableUrls.has(f.url)));
+  const baseFiles = byPhase ? normalizePlanFiles(project.clientTimeline?.files).map(toFile) : planFiles;
   const files = sheet ? dedupeFiles([...sheetFiles(sheet), ...baseFiles]) : baseFiles;
+  const rules = portalRules(project.clientRules?.rules);
   const work = sheet ? sheetWork(sheet.data, new Set(stages.map((s) => s.id))) : [];
   const changes = sheet ? sheetChanges(sheet.data) : [];
   const readiness = sheet ? sheetReadiness(sheet.data) : [];
+  const syncs = portalContentSyncs(input.contentSyncs);
 
   const view: ClientPortalView = {
     projectId: project.id,
     projectName: project.name,
     ...portalBrand(project),
     welcome: settings?.welcome?.trim() || undefined,
-    agencyContactEmail: project.reviewOwnerEmail || project.assigneeEmails?.[0] || undefined,
+    // The client's point of contact, else the lead as before (see portal-contact.ts).
+    agencyContactEmail: portalContact(project).email,
     websiteUrl: detectWebsiteUrl(project, !saved && !byPhase),
     status,
     statusLabel: CLIENT_STATUS_PORTAL_LABELS[status],
@@ -460,8 +507,12 @@ export function buildClientPortalView(input: BuildClientPortalViewInput): Client
     readiness: readiness.length ? readiness : undefined,
     sheetUrl: sheet?.showSheetLink && sheet.url ? sheet.url : undefined,
     review: toPortalReview(checklists, project.delivery?.approvals),
+    signOffs: signOffs.length ? signOffs : undefined,
     pages: pages.length ? pages : undefined,
     pagesFeedback: pages.length ? feedbackLinks(timelineSources, pages) : undefined,
+    deliverables: deliverables.length ? deliverables : undefined,
+    rules: rules.length ? rules : undefined,
+    syncs: syncs.length ? syncs : undefined,
     generatedAt: now.toISOString(),
   };
 

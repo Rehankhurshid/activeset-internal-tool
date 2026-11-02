@@ -75,7 +75,7 @@ Tabs are defined in `tabOptions` in [ProjectDetailScreen.tsx](../../src/modules/
 
 | Method | Path | File | Auth | Purpose |
 |---|---|---|---|---|
-| GET, OPTIONS | `/api/project/[id]` | [route.ts](../../src/app/api/project/[id]/route.ts) | none (CORS `*`) | Public project read for `widget.js`. firebase-admin; returns only `PUBLIC_FIELDS` (name, status, tags, links, client, sitemapUrl, detectedLocales, pathToLocaleMap, folderPageTypes, disableAuditBadge, disableDropdown, enableSpellcheck, publicAuditShareEnabled). |
+| GET, OPTIONS | `/api/project/[id]` | [route.ts](../../src/app/api/project/[id]/route.ts) | none (CORS `*`) | Public project read for `widget.js`. firebase-admin; returns only `PUBLIC_FIELDS` (name, status, tags, links, client, sitemapUrl, detectedLocales, pathToLocaleMap, folderPageTypes, disableAuditBadge, disableDropdown, enableSpellcheck, publicAuditShareEnabled), with each link's deliverable details (`sharedWith`, `sharedAt`, `version`, `deliverableId`) removed. |
 | GET | `/api/project/[id]/checklist` | [route.ts](../../src/app/api/project/[id]/checklist/route.ts) | none | Checklist progress `{completed,total,checklists}` for the widget badge. Uses the **client SDK** server-side, which works only because `project_checklists` has `allow read: if true`. |
 | GET | `/api/projects` | [route.ts](../../src/app/api/projects/route.ts) | Firebase ID token (`@activeset.co`) or extension token for slug `webflow-settings-auditor` (`requireCallerOrExtensionToken`) | Up to 100 projects ordered by `createdAt desc` (`id, name, createdAt, webflowConfig.customDomain`) for the Webflow Settings Auditor's "save to project" dropdown. Extension side: [tools-and-extensions.md](./tools-and-extensions.md). |
 | GET | `/api/favicon?url=` | [route.ts](../../src/app/api/favicon/route.ts) | none | Fetches up to 80 KB of the page head (5 s timeout), picks the best `<link rel*=icon>`, falls back to `https://www.google.com/s2/favicons?domain=…&sz=128`. Used by the logo picker. |
@@ -191,7 +191,7 @@ One document = one client project. Type `Project` ([types/index.ts](../../src/ty
 | `name`, `userId`, `createdAt`, `updatedAt` | string, string (creator uid), Timestamp | `createProject`; `updatedAt` bumped by every team write |
 | `status` | `'current' \| 'paused' \| 'closed' \| 'paid'` (legacy `'past'` read as paid). UI labels: Current, Paused, Closed ("Done, payment pending"), Paid. There is no "Current/Past" pair any more. | card Status submenu, Raycast |
 | `tags` | `ProjectTag[]`: retainer, one_time, subscription, maintenance, consulting | card Tags submenu, Raycast |
-| `links` | `ProjectLink[]`: `{id, title, url, order, isDefault?, source?: 'manual'\|'auto', locale?, pageType?, clientVisible?}`; `auditResult` is stripped before save | manual: Links tab, card, widget, Raycast; auto: `/api/scan-sitemap` (admin) |
+| `links` | `ProjectLink[]`: `{id, title, url, order, isDefault?, source?: 'manual'\|'auto', locale?, pageType?, clientVisible?, sharedAt?, sharedWith?, version?, deliverableId?}`; `auditResult` is stripped before save. The last four are deliverable details (see "Links as client deliverables" below). | manual: Links tab, card, widget, Raycast, the Client tab's Deliverables card; auto: `/api/scan-sitemap` (admin) |
 | `client` | string (group label) | detail hero inline edit |
 | `logoUrl` | URL or data URL | `ProjectLogoDialog` |
 | `assigneeEmails`, `reviewOwnerEmail` | string[] (normalized), string | people picker; `reviewOwnerEmail` has no writer in this module |
@@ -215,6 +215,10 @@ Subcollections touched here: `projects/{id}/link_audits/{linkId}` (one compacted
 Top-level collections read by project tabs, keyed by `projectId`: `tasks`, `requests`, `project_checklists`, `project_timelines` (all `allow read: if true`, write team-only, so the public share page can render them).
 
 **firestore.rules** ([firestore.rules](../../firestore.rules) l.71-106): `projects` read/update/delete if admin, owner (`userId == auth.uid`) or any `@activeset.co` user; create/update must not include `webflowConfig.apiToken` (`writeHasNoApiToken`); update must keep `userId` unchanged. `link_audits` same audience. Rules tests: `tests/firestore.rules.test.ts` `describe('projects')`.
+
+### Links as client deliverables (2026-11-02, ACT-89)
+
+A manual link with `clientVisible: true` is a **deliverable** on the client portal ("What we've handed over"). Since ACT-89 it can carry `sharedAt` (YYYY-MM-DD), `sharedWith` (names), `version` (1, 2, 3…) and `deliverableId` (the first version's link id; versions of one deliverable share it). There is no separate store: the Client tab's Deliverables card ([ClientDeliverablesCard.tsx](../../src/modules/client-portal/ui/components/ClientDeliverablesCard.tsx)) adds and edits these links through `clientPortalRepository.addDeliverable` / `updateDeliverable` / `setDeliverableVisible` → `projectsService.addLinkToProject` / `updateLink`, so each version is also an ordinary row on the Links tab, where [LinkItem.tsx](../../src/components/projects/LinkItem.tsx) shows a "Client deliverable · vN" chip. `UpdateProjectLinkInput` now allows `clientVisible` and the four fields. Grouping, ordering and what reaches the client: [client-portal.md](./client-portal.md) "Deliverables and client rules". The public widget endpoint `/api/project/[id]` drops `sharedWith`, `sharedAt`, `version` and `deliverableId` from every link (`PRIVATE_LINK_FIELDS` in its route.ts); `clientVisible`, title and URL still go out as before.
 
 **firestore.indexes.json**: one `projects` composite index (`userId ASC, updatedAt DESC`). No current query needs it (`subscribeToUserProjects`/`getUserProjects` filter on `userId` only and have no callers); `/api/projects` orders by `createdAt` alone.
 

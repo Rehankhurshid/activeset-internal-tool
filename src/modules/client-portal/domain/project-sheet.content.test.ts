@@ -93,6 +93,15 @@ describe('managedSheetContent', () => {
     });
   });
 
+  it('names the client’s point of contact as their lead when one is chosen', () => {
+    const withContact = managedSheetContent({
+      project: { ...project, clientPortal: { enabled: true, agencyContactEmail: 'sanjay@activeset.co' } },
+      checklists: [designAndBuild],
+      agency: [AGENCY_START, AGENCY_CLOSE],
+    });
+    assert.equal(withContact.overview['Project lead'], 'sanjay@activeset.co');
+  });
+
   it('lists the team’s links, not discovered pages or the old tracker', () => {
     assert.deepEqual(content.links, [{ name: 'Staging', url: 'https://dreamteam-ai.webflow.io' }]);
   });

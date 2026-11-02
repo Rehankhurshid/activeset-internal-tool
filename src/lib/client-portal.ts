@@ -5,6 +5,7 @@ import { PortalAuthError, verifyPortalToken } from '@/lib/client-portal-tokens';
 import { buildClientPortalView } from '@/modules/client-portal/domain/client-portal.projection';
 import type { ClientPortalView } from '@/modules/client-portal/domain/client-portal.types';
 import type { ProjectSheetRecord } from '@/modules/client-portal/domain/project-sheet.types';
+import type { ContentSync } from '@/modules/client-portal/domain/content-syncs';
 import type { ProjectPage } from '@/modules/delivery/domain/delivery.types';
 import { getStack } from '@/modules/delivery/domain/stacks';
 import { disciplineOwners } from '@/modules/delivery/domain/delivery.progress';
@@ -114,7 +115,29 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
   }
 
   const { projectId, tokenHash, project: raw } = verified;
-  const [timelineSnap, asksSnap, checklistSnap, meetingSnap, sheetSnap, pagesSnap] = await Promise.all([
+  const { view } = await buildPortalViewFor(projectId, raw);
+  return { view, projectId, tokenHash };
+}
+
+/**
+ * The client's view of a project for the team (the Client tab's warnings),
+ * built by exactly the code the portal page uses, whether or not the link is
+ * on. Null when the project does not exist. Never hand this to a client
+ * route: it skips the token check.
+ */
+export async function loadClientPortalForTeam(
+  projectId: string,
+): Promise<{ view: ClientPortalView; project: Project; readsSheet: boolean } | null> {
+  const snap = await adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId).get();
+  if (!snap.exists) return null;
+  return buildPortalViewFor(projectId, snap.data() as Record<string, unknown>);
+}
+
+async function buildPortalViewFor(
+  projectId: string,
+  raw: Record<string, unknown>,
+): Promise<{ view: ClientPortalView; project: Project; readsSheet: boolean }> {
+  const [timelineSnap, asksSnap, checklistSnap, meetingSnap, sheetSnap, pagesSnap, syncsSnap] = await Promise.all([
     adminDb.collection(COLLECTIONS.PROJECT_TIMELINES).doc(projectId).get(),
     adminDb
       .collection(COLLECTIONS.TASKS)
@@ -148,6 +171,10 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
     // The page tracker, for "Your pages". Only names, staging links and states
     // leave it (see portalPages).
     adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId).collection(COLLECTIONS.PROJECT_PAGES).limit(500).get(),
+    // Content syncs (Airtable → Webflow…), as the team or the Whalesync cron
+    // last recorded them. Never Whalesync itself: the page must not wait on it.
+    // The projection keeps only shown rows and their client fields.
+    adminDb.collection(COLLECTIONS.PROJECTS).doc(projectId).collection(COLLECTIONS.PROJECT_CONTENT_SYNCS).limit(50).get(),
   ]);
 
   const project = toProject(projectId, raw);
@@ -166,9 +193,12 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
     rows: pagesSnap.docs.map((d) => ({ ...(d.data() as Omit<ProjectPage, 'id'>), id: d.id })),
     disciplines: stack.disciplines,
     owners: disciplineOwners(stack, project),
+    liveOrigin: project.delivery?.launch?.liveOrigin,
   };
 
   return {
+    project,
+    readsSheet: sheet !== null,
     view: buildClientPortalView({
       project,
       timeline,
@@ -179,8 +209,7 @@ export async function loadClientPortalByToken(token: unknown): Promise<LoadedCli
       templates,
       agency: [AGENCY_START, AGENCY_CLOSE],
       pages,
+      contentSyncs: syncsSnap.docs.map((d) => ({ ...(d.data() as Partial<ContentSync>), id: d.id })),
     }),
-    projectId,
-    tokenHash,
   };
 }

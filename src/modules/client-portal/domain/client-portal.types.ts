@@ -7,10 +7,16 @@ export type {
   ClientStageKind,
   ClientStatus,
 } from '@/types';
-import type { ClientStatus } from '@/types';
+import type { ClientStatus, SignOffChannel } from '@/types';
 import type { SheetChangeState, WorkState } from './project-sheet.types';
 import type { PortalPageFeedbackLink, PortalPageView } from './portal-pages';
+import type { PortalDeliverableView } from './portal-deliverables';
+import type { PortalRuleView } from './client-rules';
+import type { PortalContentSyncView } from './content-syncs';
+export type { ContentSyncState, PortalContentSyncView } from './content-syncs';
 export type { PortalPageFeedbackLink, PortalPageState, PortalPageView } from './portal-pages';
+export type { PortalDeliverableVersionView, PortalDeliverableView } from './portal-deliverables';
+export type { PortalRuleView } from './client-rules';
 export type { WorkState } from './project-sheet.types';
 export {
   CLIENT_STATUSES,
@@ -123,6 +129,10 @@ export interface PortalAskView {
   group?: string;
   /** The client's own person for it. */
   owner?: string;
+  /** ISO YYYY-MM-DD: when we asked. From a task only. */
+  askedDate?: string;
+  /** ISO YYYY-MM-DD: when we next follow up. Past and still open reads as overdue. From a task only. */
+  followUpDate?: string;
   /** Where to put it, or the sheet tab to fill. Always http(s). */
   url?: string;
   /** `fill`: a `[Fill this]` tab of the project sheet. */
@@ -265,6 +275,8 @@ export interface ClientPortalView {
    * thing to say yes to.
    */
   review?: PortalReviewView;
+  /** Everything the client has signed off, oldest first: on this page or elsewhere. */
+  signOffs?: PortalSignOffView[];
   /**
    * The pages being built, from the page tracker: name, staging link, where
    * each stands for them, and their own parts not yet final.
@@ -272,8 +284,37 @@ export interface ClientPortalView {
   pages?: PortalPageView[];
   /** Where to comment on them: the client's review step's links, less staging. */
   pagesFeedback?: PortalPageFeedbackLink[];
+  /**
+   * What we handed over (a data sheet, a report), from the manual links the
+   * team marked as deliverables: each with its versions, latest first, the day
+   * shared and who got it.
+   */
+  deliverables?: PortalDeliverableView[];
+  /** The rules agreed with the client (compliance, brand, copy), pinned on the page. */
+  rules?: PortalRuleView[];
+  /**
+   * The syncs carrying their data into the site (Airtable → Webflow through
+   * Whalesync): name, provider, source → destination, running or not, last
+   * run, open issue count, one line from the team. Never the team's notes or
+   * the issue messages.
+   */
+  syncs?: PortalContentSyncView[];
   /** ISO timestamp the projection was built (server time). */
   generatedAt: string;
+}
+
+/**
+ * One line of the sign-off log: what they approved, when, and what they said.
+ * Never who on our side wrote it down, nor the link to the message.
+ */
+export interface PortalSignOffView {
+  id: string;
+  title: string;
+  /** ISO timestamp. */
+  approvedAt: string;
+  note?: string;
+  /** Where it was given, when not on this page. */
+  via?: SignOffChannel;
 }
 
 export interface PortalReviewView {
@@ -310,7 +351,11 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'readiness',
   'sheetUrl',
   'review',
+  'signOffs',
   'pages',
   'pagesFeedback',
+  'deliverables',
+  'rules',
+  'syncs',
   'generatedAt',
 ] as const;

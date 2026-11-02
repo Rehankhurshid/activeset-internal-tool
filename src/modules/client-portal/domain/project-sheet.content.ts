@@ -4,6 +4,7 @@ import { servicesName, orderServices, isServiceId, workOwner } from '@/lib/engag
 import { resolveTimelinePlan } from './client-timeline';
 import { portalStageSources } from './portal-sources';
 import { sheetMetrics, type ProjectMetric, type SheetMetrics } from './project-metrics';
+import { portalContact } from './portal-contact';
 
 /**
  * What the app writes into a project's sheet, from what the app knows.
@@ -137,7 +138,10 @@ export interface SheetPageInput {
 }
 
 export interface ManagedSheetInput {
-  project: Pick<Project, 'name' | 'client' | 'services' | 'reviewOwnerEmail' | 'links' | 'clientTimeline' | 'clientFacing' | 'delivery'>;
+  project: Pick<
+    Project,
+    'name' | 'client' | 'services' | 'reviewOwnerEmail' | 'assigneeEmails' | 'clientPortal' | 'links' | 'clientTimeline' | 'clientFacing' | 'delivery'
+  >;
   checklists: readonly Pick<ProjectChecklist, 'sections' | 'templateId' | 'templateIds' | 'createdAt'>[];
   templates?: readonly Pick<SOPTemplate, 'id' | 'service' | 'sections'>[];
   agency?: readonly Omit<SOPTemplateSection, 'order'>[];
@@ -219,6 +223,11 @@ export function clientKeyLinks(links: Project['links'] | undefined): { name: str
 }
 
 /** Our lead as the checklist records it ("Name the leads on both sides"), when the project names none. */
+function clientPortalContact(project: ManagedSheetInput['project']): string | undefined {
+  const contact = portalContact(project);
+  return contact.source === 'set' || contact.source === 'lead' ? contact.email : undefined;
+}
+
 function ourLead(checklists: ManagedSheetInput['checklists']): string {
   for (const checklist of checklists) {
     for (const section of checklist.sections ?? []) {
@@ -432,7 +441,9 @@ export function managedSheetContent(input: ManagedSheetInput): ManagedSheetConte
       Services: services,
       Kickoff: kickoff?.date ?? '',
       'Target launch': launch?.date ?? '',
-      'Project lead': project.reviewOwnerEmail || ourLead(input.checklists),
+      // The client reads this sheet too: their point of contact when one is
+      // set, else the lead (or the checklist's "our lead") as before.
+      'Project lead': clientPortalContact(project) || ourLead(input.checklists),
     },
     links: clientKeyLinks(project.links),
     process: rows,
