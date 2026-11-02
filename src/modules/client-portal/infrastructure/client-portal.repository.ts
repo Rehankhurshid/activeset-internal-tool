@@ -6,14 +6,45 @@ import type {
   ClientPlan,
   ClientPlanFile,
   ClientPlanStage,
+  ClientRule,
   ClientStatus,
   ClientTimelineSettings,
   MeetingShareStatus,
   ProjectMeeting,
 } from '@/types';
 import { normalizeClientPlan } from '../domain/client-plan';
+import { normalizeClientRules } from '../domain/client-rules';
+import { cleanSharedWith } from '../domain/portal-deliverables';
 import type { ProjectSheetRecord, SheetStagesFrom, SheetTabRole } from '../domain/project-sheet.types';
 import { normalizeClientTimelineSettings } from '../domain/client-timeline';
+
+/** A deliverable as the Client tab edits it. */
+export interface DeliverableInput {
+  title: string;
+  url: string;
+  /** YYYY-MM-DD, or empty. */
+  sharedAt: string;
+  /** Names, or empty. */
+  sharedWith: string;
+  /** 1, 2, 3… or undefined. */
+  version?: number;
+  /** The first version's link id, for a later version. */
+  deliverableId?: string;
+}
+
+/** The link fields a deliverable writes; an empty one is cleared (undefined is stripped before saving). */
+function deliverableFields(input: DeliverableInput) {
+  const url = input.url.trim();
+  const sharedWith = cleanSharedWith(input.sharedWith);
+  return {
+    title: input.title.trim(),
+    url: /^https?:\/\//i.test(url) ? url : `https://${url}`,
+    sharedAt: /^\d{4}-\d{2}-\d{2}$/.test(input.sharedAt) ? input.sharedAt : undefined,
+    sharedWith,
+    version: input.version && Number.isInteger(input.version) && input.version > 0 ? input.version : undefined,
+    deliverableId: input.deliverableId || undefined,
+  };
+}
 
 /** What the Client tab gets back from the meetings route. */
 export interface MeetingsState {
@@ -94,6 +125,10 @@ type ClientPortalRepository = {
     patch: { brandName?: string | null; brandLogoUrl?: string | null; welcome?: string | null; contactEmails?: string[] },
   ): Promise<void>;
   editPlan(projectId: string, byEmail: string, edit: (plan: ClientPlan) => ClientPlan): Promise<void>;
+  saveRules(projectId: string, rules: ClientRule[], byEmail: string): Promise<void>;
+  addDeliverable(projectId: string, deliverable: DeliverableInput, order: number): Promise<void>;
+  updateDeliverable(projectId: string, linkId: string, deliverable: DeliverableInput): Promise<void>;
+  setDeliverableVisible(projectId: string, linkId: string, visible: boolean): Promise<void>;
   savePlan(projectId: string, plan: ClientPlan, byEmail: string): Promise<void>;
   updateStage(projectId: string, stageId: string, patch: Partial<ClientPlanStage>, byEmail: string): Promise<void>;
   addStage(projectId: string, stage: ClientPlanStage, byEmail: string): Promise<void>;
@@ -179,6 +214,32 @@ export const clientPortalRepository: ClientPortalRepository = {
       contactEmails?: string[];
     },
   ) => projectsService.updateClientPortalSettings(projectId, patch),
+
+  /**
+   * A deliverable is a manual project link switched on for the client, with
+   * when it was shared, with whom and its version. A new version is a new
+   * link carrying the first version's id as `deliverableId`.
+   */
+  addDeliverable: (projectId: string, deliverable: DeliverableInput, order: number) =>
+    projectsService.addLinkToProject(projectId, {
+      ...deliverableFields(deliverable),
+      order,
+      isDefault: false,
+      source: 'manual',
+      clientVisible: true,
+    }),
+
+  /** Edits one version: every field, an empty one cleared. */
+  updateDeliverable: (projectId: string, linkId: string, deliverable: DeliverableInput) =>
+    projectsService.updateLink(projectId, linkId, deliverableFields(deliverable)),
+
+  /** Off takes it off the client's page; the link stays on the Links tab. */
+  setDeliverableVisible: (projectId: string, linkId: string, visible: boolean) =>
+    projectsService.updateLink(projectId, linkId, { clientVisible: visible }),
+
+  /** The rules agreed with the client, replaced whole, always cleaned on the way in. */
+  saveRules: (projectId: string, rules: ClientRule[], byEmail: string) =>
+    projectsService.updateClientRules(projectId, normalizeClientRules(rules), byEmail),
 
   /**
    * Edits the client plan from its latest stored value (a transaction), always

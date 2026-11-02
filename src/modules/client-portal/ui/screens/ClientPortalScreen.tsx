@@ -1,6 +1,8 @@
 import { showsProcess, type ClientPortalView } from '../../domain/client-portal.types';
 import { PortalAsks } from '../components/PortalAsks';
 import { PortalChanges } from '../components/PortalChanges';
+import { PortalDeliverables } from '../components/PortalDeliverables';
+import { PortalRules } from '../components/PortalRules';
 import { PortalReadiness } from '../components/PortalReadiness';
 import { PortalWork } from '../components/PortalWork';
 import { PortalYourTurn } from '../components/PortalYourTurn';
@@ -33,9 +35,10 @@ function resolveNow(generatedAt: string): Date {
  * `.portal-theme`, the light palette defined in globals.css, and uses token
  * utilities only.
  *
- * In reading order: where the project is, whether anything is waiting on them
- * and what, the work itself, what they get and when, how ready launch is, any
- * change outside scope, the files, and the one thing they can sign. Sections
+ * In reading order: where the project is, the rules agreed with them, whether
+ * anything is waiting on them and what, the work itself, what they get and
+ * when, how ready launch is, any change outside scope, what we handed over,
+ * the files, and the one thing they can sign. Sections
  * fed by the project sheet render nothing when no sheet is bound.
  */
 export function ClientPortalScreen({ view, token, preview = false }: ClientPortalScreenProps) {
@@ -61,6 +64,8 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
           now={now}
         />
         <PortalNowCard view={view} now={now} />
+        {/* Pinned under where we are: what everyone on the project has agreed with them. */}
+        <PortalRules rules={view.rules} />
         <PortalYourTurn view={view} now={now} />
         {/* From the project sheet or the checklist, the whole process as one numbered list, right under where we are. */}
         {showsProcess(view.planSource) && <PortalProcess stages={view.stages} now={now} />}
@@ -72,6 +77,7 @@ export function ClientPortalScreen({ view, token, preview = false }: ClientPorta
         {!showsProcess(view.planSource) && <PortalStages stages={view.stages} now={now} planSource={view.planSource} />}
         <PortalReadiness readiness={view.readiness} />
         <PortalChanges changes={view.changes} now={now} />
+        <PortalDeliverables deliverables={view.deliverables} now={now} />
         <div className="lg:hidden">
           <PortalFiles files={view.files} websiteUrl={view.websiteUrl} />
         </div>

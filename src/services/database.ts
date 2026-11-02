@@ -39,6 +39,8 @@ import {
   ClientStatus,
   ClientFacingState,
   ClientPlan,
+  ClientRule,
+  ClientRules,
   ClientTimelineSettings,
   ServiceId,
 } from '@/types';
@@ -1504,6 +1506,44 @@ export const projectsService = {
       logError(error, 'updateClientPlan');
       if (error instanceof DatabaseError) throw error;
       throw new DatabaseError('Failed to save the client plan');
+    }
+  },
+
+  /**
+   * The rules agreed with the client (`projects/{id}.clientRules`), replaced
+   * whole. The caller cleans them first (`normalizeClientRules`); an empty
+   * list removes the field. Stamps `clientFacing.lastUpdateAt`, like a plan
+   * edit: a rule on their page is news to the client.
+   */
+  async updateClientRules(projectId: string, rules: ClientRule[], byEmail: string): Promise<void> {
+    const by = byEmail.trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+    const value: ClientRules = { rules, updatedAt: nowIso, ...(by ? { updatedBy: by } : {}) };
+
+    if (isLocalProjectBypassEnabled()) {
+      updateLocalProject(projectId, (project) => {
+        const updated: Project = {
+          ...project,
+          clientFacing: { ...project.clientFacing, lastUpdateAt: nowIso, ...(by ? { lastUpdateBy: by } : {}) },
+        };
+        if (rules.length) updated.clientRules = value;
+        else delete updated.clientRules;
+        return updated;
+      });
+      return;
+    }
+
+    try {
+      const update: UpdateData<DocumentData> = {
+        clientRules: rules.length ? value : deleteField(),
+        'clientFacing.lastUpdateAt': nowIso,
+        updatedAt: Timestamp.now(),
+      };
+      if (by) update['clientFacing.lastUpdateBy'] = by;
+      await updateDoc(doc(db, PROJECTS_COLLECTION, projectId), update);
+    } catch (error) {
+      logError(error, 'updateClientRules');
+      throw new DatabaseError('Failed to save the client rules');
     }
   },
 

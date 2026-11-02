@@ -10,7 +10,11 @@ export type {
 import type { ClientStatus } from '@/types';
 import type { SheetChangeState, WorkState } from './project-sheet.types';
 import type { PortalPageFeedbackLink, PortalPageView } from './portal-pages';
+import type { PortalDeliverableView } from './portal-deliverables';
+import type { PortalRuleView } from './client-rules';
 export type { PortalPageFeedbackLink, PortalPageState, PortalPageView } from './portal-pages';
+export type { PortalDeliverableVersionView, PortalDeliverableView } from './portal-deliverables';
+export type { PortalRuleView } from './client-rules';
 export type { WorkState } from './project-sheet.types';
 export {
   CLIENT_STATUSES,
@@ -272,6 +276,14 @@ export interface ClientPortalView {
   pages?: PortalPageView[];
   /** Where to comment on them: the client's review step's links, less staging. */
   pagesFeedback?: PortalPageFeedbackLink[];
+  /**
+   * What we handed over (a data sheet, a report), from the manual links the
+   * team marked as deliverables: each with its versions, latest first, the day
+   * shared and who got it.
+   */
+  deliverables?: PortalDeliverableView[];
+  /** The rules agreed with the client (compliance, brand, copy), pinned on the page. */
+  rules?: PortalRuleView[];
   /** ISO timestamp the projection was built (server time). */
   generatedAt: string;
 }
@@ -312,5 +324,7 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'review',
   'pages',
   'pagesFeedback',
+  'deliverables',
+  'rules',
   'generatedAt',
 ] as const;

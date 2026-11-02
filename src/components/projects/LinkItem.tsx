@@ -200,6 +200,14 @@ export function LinkItem({ link, onEdit, onDelete, compact }: LinkItemProps) {
             <div className="font-medium text-sm truncate group-hover:text-primary transition-colors">
               {link.title}
             </div>
+            {link.clientVisible && link.source !== 'auto' && (
+              <span
+                className="flex-shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] font-semibold text-muted-foreground"
+                title="Shown on the client's page as a deliverable (Client tab)"
+              >
+                Client deliverable{link.version ? ` · v${link.version}` : ''}
+              </span>
+            )}
           </div>
           {link.url && (
             <div className="text-xs text-muted-foreground truncate pl-6">
