@@ -44,6 +44,19 @@ describe('portalPages', () => {
       { id: 'product', title: 'Product', state: 'ready', stagingUrl: 'https://site.webflow.io/product', theirs: ['Your design: in revision'] },
     ]);
   });
+
+  it('marks a link on the launched domain as live, and never the pre-launch link', () => {
+    const built = { dev_desktop: 'completed', dev_mobile: 'completed' } as const;
+    const pages = portalPages([
+      page('careers', built, { order: 0, stagingLink: 'https://www.site.com/careers', prelaunchLink: 'https://site.webflow.io/careers' }),
+      page('vdp', built, { order: 1, stagingLink: 'https://site.webflow.io/vdp' }),
+    ], disciplines, owners, 'https://www.site.com');
+    assert.deepEqual(pages.map((p) => [p.stagingUrl, p.live]), [
+      ['https://www.site.com/careers', true],
+      ['https://site.webflow.io/vdp', undefined],
+    ]);
+    assert.ok(!JSON.stringify(pages).includes('prelaunch'));
+  });
 });
 
 describe('the review step and pages', () => {

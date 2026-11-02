@@ -34,6 +34,8 @@ export interface PageTrackerInput {
   rows: ProjectPage[];
   disciplines: Pick<StackDiscipline, 'id' | 'label' | 'order'>[];
   owners: Record<string, PageWorkOwner>;
+  /** The live site, once the team marked it launched (`delivery.launch.liveOrigin`). */
+  liveOrigin?: string;
 }
 
 export type PortalPageState = 'ready' | 'building' | 'waiting' | 'planned';
@@ -41,8 +43,13 @@ export type PortalPageState = 'ready' | 'building' | 'waiting' | 'planned';
 export interface PortalPageView {
   id: string;
   title: string;
-  /** Where the page is on staging, when the team recorded it. Always http(s). */
+  /**
+   * Where to open the page, when the team recorded it: staging while it is
+   * built, the live site once launched (see `live`). Always http(s).
+   */
   stagingUrl?: string;
+  /** The link is on the live site the team marked launched, so it is not staging any more. */
+  live?: true;
   state: PortalPageState;
   /** Their own parts that are not final yet, in their words: "Your design: in revision". */
   theirs?: string[];
@@ -63,6 +70,15 @@ const THEIR_WORD: Record<PageWorkStatus, string> = {
 };
 
 const isHttp = (url: string | undefined): url is string => typeof url === 'string' && /^https?:\/\/\S+$/i.test(url.trim());
+
+function hostOf(url: string | undefined): string {
+  if (!url) return '';
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
 
 /** One page's state from its columns: ours decide whether it is built, theirs only add a note. */
 export function portalPageState(
@@ -89,14 +105,19 @@ export function portalPages(
   pages: readonly ProjectPage[],
   disciplines: readonly Pick<StackDiscipline, 'id' | 'label' | 'order'>[],
   owners: Readonly<Record<string, PageWorkOwner>>,
+  liveOrigin?: string,
 ): PortalPageView[] {
   const columns = [...disciplines].sort((a, b) => a.order - b.order);
+  const liveHost = hostOf(liveOrigin);
   return [...pages]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map((page) => {
       const state = portalPageState(page, columns, owners);
       const view: PortalPageView = { id: page.id, title: page.title?.trim() || page.path, state };
-      if (isHttp(page.stagingLink)) view.stagingUrl = page.stagingLink.trim();
+      if (isHttp(page.stagingLink)) {
+        view.stagingUrl = page.stagingLink.trim();
+        if (liveHost && hostOf(view.stagingUrl) === liveHost) view.live = true;
+      }
       const theirs = columns
         .filter((d) => owners[d.id] === 'client')
         .map((d) => ({ d, status: normalizePageWorkStatus(page.work?.[d.id]) }))

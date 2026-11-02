@@ -9,6 +9,8 @@ import type { CheckStatus, ProjectPage, StackDefinition } from '../../domain/del
 import { deliveryRepository } from '../../infrastructure/delivery.repository';
 import { STATUS_LABELS } from './CheckStatusControl';
 import { LaunchReadinessCard } from './LaunchReadinessCard';
+import { MarkLaunchedCard } from './MarkLaunchedCard';
+import { SitemapGapCard } from './SitemapGapCard';
 import { PageQcMatrix } from './PageQcMatrix';
 
 /**
@@ -146,6 +148,12 @@ export function LaunchExtras({
         userEmail={userEmail}
         launchChecklistUntagged={launchProgress.untagged}
       />
+
+      {/* Launch day: page links to the live domain, and pages the live sitemap has that the tracker lacks. */}
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+        <MarkLaunchedCard project={project} pages={pages} userEmail={userEmail} />
+        <SitemapGapCard project={project} pages={pages} />
+      </div>
 
       {children}
 

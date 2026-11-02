@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   deleteField,
@@ -24,13 +26,14 @@ import { fetchAuthed } from '@/lib/api-client';
 import { COLLECTIONS } from '@/lib/constants';
 import { DatabaseError, logError } from '@/lib/errors';
 import { checklistService } from '@/services/ChecklistService';
-import type { ChecklistItemStatus, ProjectChecklist, ProjectLink, SOPTemplate,
+import type { ChecklistItemStatus, DeliveryLaunchRecord, DeliverySitemapGap, ProjectChecklist, ProjectLink, SOPTemplate,
   DeliverableOwner,
   DeliverablePriority,
 } from '@/types';
 import type { MissingBasic } from '../domain/delivery.basics';
 import type { PageRecording, RecordingSource } from '../domain/delivery.recording';
 import type { Improvement } from '../domain/delivery.feedback';
+import type { LaunchPlan } from '../domain/delivery.launch';
 import type {
   CheckStatus,
   CreateProjectPageInput,
@@ -104,6 +107,7 @@ function fromDoc(id: string, data: DocumentData): ProjectPage {
     expectedDate: data.expectedDate ?? undefined,
     designLink: data.designLink ?? undefined,
     stagingLink: data.stagingLink ?? undefined,
+    prelaunchLink: data.prelaunchLink ?? undefined,
     docsLink: data.docsLink ?? undefined,
     reviewComment: data.reviewComment ?? undefined,
     sourceLinkId: data.sourceLinkId ?? undefined,
@@ -155,6 +159,54 @@ async function sheetAction<T>(
     throw new TrackerSheetError(parsed?.error || `${fallback} (${res.status})`, parsed?.code, parsed?.serviceAccountEmail ?? undefined);
   }
   return parsed;
+}
+
+/**
+ * Adds the rows whose path is not on the tracker yet, in the order given, after
+ * the pages already there. Shared by the sitemap import and the live-sitemap
+ * check so both skip duplicates the same way.
+ */
+async function addNewPages(
+  projectId: string,
+  rows: { path: string; title: string; stagingLink?: string; sourceLinkId?: string }[],
+): Promise<{ added: number }> {
+  const existing = await getDocs(pagesRef(projectId));
+  const known = new Set(existing.docs.map((d) => normalizePagePath(String(d.data().path ?? ''))));
+
+  const candidates: (typeof rows)[number][] = [];
+  for (const row of rows) {
+    const path = normalizePagePath(row.path);
+    if (known.has(path)) continue;
+    known.add(path);
+    candidates.push({ ...row, path });
+  }
+  if (candidates.length === 0) return { added: 0 };
+
+  const created = nowIso();
+  let order = existing.size;
+  // Firestore caps a batch at 500 writes; sites this size are realistic.
+  for (let i = 0; i < candidates.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const row of candidates.slice(i, i + 400)) {
+      batch.set(
+        doc(pagesRef(projectId)),
+        stripUndefined({
+          path: row.path,
+          title: row.title.trim() || titleFromPath(row.path),
+          order: order++,
+          work: {},
+          stagingLink: row.stagingLink,
+          sourceLinkId: row.sourceLinkId,
+          createdAt: created,
+          updatedAt: created,
+        } as Record<string, unknown>),
+      );
+    }
+    await batch.commit();
+  }
+
+  requestProjectSheetWrite(projectId);
+  return { added: candidates.length };
 }
 
 export const deliveryRepository = {
@@ -216,52 +268,136 @@ export const deliveryRepository = {
     links: ProjectLink[],
   ): Promise<{ added: number; skipped: number }> {
     try {
-      const existing = await getDocs(pagesRef(projectId));
-      const known = new Set(existing.docs.map((d) => normalizePagePath(String(d.data().path ?? ''))));
-
-      const candidates: { path: string; link: ProjectLink }[] = [];
-      const seen = new Set<string>();
-      for (const link of links) {
-        if (!link.url) continue;
-        const path = normalizePagePath(link.url);
-        if (known.has(path) || seen.has(path)) continue;
-        seen.add(path);
-        candidates.push({ path, link });
-      }
-
-      if (candidates.length === 0) return { added: 0, skipped: links.length };
-
-      const created = nowIso();
-      let order = existing.size;
-      // Firestore caps a batch at 500 writes; sites this size are realistic.
-      const chunks: (typeof candidates)[] = [];
-      for (let i = 0; i < candidates.length; i += 400) chunks.push(candidates.slice(i, i + 400));
-
-      for (const chunk of chunks) {
-        const batch = writeBatch(db);
-        for (const { path, link } of chunk) {
-          batch.set(
-            doc(pagesRef(projectId)),
-            stripUndefined({
-              path,
-              title: link.title?.trim() || titleFromPath(path),
-              order: order++,
-              work: {},
-              sourceLinkId: link.id,
-              createdAt: created,
-              updatedAt: created,
-            } as Record<string, unknown>),
-          );
-        }
-        await batch.commit();
-      }
-
-      requestProjectSheetWrite(projectId);
-      return { added: candidates.length, skipped: links.length - candidates.length };
+      const rows = links
+        .filter((link) => link.url)
+        .map((link) => ({ path: link.url, title: link.title?.trim() || '', sourceLinkId: link.id }));
+      const { added } = await addNewPages(projectId, rows);
+      return { added, skipped: links.length - added };
     } catch (error) {
       logError(error, 'importFromLinks');
       throw new DatabaseError('Failed to import pages');
     }
+  },
+
+  /**
+   * Adds pages the live sitemap lists and the tracker does not. Once the site
+   * is launched each gets its live address as its link, the same as the pages
+   * "Mark launched" moved.
+   */
+  async addPagesFromSitemap(
+    projectId: string,
+    entries: { path: string; url: string; title: string }[],
+    withLink: boolean,
+  ): Promise<{ added: number; skipped: number }> {
+    try {
+      const rows = entries.map((entry) => ({
+        path: entry.path,
+        title: entry.title,
+        ...(withLink && /^https?:\/\//i.test(entry.url) ? { stagingLink: entry.url } : {}),
+      }));
+      const { added } = await addNewPages(projectId, rows);
+      return { added, skipped: entries.length - added };
+    } catch (error) {
+      logError(error, 'addPagesFromSitemap');
+      throw new DatabaseError('Failed to add the pages');
+    }
+  },
+
+  /** Asks the server to read the live sitemap and compare it with the tracker; saves and returns the result. */
+  async checkSitemapGap(projectId: string, origin?: string): Promise<DeliverySitemapGap> {
+    const res = await fetchAuthed(`/api/delivery/${encodeURIComponent(projectId)}/sitemap-gap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(origin ? { origin } : {}),
+    });
+    const parsed = (await res.json().catch(() => ({}))) as { gap?: DeliverySitemapGap; error?: string };
+    if (!res.ok || !parsed.gap) throw new DatabaseError(parsed.error || `The sitemap could not be checked (${res.status})`);
+    return parsed.gap;
+  },
+
+  /** Paths, or `/folder/*`, that do not belong on the tracker; the sitemap check stops listing them. */
+  async setSitemapIgnored(projectId: string, patterns: string[], ignored: boolean): Promise<void> {
+    if (patterns.length === 0) return;
+    try {
+      await updateDoc(doc(db, PROJECTS, projectId), {
+        'delivery.sitemapIgnore': ignored ? arrayUnion(...patterns) : arrayRemove(...patterns),
+      });
+    } catch (error) {
+      logError(error, 'setSitemapIgnored');
+      throw new DatabaseError('Could not save that');
+    }
+  },
+
+  /**
+   * Marks the site launched: every page link the plan names moves to the live
+   * domain, and the launch is recorded on the project, in one transaction. The
+   * transaction reads the project first and refuses when a launch is already
+   * recorded, unless `again` (the team typed a different domain on purpose),
+   * so two people pressing it, or one pressing it twice, change nothing more.
+   *
+   * The link a page had before is kept as `prelaunchLink` (only the first
+   * time), so staging can still be recorded or restored by hand.
+   */
+  async markLaunched(input: {
+    projectId: string;
+    plan: LaunchPlan;
+    includeUnlinked: boolean;
+    /** Pages that already keep a pre-launch link, which a second launch must not overwrite. */
+    keepPrelaunch: ReadonlySet<string>;
+    by?: string;
+    again?: boolean;
+  }): Promise<DeliveryLaunchRecord> {
+    const { projectId, plan, includeUnlinked, keepPrelaunch, by, again } = input;
+    const unlinked = includeUnlinked ? plan.unlinked : [];
+    // One transaction is at most 500 writes: the project plus the pages.
+    if (plan.rewrites.length + unlinked.length > 450) {
+      throw new DatabaseError('Too many pages to move in one go (more than 450)');
+    }
+    const record: DeliveryLaunchRecord = stripUndefined({
+      launchedAt: nowIso(),
+      launchedBy: by?.toLowerCase().trim() || undefined,
+      liveOrigin: plan.liveOrigin,
+      fromHosts: plan.fromHosts,
+      rewritten: plan.rewrites.length,
+      linked: unlinked.length,
+    });
+    try {
+      await runTransaction(db, async (tx) => {
+        const project = await tx.get(doc(db, PROJECTS, projectId));
+        const existing = project.data()?.delivery?.launch as DeliveryLaunchRecord | undefined;
+        if (existing?.launchedAt && !again) {
+          throw new DatabaseError(
+            `Already marked launched on ${existing.launchedAt.slice(0, 10)}${existing.launchedBy ? ` by ${existing.launchedBy}` : ''}`,
+          );
+        }
+        const updatedAt = record.launchedAt;
+        for (const change of plan.rewrites) {
+          tx.update(pageRef(projectId, change.pageId), {
+            stagingLink: change.to,
+            ...(change.from && !keepPrelaunch.has(change.pageId) ? { prelaunchLink: change.from } : {}),
+            updatedAt,
+          });
+        }
+        for (const change of unlinked) {
+          tx.update(pageRef(projectId, change.pageId), { stagingLink: change.to, updatedAt });
+        }
+        tx.update(doc(db, PROJECTS, projectId), { 'delivery.launch': record, updatedAt: Timestamp.now() });
+      });
+    } catch (error) {
+      logError(error, 'markLaunched');
+      if (error instanceof DatabaseError) throw error;
+      throw new DatabaseError('Could not mark the site launched');
+    }
+    requestProjectSheetWrite(projectId);
+    if (record.launchedBy) {
+      const host = new URL(plan.liveOrigin).host;
+      logDeliveryUpdate(projectId, {
+        by: record.launchedBy,
+        summary: `Marked launched on ${host}: ${record.rewritten + record.linked} page links now open the live site`,
+        kind: 'page',
+      }).catch(() => {});
+    }
+    return record;
   },
 
   /**

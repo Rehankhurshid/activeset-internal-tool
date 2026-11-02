@@ -68,7 +68,7 @@ If you change code covered by a doc, update that doc in the same change and bump
 | `/api/scan-sitemap`, `/api/parse-sitemap`, `/api/sitemap-links`, `/api/scan-pages`, `/api/scan-bulk/*`, `/api/save-audit`, `/api/audit`, `/api/audit-logs/*`, `/api/audit-config`, `/api/check-text`, `/api/check-links`, `/api/project-text-check`, `/api/scan-images`, `/api/image-scan/*`, `/api/qa/*` | site-audit |
 | `/api/alerts`, `/api/visual-diff`, `/api/compare-screenshots`, `/api/capture-screenshot`, `/api/scan-bulk/notify`, `/api/scan-bulk/debug-notifications` | site-monitoring |
 | `/api/webflow/*`, `/api/webflow-settings`, `/api/ai-seo-gen`, `/api/schema/*` | webflow (`/api/webflow/session` is called by the Team Tracker extension, see tools-and-extensions) |
-| `/api/delivery/*`, `/api/ai-checklist` | delivery |
+| `/api/delivery/*` (incl. `/api/delivery/[projectId]/sitemap-gap`), `/api/ai-checklist` | delivery |
 | `/api/portal/[token]/*`, `/api/client-portal/[projectId]/*` | client-portal |
 | `/api/proposals/*`, `/api/ai/proposal-*`, `/api/generate-pdf`, `/api/send-notification` | proposal |
 | `/api/clickup/*`, `/api/tasks/*` | clickup-tasks |
@@ -83,7 +83,7 @@ All crons are defined in [vercel.json](../../vercel.json) (times in UTC) and aut
 | Schedule (UTC) | Route | Doc |
 |---|---|---|
 | `30 0 * * *` | `/api/cron/daily-scan` | site-audit (queues the scan), site-monitoring (alerts after it) |
-| `0 1 * * *` | `/api/cron/webflow-sitemap-diff` | webflow |
+| `0 1 * * *` | `/api/cron/webflow-sitemap-diff` | webflow (then, for launched projects, the live sitemap against the page tracker → delivery) |
 | `35 3 * * *` | `/api/cron/delivery-nudge` | delivery |
 | `0 4 * * *` | `/api/cron/health-report` | site-monitoring |
 | `20 * * * *` | `/api/cron/auto-optimise` | worker-alt-text-images (queues `library_sweep` per project with `autoOptimiseImages.enabled`) |

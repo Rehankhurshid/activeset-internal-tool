@@ -193,6 +193,7 @@ async function buildPortalViewFor(
     rows: pagesSnap.docs.map((d) => ({ ...(d.data() as Omit<ProjectPage, 'id'>), id: d.id })),
     disciplines: stack.disciplines,
     owners: disciplineOwners(stack, project),
+    liveOrigin: project.delivery?.launch?.liveOrigin,
   };
 
   return {
