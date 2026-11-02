@@ -356,6 +356,38 @@ No feature flags. Constants: `PORTAL_STALE_AFTER_DAYS = 7`, note max 160 chars (
 
 No tests cover `client-portal-tokens.ts`, the routes, or the UI. Locally the Client tab and New project dialog run against the localhost project bypass (plan, status and branding writes all have bypass branches); the portal page itself needs firebase-admin, so render `ClientPortalScreen` with a view from `buildClientPortalView` to see it. `npm run arch:check` (typecheck + architecture lint) should also pass.
 
+## Data syncs (content syncs, Whalesync; ACT-90, 2026-11-02)
+
+Keywords: content syncs, data syncs, sync health, Whalesync, WHALESYNC_API_KEY, Airtable to Webflow, content_syncs, PortalSyncs, ClientSyncsCard, content-sync-status.
+
+**Why.** PeakXV's and Surge's Airtable data reaches Webflow through Whalesync. When a sync breaks (October: the Disclosure field mapping error) the client's site quietly stops updating and their page said nothing. Now each portal shows one row per sync with a chip: running / paused / needs attention, the issue count, when it last ran, and an optional line from the team.
+
+**Data.** `projects/{id}/content_syncs/{syncId}` (`COLLECTIONS.PROJECT_CONTENT_SYNCS`), server-only like `meetings`: not in `firestore.rules`, so client SDKs are denied; the Client tab goes through the routes below. Type `ContentSync` in [content-syncs.ts](../../src/modules/client-portal/domain/content-syncs.ts): `name`, `provider?`, `source?`, `destination?`, `state` (`active` / `paused` / `error`), `lastRunAt?`, `openIssues`, `clientNote?`, `showToClient` (default true), `order`, and team-only `notes?`, `whalesyncId?` (`sync_…`), `refreshedAt?`, `refreshError?`, `issues?` (up to 10: code, message, table, count, last seen), `authErrors?`, `createdAt/By`, `updatedAt/By`. Up to 20 per project. Nothing is hard-coded per project: the team adds the rows.
+
+**What the client sees, and what it never does.** `portalContentSyncs` builds `ClientPortalView.syncs` (`PortalContentSyncView`: `id`, `name`, `provider`, `source`, `destination`, `state`, `stateLabel` Running / Paused / Needs attention, `lastRunAt`, `openIssues`, `note`), only rows with `showToClient !== false`, in the team's order. Team notes, Whalesync's issue messages (they name records and fields), auth errors, refresh errors, the Whalesync id and who edited never leave; `content-syncs.test.ts` checks the keys and a sentinel. The loader reads the rows (limit 50) with firebase-admin and never calls Whalesync, so a slow or failing Whalesync cannot slow or break the page. Sync changes do not move `lastUpdateAt`.
+
+**Tone.** `contentSyncTone`: `error` → red; paused, any open issue, or a running sync whose last run is over 24 h old (`isContentSyncStale`, `CONTENT_SYNC_STALE_AFTER_HOURS`) → amber ("later than usual"); else green.
+
+**Portal UI.** [PortalSyncs.tsx](../../src/modules/client-portal/ui/components/PortalSyncs.tsx) (server component), "Data syncs", right after "Your turn" in `ClientPortalScreen`; nothing when there are none. `formatRelativeTime` in portal-format.ts gives "25 min ago" / "3 h ago".
+
+**Team UI.** Client tab → "Data syncs" card, [ClientSyncsCard.tsx](../../src/modules/client-portal/ui/components/ClientSyncsCard.tsx): rows with the client's chip plus team-only lines (hidden from client, Whalesync link, last read, refresh error, auth errors, top issues, notes); "Add sync" and click-to-edit dialog (name, from, to, provider, status, last ran, open issues, note for the client, team notes, show on the client's page, Whalesync sync: a picker of the account's syncs when the key is set, else a pasted id kept for later); Remove with a confirm. A row linked to Whalesync on a deployment with the key has status, last run and issues read-only (they come from Whalesync). "Refresh" appears only when the key is set.
+
+**Routes** (all `requireProjectAccess`, 503 without firebase-admin):
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/client-portal/[projectId]/syncs` | Rows (team fields included) + `connected` (key set). `?available=1` also lists the Whalesync account's syncs (`id`, `name`, `status`, `source`, `destination`) for the picker; a Whalesync failure there returns `availableError`, not an error. |
+| POST | same | `{ action: 'create', sync }` (name required; cleaned by `cleanContentSyncInput`; a linked row is read from Whalesync straight away when the key is set, `refreshError` in the answer if that failed). `{ action: 'refresh' }`: every linked row now (503 without the key). |
+| PATCH | `/api/client-portal/[projectId]/syncs/[syncId]` | Any editable field; `''`/`null` clears. Re-linking reads Whalesync at once; unlinking drops `issues`, `authErrors`, `refreshedAt`, `refreshError`. |
+| DELETE | same | Removes the row. |
+| GET | `/api/cron/content-sync-status` | `10 * * * *` (vercel.json). `refreshAllContentSyncs`: one unfiltered collection-group read of `content_syncs` (no index needed), one Whalesync call per linked row (plus the issues call when it has any). Skips (200) without `WHALESYNC_API_KEY`. `CRON_SECRET`. |
+
+**Whalesync API** ([whalesync.ts](../../src/lib/whalesync.ts), `server-only`). Public REST API, `https://api.whalesync.com/v1`, `Authorization: Bearer ws_tok_…`; keys are made by a person in Whalesync → Settings → API keys with a scope (`read` is enough here; `operate`/`readwrite` are not needed) and optionally limited to one sync. OpenAPI: `https://api.whalesync.com/v1/openapi.json`. Used: `GET /sync/syncs` (picker, paged `limit=100`, `next_cursor`), `GET /sync/syncs/{id}` (`status` draft/active/paused, `open_issues`, `last_synced_at` = last poll, `initial_sync_running`, `left`/`right` with `connector`, `base.name`, `auth_status`, `auth_error`), `GET /sync/issues?sync={id}&limit=10`. 429 is retried with `Retry-After` (3 tries), 15 s timeout. Mapping (`fromWhalesync`, pure): a side with `auth_status: 'error'` → `error`; `active` or `initial_sync_running` → `active`; draft/paused → `paused`; source/destination/provider are filled only where the team left them empty. A failed read records `refreshError` and keeps the last known status, so a chip never empties because Whalesync had a bad minute. Whalesync also offers sync webhooks (docs: features/additional-features/sync-webhooks) — not used; hourly polling was enough for a status chip.
+
+**Without the key** everything is manual: the team sets status, last run and issue count by hand, the cron skips, Refresh is hidden, and a linked row's id is kept for when the key arrives.
+
+**Tests.** [content-syncs.test.ts](../../src/modules/client-portal/domain/content-syncs.test.ts) (7 cases: allow-list and sentinel, hidden/nameless rows and order, the projection's `syncs` key, tone and staleness, input cleaning and id parsing, Whalesync mapping incl. auth errors, drafts and a first run). Run with `npm run test:client-portal`.
+
 ## Adjacent: daily review (not client portal)
 
 `src/lib/review-status.ts`, `src/lib/review-digest.ts`, `/api/cron/review-digest`, [DailyReviewBanner.tsx](../../src/components/projects/DailyReviewBanner.tsx) and [ProjectReviewToggle.tsx](../../src/components/projects/ProjectReviewToggle.tsx) are the **team's daily project review** (fields `lastReviewDate`, `lastReviewedAt`, `lastReviewedBy`, `reviewStreak` written by `projectsService.markProjectReviewed` / `unmarkProjectReviewed`). They are unrelated to what the client sees; the only overlap is that `client-status.ts` and `ClientUpdatesBanner` reuse `todayIso`/`daysBetweenIso`. "Live" for the banner and digest = `status === 'current'` with at least one tag. These belong with the project-links dashboard doc.

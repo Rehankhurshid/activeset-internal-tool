@@ -15,6 +15,7 @@ import { normalizeClientStatus } from '../../domain/client-portal.types';
 import type { PortalLinkState } from '../../infrastructure/client-portal.repository';
 import { ClientMeetingsCard } from '../components/ClientMeetingsCard';
 import { ClientStatusChip } from '../components/ClientStatusChip';
+import { ClientSyncsCard } from '../components/ClientSyncsCard';
 import { PortalBrandingFields } from '../components/PortalBrandingFields';
 import { PortalLinkCard } from '../components/PortalLinkCard';
 import { useProjectSheet } from '../components/ProjectSheetCard';
@@ -296,6 +297,19 @@ export function ClientPanel(props: ClientPanelProps) {
             stages={picked.kind ? picked.sources.map((s) => s.stage) : (planResolved?.stages.map((r) => r.stage) ?? [])}
             userEmail={userEmail}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="gap-3">
+        <CardHeader>
+          <SectionTitle>Data syncs</SectionTitle>
+          <CardDescription className="text-xs">
+            Syncs that carry the client&apos;s data into the site (Airtable → Webflow through Whalesync). Their page shows a
+            chip per sync: running or not, last run, open issues.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ClientSyncsCard projectId={project.id} />
         </CardContent>
       </Card>
 

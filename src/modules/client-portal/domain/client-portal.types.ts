@@ -10,6 +10,8 @@ export type {
 import type { ClientStatus } from '@/types';
 import type { SheetChangeState, WorkState } from './project-sheet.types';
 import type { PortalPageFeedbackLink, PortalPageView } from './portal-pages';
+import type { PortalContentSyncView } from './content-syncs';
+export type { ContentSyncState, PortalContentSyncView } from './content-syncs';
 export type { PortalPageFeedbackLink, PortalPageState, PortalPageView } from './portal-pages';
 export type { WorkState } from './project-sheet.types';
 export {
@@ -272,6 +274,13 @@ export interface ClientPortalView {
   pages?: PortalPageView[];
   /** Where to comment on them: the client's review step's links, less staging. */
   pagesFeedback?: PortalPageFeedbackLink[];
+  /**
+   * The syncs carrying their data into the site (Airtable → Webflow through
+   * Whalesync): name, provider, source → destination, running or not, last
+   * run, open issue count, one line from the team. Never the team's notes or
+   * the issue messages.
+   */
+  syncs?: PortalContentSyncView[];
   /** ISO timestamp the projection was built (server time). */
   generatedAt: string;
 }
@@ -312,5 +321,6 @@ export const CLIENT_PORTAL_VIEW_KEYS = [
   'review',
   'pages',
   'pagesFeedback',
+  'syncs',
   'generatedAt',
 ] as const;
