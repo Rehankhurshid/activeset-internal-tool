@@ -29,6 +29,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // The whole app stays out of search, non-HTML responses included.
+        // Listed first so the stricter /portal value below wins on portal
+        // paths (a later rule setting the same key overrides an earlier one).
+        source: "/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
         // Client portal pages: the URL is the credential, so never leak it via
         // Referer and never let it be indexed.
         source: "/portal/:path*",

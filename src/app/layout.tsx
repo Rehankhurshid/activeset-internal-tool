@@ -43,6 +43,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Activeset Tools",
   description: "Manage your project links with real-time collaboration",
+  // Internal tool and client portal: never in search results. next.config.ts
+  // also sends X-Robots-Tag on every response. Do not add a robots.txt
+  // Disallow: crawlers have to fetch a page to see its noindex.
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: { index: false, follow: false },
+  },
 };
 
 export default function RootLayout({
